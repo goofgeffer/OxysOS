@@ -20,6 +20,7 @@
 
 #include <oxys/types.h>
 #include <oxys/memory.h>
+#include <oxys/bootinfo.h>
 
 /*
  * Paging-structure entry flags, per Intel SDM, Volume 3A, Table 4-15.
@@ -53,7 +54,17 @@
  * The physical frame allocator must have been initialised before this is called.
  * This function does not return if a required frame cannot be allocated.
  */
-void PagingInitialise(void);
+void PagingInitialise(const BootInformation *information);
+
+/*
+ * Reports whether the direct physical map is established and active. Until it
+ * is, only the first gibibyte of physical memory is addressable by the kernel,
+ * and frames intended for kernel use must be obtained with FrameAllocateBelow.
+ */
+bool PagingDirectMapIsActive(void);
+
+/* The extent of physical memory covered by the direct physical map. */
+uint64_t PagingDirectMapExtent(void);
 
 /*
  * Resolves a virtual address to the physical address it maps to, by walking the

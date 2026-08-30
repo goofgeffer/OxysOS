@@ -28,7 +28,7 @@ not conflict when they are introduced.
 
 | Base | Extent | Region | Introduced |
 | ---- | ------ | ------ | ---------- |
-| `0xFFFF800000000000` | 64 TiB | The direct map of all physical memory. | Phase 2, sub-task 2.4 |
+| `0xFFFF800000000000` | 64 TiB | The direct map of all physical memory. | Phase 2, sub-task 2.4 (established) |
 | `0xFFFFC00000000000` | 32 TiB | The kernel virtual allocator arena, comprising the kernel heap and device mappings. | Phase 2, sub-task 2.5 |
 | `0xFFFFFFFF80000000` | 2 GiB | The kernel image: text, read-only data, data and BSS. | Phase 1 |
 
@@ -345,3 +345,62 @@ is, and that a write through a writable mapping is observable.
 
 A read-only mapping cannot be confirmed by attempting a write until a page-fault
 handler exists. That negative test belongs to Phase 3, sub-task 3.4.
+
+
+## 9. The direct physical map
+
+Sub-task 2.4 adds a second mapping of physical memory, at `0xFFFF800000000000`,
+covering everything below the highest usable address.
+
+### 9.1 Why a second mapping is needed
+
+The kernel image window of Section 8 covers only the first gibibyte, because it
+exists to map the kernel where it is linked. That was sufficient while the only
+frames the kernel had to address were its own paging structures, which
+`FrameAllocateBelow` confined to that gibibyte. It is not sufficient in general:
+a machine with more memory would be unable to use any frame above the boundary
+for a page table, a heap page or a process image.
+
+The direct map removes the restriction. Every physical address has a
+corresponding virtual address, `PhysicalToDirect` of it, and the kernel may
+address any frame the allocator issues.
+
+### 9.2 Why the window is retained
+
+The kernel image window is not superseded. The kernel is linked within it: every
+code address, every string literal and the kernel stack are addresses in that
+window. Abandoning it would invalidate all of them at the instant CR3 was
+written. Both mappings therefore coexist, and the same physical frame is
+reachable by two virtual addresses.
+
+The distinction is one of purpose, and the two translation helpers name it:
+
+| Helper | Domain | Use |
+| ------ | ------ | --- |
+| `PhysicalToVirtual` | Below 1 GiB | The kernel image window. Used during the construction of the hierarchy, before the direct map is active. |
+| `PhysicalToDirect` | All physical memory | The direct map. Used by everything running after `PagingInitialise`. |
+
+### 9.3 Granularity and extent
+
+2 MiB pages are used throughout. A gibibyte costs 512 entries in one page
+directory; 4 KiB pages would cost 262144 entries across 512 page tables, which is
+2 MiB of paging structures for every gibibyte mapped.
+
+The extent runs to the highest usable address, rounded up to a large-page
+boundary. Nothing usable lies beyond it, and the reserved regions at the top of
+the address space, one of which QEMU reports at `0xFD00000000`, would demand an
+enormous number of entries to describe memory that does not exist.
+
+Under QEMU with 512 MiB the map covers 524288 KiB, and the whole hierarchy,
+window and direct map together, occupies six frames.
+
+### 9.4 The bootstrap ordering
+
+The direct map cannot be used to build itself. Paging structures are reached
+through `PagingTableAt`, which consults the window until the map is active and
+the direct map thereafter. The flag governing that choice is set only after CR3
+has been written, because until then the map exists in the structures but not in
+the translations the processor performs.
+
+`PagingAllocateTable` observes the same distinction, drawing from
+`FrameAllocateBelow` before the map exists and from `FrameAllocate` afterwards.

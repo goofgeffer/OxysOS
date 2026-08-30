@@ -74,12 +74,11 @@ Full citations are held in [`../docs/REFERENCES.md`](../docs/REFERENCES.md).
 
 ## Present limitations
 
-1. `PhysicalToVirtual` and `VirtualToPhysical` are valid only for physical
-   addresses below one gibibyte, that being the extent of the higher-half
-   mapping that the permanent hierarchy establishes. Phase 2, sub-task 2.4,
-   introduces the direct physical map and extends their domain to the whole of
-   physical memory. Until then `FrameAllocateBelow` must be used for any frame
-   the kernel intends to address.
+1. `PhysicalToVirtual` and `VirtualToPhysical` translate through the kernel image
+   window and are valid only below one gibibyte. For arbitrary physical memory
+   use `PhysicalToDirect` and `DirectToPhysical`, which are valid once
+   `PagingInitialise` has run. The distinction is explained in
+   `docs/MEMORY-LAYOUT.md`, Section 9.2.
 2. There is no formatted output. `KernelWriteHexadecimal` is a deliberate
    minimum, to be superseded when the C library of Phase 7 exists.
 4. The frame allocator is not yet safe against concurrent access; from sub-task

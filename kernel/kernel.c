@@ -284,6 +284,33 @@ static void KernelVerifyPaging(void)
         succeeded = false;
     }
 
+    /* The direct map must translate every physical address to itself, including
+     * addresses beyond the gibibyte the kernel image window covers. */
+    if (PagingTranslate(PhysicalToDirect(VGA_TEXT_BUFFER_PHYSICAL)) !=
+        VGA_TEXT_BUFFER_PHYSICAL)
+    {
+        KernelWriteString("  The direct map does not translate correctly.\n");
+        succeeded = false;
+    }
+
+    /*
+     * The kernel image window and the direct map must resolve the same physical
+     * frame by two different virtual addresses. This is the property that makes
+     * the direct map useful, and its failure would be silent.
+     */
+    if (PagingTranslate(PhysicalToDirect(VGA_TEXT_BUFFER_PHYSICAL)) !=
+        PagingTranslate(PhysicalToVirtual(VGA_TEXT_BUFFER_PHYSICAL)))
+    {
+        KernelWriteString("  The window and the direct map disagree.\n");
+        succeeded = false;
+    }
+
+    if (!PagingDirectMapIsActive())
+    {
+        KernelWriteString("  The direct map is not reported active.\n");
+        succeeded = false;
+    }
+
     /* A write through a writable mapping must succeed and be observable. The
      * kernel reaching the next line at all is itself the proof that the
      * hierarchy supports execution and a stack. */
@@ -348,12 +375,12 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
     PhysicalMemoryReport();
     KernelVerifyFrameAllocator();
 
-    PagingInitialise();
+    PagingInitialise(&KernelBootInformation);
     PagingReport();
     KernelVerifyPaging();
 
     VgaSetColour(VGA_COLOUR_LIGHT_GREEN, VGA_COLOUR_BLACK);
-    KernelWriteString("Phase 2.3 initialisation complete.\n");
+    KernelWriteString("Phase 2.4 initialisation complete.\n");
 
     VgaSetColour(VGA_COLOUR_LIGHT_GREY, VGA_COLOUR_BLACK);
     KernelWriteString("No further subsystems are implemented. Halting.\n");

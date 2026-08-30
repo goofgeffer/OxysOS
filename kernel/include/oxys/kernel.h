@@ -30,10 +30,21 @@
 #define MULTIBOOT2_BOOTLOADER_MAGIC UINT32_C(0x36D76289)
 
 /*
+ * The base of the direct physical map, at which the whole of physical memory is
+ * mapped once Phase 2, sub-task 2.4, has run. The region occupies the 64 TiB
+ * beginning at this address; refer to docs/MEMORY-LAYOUT.md, Section 2.
+ */
+#define DIRECT_MAP_BASE UINT64_C(0xFFFF800000000000)
+
+/*
  * Translates a physical address within the first gibibyte into the corresponding
- * kernel virtual address. The boot-time paging hierarchy maps only the first
- * gibibyte of physical memory into the higher half; addresses beyond that range
- * are not translatable until Phase 2 establishes the direct physical map.
+ * address in the kernel image window.
+ *
+ * This translation is valid only below one gibibyte, that being the extent of
+ * the window, and is used during the construction of the paging hierarchy, at
+ * which point the direct map does not yet exist. Code running after
+ * PagingInitialise should prefer PhysicalToDirect, which is valid for the whole
+ * of physical memory.
  */
 static inline VirtualAddress PhysicalToVirtual(PhysicalAddress physical_address)
 {
@@ -41,12 +52,29 @@ static inline VirtualAddress PhysicalToVirtual(PhysicalAddress physical_address)
 }
 
 /*
- * Translates a kernel virtual address within the higher-half mapping into the
+ * Translates a kernel virtual address within the kernel image window into the
  * corresponding physical address.
  */
 static inline PhysicalAddress VirtualToPhysical(VirtualAddress virtual_address)
 {
     return virtual_address - KERNEL_VIRTUAL_BASE;
+}
+
+/*
+ * Translates any physical address into its address within the direct physical
+ * map. Valid for the whole of physical memory, but only after PagingInitialise
+ * has established and activated the map.
+ */
+static inline VirtualAddress PhysicalToDirect(PhysicalAddress physical_address)
+{
+    return physical_address + DIRECT_MAP_BASE;
+}
+
+/* Translates an address within the direct physical map back to its physical
+ * address. */
+static inline PhysicalAddress DirectToPhysical(VirtualAddress virtual_address)
+{
+    return virtual_address - DIRECT_MAP_BASE;
 }
 
 /*

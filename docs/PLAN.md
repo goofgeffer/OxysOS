@@ -27,9 +27,12 @@ hierarchy is built from allocated frames and activated, the kernel's text and
 read-only data are mapped without write permission, and the low identity map
 established by `boot/boot.asm` is gone.
 
-**The next work is sub-task 2.4**, the direct physical map, which lifts the
-present restriction that only the first gibibyte of physical memory is
-addressable by the kernel.
+Sub-task 2.4 is complete: the whole of physical memory is mapped at
+`0xFFFF800000000000`, and the restriction confining kernel-addressable frames to
+the first gibibyte is lifted.
+
+**The next work is sub-task 2.5**, the kernel virtual address allocator and the
+kernel heap.
 
 ## Legend
 
@@ -76,7 +79,7 @@ provide the copy-on-write primitives upon which `fork()` will later depend.
 - [x] 2.1 Parse the Multiboot2 information structure and extract the memory map (tag type 6) and the ELF section headers (tag type 9).
 - [x] 2.2 Implement a physical frame allocator (bitmap) covering all usable regions, reserving the kernel image, the Multiboot2 structures and the low 1 MiB.
 - [x] 2.3 Construct a permanent kernel page-table hierarchy, replacing the boot-time tables and removing the low identity map.
-- [ ] 2.4 Implement a direct physical map region for kernel access to arbitrary frames.
+- [x] 2.4 Implement a direct physical map region for kernel access to arbitrary frames.
 - [ ] 2.5 Implement a kernel virtual-address-space allocator and a general-purpose kernel heap (slab allocator over a buddy-style page allocator).
 - [ ] 2.6 Implement per-frame reference counting as the substrate for shared pages.
 - [ ] 2.7 Implement the page-fault handler dispatch path (dependent upon Phase 3) and the copy-on-write fault resolution routine.
@@ -287,6 +290,7 @@ ACPI Specification 6.5.
 | Date | Phase affected | Summary |
 | ---- | -------------- | ------- |
 | 2026-08-30 | Phase 1 | Project initialised. Directory structure, documentation corpus, boot code, kernel entry, VGA and serial output, build system and ISO generation completed. Boot verified under QEMU. |
+| 2026-08-30 | Phase 2 | Sub-task 2.4 completed. The direct physical map covers the whole of usable physical memory at `0xFFFF800000000000` with 2 MiB pages. Paging structures are no longer confined to the first gibibyte. |
 | 2026-08-30 | Phase 2 | Sub-task 2.3 completed. The permanent kernel paging hierarchy is constructed from four allocated frames and activated; the kernel text and read-only data are mapped read-only; the low identity mapping is removed. Verified by a boot-time self-test that walks the hierarchy in software. |
 | 2026-08-30 | Phase 2 | Sub-task 2.2 completed. A bitmap physical frame allocator, with a boot-time self-test. 131039 frames governed under QEMU with 512 MiB, of which 288 are reserved: 256 for the low mebibyte, 27 for the kernel image, 4 for the bitmap and 1 for the boot information structure. |
 | 2026-08-30 | Phase 2 | Sub-task 2.1 completed. The Multiboot2 information structure is parsed into the neutral `BootInformation` description: the memory map, the ELF section count, the boot loader name and the command line. The kernel and boot information extents are recorded for the frame allocator to reserve. |

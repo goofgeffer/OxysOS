@@ -59,6 +59,18 @@ static PhysicalAddress PagingRootTable;
 /* The number of frames consumed by the hierarchy, for reporting. */
 static size_t PagingTableFrameCount;
 
+/*
+ * True once the direct physical map is established and active. Before that
+ * point a paging structure must be reached through the kernel image window,
+ * which confines every structure to the first gibibyte of physical memory;
+ * afterwards the whole of physical memory is addressable and that restriction
+ * is lifted.
+ */
+static bool PagingDirectMapActive;
+
+/* The extent of physical memory covered by the direct map. */
+static uint64_t PagingDirectMapBytes;
+
 /* Extracts the index of each paging structure from a linear address. */
 static size_t PagingLevel4Index(VirtualAddress address)
 {
@@ -88,6 +100,11 @@ static size_t PagingLevel1Index(VirtualAddress address)
  */
 static uint64_t *PagingTableAt(PhysicalAddress table)
 {
+    if (PagingDirectMapActive)
+    {
+        return (uint64_t *)(uintptr_t)PhysicalToDirect(table);
+    }
+
     return (uint64_t *)(uintptr_t)PhysicalToVirtual(table);
 }
 
@@ -102,7 +119,16 @@ static uint64_t *PagingTableAt(PhysicalAddress table)
  */
 static PhysicalAddress PagingAllocateTable(void)
 {
-    PhysicalAddress frame = FrameAllocateBelow(KERNEL_PHYSICAL_MAP_LIMIT);
+    /*
+     * Before the direct map exists a structure must be reachable through the
+     * kernel image window, which extends only to the first gibibyte. Once the
+     * direct map is active any frame may be used, and the restriction is lifted
+     * so that machines with more than a gibibyte of memory are not confined to
+     * their lowest gibibyte for page tables.
+     */
+    PhysicalAddress frame = PagingDirectMapActive
+                                ? FrameAllocate()
+                                : FrameAllocateBelow(KERNEL_PHYSICAL_MAP_LIMIT);
     uint64_t *entries;
 
     if (frame == FRAME_ALLOCATION_FAILED)
@@ -227,11 +253,13 @@ static void PagingActivate(PhysicalAddress root)
     __asm__ __volatile__("mov %0, %%cr3" : : "r"((uint64_t)root) : "memory");
 }
 
-void PagingInitialise(void)
+void PagingInitialise(const BootInformation *information)
 {
     PhysicalAddress root;
+    uint64_t direct_map_limit;
 
     PagingTableFrameCount = 0U;
+    PagingDirectMapActive = false;
     root = PagingAllocateTable();
 
     /*
@@ -252,9 +280,11 @@ void PagingInitialise(void)
     }
 
     /*
-     * Map the remainder of the first gibibyte with 2 MiB pages. This covers the
-     * frame bitmap, the boot information structure and every frame that later
-     * allocations may return, and costs 511 entries rather than 261632.
+     * Map the remainder of the first gibibyte with 2 MiB pages. This is the
+     * kernel image window, which is retained after the direct map exists because
+     * the kernel is linked within it: every code address, every string literal
+     * and the kernel stack are addresses in this window, and abandoning it would
+     * invalidate all of them.
      */
     for (PhysicalAddress frame = KERNEL_FINE_MAP_LIMIT;
          frame < KERNEL_PHYSICAL_MAP_LIMIT;
@@ -262,6 +292,26 @@ void PagingInitialise(void)
     {
         PagingMapLargePage(root, PhysicalToVirtual(frame), frame, PAGE_ENTRY_WRITABLE);
     }
+
+    /*
+     * Establish the direct physical map, at which the whole of physical memory
+     * is addressable. The extent is taken to the highest usable address, rounded
+     * up to a large-page boundary; nothing usable lies beyond it, and the
+     * reserved regions at the top of the address space would demand an enormous
+     * number of entries to describe memory that does not exist.
+     *
+     * Large pages are used throughout. A gibibyte of memory costs 512 entries in
+     * one page directory, whereas 4 KiB pages would cost 262144 entries across
+     * 512 page tables, which is 2 MiB of paging structures per gibibyte mapped.
+     */
+    direct_map_limit = AlignUp(information->highest_usable_address, PAGE_SIZE_LARGE);
+
+    for (PhysicalAddress frame = 0U; frame < direct_map_limit; frame += PAGE_SIZE_LARGE)
+    {
+        PagingMapLargePage(root, PhysicalToDirect(frame), frame, PAGE_ENTRY_WRITABLE);
+    }
+
+    PagingDirectMapBytes = direct_map_limit;
 
     /*
      * No entry is created at index 0 of the page-map level 4 table, so the
@@ -274,6 +324,23 @@ void PagingInitialise(void)
 
     PagingRootTable = root;
     PagingActivate(root);
+
+    /*
+     * The direct map is now live. This flag is set only after activation,
+     * because until CR3 is written the map exists in the structures but not in
+     * the translations the processor performs.
+     */
+    PagingDirectMapActive = true;
+}
+
+bool PagingDirectMapIsActive(void)
+{
+    return PagingDirectMapActive;
+}
+
+uint64_t PagingDirectMapExtent(void)
+{
+    return PagingDirectMapBytes;
 }
 
 PhysicalAddress PagingTranslate(VirtualAddress address)
@@ -399,6 +466,12 @@ void PagingReport(void)
     KernelWriteString(" frames (");
     KernelWriteDecimal(((uint64_t)PagingTableFrameCount * PAGE_SIZE) / 1024U);
     KernelWriteString(" KiB).\n");
+
+    KernelWriteString("Direct physical map: ");
+    KernelWriteHexadecimal(DIRECT_MAP_BASE);
+    KernelWriteString(" covering ");
+    KernelWriteDecimal(PagingDirectMapBytes / 1024U);
+    KernelWriteString(" KiB of physical memory.\n");
 
     KernelWriteString("Low identity mapping: ");
     KernelWriteString((entries[0] & PAGE_ENTRY_PRESENT) != 0U
