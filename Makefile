@@ -105,6 +105,7 @@ C_SOURCES := kernel/kernel.c \
              kernel/mm/paging.c \
              kernel/mm/vmm.c \
              kernel/mm/heap.c \
+             kernel/cpu/idt.c \
              drivers/vga/vga.c \
              drivers/serial/serial.c
 

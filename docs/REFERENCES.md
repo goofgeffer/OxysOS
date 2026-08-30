@@ -74,6 +74,16 @@ Sections relied upon:
 - **Volume 3A, Section 4.6**, access rights: the permissions of a translation are
   the conjunction of those held at every level of the hierarchy, which is why a
   restriction must be applied at the leaf entry and not at an intermediate one.
+- **Volume 3A, Section 6.2**, exception and interrupt vectors: vectors 0 to 31
+  are reserved for architecture-defined exceptions; 32 to 255 are available.
+- **Volume 3A, Section 6.10**, the interrupt descriptor table and the IDTR
+  register; the limit is one less than the size of the table in bytes.
+- **Volume 3A, Section 6.14.1 and Figure 6-8**, the 64-bit mode IDT: the index is
+  the vector scaled by 16, each descriptor occupying sixteen bytes; only 64-bit
+  interrupt and trap gates are valid, a legacy 32-bit type generating a
+  general-protection exception.
+- **Volume 2A, "LGDT/LIDT" and "SGDT/SIDT"**, the instructions that load and
+  store the descriptor table registers.
 - **Volume 3A, Section 4.10.4.1**, invalidation: writing CR3 invalidates every
   translation-lookaside-buffer entry associated with the current process context,
   save those for global pages.

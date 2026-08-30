@@ -53,6 +53,7 @@ units.
 | Unit | Role |
 | ---- | ---- |
 | `boot/boot.asm` | The Multiboot2 header; the 32-bit entry point `_start`; CPUID and long-mode feature detection; the construction of the boot-time paging hierarchy; the long-mode transition; the higher-half entry point `KernelEntryHigh`. |
+| `kernel/cpu/idt.c` | The interrupt descriptor table: its storage, the installation of a gate, and the loading of the table. |
 | `kernel/mm/heap.c` | The kernel heap: a slab allocator of eight size classes over the kernel arena. |
 | `kernel/mm/vmm.c` | The kernel virtual address allocator, issuing ranges of the kernel arena backed by frames. |
 | `kernel/mm/paging.c` | The permanent kernel paging hierarchy: its construction, activation and software translation. |

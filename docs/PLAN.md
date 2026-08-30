@@ -41,8 +41,10 @@ fault path, and a fault handler is unreachable until the interrupt descriptor
 table of Phase 3 is installed. The dependency is recorded in
 `docs/ARCHITECTURE.md`, Section 4.
 
-**The next work is therefore Phase 3, sub-task 3.1**, the interrupt descriptor
-table. Sub-tasks 2.7 and 2.8 follow the completion of sub-task 3.4.
+**Phase 3 is in progress.** Sub-task 3.1 is complete: the interrupt descriptor
+table is defined and loaded, with every gate initially absent. The next work is
+sub-task 3.2, the vector stubs. Sub-tasks 2.7 and 2.8 follow the completion of
+sub-task 3.4.
 
 ## Legend
 
@@ -105,7 +107,7 @@ exceptions, and accept keyboard input.
 **Specifications**: Intel SDM Volume 3A, Chapter 6; Intel 8259A datasheet;
 IBM PS/2 controller documentation.
 
-- [ ] 3.1 Define the IDT and the 64-bit interrupt-gate descriptor format; load it with `lidt`.
+- [x] 3.1 Define the IDT and the 64-bit interrupt-gate descriptor format; load it with `lidt`.
 - [ ] 3.2 Author assembly stubs for vectors 0–255, normalising the presence or absence of a processor-pushed error code.
 - [ ] 3.3 Implement a C interrupt dispatcher operating on a formal trap frame structure.
 - [ ] 3.4 Implement exception handlers with register and stack diagnostics emitted over the serial port.
@@ -300,6 +302,7 @@ ACPI Specification 6.5.
 | Date | Phase affected | Summary |
 | ---- | -------------- | ------- |
 | 2026-08-30 | Phase 1 | Project initialised. Directory structure, documentation corpus, boot code, kernel entry, VGA and serial output, build system and ISO generation completed. Boot verified under QEMU. |
+| 2026-08-30 | Phase 3 | Sub-task 3.1 completed. The interrupt descriptor table and the 64-bit gate descriptor are defined and the table loaded with `LIDT`. Every gate is initially absent. Verified by reading the table register back with `SIDT`. |
 | 2026-08-30 | — | The project guidelines were consolidated under `PROJECT_GUIDELINES.md` and the text adapted to that name: the framing addressed to an assistant is now addressed to a contributor, and the document now describes itself as guidelines. The root directory recorded in Sections 1 and 9 was corrected to `~/oxys-os`. The documentation index was relocated from `docs/` to the repository root as `README.md`, becoming the front page of the repository, with every relative link corrected. Every reference to the guidelines document was updated across the source, the documentation and the agent definitions. |
 | 2026-08-30 | Phase 2 | Sub-task 2.6 completed. Per-frame reference counting is established over a 255 KiB table allocated from the kernel heap. `FrameFree` releases one reference and returns a frame to the allocator only upon the last. Sub-tasks 2.7 and 2.8 are deferred until Phase 3 provides a page-fault handler. |
 | 2026-08-30 | Phase 2 | Sub-task 2.5 completed. The kernel virtual address allocator issues ranges of the 32 TiB arena, backing each page with a frame; the kernel heap is a slab allocator over it, with eight size classes and a whole-page path for larger requests. Both pass a boot-time self-test. |

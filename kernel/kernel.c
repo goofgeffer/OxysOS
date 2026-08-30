@@ -28,6 +28,7 @@
 #include <oxys/paging.h>
 #include <oxys/vmm.h>
 #include <oxys/heap.h>
+#include <oxys/idt.h>
 #include <oxys/vga.h>
 #include <oxys/serial.h>
 
@@ -597,6 +598,38 @@ static void KernelVerifyReferenceCounting(void)
                           : "Reference counting self-test FAILED.\n");
 }
 
+/*
+ * Confirms that the interrupt descriptor table was loaded as intended.
+ *
+ * The table register is read back with SIDT rather than trusting the value that
+ * was written to it. A LIDT that silently failed, or an operand corrupted by
+ * padding the compiler inserted, would produce a table register that does not
+ * describe the table, and nothing else would reveal it until the first interrupt
+ * escalated to a reset.
+ */
+static void KernelVerifyIdt(void)
+{
+    const uint16_t expected_limit = (uint16_t)((IDT_ENTRY_COUNT * 16U) - 1U);
+    const uint64_t expected_base = (uint64_t)(uintptr_t)IdtTableAddress();
+    bool succeeded = true;
+
+    if (IdtLimit() != expected_limit)
+    {
+        KernelWriteString("  The table limit read back does not match.\n");
+        succeeded = false;
+    }
+
+    if (IdtBase() != expected_base)
+    {
+        KernelWriteString("  The table base read back does not match.\n");
+        succeeded = false;
+    }
+
+    KernelWriteString(succeeded
+                          ? "Interrupt descriptor table self-test passed.\n"
+                          : "Interrupt descriptor table self-test FAILED.\n");
+}
+
 void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic)
 {
     /*
@@ -660,8 +693,12 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
     KernelVerifyReferenceCounting();
     PhysicalMemoryReport();
 
+    IdtInitialise();
+    IdtReport();
+    KernelVerifyIdt();
+
     VgaSetColour(VGA_COLOUR_LIGHT_GREEN, VGA_COLOUR_BLACK);
-    KernelWriteString("Phase 2.6 initialisation complete.\n");
+    KernelWriteString("Phase 3.1 initialisation complete.\n");
 
     VgaSetColour(VGA_COLOUR_LIGHT_GREY, VGA_COLOUR_BLACK);
     KernelWriteString("No further subsystems are implemented. Halting.\n");

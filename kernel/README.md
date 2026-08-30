@@ -19,6 +19,8 @@ are separate.
 | Path | Description |
 | ---- | ----------- |
 | `kernel.c` | `KernelMain`, the C entry point: it validates the boot loader handover, initialises the early output devices, presents the identification banner and halts. `KernelPanic`, the unrecoverable-error path. `KernelHalt`, `KernelWriteString` and `KernelWriteHexadecimal`. |
+| `cpu/idt.c` | The interrupt descriptor table. `IdtInitialise`, `IdtSetGate`, and the accessors that read the table register back with `SIDT`. |
+| `include/oxys/idt.h` | The 64-bit gate descriptor, the `LIDT` operand, the gate types and the attribute bits. |
 | `mm/heap.c` | The kernel heap. `KernelAllocate`, `KernelAllocateZeroed` and `KernelFree`. |
 | `mm/vmm.c` | The kernel virtual address allocator. `KernelPagesAllocate` and `KernelPagesFree`. |
 | `include/oxys/heap.h` | The interface of the kernel heap. |
