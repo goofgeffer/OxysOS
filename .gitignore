@@ -14,10 +14,12 @@ kernel/kernel.elf
 boot/boot.bin
 boot/boot.o
 
-# ISO generation leftovers
-iso/
+# ISO generation leftovers.
+# Note: the pattern below excludes only the staging copy produced beneath the
+# build directory. The authoritative configuration, boot/grub/grub.cfg, is a
+# tracked source file and must not be ignored.
 isodir/
-grub.cfg
+build/isodir/boot/grub/grub.cfg
 *.iso.tmp
 
 # Cross-compiler or toolchain local builds (if any)
