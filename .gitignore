@@ -1,0 +1,109 @@
+# Build artifacts
+*.o
+*.elf
+*.bin
+*.img
+*.iso
+*.tar
+*.gz
+*.bz2
+*.xz
+
+# Kernel and boot images
+kernel/kernel.elf
+boot/boot.bin
+boot/boot.o
+
+# ISO generation leftovers
+iso/
+isodir/
+grub.cfg
+*.iso.tmp
+
+# Cross-compiler or toolchain local builds (if any)
+cross-*/
+x86_64-elf-*/
+sysroot/
+
+# Object files and dependency files
+*.d
+*.deps
+*.a
+*.so
+*.lib
+
+# Build directories
+build/
+obj/
+out/
+dist/
+
+# QEMU and VirtualBox runtime files
+*.vdi
+*.vmdk
+*.vbox
+*.vbox-prev
+*.vhd
+*.qcow2
+*.snap
+*.sav
+*.mem
+*.pid
+*.log
+
+# Serial and debug logs
+*.log
+*.debug
+com1.out
+serial.log
+
+# Project-specific logs from hooks
+.claude/hooks.log
+
+# Claude project configuration (do not commit)
+CLAUDE.md
+.claude/
+
+# User/editor temporary files
+*~
+*.swp
+*.swo
+*.bak
+*.tmp
+*.temp
+
+# IDE specific (if you use VS Code, etc.)
+.vscode/
+.idea/
+*.iml
+*.code-workspace
+
+# OS metadata (Windows, macOS, Linux)
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Test artifacts from real hardware USB creation (do not commit large files)
+*.usb
+*.dd
+
+# Documentation build output (if any)
+docs/_build/
+docs/html/
+docs/latex/
+
+# User local configuration (not to be shared)
+.env
+.env.local
+.secrets/
+secrets/
+
+# Compiled userland programs (if built inside userland/)
+userland/*.o
+userland/*.elf
+userland/bin/
+userland/sbin/
+
+# Temporary files from GRUB mkrescue
+*.tmp
+*.mkrescue
