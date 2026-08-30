@@ -25,6 +25,7 @@
 #include <oxys/kernel.h>
 #include <oxys/bootinfo.h>
 #include <oxys/pmm.h>
+#include <oxys/paging.h>
 #include <oxys/vga.h>
 #include <oxys/serial.h>
 
@@ -224,6 +225,80 @@ static void KernelVerifyFrameAllocator(void)
                           : "Frame allocator self-test FAILED.\n");
 }
 
+/*
+ * A datum in the BSS, written by the paging self-test to confirm that writable
+ * mappings genuinely permit writing after the hierarchy has been replaced. It is
+ * volatile so that the compiler cannot discard the store as unobservable.
+ */
+static volatile uint64_t KernelPagingWriteProbe;
+
+/*
+ * Exercises the permanent paging hierarchy and reports the outcome.
+ *
+ * Every assertion here is made by walking the hierarchy in software rather than
+ * by dereferencing an address. There is no interrupt descriptor table until
+ * Phase 3, so a page fault would escalate to a triple fault and reset the
+ * machine, destroying the evidence. A read-only mapping therefore cannot be
+ * tested by attempting a write; it is tested by inspecting the entries that
+ * govern it. The negative test becomes possible in Phase 3, sub-task 3.4.
+ */
+static void KernelVerifyPaging(void)
+{
+    const VirtualAddress text_address = (VirtualAddress)(uintptr_t)&KernelMain;
+    const VirtualAddress data_address = (VirtualAddress)(uintptr_t)&KernelPagingWriteProbe;
+    const VirtualAddress vga_address = PhysicalToVirtual(VGA_TEXT_BUFFER_PHYSICAL);
+    bool succeeded = true;
+
+    /* A higher-half address must translate to the physical address it was
+     * derived from; this is the invariant the whole layout rests upon. */
+    if (PagingTranslate(vga_address) != VGA_TEXT_BUFFER_PHYSICAL)
+    {
+        KernelWriteString("  The VGA frame buffer does not translate correctly.\n");
+        succeeded = false;
+    }
+
+    if (PagingTranslate(text_address) != VirtualToPhysical(text_address))
+    {
+        KernelWriteString("  The kernel text does not translate correctly.\n");
+        succeeded = false;
+    }
+
+    /* The identity mapping must have gone. A low virtual address must now
+     * resolve to nothing at all. */
+    if (PagingTranslate((VirtualAddress)0x100000U) != 0U)
+    {
+        KernelWriteString("  The low identity mapping survives.\n");
+        succeeded = false;
+    }
+
+    /* The kernel's text must not be writable; its data must be. */
+    if (PagingAddressIsWritable(text_address))
+    {
+        KernelWriteString("  The kernel text is mapped writable.\n");
+        succeeded = false;
+    }
+
+    if (!PagingAddressIsWritable(data_address))
+    {
+        KernelWriteString("  The kernel data is not mapped writable.\n");
+        succeeded = false;
+    }
+
+    /* A write through a writable mapping must succeed and be observable. The
+     * kernel reaching the next line at all is itself the proof that the
+     * hierarchy supports execution and a stack. */
+    KernelPagingWriteProbe = UINT64_C(0x0BADC0DEDEADBEEF);
+    if (KernelPagingWriteProbe != UINT64_C(0x0BADC0DEDEADBEEF))
+    {
+        KernelWriteString("  A write through a writable mapping was not observed.\n");
+        succeeded = false;
+    }
+
+    KernelWriteString(succeeded
+                          ? "Paging self-test passed.\n"
+                          : "Paging self-test FAILED.\n");
+}
+
 void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic)
 {
     /*
@@ -273,8 +348,12 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
     PhysicalMemoryReport();
     KernelVerifyFrameAllocator();
 
+    PagingInitialise();
+    PagingReport();
+    KernelVerifyPaging();
+
     VgaSetColour(VGA_COLOUR_LIGHT_GREEN, VGA_COLOUR_BLACK);
-    KernelWriteString("Phase 2.2 initialisation complete.\n");
+    KernelWriteString("Phase 2.3 initialisation complete.\n");
 
     VgaSetColour(VGA_COLOUR_LIGHT_GREY, VGA_COLOUR_BLACK);
     KernelWriteString("No further subsystems are implemented. Halting.\n");

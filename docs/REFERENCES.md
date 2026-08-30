@@ -71,6 +71,12 @@ Sections relied upon:
   the `PS` flag to map a 2 MiB page.
 - **Volume 3A, Table 4-15**, the paging-structure entry flags `P`, `R/W`, `U/S`
   and `PS`.
+- **Volume 3A, Section 4.6**, access rights: the permissions of a translation are
+  the conjunction of those held at every level of the hierarchy, which is why a
+  restriction must be applied at the leaf entry and not at an intermediate one.
+- **Volume 3A, Section 4.10.4.1**, invalidation: writing CR3 invalidates every
+  translation-lookaside-buffer entry associated with the current process context,
+  save those for global pages.
 - **Volume 3A, Section 13.1**, the enabling and state management required of the
   SSE and x87 units.
 

@@ -102,6 +102,7 @@ LDFLAGS := -n -T $(LINKER_SCRIPT) -Map $(KERNEL_MAP) -z max-page-size=0x1000
 C_SOURCES := kernel/kernel.c \
              kernel/multiboot2.c \
              kernel/mm/pmm.c \
+             kernel/mm/paging.c \
              drivers/vga/vga.c \
              drivers/serial/serial.c
 

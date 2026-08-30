@@ -104,7 +104,11 @@ Two mappings of the same first gibibyte of physical memory are established:
    the kernel proper is linked.
 
 The identity mapping is retained until the permanent kernel page tables are
-constructed in Phase 2, sub-task 2.3, at which point it is removed.
+constructed in Phase 2, sub-task 2.3, at which point it is removed. From that
+point the structures described in this section are dead: nothing refers to them,
+and the frames they occupy lie within the kernel image and are reserved by the
+frame allocator. Reclaiming them is deferred, being an optimisation of some
+twenty kibibytes with a corresponding risk of releasing memory still in use.
 
 ## 6. The long-mode transition
 

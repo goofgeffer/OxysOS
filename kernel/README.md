@@ -19,6 +19,8 @@ are separate.
 | Path | Description |
 | ---- | ----------- |
 | `kernel.c` | `KernelMain`, the C entry point: it validates the boot loader handover, initialises the early output devices, presents the identification banner and halts. `KernelPanic`, the unrecoverable-error path. `KernelHalt`, `KernelWriteString` and `KernelWriteHexadecimal`. |
+| `mm/paging.c` | The permanent kernel paging hierarchy. `PagingInitialise`, `PagingTranslate`, `PagingAddressIsWritable` and the reporting routines. |
+| `include/oxys/paging.h` | The paging-structure entry flags and the interface of the paging subsystem. |
 | `mm/pmm.c` | The physical frame allocator. `PhysicalMemoryInitialise`, `FrameAllocate`, `FrameAllocateBelow`, `FrameFree` and the accounting accessors. |
 | `include/oxys/memory.h` | `PAGE_SIZE`, `PAGE_SHIFT`, `LOW_MEMORY_LIMIT` and the alignment helpers. |
 | `include/oxys/pmm.h` | The interface of the physical frame allocator. |
@@ -73,9 +75,11 @@ Full citations are held in [`../docs/REFERENCES.md`](../docs/REFERENCES.md).
 ## Present limitations
 
 1. `PhysicalToVirtual` and `VirtualToPhysical` are valid only for physical
-   addresses below one gibibyte, that being the extent of the boot-time mapping.
-   Phase 2, sub-task 2.4, introduces the direct physical map and extends their
-   domain to the whole of physical memory.
+   addresses below one gibibyte, that being the extent of the higher-half
+   mapping that the permanent hierarchy establishes. Phase 2, sub-task 2.4,
+   introduces the direct physical map and extends their domain to the whole of
+   physical memory. Until then `FrameAllocateBelow` must be used for any frame
+   the kernel intends to address.
 2. There is no formatted output. `KernelWriteHexadecimal` is a deliberate
    minimum, to be superseded when the C library of Phase 7 exists.
 4. The frame allocator is not yet safe against concurrent access; from sub-task

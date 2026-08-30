@@ -269,3 +269,79 @@ that issued frames are page aligned, that a frame is not issued twice, that no
 frame is issued from the low mebibyte or from within the kernel image, that the
 free count moves correctly, and that a freed frame is reissued in preference to
 an untouched one.
+
+
+## 8. The permanent kernel paging hierarchy
+
+Sub-task 2.3 replaces the boot-time structures of `boot/boot.asm` with a
+hierarchy built from frames obtained from the allocator of Section 7.
+
+### 8.1 Structure
+
+| Structure | Frames | Contents |
+| --------- | ------ | -------- |
+| Page-map level 4 | 1 | Entry 511 alone. Entry 0 is deliberately absent. |
+| Page-directory-pointer table | 1 | Entry 510, reaching the kernel's 1 GiB window. |
+| Page directory | 1 | Entry 0 refers to the page table below; entries 1 to 511 map 2 MiB pages. |
+| Page table | 1 | 512 entries of 4 KiB, covering the first 2 MiB of physical memory. |
+
+Four frames, 16 KiB in total, with the root observed at `0x0011F000`.
+
+### 8.2 Why two granularities
+
+The first 2 MiB of physical memory is mapped with 4 KiB pages, and the remainder
+of the gibibyte with 2 MiB pages.
+
+The kernel image lies within the first 2 MiB, and per-section permissions cannot
+be applied at a granularity coarser than the sections themselves; a 2 MiB page
+spanning both `.text` and `.data` would have to be writable, which would defeat
+the protection entirely. Beyond the image there is nothing to distinguish, and
+2 MiB pages cost 511 entries where 4 KiB pages would cost 261632, besides
+consuming fewer translation-lookaside-buffer entries.
+
+### 8.3 Permissions
+
+| Region | Permission | Reason |
+| ------ | ---------- | ------ |
+| `.text` | Read, execute | Code must not be modifiable. |
+| `.rodata` | Read | Constant data must not be modifiable. |
+| `.data`, `.bss`, `.boot`, all other mapped memory | Read, write | Required for operation. |
+
+The execute-disable bit is not applied. It requires `IA32_EFER.NXE` to be set,
+and its introduction together with SMEP and SMAP belongs to Phase 13, sub-task
+13.3. Withholding write permission is the part of the protection obtainable
+without that machinery, and it is taken now rather than retrofitted.
+
+Restrictions are applied at the leaf entry, never at an intermediate one. Intel
+SDM, Volume 3A, Section 4.6, provides that the permissions of a translation are
+the conjunction of those at every level, so a restrictive intermediate entry
+would restrict every mapping beneath it rather than the one intended.
+
+### 8.4 The removal of the identity mapping
+
+No entry is created at index 0 of the page-map level 4 table, so the identity
+mapping ceases to exist the instant CR3 is written. Per Intel SDM, Volume 3A,
+Section 4.10.4.1, that write invalidates every translation-lookaside-buffer entry
+for the current process context save those marked global; no mapping here is
+global, so no stale translation of the low addresses can survive.
+
+The switch is safe because the instruction following the write to CR3 is fetched
+through the new hierarchy, and the kernel already executes from the higher half,
+which the new hierarchy maps. The stack likewise resides in the kernel's BSS.
+Nothing depends upon the identity map at this point: the values that the boot
+code preserved at low physical addresses were consumed by `KernelEntryHigh`
+before `KernelMain` was entered, and every pointer the kernel holds is a
+higher-half address.
+
+### 8.5 Verification
+
+The hierarchy is verified by walking it in software rather than by dereferencing
+addresses. There is no interrupt descriptor table until Phase 3, so a page fault
+would escalate to a triple fault and reset the machine, destroying the evidence.
+`KernelVerifyPaging` therefore confirms that the VGA frame buffer and the kernel
+text translate to the physical addresses they were derived from, that a low
+virtual address translates to nothing, that the text is not writable and the data
+is, and that a write through a writable mapping is observable.
+
+A read-only mapping cannot be confirmed by attempting a write until a page-fault
+handler exists. That negative test belongs to Phase 3, sub-task 3.4.
