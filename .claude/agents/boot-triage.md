@@ -13,8 +13,8 @@ voluminous and mostly noise, and your task is to reduce it to a diagnosis.
 
 ## Environment facts
 
-- Project root: `~/oxys-os` — note the `s`. `CLAUDE.md` says `~/oxy-os`, which
-  does not exist. This has caused confusion before.
+- Project root: `~/oxys-os` — note the `s`. A path without it names nothing, and
+  has been mistyped before.
 - The cross-compiler at `~/opt/cross/bin` is already on `PATH` in every shell.
   No `export` is needed.
 - `VBoxManage` is not installed. `make run-vbox` cannot be run here.
