@@ -28,8 +28,23 @@ Sections relied upon:
   are 32-bit read/write segments of the same base and limit; the A20 gate is
   enabled; `CR0.PG` is clear and `CR0.PE` is set; `EFLAGS.VM` and `EFLAGS.IF` are
   clear.
-- **3.6**, the boot information format: the structure commences with a 32-bit
-  total size and a 32-bit reserved field and is aligned upon an 8-byte boundary.
+- **3.6.1**, the placement of the structure: the boot loader may place it
+  anywhere in memory, and the operating system must avoid overwriting it until it
+  has finished using it.
+- **3.6.2**, the basic tag structure: the fixed part of a 32-bit total size and a
+  32-bit reserved field; the common tag header of a 32-bit type and a 32-bit
+  size; the rule that a tag's size excludes its trailing padding and that each
+  tag begins at an 8-byte aligned address.
+- **3.6.7**, the ELF-Symbols tag, type 9. Note the discrepancy recorded in
+  `kernel/include/oxys/multiboot2.h`: the prose of this section and the reference
+  C header in the same document disagree upon the widths of the `num`, `entsize`
+  and `shndx` fields.
+- **3.6.8**, the memory map tag, type 6: the `entry_size` and `entry_version`
+  fields; the guarantee that `entry_size` is a multiple of eight; the entry
+  layout of `base_addr`, `length`, `type` and `reserved`; the region type values,
+  of which 1 denotes available memory; and the warning that the map includes the
+  regions occupied by the kernel and by the boot information structure, which the
+  kernel must take care not to overwrite.
 
 Used by: `boot/boot.asm`, `kernel/kernel.c`, `linker.ld`, `boot/grub/grub.cfg`.
 

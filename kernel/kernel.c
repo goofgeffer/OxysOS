@@ -4,7 +4,8 @@
  *          state established by the boot loader, initialises the early
  *          diagnostic output devices, presents the system identification banner,
  *          and halts the processor pending the subsystems of subsequent phases.
- * Key functions: KernelMain, KernelPanic, KernelHalt, KernelReportBootState.
+ * Key functions: KernelMain, KernelPanic, KernelHalt, KernelWriteString,
+ *          KernelWriteHexadecimal, KernelWriteDecimal.
  * References:
  *   - Multiboot2 Specification 2.0, Section 3.3 ("I386 machine state"): EAX
  *     contains 0x36D76289 and EBX the physical address of the Multiboot2
@@ -22,6 +23,7 @@
  */
 
 #include <oxys/kernel.h>
+#include <oxys/bootinfo.h>
 #include <oxys/vga.h>
 #include <oxys/serial.h>
 
@@ -52,7 +54,7 @@ static _Noreturn void KernelHalt(void)
  * routine is provided here because the formatted output facilities of the C
  * library are not implemented until Phase 7.
  */
-static void KernelWriteHexadecimal(uint64_t value)
+void KernelWriteHexadecimal(uint64_t value)
 {
     static const char HexadecimalDigits[] = "0123456789ABCDEF";
 
@@ -76,11 +78,35 @@ static void KernelWriteHexadecimal(uint64_t value)
 }
 
 /*
+ * Writes an unsigned value in decimal to both output devices. The digits are
+ * generated least significant first and therefore emitted from the end of the
+ * buffer backwards.
+ */
+void KernelWriteDecimal(uint64_t value)
+{
+    /* Twenty digits suffice for the greatest 64-bit value, plus a terminator. */
+    char buffer[21];
+    size_t index = sizeof(buffer) - 1U;
+
+    buffer[index] = '\0';
+
+    do
+    {
+        --index;
+        buffer[index] = (char)('0' + (unsigned char)(value % 10U));
+        value /= 10U;
+    } while (value != 0U);
+
+    VgaWriteString(&buffer[index]);
+    SerialWriteString(&buffer[index]);
+}
+
+/*
  * Writes a string to both the text console and the serial port, so that the
  * diagnostic record is complete irrespective of which device the operator is
  * observing.
  */
-static void KernelWriteString(const char *string)
+void KernelWriteString(const char *string)
 {
     VgaWriteString(string);
     SerialWriteString(string);
@@ -97,38 +123,11 @@ void KernelPanic(const char *message)
 }
 
 /*
- * Emits a record of the state received from the boot loader. The total size
- * field of the Multiboot2 information structure is read in order to demonstrate
- * that the structure is reachable through the higher-half mapping; the
- * systematic parsing of its tags is deferred to Phase 2, sub-task 2.1.
+ * The parsed, boot-protocol-neutral description of the machine. It is held at
+ * file scope rather than upon the stack because it is substantial, and the boot
+ * stack is only 64 KiB.
  */
-static void KernelReportBootState(uint32_t multiboot_information_address)
-{
-    const uint32_t *information_structure;
-    uint32_t total_size;
-
-    KernelWriteString("Multiboot2 information structure at physical address ");
-    KernelWriteHexadecimal((uint64_t)multiboot_information_address);
-    KernelWriteString(".\n");
-
-    /*
-     * The Multiboot2 Specification, Section 3.6, requires the structure to be
-     * aligned on an 8-byte boundary. A misaligned address indicates a defective
-     * boot loader and is treated as unrecoverable.
-     */
-    if ((multiboot_information_address & 0x07U) != 0U)
-    {
-        KernelPanic("The Multiboot2 information structure is misaligned.");
-    }
-
-    information_structure =
-        (const uint32_t *)(uintptr_t)PhysicalToVirtual((PhysicalAddress)multiboot_information_address);
-    total_size = information_structure[0];
-
-    KernelWriteString("Multiboot2 information structure total size: ");
-    KernelWriteHexadecimal((uint64_t)total_size);
-    KernelWriteString(" bytes.\n");
-}
+static BootInformation KernelBootInformation;
 
 void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic)
 {
@@ -160,10 +159,23 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
     }
 
     KernelWriteString("Multiboot2 magic value verified.\n");
-    KernelReportBootState(multiboot_information_address);
+
+    /*
+     * Reduce the Multiboot2 structure to the neutral description upon which the
+     * remainder of the kernel depends. A failure here is unrecoverable: without a
+     * memory map the physical frame allocator cannot be constructed, and without
+     * that the kernel can do nothing further.
+     */
+    if (!BootInformationParseMultiboot2(multiboot_information_address,
+                                        &KernelBootInformation))
+    {
+        KernelPanic("The Multiboot2 boot information structure could not be parsed.");
+    }
+
+    BootInformationReport(&KernelBootInformation);
 
     VgaSetColour(VGA_COLOUR_LIGHT_GREEN, VGA_COLOUR_BLACK);
-    KernelWriteString("Phase 1 initialisation complete.\n");
+    KernelWriteString("Phase 2.1 initialisation complete.\n");
 
     VgaSetColour(VGA_COLOUR_LIGHT_GREY, VGA_COLOUR_BLACK);
     KernelWriteString("No further subsystems are implemented. Halting.\n");

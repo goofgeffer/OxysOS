@@ -19,6 +19,9 @@ are separate.
 | Path | Description |
 | ---- | ----------- |
 | `kernel.c` | `KernelMain`, the C entry point: it validates the boot loader handover, initialises the early output devices, presents the identification banner and halts. `KernelPanic`, the unrecoverable-error path. `KernelHalt`, `KernelWriteString` and `KernelWriteHexadecimal`. |
+| `multiboot2.c` | `BootInformationParseMultiboot2`, which walks the Multiboot2 tag series and reduces it to the neutral description; `BootInformationReport`, which emits that description. |
+| `include/oxys/multiboot2.h` | The raw on-memory layout of the Multiboot2 structure and of the tags the kernel consumes, together with the ELF64 section header. |
+| `include/oxys/bootinfo.h` | `BootInformation`, the boot-protocol-neutral description of the machine, and its classification of memory regions. |
 | `include/oxys/types.h` | The fixed-width integer types, and the distinct address types `PhysicalAddress` and `VirtualAddress`. |
 | `include/oxys/kernel.h` | `KERNEL_VIRTUAL_BASE`, the address translation helpers `PhysicalToVirtual` and `VirtualToPhysical`, and the declarations of `KernelMain` and `KernelPanic`. |
 | `include/oxys/io.h` | `PortReadByte`, `PortWriteByte` and `IoWait`: the accessors for the x86 programmed input/output address space. |
@@ -55,7 +58,7 @@ processor permanently.
 
 | Specification | Sections | Applied to |
 | ------------- | -------- | ---------- |
-| Multiboot2 Specification 2.0 | 3.3, 3.6 | The validation of the handover, and the reading of the information structure's total size. |
+| Multiboot2 Specification 2.0 | 3.3, 3.6.1, 3.6.2, 3.6.7, 3.6.8 | The validation of the handover; the tag series and its alignment rule; the ELF sections tag; the memory map tag and its region types. |
 | System V ABI, AMD64 supplement | 3.1.2, 3.2.3 | The LP64 data model and the argument registers. |
 | ISO/IEC 9899:2011 | 4 ¶6, 6.7.9 ¶4, 7.18, 7.20 | The freestanding environment, constant initialisers, and the fixed-width and boolean types. |
 | Intel SDM, Volume 1 | 18.3 | The programmed input/output address space. |
@@ -70,9 +73,7 @@ Full citations are held in [`../docs/REFERENCES.md`](../docs/REFERENCES.md).
    addresses below one gibibyte, that being the extent of the boot-time mapping.
    Phase 2, sub-task 2.4, introduces the direct physical map and extends their
    domain to the whole of physical memory.
-2. The Multiboot2 information structure is not yet parsed beyond its total size
-   field. Systematic tag parsing arrives in Phase 2, sub-task 2.1.
-3. There is no formatted output. `KernelWriteHexadecimal` is a deliberate
+2. There is no formatted output. `KernelWriteHexadecimal` is a deliberate
    minimum, to be superseded when the C library of Phase 7 exists.
 4. Nothing here is yet safe against concurrent access. Every structure
    introduced from Phase 2 onward must record its locking discipline in its

@@ -100,6 +100,7 @@ LDFLAGS := -n -T $(LINKER_SCRIPT) -Map $(KERNEL_MAP) -z max-page-size=0x1000
 # ------------------------------------------------------------------------------
 
 C_SOURCES := kernel/kernel.c \
+             kernel/multiboot2.c \
              drivers/vga/vga.c \
              drivers/serial/serial.c
 
@@ -199,7 +200,7 @@ verify: $(ISO_IMAGE)
 	@echo "--- Captured serial output ---"
 	@cat $(BUILD_DIR)/serial.log || true
 	@echo "--- End of captured serial output ---"
-	@grep -q "Phase 1 initialisation complete." $(BUILD_DIR)/serial.log \
+	@grep -q "initialisation complete." $(BUILD_DIR)/serial.log \
 		&& echo "VERIFICATION SUCCEEDED: the kernel booted and reported completion." \
 		|| (echo "VERIFICATION FAILED: the expected banner was not observed." && false)
 

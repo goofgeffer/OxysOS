@@ -17,9 +17,10 @@ the COM1 serial port. Two sub-tasks remain open for environmental reasons alone
 and are recorded as such: 1.11, because VirtualBox is not installed in the
 present WSL2 environment, and 1.12, physical hardware testing.
 
-**The next work is Phase 2, sub-task 2.1**: the parsing of the Multiboot2
-information structure, and in particular the memory map tag of type 6, upon which
-the physical frame allocator of sub-task 2.2 depends.
+**Phase 2 is in progress.** Sub-task 2.1 is complete: the Multiboot2 information
+structure is parsed into a boot-protocol-neutral `BootInformation` description,
+and the memory map is reported at boot. The next work is sub-task 2.2, the
+physical frame allocator.
 
 ## Legend
 
@@ -63,7 +64,7 @@ provide the copy-on-write primitives upon which `fork()` will later depend.
 **Specifications**: Intel SDM Volume 3A, Chapter 4 (Paging) and Section 6.15
 (Page-Fault Exception); Multiboot2 Specification, Section 3.6 (memory map tag).
 
-- [ ] 2.1 Parse the Multiboot2 information structure and extract the memory map (tag type 6) and the ELF section headers (tag type 9).
+- [x] 2.1 Parse the Multiboot2 information structure and extract the memory map (tag type 6) and the ELF section headers (tag type 9).
 - [ ] 2.2 Implement a physical frame allocator (bitmap) covering all usable regions, reserving the kernel image, the Multiboot2 structures and the low 1 MiB.
 - [ ] 2.3 Construct a permanent kernel page-table hierarchy, replacing the boot-time tables and removing the low identity map.
 - [ ] 2.4 Implement a direct physical map region for kernel access to arbitrary frames.
@@ -277,4 +278,5 @@ ACPI Specification 6.5.
 | Date | Phase affected | Summary |
 | ---- | -------------- | ------- |
 | 2026-08-30 | Phase 1 | Project initialised. Directory structure, documentation corpus, boot code, kernel entry, VGA and serial output, build system and ISO generation completed. Boot verified under QEMU. |
+| 2026-08-30 | Phase 2 | Sub-task 2.1 completed. The Multiboot2 information structure is parsed into the neutral `BootInformation` description: the memory map, the ELF section count, the boot loader name and the command line. The kernel and boot information extents are recorded for the frame allocator to reserve. |
 | 2026-08-30 | Phase 1 | `CLAUDE.md` amended at the project owner's request by the addition of Section 10, requiring directory-level documentation. `boot/README.md`, `kernel/README.md` and `drivers/README.md` created accordingly, and `docs/README.md` extended to index them. |

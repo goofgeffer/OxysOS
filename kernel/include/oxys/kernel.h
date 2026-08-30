@@ -70,4 +70,24 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
  */
 void KernelPanic(const char *message);
 
+/*
+ * Writes a null-terminated string to both the text console and the serial port,
+ * so that the diagnostic record is complete irrespective of which device the
+ * operator is observing.
+ */
+void KernelWriteString(const char *string);
+
+/*
+ * Writes an unsigned value in hexadecimal, prefixed by "0x", to both output
+ * devices. Provided because the formatted output facilities of the C library do
+ * not exist until Phase 7.
+ */
+void KernelWriteHexadecimal(uint64_t value);
+
+/*
+ * Writes an unsigned value in decimal to both output devices. Provided for the
+ * same reason as KernelWriteHexadecimal.
+ */
+void KernelWriteDecimal(uint64_t value);
+
 #endif /* OXYS_KERNEL_H */

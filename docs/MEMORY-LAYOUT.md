@@ -134,3 +134,57 @@ loader before `_start` executes.
 While the boot-time hierarchy is in effect these are valid only for physical
 addresses below one gibibyte. Phase 2, sub-task 2.4, introduces the direct
 physical map and extends their domain to the whole of physical memory.
+
+
+## 6. The physical memory map and the extents that must be reserved
+
+From Phase 2, sub-task 2.1, the kernel parses the Multiboot2 memory map into the
+boot-protocol-neutral `BootInformation` structure declared in
+`kernel/include/oxys/bootinfo.h`. The map observed under QEMU with 512 MiB of
+memory is representative:
+
+| Range | Extent | Classification |
+| ----- | ------ | -------------- |
+| `0x00000000` – `0x0009FC00` | 639 KiB | usable |
+| `0x0009FC00` – `0x000A0000` | 1 KiB | reserved |
+| `0x000F0000` – `0x00100000` | 64 KiB | reserved |
+| `0x00100000` – `0x1FFDF000` | 523132 KiB | usable |
+| `0x1FFDF000` – `0x20000000` | 132 KiB | reserved |
+| `0xB0000000` – `0xC0000000` | 262144 KiB | reserved |
+| `0xFED1C000` – `0xFED20000` | 16 KiB | reserved |
+| `0xFFFC0000` – `0x100000000` | 256 KiB | reserved |
+| `0xFD00000000` – `0x10000000000` | 12582912 KiB | reserved |
+
+### 6.1 Why the map alone is insufficient
+
+Multiboot2 Specification, Section 3.6.8, states that the map "includes the
+regions occupied by kernel, mbi, segments and modules", and that the kernel must
+take care not to overwrite them. The map is a description of the machine, not of
+what is free. Three extents therefore fall within a region the map calls usable
+and must be reserved separately by the frame allocator of sub-task 2.2:
+
+| Extent | Source | Observed range |
+| ------ | ------ | -------------- |
+| The kernel image | The linker symbols `KernelPhysicalStart` and `KernelPhysicalEnd`. | `0x00100000` – `0x0011A000` |
+| The boot information structure | Its address and its `total_size` field. | `0x00120370` – `0x00120948` |
+| The low 1 MiB | Legacy device and firmware reservations, the real-mode interrupt vector table and the VGA frame buffer. | `0x00000000` – `0x00100000` |
+
+The low mebibyte is reserved in its entirety rather than by the map, because it
+contains structures that the map does not describe and that later phases will
+require: the application processor trampoline of sub-task 6.8 must be placed
+below 1 MiB, since a processor released from reset begins execution in real mode.
+
+### 6.2 Why the kernel extent is not derived from the ELF sections tag
+
+Section 3.6.7 states that the address fields of the section headers "refer to
+where the sections are in memory". That holds for a kernel linked at the address
+at which it is loaded. Oxys-OS is a higher-half kernel: the address field of
+every section other than `.boot` holds a virtual address in the topmost two
+gibibytes. Deriving a physical extent from those values would yield an absurd
+range spanning almost the whole address space.
+
+The extent is therefore taken from the linker symbols, which are correct by
+construction, and the ELF sections tag is parsed for validation and reporting
+alone. The tag is nevertheless useful: the count of section headers it reports
+confirms that the tag was interpreted correctly, since the parser rejects it
+unless the entry size is exactly 64 bytes, the size of an ELF64 section header.
