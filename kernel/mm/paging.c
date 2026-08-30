@@ -343,6 +343,76 @@ uint64_t PagingDirectMapExtent(void)
     return PagingDirectMapBytes;
 }
 
+/*
+ * Invalidates the translation-lookaside-buffer entry for one page.
+ *
+ * Intel SDM, Volume 3A, Section 4.10.4.1, requires software to invalidate a
+ * translation whenever it changes a paging-structure entry that the processor
+ * may have cached. INVLPG is used in preference to reloading CR3 because it
+ * discards one entry rather than the whole buffer.
+ *
+ * From sub-task 6.9 this must be accompanied by a shootdown: other processors
+ * hold their own translation-lookaside buffers, and an entry cached there is not
+ * affected by an invalidation performed here.
+ */
+static void PagingInvalidate(VirtualAddress address)
+{
+    __asm__ __volatile__("invlpg (%0)" : : "r"(address) : "memory");
+}
+
+void PagingMapKernelPage(VirtualAddress virtual_address,
+                         PhysicalAddress physical_address,
+                         uint64_t flags)
+{
+    PagingMapPage(PagingRootTable, virtual_address, physical_address, flags);
+    PagingInvalidate(virtual_address);
+}
+
+void PagingUnmapKernelPage(VirtualAddress virtual_address)
+{
+    PhysicalAddress level3;
+    PhysicalAddress level2;
+    PhysicalAddress level1;
+    uint64_t *entries;
+
+    entries = PagingTableAt(PagingRootTable);
+    if ((entries[PagingLevel4Index(virtual_address)] & PAGE_ENTRY_PRESENT) == 0U)
+    {
+        return;
+    }
+    level3 = entries[PagingLevel4Index(virtual_address)] & PAGE_ENTRY_ADDRESS_MASK;
+
+    entries = PagingTableAt(level3);
+    if ((entries[PagingLevel3Index(virtual_address)] & PAGE_ENTRY_PRESENT) == 0U)
+    {
+        return;
+    }
+    level2 = entries[PagingLevel3Index(virtual_address)] & PAGE_ENTRY_ADDRESS_MASK;
+
+    entries = PagingTableAt(level2);
+    if ((entries[PagingLevel2Index(virtual_address)] & PAGE_ENTRY_PRESENT) == 0U)
+    {
+        return;
+    }
+
+    /*
+     * A large page cannot be unmapped one 4 KiB page at a time. The kernel arena
+     * is mapped exclusively with 4 KiB pages, so encountering one here means the
+     * caller has passed an address outside the arena.
+     */
+    if ((entries[PagingLevel2Index(virtual_address)] & PAGE_ENTRY_LARGE) != 0U)
+    {
+        KernelPanic("An attempt was made to unmap a page within a large mapping.");
+    }
+
+    level1 = entries[PagingLevel2Index(virtual_address)] & PAGE_ENTRY_ADDRESS_MASK;
+
+    entries = PagingTableAt(level1);
+    entries[PagingLevel1Index(virtual_address)] = 0U;
+
+    PagingInvalidate(virtual_address);
+}
+
 PhysicalAddress PagingTranslate(VirtualAddress address)
 {
     const uint64_t *entries;

@@ -26,6 +26,8 @@
 #include <oxys/bootinfo.h>
 #include <oxys/pmm.h>
 #include <oxys/paging.h>
+#include <oxys/vmm.h>
+#include <oxys/heap.h>
 #include <oxys/vga.h>
 #include <oxys/serial.h>
 
@@ -326,6 +328,187 @@ static void KernelVerifyPaging(void)
                           : "Paging self-test FAILED.\n");
 }
 
+/*
+ * Exercises the kernel virtual address allocator and the heap, and reports the
+ * outcome. The properties asserted are those whose violation would corrupt
+ * memory silently rather than announce itself.
+ */
+static void KernelVerifyAllocators(void)
+{
+    const size_t probe_page_count = 4U;
+    bool succeeded = true;
+    uint8_t *pages;
+    uint8_t *pages_again;
+    void *small;
+    void *medium;
+    void *large;
+    void *zeroed;
+    size_t live_before;
+
+    /* --- The page allocator. --- */
+
+    pages = (uint8_t *)KernelPagesAllocate(probe_page_count);
+
+    if (pages == NULL)
+    {
+        KernelWriteString("  A four-page allocation failed.\n");
+        succeeded = false;
+    }
+    else
+    {
+        /*
+         * Write a distinct value into every page and read it back. A range that
+         * was mapped short, or whose pages aliased one another, would fail here
+         * and nowhere else.
+         */
+        for (size_t index = 0U; index < probe_page_count; ++index)
+        {
+            pages[index * PAGE_SIZE] = (uint8_t)(index + 1U);
+        }
+
+        for (size_t index = 0U; index < probe_page_count; ++index)
+        {
+            if (pages[index * PAGE_SIZE] != (uint8_t)(index + 1U))
+            {
+                KernelWriteString("  A page of the range did not retain its contents.\n");
+                succeeded = false;
+                break;
+            }
+
+            if (PagingTranslate((VirtualAddress)(uintptr_t)&pages[index * PAGE_SIZE]) == 0U)
+            {
+                KernelWriteString("  A page of the range is not mapped.\n");
+                succeeded = false;
+                break;
+            }
+        }
+
+        KernelPagesFree(pages, probe_page_count);
+
+        /* The released range must be reused rather than the bump pointer
+         * advanced, which is the property the free list exists to provide. */
+        pages_again = (uint8_t *)KernelPagesAllocate(probe_page_count);
+
+        if (pages_again != pages)
+        {
+            KernelWriteString("  A released range was not reused.\n");
+            succeeded = false;
+        }
+
+        if (pages_again != NULL)
+        {
+            KernelPagesFree(pages_again, probe_page_count);
+        }
+    }
+
+    /* --- The heap. --- */
+
+    live_before = 0U;
+    (void)live_before;
+
+    small = KernelAllocate(16U);
+    medium = KernelAllocate(1000U);
+    large = KernelAllocate(5000U);
+
+    if (small == NULL || medium == NULL || large == NULL)
+    {
+        KernelWriteString("  A heap allocation failed.\n");
+        succeeded = false;
+    }
+    else
+    {
+        if ((((uintptr_t)small | (uintptr_t)medium | (uintptr_t)large) %
+             HEAP_ALIGNMENT) != 0U)
+        {
+            KernelWriteString("  A heap allocation was not correctly aligned.\n");
+            succeeded = false;
+        }
+
+        if (small == medium || medium == large || small == large)
+        {
+            KernelWriteString("  Two heap allocations shared an address.\n");
+            succeeded = false;
+        }
+
+        /* Fill each allocation to its full requested extent. An object smaller
+         * than its class, or a large allocation short of its pages, would
+         * corrupt a neighbour here. */
+        for (size_t index = 0U; index < 16U; ++index)
+        {
+            ((uint8_t *)small)[index] = 0xA5U;
+        }
+        for (size_t index = 0U; index < 1000U; ++index)
+        {
+            ((uint8_t *)medium)[index] = 0x5AU;
+        }
+        for (size_t index = 0U; index < 5000U; ++index)
+        {
+            ((uint8_t *)large)[index] = 0x3CU;
+        }
+
+        for (size_t index = 0U; index < 16U; ++index)
+        {
+            if (((uint8_t *)small)[index] != 0xA5U)
+            {
+                KernelWriteString("  A small allocation was corrupted.\n");
+                succeeded = false;
+                break;
+            }
+        }
+        for (size_t index = 0U; index < 5000U; ++index)
+        {
+            if (((uint8_t *)large)[index] != 0x3CU)
+            {
+                KernelWriteString("  A large allocation was corrupted.\n");
+                succeeded = false;
+                break;
+            }
+        }
+
+        KernelFree(medium);
+        KernelFree(large);
+
+        /* An object released to a class free list must be the next issued from
+         * that class. */
+        KernelFree(small);
+        if (KernelAllocate(16U) != small)
+        {
+            KernelWriteString("  A released object was not reissued.\n");
+            succeeded = false;
+        }
+        else
+        {
+            KernelFree(small);
+        }
+    }
+
+    zeroed = KernelAllocateZeroed(256U);
+
+    if (zeroed == NULL)
+    {
+        KernelWriteString("  A zeroed allocation failed.\n");
+        succeeded = false;
+    }
+    else
+    {
+        for (size_t index = 0U; index < 256U; ++index)
+        {
+            if (((const uint8_t *)zeroed)[index] != 0U)
+            {
+                KernelWriteString("  A zeroed allocation was not cleared.\n");
+                succeeded = false;
+                break;
+            }
+        }
+
+        KernelFree(zeroed);
+    }
+
+    KernelWriteString(succeeded
+                          ? "Allocator self-test passed.\n"
+                          : "Allocator self-test FAILED.\n");
+}
+
 void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic)
 {
     /*
@@ -379,8 +562,14 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
     PagingReport();
     KernelVerifyPaging();
 
+    KernelVirtualInitialise();
+    KernelHeapInitialise();
+    KernelVerifyAllocators();
+    KernelVirtualReport();
+    KernelHeapReport();
+
     VgaSetColour(VGA_COLOUR_LIGHT_GREEN, VGA_COLOUR_BLACK);
-    KernelWriteString("Phase 2.4 initialisation complete.\n");
+    KernelWriteString("Phase 2.5 initialisation complete.\n");
 
     VgaSetColour(VGA_COLOUR_LIGHT_GREY, VGA_COLOUR_BLACK);
     KernelWriteString("No further subsystems are implemented. Halting.\n");

@@ -105,3 +105,6 @@ userland/sbin/
 # Temporary files from GRUB mkrescue
 *.tmp
 *.mkrescue
+
+# Temporary files from the Claude tool (if used)
+.claude/

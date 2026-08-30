@@ -103,6 +103,8 @@ C_SOURCES := kernel/kernel.c \
              kernel/multiboot2.c \
              kernel/mm/pmm.c \
              kernel/mm/paging.c \
+             kernel/mm/vmm.c \
+             kernel/mm/heap.c \
              drivers/vga/vga.c \
              drivers/serial/serial.c
 

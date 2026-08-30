@@ -29,7 +29,7 @@ not conflict when they are introduced.
 | Base | Extent | Region | Introduced |
 | ---- | ------ | ------ | ---------- |
 | `0xFFFF800000000000` | 64 TiB | The direct map of all physical memory. | Phase 2, sub-task 2.4 (established) |
-| `0xFFFFC00000000000` | 32 TiB | The kernel virtual allocator arena, comprising the kernel heap and device mappings. | Phase 2, sub-task 2.5 |
+| `0xFFFFC00000000000` | 32 TiB | The kernel virtual allocator arena, comprising the kernel heap and device mappings. | Phase 2, sub-task 2.5 (established) |
 | `0xFFFFFFFF80000000` | 2 GiB | The kernel image: text, read-only data, data and BSS. | Phase 1 |
 
 The kernel image is placed within the topmost 2 GiB so that every kernel symbol
@@ -404,3 +404,109 @@ the translations the processor performs.
 
 `PagingAllocateTable` observes the same distinction, drawing from
 `FrameAllocateBelow` before the map exists and from `FrameAllocate` afterwards.
+
+
+## 10. The kernel virtual address allocator
+
+Sub-task 2.5 introduces the arena of `kernel/mm/vmm.c`, occupying the 32 TiB at
+`0xFFFFC00000000000`. It issues virtually contiguous ranges and backs every page
+with a frame from the physical allocator.
+
+### 10.1 Why it is distinct from the direct map
+
+The direct map of Section 9 makes every physical frame addressable, but the
+address of a frame there is fixed by its physical address. Two frames that are
+not physically adjacent are not adjacent in the direct map either. A caller
+requiring a contiguous buffer larger than a page cannot use it.
+
+The arena provides the missing property. It allocates *address space*, and maps
+arbitrary frames into it, so a range is contiguous in virtual memory whatever the
+physical arrangement of the frames beneath it. The frames are explicitly not
+contiguous, and a caller needing physical contiguity, such as a driver
+programming a bus master, requires a facility this allocator does not offer.
+
+### 10.2 Structure
+
+Address space is issued by a bump pointer, with a free list of released ranges
+searched first. The free list is a fixed-capacity array of 128 entries rather
+than a linked structure, because this allocator sits *beneath* the heap: the heap
+obtains its pages here, so allocating a list node from the heap would be
+circular. The array introduces no such dependency.
+
+Ranges are held in ascending order and coalesced with an adjacent neighbour upon
+release. Without coalescing, a sequence of allocations and releases of differing
+sizes would fragment the list into entries too small to satisfy any request while
+the address space they describe remained contiguous.
+
+A range released when the list is full is not reused, and the event is counted
+and reported. Only address space is forfeit; the frames are always returned to
+the physical allocator, and the arena has 32 TiB to lose.
+
+### 10.3 Failure partway through
+
+An allocation that cannot obtain a frame for every page unwinds: the pages
+already mapped are unmapped, their frames returned, and the address range
+restored to the free list. Returning NULL with part of the range mapped would
+leak both frames and address space and leave the arena inconsistent.
+
+## 11. The kernel heap
+
+Sub-task 2.5 also introduces the slab heap of `kernel/mm/heap.c`, providing
+allocations of arbitrary size above the arena.
+
+### 11.1 Structure
+
+Eight size classes are served: 16, 32, 64, 128, 256, 512, 1024 and 2048 bytes. A
+class is refilled by taking one page from the arena and carving it into objects,
+which are threaded onto the class free list. A request larger than the greatest
+class is served by whole pages.
+
+Free objects hold the free-list link in their own first eight bytes. An object
+that is free is by definition not in use by any caller, so this costs no storage.
+
+### 11.2 How the size class is recovered
+
+An allocation carries no header of its own. Every slab is one page, is page
+aligned, and no object crosses a page boundary, so rounding a pointer down to a
+page boundary yields the header of the slab containing it.
+
+This matters more than it may appear. A per-object header of 32 bytes would be 6
+per cent overhead on the 2048-byte class but 200 per cent on the 16-byte class,
+which is the class small kernel structures will use most.
+
+### 11.3 Validation
+
+The slab header carries a magic value. A pointer passed to `KernelFree` that was
+not obtained from the heap will almost always land on a page whose header does
+not bear it, and is reported rather than acted upon. Releasing an object from a
+slab that records none in use is likewise reported. Neither check is complete —
+a pointer into the middle of a live slab would pass both — but each converts a
+class of silent corruption into an immediate diagnosis.
+
+### 11.4 Known limitation
+
+A slab whose objects have all been released is not returned to the arena. Doing
+so would require removing its remaining objects from the class free list, which
+is singly linked and offers no means of locating them. The page is retained and
+reused by the next allocation of its class.
+
+The consequence is that the heap's page consumption follows the high-water mark
+of each class rather than the current demand. This is acceptable at present and
+becomes worth addressing when the heap comes under sustained and varied load,
+which is not before Phase 6. The remedy is a doubly linked free list per slab
+rather than per class, at the cost of eight further bytes per free object.
+
+### 11.5 Observed state
+
+After the boot-time self-test under QEMU:
+
+| Quantity | Value |
+| -------- | ----- |
+| Arena pages in use | 3 |
+| Arena high-water mark | 4 |
+| Live heap allocations | 0 |
+| Slab pages retained | 3 |
+
+The three retained pages are those of the 16, 256 and 1024-byte classes, held by
+the limitation of Section 11.4. Zero live allocations confirms the self-test
+released everything it took.

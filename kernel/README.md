@@ -19,6 +19,10 @@ are separate.
 | Path | Description |
 | ---- | ----------- |
 | `kernel.c` | `KernelMain`, the C entry point: it validates the boot loader handover, initialises the early output devices, presents the identification banner and halts. `KernelPanic`, the unrecoverable-error path. `KernelHalt`, `KernelWriteString` and `KernelWriteHexadecimal`. |
+| `mm/heap.c` | The kernel heap. `KernelAllocate`, `KernelAllocateZeroed` and `KernelFree`. |
+| `mm/vmm.c` | The kernel virtual address allocator. `KernelPagesAllocate` and `KernelPagesFree`. |
+| `include/oxys/heap.h` | The interface of the kernel heap. |
+| `include/oxys/vmm.h` | The kernel arena constants and the interface of the virtual address allocator. |
 | `mm/paging.c` | The permanent kernel paging hierarchy. `PagingInitialise`, `PagingTranslate`, `PagingAddressIsWritable` and the reporting routines. |
 | `include/oxys/paging.h` | The paging-structure entry flags and the interface of the paging subsystem. |
 | `mm/pmm.c` | The physical frame allocator. `PhysicalMemoryInitialise`, `FrameAllocate`, `FrameAllocateBelow`, `FrameFree` and the accounting accessors. |

@@ -86,6 +86,21 @@ PhysicalAddress PagingTranslate(VirtualAddress address);
  */
 bool PagingAddressIsWritable(VirtualAddress address);
 
+/*
+ * Establishes a 4 KiB mapping in the kernel hierarchy and invalidates any stale
+ * translation for the address. The flags are those of Table 4-15;
+ * PAGE_ENTRY_PRESENT is supplied by the implementation.
+ */
+void PagingMapKernelPage(VirtualAddress virtual_address,
+                         PhysicalAddress physical_address,
+                         uint64_t flags);
+
+/*
+ * Removes a 4 KiB mapping from the kernel hierarchy and invalidates the
+ * translation. The frame that was mapped is not freed; the caller owns it.
+ */
+void PagingUnmapKernelPage(VirtualAddress virtual_address);
+
 /* The physical address of the active page-map level 4 table. */
 PhysicalAddress PagingKernelRoot(void);
 
