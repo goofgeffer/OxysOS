@@ -105,11 +105,15 @@ C_SOURCES := kernel/kernel.c \
              kernel/mm/paging.c \
              kernel/mm/vmm.c \
              kernel/mm/heap.c \
+             kernel/cpu/gdt.c \
              kernel/cpu/idt.c \
+             kernel/cpu/interrupts.c \
              drivers/vga/vga.c \
              drivers/serial/serial.c
 
-ASM_SOURCES := boot/boot.asm
+ASM_SOURCES := boot/boot.asm \
+               kernel/cpu/interrupt_stubs.asm \
+               kernel/cpu/gdt.asm
 
 OBJECTS := $(patsubst %.c,$(BUILD_DIR)/%.c.o,$(C_SOURCES)) \
            $(patsubst %.asm,$(BUILD_DIR)/%.asm.o,$(ASM_SOURCES))

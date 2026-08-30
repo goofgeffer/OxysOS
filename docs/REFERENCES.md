@@ -82,6 +82,23 @@ Sections relied upon:
   the vector scaled by 16, each descriptor occupying sixteen bytes; only 64-bit
   interrupt and trap gates are valid, a legacy 32-bit type generating a
   general-protection exception.
+- **Volume 3A, Section 3.4.2**, the processor sets the accessed bit of a segment
+  descriptor when its selector is loaded, so the table must be writable.
+- **Volume 3A, Section 3.4.3**, the CS register cannot be loaded by MOV; it is
+  changed by a far transfer.
+- **Volume 3A, Section 3.5.1**, the GDTR, and the limit being one less than the
+  size of the table.
+- **Volume 3A, Section 6.5**, the classification of exceptions as faults, traps
+  and aborts, and the consequence for restarting the interrupted instruction.
+- **Volume 3A, Section 6.12.1 and Figure 6-4**, the stack frame the processor
+  pushes: in 64-bit mode SS, RSP, RFLAGS, CS and RIP unconditionally, with RSP
+  aligned to sixteen bytes beforehand.
+- **Volume 3A, Section 6.13**, the error code, pushed last and padded to eight
+  bytes in 64-bit mode.
+- **Volume 3A, Table 6-1**, the architecturally defined exceptions, their
+  mnemonics, their classification, and whether each pushes an error code.
+- **Volume 2A, "IRET/IRETQ"** and **"RET"** (far form), the return from a handler
+  and the far return used to reload CS.
 - **Volume 2A, "LGDT/LIDT" and "SGDT/SIDT"**, the instructions that load and
   store the descriptor table registers.
 - **Volume 3A, Section 4.10.4.1**, invalidation: writing CR3 invalidates every

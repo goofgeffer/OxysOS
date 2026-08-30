@@ -41,10 +41,14 @@ fault path, and a fault handler is unreachable until the interrupt descriptor
 table of Phase 3 is installed. The dependency is recorded in
 `docs/ARCHITECTURE.md`, Section 4.
 
-**Phase 3 is in progress.** Sub-task 3.1 is complete: the interrupt descriptor
-table is defined and loaded, with every gate initially absent. The next work is
-sub-task 3.2, the vector stubs. Sub-tasks 2.7 and 2.8 follow the completion of
-sub-task 3.4.
+**Phase 3 is in progress.** Sub-tasks 3.1 and 3.2 are complete: the interrupt
+descriptor table is loaded, a stub is installed for each of the 256 vectors, and
+the trap frame they construct is uniform whatever the vector. A minimal kernel
+global descriptor table was established in the same work, for the reasons given
+in `docs/INTERRUPTS.md`, Section 5.
+
+**The next work is sub-task 3.3**, the interrupt dispatcher. Sub-tasks 2.7 and
+2.8 follow the completion of sub-task 3.4.
 
 ## Legend
 
@@ -108,7 +112,7 @@ exceptions, and accept keyboard input.
 IBM PS/2 controller documentation.
 
 - [x] 3.1 Define the IDT and the 64-bit interrupt-gate descriptor format; load it with `lidt`.
-- [ ] 3.2 Author assembly stubs for vectors 0–255, normalising the presence or absence of a processor-pushed error code.
+- [x] 3.2 Author assembly stubs for vectors 0–255, normalising the presence or absence of a processor-pushed error code.
 - [ ] 3.3 Implement a C interrupt dispatcher operating on a formal trap frame structure.
 - [ ] 3.4 Implement exception handlers with register and stack diagnostics emitted over the serial port.
 - [ ] 3.5 Remap the 8259A PIC to vectors 32–47 and implement end-of-interrupt signalling.
@@ -161,7 +165,7 @@ processors, and expose kernel services by system call.
 (`SYSCALL`/`SYSRET`); System V ABI for AMD64; Intel MultiProcessor
 Specification 1.4; ACPI Specification 6.5 (MADT).
 
-- [ ] 6.1 Install the GDT and TSS required for privilege transition; configure IA32_STAR, IA32_LSTAR and IA32_FMASK.
+- [~] 6.1 Install the GDT and TSS required for privilege transition; configure IA32_STAR, IA32_LSTAR and IA32_FMASK. *(The kernel GDT and its null, code and data descriptors were established early, in Phase 3; what remains is the user-mode descriptors, the task state segment and the system-call MSRs.)*
 - [ ] 6.2 Implement the `SYSCALL` entry path, the system-call dispatch table and argument validation.
 - [ ] 6.3 Implement the ELF64 loader for statically linked executables.
 - [ ] 6.4 Define the process control block, the address-space descriptor and the thread structure.
@@ -302,6 +306,7 @@ ACPI Specification 6.5.
 | Date | Phase affected | Summary |
 | ---- | -------------- | ------- |
 | 2026-08-30 | Phase 1 | Project initialised. Directory structure, documentation corpus, boot code, kernel entry, VGA and serial output, build system and ISO generation completed. Boot verified under QEMU. |
+| 2026-08-30 | Phase 3 | Sub-task 3.2 completed. A stub for each of the 256 vectors, normalising the vector number and the presence of a processor error code into a uniform trap frame. A minimal kernel global descriptor table was established in the same work: the table loaded by `boot/boot.asm` lay at an address unmapped by sub-task 2.3, and interrupt delivery faulted upon reading it. `docs/INTERRUPTS.md` added. |
 | 2026-08-30 | Phase 3 | Sub-task 3.1 completed. The interrupt descriptor table and the 64-bit gate descriptor are defined and the table loaded with `LIDT`. Every gate is initially absent. Verified by reading the table register back with `SIDT`. |
 | 2026-08-30 | — | The project guidelines were consolidated under `PROJECT_GUIDELINES.md` and the text adapted to that name: the framing addressed to an assistant is now addressed to a contributor, and the document now describes itself as guidelines. The root directory recorded in Sections 1 and 9 was corrected to `~/oxys-os`. The documentation index was relocated from `docs/` to the repository root as `README.md`, becoming the front page of the repository, with every relative link corrected. Every reference to the guidelines document was updated across the source, the documentation and the agent definitions. |
 | 2026-08-30 | Phase 2 | Sub-task 2.6 completed. Per-frame reference counting is established over a 255 KiB table allocated from the kernel heap. `FrameFree` releases one reference and returns a frame to the allocator only upon the last. Sub-tasks 2.7 and 2.8 are deferred until Phase 3 provides a page-fault handler. |

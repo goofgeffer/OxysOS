@@ -333,6 +333,16 @@ code preserved at low physical addresses were consumed by `KernelEntryHigh`
 before `KernelMain` was entered, and every pointer the kernel holds is a
 higher-half address.
 
+**One thing did depend upon it, and was missed.** The global descriptor table
+loaded by `boot/boot.asm` resides in the `.boot` section at physical `0x101000`.
+No segment register was reloaded after the switch, so the cached descriptors
+remained in force and the table was never read again — until Phase 3 installed
+interrupt gates, delivery of which obliges the processor to read the descriptor
+named by the gate's selector. The consequence and the remedy are recorded in
+`docs/INTERRUPTS.md`, Section 5. The general rule it illustrates is that a
+structure the processor reads directly must remain mapped for as long as the
+processor may read it, and such reads are not visible in the source.
+
 ### 8.5 Verification
 
 The hierarchy is verified by walking it in software rather than by dereferencing

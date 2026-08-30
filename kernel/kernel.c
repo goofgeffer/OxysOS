@@ -28,7 +28,9 @@
 #include <oxys/paging.h>
 #include <oxys/vmm.h>
 #include <oxys/heap.h>
+#include <oxys/gdt.h>
 #include <oxys/idt.h>
+#include <oxys/interrupts.h>
 #include <oxys/vga.h>
 #include <oxys/serial.h>
 
@@ -630,6 +632,139 @@ static void KernelVerifyIdt(void)
                           : "Interrupt descriptor table self-test FAILED.\n");
 }
 
+/*
+ * Exercises the interrupt stubs and the trap frame they construct.
+ *
+ * The frame is the interface between the assembly stubs and every handler the
+ * kernel will ever have. An error in its layout would not announce itself: the
+ * dispatcher would read plausible values from the wrong offsets, and every
+ * diagnosis founded upon them would be wrong. The test therefore checks the
+ * frame against values it planted, rather than merely checking that an interrupt
+ * was taken.
+ */
+static void KernelVerifyInterruptStubs(void)
+{
+    const uint64_t sentinel = UINT64_C(0xFEEDFACECAFEB00D);
+    const uint64_t count_before = InterruptCount();
+    const TrapFrame *frame;
+    bool succeeded = true;
+
+    /*
+     * Raise a breakpoint exception with a known value in RAX. INT3 is a trap
+     * rather than a fault, so the handler returns to the instruction following
+     * and execution continues; and the value in RAX proves that the common stub
+     * saved the registers in the order the structure declares. Were the order
+     * reversed, this field would hold the contents of R15.
+     */
+    __asm__ __volatile__("mov %0, %%rax\n\t"
+                         "int3"
+                         :
+                         : "r"(sentinel)
+                         : "rax", "memory");
+
+    frame = InterruptLastFrame();
+
+    if (InterruptCount() != (count_before + 1U))
+    {
+        KernelWriteString("  The breakpoint was not dispatched.\n");
+        succeeded = false;
+    }
+
+    if (frame->vector != 3U)
+    {
+        KernelWriteString("  The breakpoint reported the wrong vector.\n");
+        succeeded = false;
+    }
+
+    if (frame->rax != sentinel)
+    {
+        KernelWriteString("  The saved RAX does not hold the planted value.\n");
+        succeeded = false;
+    }
+
+    /* A vector that pushes no error code must present a zero in its place. */
+    if (frame->error_code != 0U)
+    {
+        KernelWriteString("  The substituted error code is not zero.\n");
+        succeeded = false;
+    }
+
+    /* The processor pushes the segment and flags of the interrupted code. */
+    if (frame->cs != 0x08U)
+    {
+        KernelWriteString("  The saved CS is not the kernel code selector.\n");
+        succeeded = false;
+    }
+
+    /*
+     * The saved RIP must lie within the kernel text, being the address of the
+     * instruction after INT3. A displaced frame would place something else here,
+     * and a value outside the text is the clearest evidence of that.
+     */
+    if (frame->rip < (uint64_t)(uintptr_t)&KernelMain ||
+        frame->rip >= (uint64_t)KERNEL_VIRTUAL_BASE + UINT64_C(0x40000000))
+    {
+        KernelWriteString("  The saved RIP does not lie within the kernel image.\n");
+        succeeded = false;
+    }
+
+    /* The saved RSP must lie above the frame itself, the stack growing down. */
+    if (frame->rsp <= (uint64_t)(uintptr_t)frame)
+    {
+        KernelWriteString("  The saved RSP does not lie above the frame.\n");
+        succeeded = false;
+    }
+
+    /*
+     * Raise a vector above the architecture-defined range, to confirm that a
+     * stub other than the first thirty-two is reached and reports its own
+     * number. Vector 42 is arbitrary and unassigned.
+     */
+    __asm__ __volatile__("int $42" : : : "memory");
+
+    frame = InterruptLastFrame();
+
+    if (InterruptCount() != (count_before + 2U))
+    {
+        KernelWriteString("  The software interrupt was not dispatched.\n");
+        succeeded = false;
+    }
+
+    if (frame->vector != 42U)
+    {
+        KernelWriteString("  The software interrupt reported the wrong vector.\n");
+        succeeded = false;
+    }
+
+    /*
+     * The set of vectors that the C code believes push an error code must match
+     * the set the assembly stubs were generated from. The two are written
+     * separately and a divergence would displace the frame for exactly those
+     * vectors that matter most, the faults.
+     */
+    {
+        size_t counted = 0U;
+
+        for (uint64_t vector = 0U; vector < IDT_ENTRY_COUNT; ++vector)
+        {
+            if (InterruptVectorPushesErrorCode(vector))
+            {
+                ++counted;
+            }
+        }
+
+        if (counted != 10U)
+        {
+            KernelWriteString("  The error-code vector set is not of the expected size.\n");
+            succeeded = false;
+        }
+    }
+
+    KernelWriteString(succeeded
+                          ? "Interrupt stub self-test passed.\n"
+                          : "Interrupt stub self-test FAILED.\n");
+}
+
 void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic)
 {
     /*
@@ -693,12 +828,24 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
     KernelVerifyReferenceCounting();
     PhysicalMemoryReport();
 
+    /*
+     * The table established by boot/boot.asm resides at a low address that
+     * sub-task 2.3 unmapped. It must be replaced before any interrupt gate is
+     * installed, because delivering an interrupt obliges the processor to read
+     * the descriptor named by the gate's selector.
+     */
+    GdtInitialise();
+    GdtReport();
+
     IdtInitialise();
+    InterruptInitialise();
     IdtReport();
+    InterruptReport();
     KernelVerifyIdt();
+    KernelVerifyInterruptStubs();
 
     VgaSetColour(VGA_COLOUR_LIGHT_GREEN, VGA_COLOUR_BLACK);
-    KernelWriteString("Phase 3.1 initialisation complete.\n");
+    KernelWriteString("Phase 3.2 initialisation complete.\n");
 
     VgaSetColour(VGA_COLOUR_LIGHT_GREY, VGA_COLOUR_BLACK);
     KernelWriteString("No further subsystems are implemented. Halting.\n");
