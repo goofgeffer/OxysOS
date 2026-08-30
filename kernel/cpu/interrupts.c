@@ -16,10 +16,15 @@
  *     The distinction governs whether returning from a handler that has taken no
  *     corrective action re-enters the same exception.
  *
- * Status. The dispatcher here is provisional and belongs to sub-task 3.2, whose
- * purpose is the stubs and the uniform frame. Sub-task 3.3 replaces it with a
- * dispatch table and registered handlers, and sub-task 3.4 supplies the
- * exception handlers proper.
+ * Status. Sub-task 3.3 introduces the dispatch table and the registration
+ * interface implemented here. Sub-task 3.4 supplies the exception handlers
+ * proper; until it does, an exception for which no handler is registered
+ * remains fatal, for the reason given in the commentary upon InterruptDispatch.
+ *
+ * Concurrency. The dispatch table is written during initialisation and read
+ * thereafter, which is safe without a lock so long as registration precedes the
+ * enabling of interrupts. From sub-task 6.9 a handler registered while other
+ * processors are running requires the write to be ordered against their reads.
  */
 
 #include <oxys/interrupts.h>
@@ -43,9 +48,24 @@ _Static_assert(sizeof(TrapFrame) == (22U * 8U),
 _Static_assert(TRAP_FRAME_REGISTER_COUNT == 15U,
                "The common stub preserves fifteen general-purpose registers.");
 
-/* The number of interrupts dispatched, and a copy of the most recent frame. */
+/* The number of interrupts dispatched, and a copy of the most recent frame.
+ *
+ * The copy is a diagnostic aid. It costs 176 bytes of copying per interrupt,
+ * which is immaterial at the rates seen so far but should be reconsidered once
+ * the timer of sub-task 3.6 begins to fire. */
 static uint64_t InterruptDispatchCount;
 static TrapFrame InterruptMostRecentFrame;
+
+/* The handler registered for each vector, and its name. A null entry denotes a
+ * vector for which no handler is registered. */
+static InterruptHandler InterruptHandlerTable[IDT_ENTRY_COUNT];
+static const char *InterruptHandlerNames[IDT_ENTRY_COUNT];
+
+/* The number of times each vector has been dispatched. */
+static uint64_t InterruptVectorCounts[IDT_ENTRY_COUNT];
+
+/* The number of dispatches that found no handler and were not fatal. */
+static uint64_t InterruptUnhandledDispatchCount;
 
 /*
  * The mnemonics of the architecture-defined exceptions, per Intel SDM,
@@ -112,6 +132,25 @@ bool InterruptVectorPushesErrorCode(uint64_t vector)
     }
 }
 
+/*
+ * The default handler for the breakpoint exception.
+ *
+ * The breakpoint is a trap rather than a fault: it reports the state after the
+ * INT3 instruction, so returning resumes at the instruction following and does
+ * not re-enter. It is therefore safe, and useful, to record it and continue,
+ * which makes INT3 usable as a diagnostic marker in kernel code that has no
+ * debugger attached.
+ *
+ * It is registered here rather than in sub-task 3.4 because without it an INT3
+ * would be an exception with no handler, and so fatal.
+ */
+static void InterruptBreakpointHandler(TrapFrame *frame)
+{
+    /* The frame is recorded by the dispatcher before the handler is entered;
+     * nothing further is required to make it available for inspection. */
+    (void)frame;
+}
+
 void InterruptInitialise(void)
 {
     for (size_t vector = 0U; vector < IDT_ENTRY_COUNT; ++vector)
@@ -129,6 +168,8 @@ void InterruptInitialise(void)
                    (uint8_t)(IDT_ATTRIBUTE_PRESENT | IDT_ATTRIBUTE_DPL_0 |
                              IDT_GATE_TYPE_INTERRUPT));
     }
+
+    InterruptRegisterHandler(3U, InterruptBreakpointHandler, "breakpoint");
 }
 
 void InterruptReportFrame(const TrapFrame *frame)
@@ -136,12 +177,9 @@ void InterruptReportFrame(const TrapFrame *frame)
     KernelWriteString("  vector ");
     KernelWriteDecimal(frame->vector);
 
-    if (frame->vector < 32U)
-    {
-        KernelWriteString(" (");
-        KernelWriteString(InterruptMnemonics[frame->vector]);
-        KernelWriteString(")");
-    }
+    KernelWriteString(" (");
+    KernelWriteString(InterruptVectorName(frame->vector));
+    KernelWriteString(")");
 
     KernelWriteString(", error code ");
     KernelWriteHexadecimal(frame->error_code);
@@ -164,30 +202,87 @@ void InterruptReportFrame(const TrapFrame *frame)
     KernelWriteString("\n");
 }
 
+void InterruptRegisterHandler(uint8_t vector, InterruptHandler handler,
+                              const char *name)
+{
+    InterruptHandlerTable[vector] = handler;
+    InterruptHandlerNames[vector] = name;
+}
+
+void InterruptUnregisterHandler(uint8_t vector)
+{
+    InterruptHandlerTable[vector] = NULL;
+    InterruptHandlerNames[vector] = NULL;
+}
+
+InterruptHandler InterruptRegisteredHandler(uint8_t vector)
+{
+    return InterruptHandlerTable[vector];
+}
+
+uint64_t InterruptVectorCount(uint8_t vector)
+{
+    return InterruptVectorCounts[vector];
+}
+
+uint64_t InterruptUnhandledCount(void)
+{
+    return InterruptUnhandledDispatchCount;
+}
+
+const char *InterruptVectorName(uint64_t vector)
+{
+    if (vector < 32U)
+    {
+        return InterruptMnemonics[vector];
+    }
+
+    return "(user-defined interrupt)";
+}
+
+/*
+ * Receives control from the common stub and routes the interrupt to the handler
+ * registered for its vector.
+ *
+ * Where no handler is registered the treatment depends upon the vector, and the
+ * distinction is not arbitrary. Intel SDM, Volume 3A, Section 6.5, classifies
+ * the architecture-defined exceptions as faults, traps and aborts. A fault
+ * reports the state before the offending instruction and restarts it upon
+ * return, so returning without having removed the cause re-enters the same
+ * exception immediately and without end. An unhandled exception is therefore
+ * fatal: halting with a diagnosis is the only outcome that yields any
+ * information.
+ *
+ * A vector at or above 32 is not architecture-defined. Nothing about it is
+ * restarted, so an unregistered one is counted and ignored. This is the correct
+ * treatment of a spurious interrupt, which the 8259A of sub-task 3.5 is known to
+ * deliver.
+ */
 void InterruptDispatch(TrapFrame *frame)
 {
+    const uint8_t vector = (uint8_t)frame->vector;
+    InterruptHandler handler;
+
     ++InterruptDispatchCount;
+    ++InterruptVectorCounts[vector];
     InterruptMostRecentFrame = *frame;
 
-    /*
-     * A fault reports the state before the faulting instruction and restarts it
-     * upon return, per Intel SDM, Volume 3A, Section 6.5. Returning from one
-     * without having removed its cause therefore re-enters it immediately and
-     * without end. Until sub-task 3.4 supplies handlers that can either correct
-     * the condition or report it usefully, an exception is fatal.
-     *
-     * The breakpoint and overflow exceptions are excepted because they are traps
-     * rather than faults: they report the state after the instruction, so
-     * returning resumes at the instruction following and does not re-enter.
-     * INT3 is consequently usable to exercise this path, which is what the
-     * self-test of sub-task 3.2 does.
-     */
-    if (frame->vector < 32U && frame->vector != 3U && frame->vector != 4U)
+    handler = InterruptHandlerTable[vector];
+
+    if (handler != NULL)
+    {
+        handler(frame);
+        return;
+    }
+
+    if (frame->vector < 32U)
     {
         KernelWriteString("\nUnhandled processor exception:\n");
         InterruptReportFrame(frame);
-        KernelPanic("An exception was raised for which no handler is installed.");
+        KernelPanic("An exception was raised for which no handler is registered.");
     }
+
+    ++InterruptUnhandledDispatchCount;
 }
 
 uint64_t InterruptCount(void)
@@ -212,9 +307,27 @@ void InterruptReport(void)
         }
     }
 
+    size_t registered = 0U;
+
+    for (size_t vector = 0U; vector < IDT_ENTRY_COUNT; ++vector)
+    {
+        if (InterruptHandlerTable[vector] != NULL)
+        {
+            ++registered;
+        }
+    }
+
     KernelWriteString("Interrupt stubs: ");
     KernelWriteDecimal((uint64_t)IDT_ENTRY_COUNT);
     KernelWriteString(" installed, of which ");
     KernelWriteDecimal((uint64_t)error_code_vectors);
     KernelWriteString(" receive a processor error code.\n");
+
+    KernelWriteString("Interrupt dispatcher: handlers registered ");
+    KernelWriteDecimal((uint64_t)registered);
+    KernelWriteString(", dispatched ");
+    KernelWriteDecimal(InterruptDispatchCount);
+    KernelWriteString(", unhandled ");
+    KernelWriteDecimal(InterruptUnhandledDispatchCount);
+    KernelWriteString(".\n");
 }

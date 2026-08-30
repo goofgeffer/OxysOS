@@ -765,6 +765,138 @@ static void KernelVerifyInterruptStubs(void)
                           : "Interrupt stub self-test FAILED.\n");
 }
 
+/* State recorded by the probe handlers of the dispatcher self-test. */
+static uint64_t KernelProbeHandlerCount;
+static uint64_t KernelProbeHandlerVector;
+static uint64_t KernelExceptionProbeCount;
+
+/* The value the probe handler writes into the frame, to be observed in RAX after
+ * the return from the interrupt. */
+#define KERNEL_PROBE_RESULT UINT64_C(0x00C0FFEE0000BEEF)
+
+/*
+ * A probe handler that records its invocation and alters the frame.
+ *
+ * The alteration is the point of the exercise. A handler that could observe the
+ * interrupted state but not change it would be sufficient for reporting and for
+ * nothing else. Correcting a fault, delivering the result of a system call and
+ * switching context all require that a change to the frame become the state to
+ * which control returns.
+ */
+static void KernelProbeHandler(TrapFrame *frame)
+{
+    ++KernelProbeHandlerCount;
+    KernelProbeHandlerVector = frame->vector;
+    frame->rax = KERNEL_PROBE_RESULT;
+}
+
+/* A probe handler for an architecture-defined vector, to confirm that a
+ * registered handler displaces the fatal default. */
+static void KernelExceptionProbeHandler(TrapFrame *frame)
+{
+    (void)frame;
+    ++KernelExceptionProbeCount;
+}
+
+/*
+ * Exercises the interrupt dispatcher and reports the outcome.
+ */
+static void KernelVerifyDispatcher(void)
+{
+    const uint64_t unhandled_before = InterruptUnhandledCount();
+    const uint64_t vector_count_before = InterruptVectorCount(42U);
+    uint64_t returned_value = 0U;
+    bool succeeded = true;
+
+    /* --- A registered handler receives the interrupt. --- */
+
+    InterruptRegisterHandler(42U, KernelProbeHandler, "self-test probe");
+
+    if (InterruptRegisteredHandler(42U) != KernelProbeHandler)
+    {
+        KernelWriteString("  The registered handler was not recorded.\n");
+        succeeded = false;
+    }
+
+    __asm__ __volatile__("int $42" : "=a"(returned_value) : : "memory");
+
+    if (KernelProbeHandlerCount != 1U)
+    {
+        KernelWriteString("  The registered handler was not entered.\n");
+        succeeded = false;
+    }
+
+    if (KernelProbeHandlerVector != 42U)
+    {
+        KernelWriteString("  The handler received the wrong vector.\n");
+        succeeded = false;
+    }
+
+    /*
+     * The handler wrote to the frame. That write must have been restored into
+     * RAX by the common stub, and so be the value the interrupted code observes.
+     */
+    if (returned_value != KERNEL_PROBE_RESULT)
+    {
+        KernelWriteString("  A handler's change to the frame was not restored.\n");
+        succeeded = false;
+    }
+
+    if (InterruptVectorCount(42U) != (vector_count_before + 1U))
+    {
+        KernelWriteString("  The per-vector count did not advance.\n");
+        succeeded = false;
+    }
+
+    if (InterruptUnhandledCount() != unhandled_before)
+    {
+        KernelWriteString("  A handled interrupt was counted as unhandled.\n");
+        succeeded = false;
+    }
+
+    /* --- An unregistered vector above the architectural range is ignored. --- */
+
+    InterruptUnregisterHandler(42U);
+
+    if (InterruptRegisteredHandler(42U) != NULL)
+    {
+        KernelWriteString("  The handler was not removed.\n");
+        succeeded = false;
+    }
+
+    __asm__ __volatile__("int $42" : : : "memory", "rax");
+
+    if (KernelProbeHandlerCount != 1U)
+    {
+        KernelWriteString("  A removed handler was entered.\n");
+        succeeded = false;
+    }
+
+    if (InterruptUnhandledCount() != (unhandled_before + 1U))
+    {
+        KernelWriteString("  An unhandled interrupt was not counted.\n");
+        succeeded = false;
+    }
+
+    /* --- A registered handler displaces the fatal default for an exception. --- */
+
+    InterruptRegisterHandler(4U, KernelExceptionProbeHandler, "self-test overflow probe");
+
+    __asm__ __volatile__("int $4" : : : "memory");
+
+    if (KernelExceptionProbeCount != 1U)
+    {
+        KernelWriteString("  The exception handler was not entered.\n");
+        succeeded = false;
+    }
+
+    InterruptUnregisterHandler(4U);
+
+    KernelWriteString(succeeded
+                          ? "Interrupt dispatcher self-test passed.\n"
+                          : "Interrupt dispatcher self-test FAILED.\n");
+}
+
 void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic)
 {
     /*
@@ -843,9 +975,11 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
     InterruptReport();
     KernelVerifyIdt();
     KernelVerifyInterruptStubs();
+    KernelVerifyDispatcher();
+    InterruptReport();
 
     VgaSetColour(VGA_COLOUR_LIGHT_GREEN, VGA_COLOUR_BLACK);
-    KernelWriteString("Phase 3.2 initialisation complete.\n");
+    KernelWriteString("Phase 3.3 initialisation complete.\n");
 
     VgaSetColour(VGA_COLOUR_LIGHT_GREY, VGA_COLOUR_BLACK);
     KernelWriteString("No further subsystems are implemented. Halting.\n");

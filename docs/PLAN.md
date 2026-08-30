@@ -47,8 +47,12 @@ the trap frame they construct is uniform whatever the vector. A minimal kernel
 global descriptor table was established in the same work, for the reasons given
 in `docs/INTERRUPTS.md`, Section 5.
 
-**The next work is sub-task 3.3**, the interrupt dispatcher. Sub-tasks 2.7 and
-2.8 follow the completion of sub-task 3.4.
+Sub-task 3.3 is complete: a dispatch table routes each vector to a registered
+handler, and a handler may alter the frame to which control returns.
+
+**The next work is sub-task 3.4**, the exception handlers. Its completion
+unblocks sub-tasks 2.7 and 2.8, and the negative paging test deferred from
+sub-task 2.3.
 
 ## Legend
 
@@ -113,7 +117,7 @@ IBM PS/2 controller documentation.
 
 - [x] 3.1 Define the IDT and the 64-bit interrupt-gate descriptor format; load it with `lidt`.
 - [x] 3.2 Author assembly stubs for vectors 0–255, normalising the presence or absence of a processor-pushed error code.
-- [ ] 3.3 Implement a C interrupt dispatcher operating on a formal trap frame structure.
+- [x] 3.3 Implement a C interrupt dispatcher operating on a formal trap frame structure.
 - [ ] 3.4 Implement exception handlers with register and stack diagnostics emitted over the serial port.
 - [ ] 3.5 Remap the 8259A PIC to vectors 32–47 and implement end-of-interrupt signalling.
 - [ ] 3.6 Implement the Programmable Interval Timer as the initial timer source.
@@ -306,6 +310,7 @@ ACPI Specification 6.5.
 | Date | Phase affected | Summary |
 | ---- | -------------- | ------- |
 | 2026-08-30 | Phase 1 | Project initialised. Directory structure, documentation corpus, boot code, kernel entry, VGA and serial output, build system and ISO generation completed. Boot verified under QEMU. |
+| 2026-08-30 | Phase 3 | Sub-task 3.3 completed. A dispatch table of 256 entries with a registration interface. An unregistered architecture-defined exception remains fatal until sub-task 3.4; an unregistered vector above that range is counted and ignored, which is the correct treatment of a spurious interrupt. A default breakpoint handler is registered, the breakpoint being a trap and therefore safe to resume from. |
 | 2026-08-30 | Phase 3 | Sub-task 3.2 completed. A stub for each of the 256 vectors, normalising the vector number and the presence of a processor error code into a uniform trap frame. A minimal kernel global descriptor table was established in the same work: the table loaded by `boot/boot.asm` lay at an address unmapped by sub-task 2.3, and interrupt delivery faulted upon reading it. `docs/INTERRUPTS.md` added. |
 | 2026-08-30 | Phase 3 | Sub-task 3.1 completed. The interrupt descriptor table and the 64-bit gate descriptor are defined and the table loaded with `LIDT`. Every gate is initially absent. Verified by reading the table register back with `SIDT`. |
 | 2026-08-30 | — | The project guidelines were consolidated under `PROJECT_GUIDELINES.md` and the text adapted to that name: the framing addressed to an assistant is now addressed to a contributor, and the document now describes itself as guidelines. The root directory recorded in Sections 1 and 9 was corrected to `~/oxys-os`. The documentation index was relocated from `docs/` to the repository root as `README.md`, becoming the front page of the repository, with every relative link corrected. Every reference to the guidelines document was updated across the source, the documentation and the agent definitions. |

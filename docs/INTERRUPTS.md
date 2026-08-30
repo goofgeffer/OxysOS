@@ -194,13 +194,50 @@ a fault: it reports the state *after* the instruction, so returning resumes at
 the instruction following. A fault would be restarted and would re-enter without
 end.
 
-## 7. Present limitations
+## 7. The dispatcher
 
-1. The dispatcher is provisional. Any exception other than a breakpoint or an
-   overflow is fatal, being reported and then halted, because returning from a
-   fault without removing its cause re-enters it immediately. Sub-task 3.3
-   introduces the dispatch table and registered handlers; sub-task 3.4 the
-   exception handlers proper.
+Sub-task 3.3 introduces a table of 256 handler pointers and the registration
+interface of `kernel/include/oxys/interrupts.h`.
+
+### 7.1 Routing
+
+`InterruptDispatch` records the frame, increments the counters, and calls the
+handler registered for the vector. Where none is registered the treatment depends
+upon the vector, and the distinction is not arbitrary:
+
+| Vector range | Unregistered treatment | Reason |
+| ------------ | ---------------------- | ------ |
+| 0–31 | Reported and fatal | Intel SDM, Volume 3A, Section 6.5: most of these are *faults*, which report the state before the offending instruction and restart it upon return. Returning without removing the cause re-enters the same exception without end. Halting with a diagnosis is the only outcome that yields information. |
+| 32–255 | Counted and ignored | Not architecture-defined; nothing is restarted. This is the correct treatment of a spurious interrupt, which the 8259A of sub-task 3.5 is known to deliver. |
+
+### 7.2 A handler may alter the frame
+
+The frame is passed by address and is not `const`. Any change a handler makes is
+restored into the registers by the common stub and becomes the state of the
+interrupted code.
+
+This is not a convenience. A handler that could observe the interrupted state but
+not change it would suffice for reporting and for nothing else. Correcting a
+page fault, delivering the result of a system call, and switching context all
+require exactly this property, and the self-test asserts it directly: a probe
+handler writes a known value into `frame->rax`, and the interrupted code observes
+that value in `RAX` after the return.
+
+### 7.3 The default breakpoint handler
+
+`InterruptInitialise` registers a handler for vector 3. Without it an `INT3`
+would be an exception with no handler, and therefore fatal under the rule above.
+
+The breakpoint is a trap rather than a fault, so recording it and returning is
+safe, and it makes `INT3` usable as a diagnostic marker in kernel code that has
+no debugger attached.
+
+## 8. Present limitations
+
+1. No exception handlers are registered save the breakpoint. Every other
+   architecture-defined exception is therefore reported and fatal. Sub-task 3.4
+   supplies the handlers proper, and with them the ability to resolve a page
+   fault rather than merely report it.
 2. No interrupt stack table entry is used. A fault taken on a bad stack cannot
    presently be reported. This requires the task state segment of sub-task 6.1.
 3. No hardware interrupt can yet arrive: the 8259A is not remapped until

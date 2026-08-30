@@ -20,7 +20,7 @@ are separate.
 | ---- | ----------- |
 | `kernel.c` | `KernelMain`, the C entry point: it validates the boot loader handover, initialises the early output devices, presents the identification banner and halts. `KernelPanic`, the unrecoverable-error path. `KernelHalt`, `KernelWriteString` and `KernelWriteHexadecimal`. |
 | `cpu/interrupt_stubs.asm` | The 256 per-vector stubs, the common stub, and the table of stub addresses. |
-| `cpu/interrupts.c` | `InterruptInitialise`, `InterruptDispatch` and the frame reporting routines. |
+| `cpu/interrupts.c` | `InterruptInitialise`, `InterruptDispatch`, the dispatch table and its registration interface, and the frame reporting routines. |
 | `cpu/gdt.c`, `cpu/gdt.asm` | The kernel global descriptor table and the segment reload. |
 | `include/oxys/interrupts.h` | The trap frame and the interrupt interface. |
 | `include/oxys/gdt.h` | The `LGDT` operand, the selectors and the interface of the descriptor table. |

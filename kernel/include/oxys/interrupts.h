@@ -87,6 +87,44 @@ typedef struct TrapFrame
 #define TRAP_FRAME_REGISTER_COUNT 15U
 
 /*
+ * The signature of a handler. The frame is supplied by address and is not
+ * const: a handler may alter the state to which control returns, which is how a
+ * fault is corrected and how a system call will deliver its result. Any change
+ * made to the frame is restored into the registers by the common stub and
+ * becomes the state of the interrupted code.
+ */
+typedef void (*InterruptHandler)(TrapFrame *frame);
+
+/*
+ * Registers a handler for one vector, replacing any handler previously
+ * registered for it. A vector for which no handler is registered is treated as
+ * described in the commentary upon InterruptDispatch.
+ *
+ * name: a short description used in diagnostic output. The string is not copied
+ *     and must therefore have static storage duration.
+ */
+void InterruptRegisterHandler(uint8_t vector, InterruptHandler handler,
+                              const char *name);
+
+/* Removes the handler registered for a vector, if any. */
+void InterruptUnregisterHandler(uint8_t vector);
+
+/* The handler registered for a vector, or NULL if none is registered. */
+InterruptHandler InterruptRegisteredHandler(uint8_t vector);
+
+/* The number of times the given vector has been dispatched. */
+uint64_t InterruptVectorCount(uint8_t vector);
+
+/*
+ * The number of interrupts dispatched for which no handler was registered and
+ * which were not fatal, being vectors outside the architecture-defined range.
+ */
+uint64_t InterruptUnhandledCount(void);
+
+/* The mnemonic of an architecture-defined exception, or a reserved marker. */
+const char *InterruptVectorName(uint64_t vector);
+
+/*
  * Reports whether the processor pushes an error code for the given vector, per
  * Intel SDM, Volume 3A, Table 6-1. Declared here so that the same knowledge is
  * available to C as to the assembly stubs, and so that the two may be compared.
