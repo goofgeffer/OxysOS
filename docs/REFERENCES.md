@@ -1,6 +1,6 @@
 # Oxys-OS Bibliography
 
-**Authority**: `CLAUDE.md`, Section 6, requires that every design decision be
+**Authority**: `PROJECT_GUIDELINES.md`, Section 6, requires that every design decision be
 justified by reference to an authoritative specification, and that the
 specification be cited in the code comment or design document that relies upon
 it. This file is the register of those specifications.

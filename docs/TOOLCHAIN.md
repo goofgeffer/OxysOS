@@ -30,27 +30,27 @@ and is therefore the only correct instrument for the task.
 ## 3. Compilation flags and their justification
 
 The flags below are applied to every C translation unit. Each is recorded here
-together with its reason, as `CLAUDE.md`, Section 8, requires of any deviation
+together with its reason, as `PROJECT_GUIDELINES.md`, Section 8, requires of any deviation
 from plain ISO C.
 
 | Flag | Justification |
 | ---- | ------------- |
-| `-std=c11 -pedantic` | Conformance to ISO/IEC 9899:2011, as mandated by `CLAUDE.md`, Section 1. |
+| `-std=c11 -pedantic` | Conformance to ISO/IEC 9899:2011, as mandated by `PROJECT_GUIDELINES.md`, Section 1. |
 | `-ffreestanding` | The program does not execute in a hosted environment; `main` is not the entry point and the standard library is unavailable. |
 | `-fno-builtin` | Prevents the compiler from substituting calls to library routines that the kernel does not provide. |
 | `-fno-stack-protector` | The stack canary requires a runtime `__stack_chk_guard` object and a failure handler, neither of which exists before Phase 13, sub-task 13.4. |
 | `-fno-pic -fno-pie` | The kernel is loaded at a fixed address; position-independent code would add indirection without benefit. |
 | `-mno-red-zone` | The System V AMD64 ABI, Section 3.2.2, reserves 128 bytes below the stack pointer for leaf functions. An interrupt may be delivered at any instruction boundary and would overwrite that region. The red zone is therefore inadmissible in kernel code. |
-| `-mno-mmx -mno-sse -mno-sse2 -mno-80387` | Intel SDM, Volume 3A, Section 13.1, requires the vector and floating-point units to be explicitly enabled and their state to be saved and restored across context switches. The kernel performs neither, so the corresponding instruction sets must not be emitted. This also enforces the prohibition upon kernel floating-point arithmetic recorded in `CLAUDE.md`, Section 8. |
+| `-mno-mmx -mno-sse -mno-sse2 -mno-80387` | Intel SDM, Volume 3A, Section 13.1, requires the vector and floating-point units to be explicitly enabled and their state to be saved and restored across context switches. The kernel performs neither, so the corresponding instruction sets must not be emitted. This also enforces the prohibition upon kernel floating-point arithmetic recorded in `PROJECT_GUIDELINES.md`, Section 8. |
 | `-mcmodel=kernel` | All kernel symbols reside within the topmost 2 GiB of the address space, permitting 32-bit sign-extended displacements rather than 64-bit absolute addressing. |
-| `-Wall -Wextra -Werror` | The diagnostic regime mandated by `CLAUDE.md`, Section 4. |
+| `-Wall -Wextra -Werror` | The diagnostic regime mandated by `PROJECT_GUIDELINES.md`, Section 4. |
 | `-Wshadow -Wpointer-arith -Wcast-align -Wstrict-prototypes -Wmissing-prototypes -Wredundant-decls -Wwrite-strings` | Additional diagnostics selected because each detects a class of defect that is difficult to observe in a kernel, where there is no debugger of last resort. |
 | `-O2` | Optimisation at level two. Level three is not selected because its aggressive inlining complicates the correlation of a fault address with a source line. |
 | `-g` | DWARF debugging information, consumed by the QEMU GDB stub. |
 
 No warning is presently suppressed. Should a suppression become necessary, it
 must be recorded in the `Makefile` together with its justification, as required
-by `CLAUDE.md`, Section 4.
+by `PROJECT_GUIDELINES.md`, Section 4.
 
 ## 4. Assembler flags
 

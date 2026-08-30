@@ -1,8 +1,8 @@
 # Oxys-OS Coding Standards
 
-**Authority**: `CLAUDE.md`, Sections 2, 4 and 8. This document elaborates upon
+**Authority**: `PROJECT_GUIDELINES.md`, Sections 2, 4 and 8. This document elaborates upon
 those requirements; it does not amend them. Where the two appear to differ,
-`CLAUDE.md` governs.
+`PROJECT_GUIDELINES.md` governs.
 
 ## 1. Language
 
@@ -76,7 +76,7 @@ accesses to it.
 
 ## 7. Register of permitted compiler extensions
 
-`CLAUDE.md`, Section 8, prohibits compiler extensions unless the rationale is
+`PROJECT_GUIDELINES.md`, Section 8, prohibits compiler extensions unless the rationale is
 documented. The following are in use.
 
 | Extension | Where | Rationale |
@@ -100,7 +100,7 @@ documented. The following are in use.
 
 ## 9. Documentation discipline
 
-`CLAUDE.md`, Section 2, requires that no change be regarded as complete until:
+`PROJECT_GUIDELINES.md`, Section 2, requires that no change be regarded as complete until:
 
 1. The inline comments and the file header of every file touched are current.
 2. The affected documents within `docs/` are updated.

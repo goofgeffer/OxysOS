@@ -1,6 +1,6 @@
 # Oxys-OS Test Procedure
 
-**Corresponding phase**: All phases. `CLAUDE.md`, Section 2, requires every
+**Corresponding phase**: All phases. `PROJECT_GUIDELINES.md`, Section 2, requires every
 milestone to be bootable and testable under QEMU and VirtualBox.
 
 ## 1. Automated verification
@@ -41,7 +41,7 @@ make run-qemu
 The machine type `q35`, the processor model `qemu64` and the two-core
 configuration are fixed in the `Makefile` so that the symmetric multi-processing
 work of Phase 6 is exercised under a representative configuration from the
-earliest opportunity, as `CLAUDE.md`, Section 2, requires.
+earliest opportunity, as `PROJECT_GUIDELINES.md`, Section 2, requires.
 
 The VGA console is expected to present the identification banner in light cyan
 upon black, followed by the status lines. The serial output is directed to the

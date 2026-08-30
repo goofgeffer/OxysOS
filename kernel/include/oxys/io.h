@@ -21,7 +21,7 @@
  *
  * The GNU C extended assembly syntax is employed because ISO C provides no means
  * of expressing the IN instruction. The rationale for this deviation from the
- * prohibition upon compiler extensions, recorded in CLAUDE.md Section 8, is that
+ * prohibition upon compiler extensions, recorded in PROJECT_GUIDELINES.md Section 8, is that
  * no conforming alternative exists; the same rationale applies to every other
  * inline assembly construct within the kernel.
  */

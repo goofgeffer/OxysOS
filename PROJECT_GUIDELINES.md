@@ -1,14 +1,19 @@
-# CLAUDE.md - Oxys-OS Project Constitution
+# Oxys-OS Project Guidelines
+
+This document sets out the conventions binding upon all work in the Oxys-OS
+repository. It governs project identity, research protocol, technical stack,
+coding and documentation standards, the phase roadmap in outline, and the
+practices that are prohibited.
 
 ## 1. Project Identity
 - **Name**: Oxys-OS (Oxys).
 - **Purpose**: A monolithic, Unix-based x86_64 operating system built entirely from scratch in ISO C11 and assembly.
-- **Root Directory**: ~/oxy-os (within WSL2 on Windows 10).
+- **Root Directory**: `~/oxys-os` (within WSL2 on Windows 10).
 - **Primary Language**: C11 for kernel and userland; NASM assembly for boot and architecture-specific routines.
 
 ## 2. Absolute Rules of Engagement
 - **Formality**: All communication, documentation, code comments, and commit messages must adopt a strictly formal, technical, and objective tone. The use of emojis, slang, humour, or any informal expression is strictly prohibited.
-- **Specification-Driven Development**: Before implementing any subsystem, the assistant must invoke `webfetch` and `websearch` to retrieve and cite the official authoritative specifications (e.g., Intel manuals, Multiboot2, EXT2, System V ABI, UEFI Specification, relevant RFCs). No implementation shall proceed without referenced specification.
+- **Specification-Driven Development**: Before implementing any subsystem, the contributor must retrieve and cite the official authoritative specifications (e.g., Intel manuals, Multiboot2, EXT2, System V ABI, UEFI Specification, relevant RFCs). No implementation shall proceed without referenced specification.
 - **Synchronous Documentation**: Every single code change must be immediately reflected in:
   - Updated inline comments and file-header blocks.
   - Corresponding design notes within the `docs/` folder.
@@ -38,7 +43,8 @@
 - **Compiler Flags**: `-Wall -Wextra -Werror` shall be enabled at the earliest stable stage, with exceptions explicitly documented in the Makefile.
 
 ## 5. Project Milestones (13 Formal Phases)
-The roadmap is enumerated in `docs/PLAN.md` and comprises 13 major phases, ordered by dependency:
+The roadmap is enumerated in full in `docs/PLAN.md`, which is the single source
+of truth for progress. It comprises 13 major phases, ordered by dependency:
 
 1. **Bootstrapping & Early Output** — Cross-compiler, Multiboot2, long-mode, VGA text output, ISO generation.
 2. **Memory Management (incl. Copy‑on‑Write)** — Physical frame allocator, paging, higher-half kernel, virtual allocator, COW page fault handler with reference counting.
@@ -70,7 +76,7 @@ Each phase shall be broken into atomic, testable sub-tasks. The GUI is explicitl
 
 ## 7. Update Discipline
 - `docs/PLAN.md` is the single source of truth for task tracking. It shall be updated in every session after any functional change.
-- The file `CLAUDE.md` itself is immutable except by explicit user request. Any requested change to this constitution must be acknowledged and documented separately.
+- This document is amended only by explicit decision of the project owner. Any such amendment must be acknowledged, and the reason for it recorded, in the commit that makes it.
 
 ## 8. Prohibited Practices
 - Use of non-standard or GCC-specific extensions without first documenting the rationale.
@@ -79,8 +85,8 @@ Each phase shall be broken into atomic, testable sub-tasks. The GUI is explicitl
 - Use of any third-party library or external code inside the kernel proper. The only external dependencies are the bootloader (GRUB) and the cross-compiler toolchain.
 
 ## 9. Initialisation Checklist
-At the start of each session, the assistant shall verify:
-- The working directory is `~/oxy-os`.
+At the start of each working session, the contributor shall verify:
+- The working directory is `~/oxys-os`.
 - The cross-compiler is available in `$PATH`.
 - `docs/PLAN.md` exists and reflects the current state of progress.
 - The latest code compiles without fatal errors (if applicable).
@@ -91,4 +97,5 @@ At the start of each session, the assistant shall verify:
 - A directory that is presently empty, having been created in anticipation of a later phase, acquires its `README.md` at the moment material is first placed within it.
 - This requirement is subordinate to the Synchronous Documentation rule of Section 2: a directory `README.md` must be updated in the same change that alters the contents it describes.
 
-This constitution is binding for all assistants, agents, and contributors operating within the Oxys-OS repository.
+These guidelines are binding upon every contributor operating within the Oxys-OS
+repository, whether human or automated.

@@ -71,8 +71,8 @@ LINKER_SCRIPT := linker.ld
 # -mcmodel=kernel       All symbols reside within the topmost 2 GiB of the
 #                       address space, permitting 32-bit sign-extended
 #                       displacements.
-# -std=c11 -pedantic    Conformance to ISO C11 as required by CLAUDE.md.
-# -Wall -Wextra -Werror The diagnostic regime mandated by CLAUDE.md, Section 4.
+# -std=c11 -pedantic    Conformance to ISO C11 as required by PROJECT_GUIDELINES.md.
+# -Wall -Wextra -Werror The diagnostic regime mandated by PROJECT_GUIDELINES.md, Section 4.
 #
 # Documented exception: -Wno-unused-parameter is NOT applied. No warning is
 # presently suppressed; should a suppression become necessary it must be
@@ -120,7 +120,7 @@ DEPENDENCIES := $(patsubst %.c,$(BUILD_DIR)/%.c.d,$(C_SOURCES))
 #
 # The q35 machine type and a two-core processor configuration are selected so
 # that the symmetric multi-processing support of Phase 6 may be exercised from
-# the earliest opportunity, as required by CLAUDE.md, Section 2.
+# the earliest opportunity, as required by PROJECT_GUIDELINES.md, Section 2.
 # ------------------------------------------------------------------------------
 
 QEMU_FLAGS := -machine q35 -cpu qemu64 -smp cores=2 -m 512M

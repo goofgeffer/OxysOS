@@ -12,7 +12,7 @@ because the inter-process communication overhead of a microkernel would obscure
 rather than illuminate the mechanisms under study.
 
 The following properties are treated as first-class design constraints rather
-than as later additions, in accordance with `CLAUDE.md`, Section 5:
+than as later additions, in accordance with `PROJECT_GUIDELINES.md`, Section 5:
 
 1. **Symmetric multi-processing.** Every kernel data structure introduced from
    Phase 2 onward is designed on the assumption that it will be accessed
@@ -43,7 +43,7 @@ than as later additions, in accordance with `CLAUDE.md`, Section 5:
 | `crypto/` | The random-number generator, the hash function and the symmetric cipher. | Phase 10 |
 | `net/` | The network protocol stack. | Phase 11 |
 | `uefi/` | The UEFI application entry point and the UEFI handoff path. | Phase 12 |
-| `docs/` | The documentation corpus described in `docs/README.md`. | Phase 1 |
+| `docs/` | The documentation corpus indexed by the repository `README.md`. | Phase 1 |
 
 ## 3. Present composition
 
