@@ -33,9 +33,16 @@ the first gibibyte is lifted.
 
 Sub-task 2.5 is complete: the kernel arena issues virtually contiguous page
 ranges backed by frames, and a slab heap above it serves allocations of arbitrary
-size.
+size. Sub-task 2.6 is complete: every frame carries a reference count, and a
+frame returns to the allocator only when its last reference is released.
 
-**The next work is sub-task 2.6**, per-frame reference counting.
+**Sub-tasks 2.7 and 2.8 cannot proceed here.** Both concern the copy-on-write
+fault path, and a fault handler is unreachable until the interrupt descriptor
+table of Phase 3 is installed. The dependency is recorded in
+`docs/ARCHITECTURE.md`, Section 4.
+
+**The next work is therefore Phase 3, sub-task 3.1**, the interrupt descriptor
+table. Sub-tasks 2.7 and 2.8 follow the completion of sub-task 3.4.
 
 ## Legend
 
@@ -84,7 +91,7 @@ provide the copy-on-write primitives upon which `fork()` will later depend.
 - [x] 2.3 Construct a permanent kernel page-table hierarchy, replacing the boot-time tables and removing the low identity map.
 - [x] 2.4 Implement a direct physical map region for kernel access to arbitrary frames.
 - [x] 2.5 Implement a kernel virtual-address-space allocator and a general-purpose kernel heap (slab allocator over a buddy-style page allocator).
-- [ ] 2.6 Implement per-frame reference counting as the substrate for shared pages.
+- [x] 2.6 Implement per-frame reference counting as the substrate for shared pages.
 - [ ] 2.7 Implement the page-fault handler dispatch path (dependent upon Phase 3) and the copy-on-write fault resolution routine.
 - [ ] 2.8 Implement address-space cloning that marks writable user pages read-only and increments frame reference counts.
 
@@ -293,6 +300,7 @@ ACPI Specification 6.5.
 | Date | Phase affected | Summary |
 | ---- | -------------- | ------- |
 | 2026-08-30 | Phase 1 | Project initialised. Directory structure, documentation corpus, boot code, kernel entry, VGA and serial output, build system and ISO generation completed. Boot verified under QEMU. |
+| 2026-08-30 | Phase 2 | Sub-task 2.6 completed. Per-frame reference counting is established over a 255 KiB table allocated from the kernel heap. `FrameFree` releases one reference and returns a frame to the allocator only upon the last. Sub-tasks 2.7 and 2.8 are deferred until Phase 3 provides a page-fault handler. |
 | 2026-08-30 | Phase 2 | Sub-task 2.5 completed. The kernel virtual address allocator issues ranges of the 32 TiB arena, backing each page with a frame; the kernel heap is a slab allocator over it, with eight size classes and a whole-page path for larger requests. Both pass a boot-time self-test. |
 | 2026-08-30 | Phase 2 | Sub-task 2.4 completed. The direct physical map covers the whole of usable physical memory at `0xFFFF800000000000` with 2 MiB pages. Paging structures are no longer confined to the first gibibyte. |
 | 2026-08-30 | Phase 2 | Sub-task 2.3 completed. The permanent kernel paging hierarchy is constructed from four allocated frames and activated; the kernel text and read-only data are mapped read-only; the low identity mapping is removed. Verified by a boot-time self-test that walks the hierarchy in software. |

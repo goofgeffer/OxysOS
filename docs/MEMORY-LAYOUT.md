@@ -510,3 +510,64 @@ After the boot-time self-test under QEMU:
 The three retained pages are those of the 16, 256 and 1024-byte classes, held by
 the limitation of Section 11.4. Zero live allocations confirms the self-test
 released everything it took.
+
+
+## 12. Per-frame reference counting
+
+Sub-task 2.6 gives every frame a reference count, which is the substrate upon
+which copy-on-write is built in sub-task 2.8.
+
+### 12.1 Semantics
+
+`FrameAllocate` issues a frame with a count of one. `FrameReferenceIncrement`
+records a further holder, as when an address space is cloned and a page becomes
+shared. `FrameFree` releases one reference, and returns the frame to the
+allocator only when the count reaches zero.
+
+This redefinition of `FrameFree` is deliberate and required no change to its
+existing callers. The kernel arena allocates a frame, holds the single reference
+that allocation confers, and releases it when the page is unmapped; that is
+correct under both the old semantics and the new. Copy-on-write will take
+additional references, and the frame will then survive the release of all but the
+last.
+
+### 12.2 Why the table is allocated later than the allocator
+
+The table is 255 KiB for the 131039 frames of a 512 MiB machine, and is allocated
+from the kernel heap. The heap does not exist until sub-task 2.5, so reference
+counting is established in a separate step after it, rather than within
+`PhysicalMemoryInitialise`.
+
+Frames allocated before that point — the paging structures, the arena's page
+tables, the heap's own slabs, and the pages of the table itself — are seeded with
+a single reference when the table is created. This is correct: each was issued
+once and released no times.
+
+The table is seeded *before* it is published. Publishing first and seeding
+afterwards would leave a window in which `FrameFree` observed a zero count for a
+live frame and reported a double release.
+
+### 12.3 Width and overflow
+
+A count is 16 bits, bounding the sharing of a single frame at 65535 address
+spaces. That is far beyond any plausible degree of sharing. An attempt to exceed
+it is reported rather than allowed to wrap, because a wrapped count would free a
+frame that is still in use — a corruption that would surface arbitrarily later
+and nowhere near its cause.
+
+### 12.4 Observed state
+
+After the boot-time self-test under QEMU with 512 MiB:
+
+| Quantity | Value |
+| -------- | ----- |
+| Frames governed | 131039 |
+| Frames free | 130671 (522684 KiB) |
+| Frames used | 368 |
+| Reference table | 255 KiB |
+| Greatest count observed | 3 |
+
+The used count has risen from the 288 of Section 7.5 by the paging structures,
+the arena's page tables, the heap's slabs and the pages of the reference table
+itself. The greatest count of three is that reached by the self-test, which takes
+a frame to three references and confirms it survives the release of two of them.

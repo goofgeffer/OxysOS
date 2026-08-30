@@ -25,7 +25,7 @@ are separate.
 | `include/oxys/vmm.h` | The kernel arena constants and the interface of the virtual address allocator. |
 | `mm/paging.c` | The permanent kernel paging hierarchy. `PagingInitialise`, `PagingTranslate`, `PagingAddressIsWritable` and the reporting routines. |
 | `include/oxys/paging.h` | The paging-structure entry flags and the interface of the paging subsystem. |
-| `mm/pmm.c` | The physical frame allocator. `PhysicalMemoryInitialise`, `FrameAllocate`, `FrameAllocateBelow`, `FrameFree` and the accounting accessors. |
+| `mm/pmm.c` | The physical frame allocator and per-frame reference counting. `PhysicalMemoryInitialise`, `FrameAllocate`, `FrameAllocateBelow`, `FrameFree`, `FrameReferenceInitialise`, `FrameReferenceIncrement` and the accounting accessors. |
 | `include/oxys/memory.h` | `PAGE_SIZE`, `PAGE_SHIFT`, `LOW_MEMORY_LIMIT` and the alignment helpers. |
 | `include/oxys/pmm.h` | The interface of the physical frame allocator. |
 | `multiboot2.c` | `BootInformationParseMultiboot2`, which walks the Multiboot2 tag series and reduces it to the neutral description; `BootInformationReport`, which emits that description. |

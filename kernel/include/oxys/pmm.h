@@ -57,11 +57,43 @@ PhysicalAddress FrameAllocate(void);
 PhysicalAddress FrameAllocateBelow(PhysicalAddress limit);
 
 /*
- * Returns a frame to the allocator. Freeing a frame that is already free, or one
- * that lies outside the range the allocator governs, is a defect in the caller
- * and is reported rather than ignored.
+ * Releases one reference to a frame. The frame returns to the allocator only
+ * when its last reference is released.
+ *
+ * Before reference counting is established every frame carries an implicit
+ * single reference, so this frees the frame outright. Afterwards a frame shared
+ * between several address spaces survives until every holder has released it,
+ * which is the property upon which copy-on-write depends.
+ *
+ * Freeing a frame that is already free, or one outside the range the allocator
+ * governs, is a defect in the caller and is reported rather than ignored.
  */
 void FrameFree(PhysicalAddress frame);
+
+/*
+ * Establishes per-frame reference counting. The kernel heap must be initialised
+ * before this is called, since the table is allocated from it.
+ *
+ * Every frame presently allocated or reserved is seeded with a single reference,
+ * which is correct: each was issued once and has been released no times.
+ */
+void FrameReferenceInitialise(void);
+
+/*
+ * Records an additional reference to a frame, as when an address space is cloned
+ * and a page becomes shared. The frame must presently be allocated.
+ */
+void FrameReferenceIncrement(PhysicalAddress frame);
+
+/*
+ * The number of references presently held to a frame. Returns 0 for a frame that
+ * is free, and 1 for every allocated frame while reference counting is not yet
+ * established.
+ */
+uint32_t FrameReferenceCount(PhysicalAddress frame);
+
+/* Reports whether reference counting is established. */
+bool FrameReferenceIsActive(void);
 
 /* The number of frames the allocator governs, being every frame below the
  * highest usable address, whether or not it is usable. */

@@ -509,6 +509,94 @@ static void KernelVerifyAllocators(void)
                           : "Allocator self-test FAILED.\n");
 }
 
+/*
+ * Exercises per-frame reference counting and reports the outcome.
+ *
+ * The property under test is the one copy-on-write will depend upon: a frame
+ * held by more than one referrer must survive the release of all but the last.
+ * Its failure would either free memory still in use, which corrupts silently, or
+ * retain memory nothing refers to, which leaks.
+ */
+static void KernelVerifyReferenceCounting(void)
+{
+    PhysicalAddress frame;
+    bool succeeded = true;
+
+    if (!FrameReferenceIsActive())
+    {
+        KernelWriteString("  Reference counting is not active.\n");
+        KernelWriteString("Reference counting self-test FAILED.\n");
+        return;
+    }
+
+    frame = FrameAllocate();
+
+    if (frame == FRAME_ALLOCATION_FAILED)
+    {
+        KernelWriteString("  A frame could not be allocated.\n");
+        succeeded = false;
+    }
+    else
+    {
+        size_t free_after_allocation = FrameFreeCount();
+
+        /* A newly allocated frame carries exactly one reference. */
+        if (FrameReferenceCount(frame) != 1U)
+        {
+            KernelWriteString("  A newly allocated frame did not carry one reference.\n");
+            succeeded = false;
+        }
+
+        /* Sharing the frame twice more brings it to three references. */
+        FrameReferenceIncrement(frame);
+        FrameReferenceIncrement(frame);
+
+        if (FrameReferenceCount(frame) != 3U)
+        {
+            KernelWriteString("  The reference count did not rise to three.\n");
+            succeeded = false;
+        }
+
+        /*
+         * Releasing two of the three references must leave the frame allocated.
+         * The free count must not move: no frame has returned to the allocator.
+         */
+        FrameFree(frame);
+        FrameFree(frame);
+
+        if (FrameReferenceCount(frame) != 1U)
+        {
+            KernelWriteString("  The reference count did not fall to one.\n");
+            succeeded = false;
+        }
+
+        if (FrameFreeCount() != free_after_allocation)
+        {
+            KernelWriteString("  A shared frame was returned before its last release.\n");
+            succeeded = false;
+        }
+
+        /* Releasing the last reference returns the frame. */
+        FrameFree(frame);
+
+        if (FrameReferenceCount(frame) != 0U)
+        {
+            KernelWriteString("  A fully released frame retains references.\n");
+            succeeded = false;
+        }
+
+        if (FrameFreeCount() != (free_after_allocation + 1U))
+        {
+            KernelWriteString("  A fully released frame did not return to the allocator.\n");
+            succeeded = false;
+        }
+    }
+
+    KernelWriteString(succeeded
+                          ? "Reference counting self-test passed.\n"
+                          : "Reference counting self-test FAILED.\n");
+}
+
 void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic)
 {
     /*
@@ -568,8 +656,12 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
     KernelVirtualReport();
     KernelHeapReport();
 
+    FrameReferenceInitialise();
+    KernelVerifyReferenceCounting();
+    PhysicalMemoryReport();
+
     VgaSetColour(VGA_COLOUR_LIGHT_GREEN, VGA_COLOUR_BLACK);
-    KernelWriteString("Phase 2.5 initialisation complete.\n");
+    KernelWriteString("Phase 2.6 initialisation complete.\n");
 
     VgaSetColour(VGA_COLOUR_LIGHT_GREY, VGA_COLOUR_BLACK);
     KernelWriteString("No further subsystems are implemented. Halting.\n");

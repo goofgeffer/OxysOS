@@ -29,6 +29,7 @@
 
 #include <oxys/pmm.h>
 #include <oxys/kernel.h>
+#include <oxys/heap.h>
 
 /* The number of frames represented by one element of the bitmap. */
 #define FRAME_BITS_PER_WORD 64U
@@ -54,6 +55,20 @@ static size_t FrameFreeFrames;
  * avoids rescanning the low frames on every call.
  */
 static size_t FrameSearchHint;
+
+/*
+ * The reference count of every frame, or NULL until reference counting is
+ * established. A count of zero denotes a free frame.
+ *
+ * The width is 16 bits, which bounds the number of address spaces that may share
+ * one frame at 65535. That is far beyond any plausible degree of sharing, and an
+ * attempt to exceed it is reported rather than allowed to wrap, since a wrapped
+ * count would free a frame that is still in use.
+ */
+static uint16_t *FrameReferenceTable;
+
+/* The greatest reference count reached, for reporting. */
+static uint16_t FrameReferenceHighWaterMark;
 
 /* The physical extent of the bitmap itself, retained so that it may be reserved. */
 static PhysicalAddress FrameBitmapPhysicalStart;
@@ -360,6 +375,12 @@ PhysicalAddress FrameAllocateBelow(PhysicalAddress limit)
             if (!FrameIsUsed(index))
             {
                 FrameMarkUsed(index);
+
+                if (FrameReferenceTable != NULL)
+                {
+                    FrameReferenceTable[index] = 1U;
+                }
+
                 FrameSearchHint = index + 1U;
                 return FrameAddressOf(index);
             }
@@ -395,12 +416,131 @@ void FrameFree(PhysicalAddress frame)
         KernelPanic("A frame that was already free was passed to FrameFree.");
     }
 
+    /*
+     * With reference counting established, a frame is returned to the allocator
+     * only when its last reference is released. This is what permits a frame to
+     * be shared between address spaces, and is the mechanism upon which
+     * copy-on-write rests.
+     */
+    if (FrameReferenceTable != NULL)
+    {
+        if (FrameReferenceTable[index] == 0U)
+        {
+            KernelPanic("A frame with no references was passed to FrameFree.");
+        }
+
+        --FrameReferenceTable[index];
+
+        if (FrameReferenceTable[index] != 0U)
+        {
+            return;
+        }
+    }
+
     FrameMarkFree(index);
 
     if (index < FrameSearchHint)
     {
         FrameSearchHint = index;
     }
+}
+
+void FrameReferenceInitialise(void)
+{
+    uint16_t *table;
+
+    if (FrameReferenceTable != NULL)
+    {
+        return;
+    }
+
+    /*
+     * The table is allocated from the kernel heap, which is why this is a
+     * separate step performed after sub-task 2.5 rather than part of
+     * PhysicalMemoryInitialise. Allocating it consumes frames itself, and those
+     * frames are seeded below along with every other allocated frame.
+     */
+    table = (uint16_t *)KernelAllocateZeroed(FrameCount * sizeof(uint16_t));
+
+    if (table == NULL)
+    {
+        KernelPanic("The frame reference table could not be allocated.");
+    }
+
+    /*
+     * Seed the table before publishing it. Every frame presently allocated or
+     * reserved has been issued once and released no times, so its count is one.
+     * Publishing the table first and seeding afterwards would leave a window in
+     * which FrameFree observed a zero count for a live frame.
+     */
+    for (size_t index = 0U; index < FrameCount; ++index)
+    {
+        table[index] = FrameIsUsed(index) ? (uint16_t)1U : (uint16_t)0U;
+    }
+
+    FrameReferenceTable = table;
+    FrameReferenceHighWaterMark = 1U;
+}
+
+void FrameReferenceIncrement(PhysicalAddress frame)
+{
+    size_t index;
+
+    if (!IsPageAligned(frame))
+    {
+        KernelPanic("A misaligned address was passed to FrameReferenceIncrement.");
+    }
+
+    index = FrameIndexOf(frame);
+
+    if (index >= FrameCount)
+    {
+        KernelPanic("An out-of-range address was passed to FrameReferenceIncrement.");
+    }
+
+    if (FrameReferenceTable == NULL)
+    {
+        KernelPanic("A reference was taken before reference counting was established.");
+    }
+
+    if (FrameReferenceTable[index] == 0U)
+    {
+        KernelPanic("A reference was taken to a frame that is not allocated.");
+    }
+
+    if (FrameReferenceTable[index] == UINT16_MAX)
+    {
+        KernelPanic("The reference count of a frame would overflow.");
+    }
+
+    ++FrameReferenceTable[index];
+
+    if (FrameReferenceTable[index] > FrameReferenceHighWaterMark)
+    {
+        FrameReferenceHighWaterMark = FrameReferenceTable[index];
+    }
+}
+
+uint32_t FrameReferenceCount(PhysicalAddress frame)
+{
+    size_t index = FrameIndexOf(frame);
+
+    if (index >= FrameCount)
+    {
+        return 0U;
+    }
+
+    if (FrameReferenceTable == NULL)
+    {
+        return FrameIsUsed(index) ? 1U : 0U;
+    }
+
+    return (uint32_t)FrameReferenceTable[index];
+}
+
+bool FrameReferenceIsActive(void)
+{
+    return FrameReferenceTable != NULL;
 }
 
 size_t FrameTotalCount(void)
@@ -429,6 +569,20 @@ void PhysicalMemoryReport(void)
     KernelWriteString(" KiB), ");
     KernelWriteDecimal((uint64_t)(FrameCount - FrameFreeFrames));
     KernelWriteString(" used.\n");
+
+    KernelWriteString("Frame reference counting: ");
+    if (FrameReferenceTable != NULL)
+    {
+        KernelWriteString("active, ");
+        KernelWriteDecimal((uint64_t)FrameCount * sizeof(uint16_t) / 1024U);
+        KernelWriteString(" KiB table, greatest count ");
+        KernelWriteDecimal((uint64_t)FrameReferenceHighWaterMark);
+        KernelWriteString(".\n");
+    }
+    else
+    {
+        KernelWriteString("not yet established.\n");
+    }
 
     KernelWriteString("Frame bitmap: ");
     KernelWriteHexadecimal(FrameBitmapPhysicalStart);

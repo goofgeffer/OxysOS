@@ -107,6 +107,10 @@ Phase 3 is installed. The dependency is resolved by implementing the memory
 management structures of sub-tasks 2.1 to 2.6 first, then Phase 3, and finally
 returning to sub-tasks 2.7 and 2.8.
 
+**Status.** Sub-tasks 2.1 to 2.6 are complete. Work has therefore moved to
+Phase 3, and sub-tasks 2.7 and 2.8 will be taken up once sub-task 3.4 provides a
+fault handler capable of reporting, and then of resolving, a page fault.
+
 ## 5. Privilege and address-space model
 
 The kernel occupies the upper half of the canonical 48-bit address space and is
