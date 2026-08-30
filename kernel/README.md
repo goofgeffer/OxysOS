@@ -19,6 +19,9 @@ are separate.
 | Path | Description |
 | ---- | ----------- |
 | `kernel.c` | `KernelMain`, the C entry point: it validates the boot loader handover, initialises the early output devices, presents the identification banner and halts. `KernelPanic`, the unrecoverable-error path. `KernelHalt`, `KernelWriteString` and `KernelWriteHexadecimal`. |
+| `mm/pmm.c` | The physical frame allocator. `PhysicalMemoryInitialise`, `FrameAllocate`, `FrameAllocateBelow`, `FrameFree` and the accounting accessors. |
+| `include/oxys/memory.h` | `PAGE_SIZE`, `PAGE_SHIFT`, `LOW_MEMORY_LIMIT` and the alignment helpers. |
+| `include/oxys/pmm.h` | The interface of the physical frame allocator. |
 | `multiboot2.c` | `BootInformationParseMultiboot2`, which walks the Multiboot2 tag series and reduces it to the neutral description; `BootInformationReport`, which emits that description. |
 | `include/oxys/multiboot2.h` | The raw on-memory layout of the Multiboot2 structure and of the tags the kernel consumes, together with the ELF64 section header. |
 | `include/oxys/bootinfo.h` | `BootInformation`, the boot-protocol-neutral description of the machine, and its classification of memory regions. |
@@ -75,6 +78,8 @@ Full citations are held in [`../docs/REFERENCES.md`](../docs/REFERENCES.md).
    domain to the whole of physical memory.
 2. There is no formatted output. `KernelWriteHexadecimal` is a deliberate
    minimum, to be superseded when the C library of Phase 7 exists.
-4. Nothing here is yet safe against concurrent access. Every structure
+4. The frame allocator is not yet safe against concurrent access; from sub-task
+   6.9 its bitmap and search hint require a spinlock. Nothing here is yet safe
+   against concurrent access. Every structure
    introduced from Phase 2 onward must record its locking discipline in its
    defining file's header, as `docs/ARCHITECTURE.md`, Section 1, requires.

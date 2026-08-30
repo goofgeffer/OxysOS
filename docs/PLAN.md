@@ -19,8 +19,11 @@ present WSL2 environment, and 1.12, physical hardware testing.
 
 **Phase 2 is in progress.** Sub-task 2.1 is complete: the Multiboot2 information
 structure is parsed into a boot-protocol-neutral `BootInformation` description,
-and the memory map is reported at boot. The next work is sub-task 2.2, the
-physical frame allocator.
+and the memory map is reported at boot. Sub-task 2.2 is complete: a bitmap frame
+allocator governs every frame below the highest usable address, reserving the low
+mebibyte, the kernel image, the boot information structure and its own bitmap,
+and passing a boot-time self-test. The next work is sub-task 2.3, the permanent
+kernel page tables.
 
 ## Legend
 
@@ -65,7 +68,7 @@ provide the copy-on-write primitives upon which `fork()` will later depend.
 (Page-Fault Exception); Multiboot2 Specification, Section 3.6 (memory map tag).
 
 - [x] 2.1 Parse the Multiboot2 information structure and extract the memory map (tag type 6) and the ELF section headers (tag type 9).
-- [ ] 2.2 Implement a physical frame allocator (bitmap) covering all usable regions, reserving the kernel image, the Multiboot2 structures and the low 1 MiB.
+- [x] 2.2 Implement a physical frame allocator (bitmap) covering all usable regions, reserving the kernel image, the Multiboot2 structures and the low 1 MiB.
 - [ ] 2.3 Construct a permanent kernel page-table hierarchy, replacing the boot-time tables and removing the low identity map.
 - [ ] 2.4 Implement a direct physical map region for kernel access to arbitrary frames.
 - [ ] 2.5 Implement a kernel virtual-address-space allocator and a general-purpose kernel heap (slab allocator over a buddy-style page allocator).
@@ -278,5 +281,6 @@ ACPI Specification 6.5.
 | Date | Phase affected | Summary |
 | ---- | -------------- | ------- |
 | 2026-08-30 | Phase 1 | Project initialised. Directory structure, documentation corpus, boot code, kernel entry, VGA and serial output, build system and ISO generation completed. Boot verified under QEMU. |
+| 2026-08-30 | Phase 2 | Sub-task 2.2 completed. A bitmap physical frame allocator, with a boot-time self-test. 131039 frames governed under QEMU with 512 MiB, of which 288 are reserved: 256 for the low mebibyte, 27 for the kernel image, 4 for the bitmap and 1 for the boot information structure. |
 | 2026-08-30 | Phase 2 | Sub-task 2.1 completed. The Multiboot2 information structure is parsed into the neutral `BootInformation` description: the memory map, the ELF section count, the boot loader name and the command line. The kernel and boot information extents are recorded for the frame allocator to reserve. |
 | 2026-08-30 | Phase 1 | `CLAUDE.md` amended at the project owner's request by the addition of Section 10, requiring directory-level documentation. `boot/README.md`, `kernel/README.md` and `drivers/README.md` created accordingly, and `docs/README.md` extended to index them. |

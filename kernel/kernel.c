@@ -24,6 +24,7 @@
 
 #include <oxys/kernel.h>
 #include <oxys/bootinfo.h>
+#include <oxys/pmm.h>
 #include <oxys/vga.h>
 #include <oxys/serial.h>
 
@@ -129,6 +130,100 @@ void KernelPanic(const char *message)
  */
 static BootInformation KernelBootInformation;
 
+/*
+ * Exercises the frame allocator and reports the outcome.
+ *
+ * There is no test harness in a kernel, and no means of running one before the
+ * userland of Phase 7 exists. A boot-time self-test is therefore the only
+ * mechanism by which the allocator's invariants may be checked upon the hardware
+ * that will actually run it. The properties asserted are those whose violation
+ * would corrupt memory silently: that frames are page aligned, that a frame is
+ * not issued twice, that a freed frame is reissued, and that no frame is issued
+ * from a reserved extent.
+ */
+static void KernelVerifyFrameAllocator(void)
+{
+    PhysicalAddress first_frame;
+    PhysicalAddress second_frame;
+    PhysicalAddress reissued_frame;
+    size_t free_before;
+    bool succeeded = true;
+
+    free_before = FrameFreeCount();
+
+    first_frame = FrameAllocate();
+    second_frame = FrameAllocate();
+
+    if (first_frame == FRAME_ALLOCATION_FAILED ||
+        second_frame == FRAME_ALLOCATION_FAILED)
+    {
+        KernelWriteString("  Allocation failed while frames remained.\n");
+        succeeded = false;
+    }
+    else
+    {
+        if (!IsPageAligned(first_frame) || !IsPageAligned(second_frame))
+        {
+            KernelWriteString("  An allocated frame was not page aligned.\n");
+            succeeded = false;
+        }
+
+        if (first_frame == second_frame)
+        {
+            KernelWriteString("  The same frame was issued twice.\n");
+            succeeded = false;
+        }
+
+        if (first_frame < LOW_MEMORY_LIMIT || second_frame < LOW_MEMORY_LIMIT)
+        {
+            KernelWriteString("  A frame was issued from the reserved low memory.\n");
+            succeeded = false;
+        }
+
+        if ((first_frame >= KernelBootInformation.kernel_physical_start &&
+             first_frame < KernelBootInformation.kernel_physical_end) ||
+            (second_frame >= KernelBootInformation.kernel_physical_start &&
+             second_frame < KernelBootInformation.kernel_physical_end))
+        {
+            KernelWriteString("  A frame was issued from within the kernel image.\n");
+            succeeded = false;
+        }
+
+        if (FrameFreeCount() != (free_before - 2U))
+        {
+            KernelWriteString("  The free count did not fall by two.\n");
+            succeeded = false;
+        }
+
+        /*
+         * A freed frame must be reissued in preference to an untouched one,
+         * since FrameFree moves the search hint back to it. This confirms both
+         * that the bit was cleared and that the hint was adjusted.
+         */
+        FrameFree(first_frame);
+        reissued_frame = FrameAllocate();
+
+        if (reissued_frame != first_frame)
+        {
+            KernelWriteString("  A freed frame was not reissued.\n");
+            succeeded = false;
+        }
+
+        FrameFree(reissued_frame);
+        FrameFree(second_frame);
+
+        if (FrameFreeCount() != free_before)
+        {
+            KernelWriteString("  The free count did not return to its initial value.\n");
+            succeeded = false;
+        }
+    }
+
+    KernelWriteString(succeeded
+                          ? "Frame allocator self-test passed.\n"
+                          : "Frame allocator self-test FAILED.\n");
+}
+
 void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic)
 {
     /*
@@ -174,8 +269,12 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
 
     BootInformationReport(&KernelBootInformation);
 
+    PhysicalMemoryInitialise(&KernelBootInformation);
+    PhysicalMemoryReport();
+    KernelVerifyFrameAllocator();
+
     VgaSetColour(VGA_COLOUR_LIGHT_GREEN, VGA_COLOUR_BLACK);
-    KernelWriteString("Phase 2.1 initialisation complete.\n");
+    KernelWriteString("Phase 2.2 initialisation complete.\n");
 
     VgaSetColour(VGA_COLOUR_LIGHT_GREY, VGA_COLOUR_BLACK);
     KernelWriteString("No further subsystems are implemented. Halting.\n");

@@ -188,3 +188,84 @@ construction, and the ELF sections tag is parsed for validation and reporting
 alone. The tag is nevertheless useful: the count of section headers it reports
 confirms that the tag was interpreted correctly, since the parser rejects it
 unless the entry size is exactly 64 bytes, the size of an ELF64 section header.
+
+
+## 7. The physical frame allocator
+
+Sub-task 2.2 introduces the frame allocator of `kernel/mm/pmm.c`. It is the sole
+authority upon which frames are free; every later subsystem that requires
+physical memory obtains it here.
+
+### 7.1 Structure
+
+The allocator is a bitmap of one bit per 4 KiB frame, in which a set bit denotes
+a frame that is allocated or reserved. A bitmap is chosen in preference to a
+free-frame stack because the initialisation sequence must be able to reserve a
+frame *by address*: the kernel image, the boot information structure and the
+bitmap itself all fall within regions the memory map classifies as usable, and
+must be excluded after those regions have been released. A stack would allocate
+in constant time but offers no means of removing a particular frame from the
+middle.
+
+### 7.2 Extent governed
+
+The allocator governs every frame below the highest usable address, and no
+frames above it. This is deliberate. Under QEMU the memory map reports a reserved
+region beginning at `0xFD00000000`; representing it would demand a bitmap of some
+two mebibytes to describe memory that does not exist. Nothing usable lies above
+the highest usable address, so nothing is lost.
+
+### 7.3 Order of initialisation
+
+The order is significant, and a different one would be incorrect:
+
+1. **Every frame is marked unavailable.** A region the boot loader did not
+   describe is thereby treated as reserved. Memory whose existence is unattested
+   must not be issued.
+2. **Frames of usable regions are released.** The start of each region is rounded
+   *upward* and its end *downward*, so that a frame only partially covered by a
+   usable region is not released; the remainder of such a frame belongs to an
+   adjacent region which may be reserved.
+3. **The reserved extents are marked again.** Here the start is rounded
+   *downward* and the end *upward*, so that a partially occupied frame is
+   reserved in its entirety. The two roundings are deliberately opposite: both
+   err towards withholding a frame rather than issuing one that is in use.
+
+Step 3 must follow step 2, or the release would undo it.
+
+### 7.4 Placement of the bitmap
+
+The bitmap must itself occupy memory, and cannot be allocated by the allocator it
+constitutes. It is placed by scanning the usable regions for one that can
+accommodate it, advancing a candidate address past the low mebibyte, the kernel
+image and the boot information structure. Two passes are made over the two
+obstructions, because advancing past one may bring the candidate into the other
+and their order in memory is not guaranteed.
+
+The bitmap must also be addressable, which until sub-task 2.4 confines it to the
+first gibibyte of physical memory, that being the extent of the higher-half
+mapping.
+
+### 7.5 Observed state
+
+Under QEMU with 512 MiB:
+
+| Quantity | Value |
+| -------- | ----- |
+| Frames governed | 131039 |
+| Frames free | 130751 (523004 KiB) |
+| Frames reserved | 288 |
+| Bitmap | `0x0011B000` – `0x0011F000` (16 KiB) |
+
+The 288 reserved frames account exactly: 256 for the low mebibyte, 27 for the
+kernel image, 4 for the bitmap and 1 for the boot information structure.
+
+### 7.6 The boot-time self-test
+
+There is no test harness in a kernel, and none can exist before the userland of
+Phase 7. `KernelVerifyFrameAllocator` therefore exercises the allocator at every
+boot and asserts the properties whose violation would corrupt memory silently:
+that issued frames are page aligned, that a frame is not issued twice, that no
+frame is issued from the low mebibyte or from within the kernel image, that the
+free count moves correctly, and that a freed frame is reissued in preference to
+an untouched one.
