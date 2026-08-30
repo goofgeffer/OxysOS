@@ -132,25 +132,6 @@ bool InterruptVectorPushesErrorCode(uint64_t vector)
     }
 }
 
-/*
- * The default handler for the breakpoint exception.
- *
- * The breakpoint is a trap rather than a fault: it reports the state after the
- * INT3 instruction, so returning resumes at the instruction following and does
- * not re-enter. It is therefore safe, and useful, to record it and continue,
- * which makes INT3 usable as a diagnostic marker in kernel code that has no
- * debugger attached.
- *
- * It is registered here rather than in sub-task 3.4 because without it an INT3
- * would be an exception with no handler, and so fatal.
- */
-static void InterruptBreakpointHandler(TrapFrame *frame)
-{
-    /* The frame is recorded by the dispatcher before the handler is entered;
-     * nothing further is required to make it available for inspection. */
-    (void)frame;
-}
-
 void InterruptInitialise(void)
 {
     for (size_t vector = 0U; vector < IDT_ENTRY_COUNT; ++vector)
@@ -168,8 +149,6 @@ void InterruptInitialise(void)
                    (uint8_t)(IDT_ATTRIBUTE_PRESENT | IDT_ATTRIBUTE_DPL_0 |
                              IDT_GATE_TYPE_INTERRUPT));
     }
-
-    InterruptRegisterHandler(3U, InterruptBreakpointHandler, "breakpoint");
 }
 
 void InterruptReportFrame(const TrapFrame *frame)

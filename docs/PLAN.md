@@ -50,9 +50,14 @@ in `docs/INTERRUPTS.md`, Section 5.
 Sub-task 3.3 is complete: a dispatch table routes each vector to a registered
 handler, and a handler may alter the frame to which control returns.
 
-**The next work is sub-task 3.4**, the exception handlers. Its completion
-unblocks sub-tasks 2.7 and 2.8, and the negative paging test deferred from
-sub-task 2.3.
+Sub-task 3.4 is complete: every architecture-defined exception has a handler,
+each fatal exception emits a full diagnosis, and the page-fault handler decodes
+its error code and CR2. The negative paging test deferred from sub-task 2.3 has
+been performed: a page mapped read-only was written to, the fault was observed
+and resolved, and the instruction restarted.
+
+**Sub-tasks 2.7 and 2.8 are now unblocked** and are the next work, being the
+copy-on-write fault path. Phase 3 resumes afterwards at sub-task 3.5.
 
 ## Legend
 
@@ -118,7 +123,7 @@ IBM PS/2 controller documentation.
 - [x] 3.1 Define the IDT and the 64-bit interrupt-gate descriptor format; load it with `lidt`.
 - [x] 3.2 Author assembly stubs for vectors 0–255, normalising the presence or absence of a processor-pushed error code.
 - [x] 3.3 Implement a C interrupt dispatcher operating on a formal trap frame structure.
-- [ ] 3.4 Implement exception handlers with register and stack diagnostics emitted over the serial port.
+- [x] 3.4 Implement exception handlers with register and stack diagnostics emitted over the serial port.
 - [ ] 3.5 Remap the 8259A PIC to vectors 32–47 and implement end-of-interrupt signalling.
 - [ ] 3.6 Implement the Programmable Interval Timer as the initial timer source.
 - [ ] 3.7 Implement the PS/2 keyboard driver: controller initialisation, scancode set 1 translation, modifier state and a circular input buffer.
@@ -310,6 +315,7 @@ ACPI Specification 6.5.
 | Date | Phase affected | Summary |
 | ---- | -------------- | ------- |
 | 2026-08-30 | Phase 1 | Project initialised. Directory structure, documentation corpus, boot code, kernel entry, VGA and serial output, build system and ISO generation completed. Boot verified under QEMU. |
+| 2026-08-30 | Phase 3 | Sub-task 3.4 completed. Handlers for all thirty-two architecture-defined exceptions, with decoding of both error-code formats, a full register and control-register dump, and a bounded stack reproduction. `CR0.WP` is now set in `PagingInitialise`, without which the read-only kernel mappings were advisory only. The negative paging test deferred from sub-task 2.3 was performed and passed. |
 | 2026-08-30 | Phase 3 | Sub-task 3.3 completed. A dispatch table of 256 entries with a registration interface. An unregistered architecture-defined exception remains fatal until sub-task 3.4; an unregistered vector above that range is counted and ignored, which is the correct treatment of a spurious interrupt. A default breakpoint handler is registered, the breakpoint being a trap and therefore safe to resume from. |
 | 2026-08-30 | Phase 3 | Sub-task 3.2 completed. A stub for each of the 256 vectors, normalising the vector number and the presence of a processor error code into a uniform trap frame. A minimal kernel global descriptor table was established in the same work: the table loaded by `boot/boot.asm` lay at an address unmapped by sub-task 2.3, and interrupt delivery faulted upon reading it. `docs/INTERRUPTS.md` added. |
 | 2026-08-30 | Phase 3 | Sub-task 3.1 completed. The interrupt descriptor table and the 64-bit gate descriptor are defined and the table loaded with `LIDT`. Every gate is initially absent. Verified by reading the table register back with `SIDT`. |

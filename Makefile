@@ -108,6 +108,7 @@ C_SOURCES := kernel/kernel.c \
              kernel/cpu/gdt.c \
              kernel/cpu/idt.c \
              kernel/cpu/interrupts.c \
+             kernel/cpu/exceptions.c \
              drivers/vga/vga.c \
              drivers/serial/serial.c
 

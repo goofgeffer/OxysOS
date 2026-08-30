@@ -31,6 +31,8 @@
 #include <oxys/gdt.h>
 #include <oxys/idt.h>
 #include <oxys/interrupts.h>
+#include <oxys/exceptions.h>
+#include <oxys/cpu.h>
 #include <oxys/vga.h>
 #include <oxys/serial.h>
 
@@ -880,9 +882,21 @@ static void KernelVerifyDispatcher(void)
 
     /* --- A registered handler displaces the fatal default for an exception. --- */
 
-    InterruptRegisterHandler(4U, KernelExceptionProbeHandler, "self-test overflow probe");
+    {
+        InterruptHandler previous_overflow = InterruptRegisteredHandler(4U);
 
-    __asm__ __volatile__("int $4" : : : "memory");
+        InterruptRegisterHandler(4U, KernelExceptionProbeHandler,
+                                 "self-test overflow probe");
+
+        __asm__ __volatile__("int $4" : : : "memory");
+
+        /*
+         * Restore the handler that was displaced rather than removing it. The
+         * exception handlers are registered before this test runs, and leaving
+         * vector 4 unregistered would make a genuine overflow trap fatal.
+         */
+        InterruptRegisterHandler(4U, previous_overflow, "overflow");
+    }
 
     if (KernelExceptionProbeCount != 1U)
     {
@@ -890,11 +904,145 @@ static void KernelVerifyDispatcher(void)
         succeeded = false;
     }
 
-    InterruptUnregisterHandler(4U);
-
     KernelWriteString(succeeded
                           ? "Interrupt dispatcher self-test passed.\n"
                           : "Interrupt dispatcher self-test FAILED.\n");
+}
+
+/* State recorded by the page-fault probe of the exception self-test. */
+static volatile uint64_t KernelFaultProbeCount;
+static volatile uint64_t KernelFaultProbeAddress;
+static volatile uint64_t KernelFaultProbeErrorCode;
+static VirtualAddress KernelFaultProbePage;
+static PhysicalAddress KernelFaultProbeFrame;
+
+/*
+ * A page-fault handler that records the fault and then resolves it.
+ *
+ * Resolution is what distinguishes this from a diagnostic. The page fault is a
+ * fault, not a trap: the offending instruction is restarted upon return, so a
+ * handler that merely recorded the fault would be re-entered without end. By
+ * restoring write permission before returning, the handler makes the restarted
+ * instruction succeed.
+ *
+ * This is precisely the shape of the copy-on-write handler of sub-task 2.8,
+ * which will differ in substituting a private copy of the frame for the shared
+ * one rather than simply granting write permission.
+ */
+static void KernelPageFaultProbe(TrapFrame *frame)
+{
+    ++KernelFaultProbeCount;
+    KernelFaultProbeAddress = ReadCr2();
+    KernelFaultProbeErrorCode = frame->error_code;
+
+    PagingMapKernelPage(KernelFaultProbePage, KernelFaultProbeFrame,
+                        PAGE_ENTRY_WRITABLE);
+}
+
+/*
+ * Exercises the exception handlers, and performs the negative test of the
+ * read-only kernel mappings that was deferred from sub-task 2.3.
+ *
+ * Until this point the read-only mappings had been confirmed only by inspecting
+ * the paging structures in software. That establishes what the entries say, not
+ * what the processor does. The test below establishes the latter: a page is
+ * mapped read-only, written to, and the resulting fault examined.
+ */
+static void KernelVerifyExceptions(void)
+{
+    InterruptHandler previous_handler;
+    volatile uint8_t *probe;
+    bool succeeded = true;
+
+    /* CR0.WP must be set, or a supervisor write to a read-only page raises no
+     * fault at all and every read-only kernel mapping is merely advisory. */
+    if ((ReadCr0() & CR0_WRITE_PROTECT) == 0U)
+    {
+        KernelWriteString("  CR0.WP is clear; read-only mappings are not enforced.\n");
+        succeeded = false;
+    }
+
+    probe = (volatile uint8_t *)KernelPagesAllocate(1U);
+
+    if (probe == NULL)
+    {
+        KernelWriteString("  The probe page could not be allocated.\n");
+        KernelWriteString("Exception self-test FAILED.\n");
+        return;
+    }
+
+    KernelFaultProbePage = (VirtualAddress)(uintptr_t)probe;
+    KernelFaultProbeFrame = PagingTranslate(KernelFaultProbePage);
+
+    /* Write once while the page is still writable, to establish that the
+     * mapping works before it is restricted. */
+    *probe = 0x11U;
+
+    /* Remap the page read-only. */
+    PagingMapKernelPage(KernelFaultProbePage, KernelFaultProbeFrame, 0U);
+
+    if (PagingAddressIsWritable(KernelFaultProbePage))
+    {
+        KernelWriteString("  The probe page is still writable after restriction.\n");
+        succeeded = false;
+    }
+
+    /* Substitute the probe handler for the fatal default. */
+    previous_handler = InterruptRegisteredHandler(14U);
+    InterruptRegisterHandler(14U, KernelPageFaultProbe, "page fault probe");
+
+    /* This write must fault, be resolved by the handler, and then succeed. */
+    *probe = 0xA5U;
+
+    InterruptRegisterHandler(14U, previous_handler, "page fault");
+
+    if (KernelFaultProbeCount != 1U)
+    {
+        KernelWriteString("  The write to a read-only page raised no fault.\n");
+        succeeded = false;
+    }
+
+    if (KernelFaultProbeAddress != KernelFaultProbePage)
+    {
+        KernelWriteString("  CR2 does not hold the address written.\n");
+        succeeded = false;
+    }
+
+    /*
+     * The page was present but not writable, so the error code must record a
+     * protection violation rather than an absent translation, a write rather
+     * than a read, and a supervisor-mode access.
+     */
+    if ((KernelFaultProbeErrorCode & PAGE_FAULT_PRESENT) == 0U)
+    {
+        KernelWriteString("  The fault was reported as a missing translation.\n");
+        succeeded = false;
+    }
+
+    if ((KernelFaultProbeErrorCode & PAGE_FAULT_WRITE) == 0U)
+    {
+        KernelWriteString("  The fault was not reported as a write.\n");
+        succeeded = false;
+    }
+
+    if ((KernelFaultProbeErrorCode & PAGE_FAULT_USER) != 0U)
+    {
+        KernelWriteString("  The fault was reported as a user-mode access.\n");
+        succeeded = false;
+    }
+
+    /* The instruction must have been restarted and completed. */
+    if (*probe != 0xA5U)
+    {
+        KernelWriteString("  The faulting instruction did not complete.\n");
+        succeeded = false;
+    }
+
+    KernelPagesFree((void *)(uintptr_t)KernelFaultProbePage, 1U);
+
+    KernelWriteString(succeeded
+                          ? "Exception self-test passed: a read-only page faulted and was resolved.\n"
+                          : "Exception self-test FAILED.\n");
 }
 
 void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic)
@@ -971,15 +1119,17 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
 
     IdtInitialise();
     InterruptInitialise();
+    ExceptionInitialise();
     IdtReport();
     InterruptReport();
     KernelVerifyIdt();
     KernelVerifyInterruptStubs();
     KernelVerifyDispatcher();
+    KernelVerifyExceptions();
     InterruptReport();
 
     VgaSetColour(VGA_COLOUR_LIGHT_GREEN, VGA_COLOUR_BLACK);
-    KernelWriteString("Phase 3.3 initialisation complete.\n");
+    KernelWriteString("Phase 3.4 initialisation complete.\n");
 
     VgaSetColour(VGA_COLOUR_LIGHT_GREY, VGA_COLOUR_BLACK);
     KernelWriteString("No further subsystems are implemented. Halting.\n");

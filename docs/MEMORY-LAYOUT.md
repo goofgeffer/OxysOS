@@ -312,6 +312,13 @@ and its introduction together with SMEP and SMAP belongs to Phase 13, sub-task
 13.3. Withholding write permission is the part of the protection obtainable
 without that machinery, and it is taken now rather than retrofitted.
 
+**`CR0.WP` is required for any of this to bind.** Intel SDM, Volume 3A, Section
+6.15, provides that supervisor-mode code faults upon writing to a read-only page
+only when that flag is set; it is clear upon reset and GRUB does not set it.
+Until Phase 3, sub-task 3.4, added the flag to `PagingInitialise`, the read-only
+mappings described here were advisory: the kernel could write through them and no
+fault would arise. Refer to `docs/INTERRUPTS.md`, Section 8.4.
+
 Restrictions are applied at the leaf entry, never at an intermediate one. Intel
 SDM, Volume 3A, Section 4.6, provides that the permissions of a translation are
 the conjunction of those at every level, so a restrictive intermediate entry

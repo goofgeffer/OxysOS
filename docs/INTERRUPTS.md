@@ -232,12 +232,101 @@ The breakpoint is a trap rather than a fault, so recording it and returning is
 safe, and it makes `INT3` usable as a diagnostic marker in kernel code that has
 no debugger attached.
 
-## 8. Present limitations
+## 8. The exception handlers
 
-1. No exception handlers are registered save the breakpoint. Every other
-   architecture-defined exception is therefore reported and fatal. Sub-task 3.4
-   supplies the handlers proper, and with them the ability to resolve a page
-   fault rather than merely report it.
+Sub-task 3.4 registers a handler for every architecture-defined vector.
+
+### 8.1 Disposition
+
+| Vectors | Handler | Disposition |
+| ------- | ------- | ----------- |
+| 3 `#BP` | Breakpoint | Reports and resumes. A trap, so returning does not re-enter. |
+| 4 `#OF` | Overflow | Reports and resumes. Likewise a trap. |
+| 14 `#PF` | Page fault | Reports, decodes the error code and `CR2`, and halts. Sub-task 2.8 adds resolution. |
+| All others 0–31 | Fatal | Reports and halts. |
+
+### 8.2 The two error-code formats
+
+An exception presents one of two entirely different error codes, and decoding one
+as the other yields nonsense.
+
+**The page fault**, per Intel SDM, Volume 3A, Figure 6-9:
+
+| Bit | Flag | Meaning when set |
+| --- | ---- | ---------------- |
+| 0 | `P` | A protection violation. When clear, no translation existed. |
+| 1 | `W/R` | The access was a write. |
+| 2 | `U/S` | The access was made in user mode. |
+| 3 | `RSVD` | A reserved bit was set in a paging-structure entry. |
+| 4 | `I/D` | The access was an instruction fetch. |
+| 5 | `PK` | A protection-key violation. |
+| 15 | `SGX` | An SGX access-control violation. |
+
+Bit 0 is reported first because it separates the two fundamentally different
+causes: an absent translation and a violated permission have entirely different
+remedies.
+
+**The selector form**, presented by `#TS`, `#NP`, `#SS` and `#GP`, per Section
+6.13 and Figure 6-6: bit 0 `EXT` (external event), bit 1 `IDT` (the index refers
+to an IDT gate), bit 2 `TI` (the LDT rather than the GDT), and bits 3 to 15 the
+selector index. A code that is null but for `EXT` denotes no specific segment, or
+a null selector.
+
+### 8.3 `CR2` is read first
+
+Intel SDM, Volume 3A, Section 6.15, warns that a further page fault may occur
+while the handler runs, and that `CR2` must be saved before that can happen.
+Every handler here reads it as its first action.
+
+### 8.4 `CR0.WP`
+
+`PagingInitialise` now sets the write-protect flag in `CR0`.
+
+Section 6.15 provides that user-mode code always faults upon writing to a
+read-only page, but that supervisor-mode code does so **only when `CR0.WP` is
+set**. The flag is clear upon reset and GRUB does not set it.
+
+Without it the read-only mappings of sub-task 2.3 were advisory: the kernel could
+write straight through them and no fault would arise, so the protection recorded
+in the paging structures did not exist in fact. It is equally a prerequisite of
+copy-on-write, whose entire mechanism is a write to a page deliberately marked
+read-only.
+
+### 8.5 The stack reproduction
+
+A fatal report reproduces up to eight quadwords from `RSP`, but only after
+confirming through `PagingTranslate` that each is mapped. A fault taken with a
+corrupt stack pointer is exactly the case in which a report is most wanted, and
+reading through the bad pointer would raise a second fault and lose the report
+entirely.
+
+### 8.6 The deferred negative test
+
+Sub-task 2.3 could confirm the read-only kernel mappings only by inspecting the
+paging structures in software, which establishes what the entries *say* rather
+than what the processor *does*. With a page-fault handler that test becomes
+possible and has been performed.
+
+A page is taken from the kernel arena and remapped read-only; a probe handler is
+substituted for the fatal default using the registration interface of sub-task
+3.3; the page is written to; and the fault is examined. The probe then restores
+write permission, so that the restarted instruction succeeds.
+
+That resolution is the point. A page fault is a fault, not a trap: the offending
+instruction is restarted upon return, so a handler that merely recorded the fault
+would be re-entered without end. The shape — fault, alter the mapping, restart —
+is exactly that of the copy-on-write handler of sub-task 2.8, which will differ
+only in substituting a private copy of the frame for a shared one.
+
+The assertions are that a fault occurred at all; that `CR2` holds the address
+written; that the error code records a protection violation rather than an absent
+translation, a write rather than a read, and a supervisor-mode access; and that
+the faulting instruction completed.
+
+## 9. Present limitations
+
+1. No page fault is yet resolved. The handler reports and halts. Sub-tasks 2.7
+   and 2.8 add copy-on-write resolution.
 2. No interrupt stack table entry is used. A fault taken on a bad stack cannot
    presently be reported. This requires the task state segment of sub-task 6.1.
 3. No hardware interrupt can yet arrive: the 8259A is not remapped until

@@ -53,6 +53,7 @@ units.
 | Unit | Role |
 | ---- | ---- |
 | `boot/boot.asm` | The Multiboot2 header; the 32-bit entry point `_start`; CPUID and long-mode feature detection; the construction of the boot-time paging hierarchy; the long-mode transition; the higher-half entry point `KernelEntryHigh`. |
+| `kernel/cpu/exceptions.c` | The handlers for the architecture-defined exceptions and the diagnostic report. |
 | `kernel/cpu/interrupt_stubs.asm` | The 256 per-vector entry stubs and the common stub that saves the registers and calls the dispatcher. |
 | `kernel/cpu/interrupts.c` | The installation of the stubs, the dispatch table and the routing of each vector to its registered handler. |
 | `kernel/cpu/gdt.c`, `kernel/cpu/gdt.asm` | The kernel global descriptor table and the reloading of the segment registers. |

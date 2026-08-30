@@ -27,6 +27,7 @@
 
 #include <oxys/paging.h>
 #include <oxys/pmm.h>
+#include <oxys/cpu.h>
 #include <oxys/kernel.h>
 
 /*
@@ -253,6 +254,26 @@ static void PagingActivate(PhysicalAddress root)
     __asm__ __volatile__("mov %0, %%cr3" : : "r"((uint64_t)root) : "memory");
 }
 
+/*
+ * Sets the write-protect flag in CR0.
+ *
+ * Intel SDM, Volume 3A, Section 6.15, provides that code running in user mode
+ * always faults upon writing to a read-only page, but that supervisor-mode code
+ * does so only when CR0.WP is set. The flag is clear upon reset and the boot
+ * loader does not set it.
+ *
+ * Without it the read-only mappings established for the kernel text and
+ * read-only data would be advisory: the kernel could write through them and no
+ * fault would be raised, so the protection recorded in the paging structures
+ * would not exist in fact. It is equally a prerequisite of copy-on-write in
+ * sub-task 2.8, whose whole mechanism is a write to a page deliberately marked
+ * read-only.
+ */
+static void PagingEnableWriteProtection(void)
+{
+    WriteCr0(ReadCr0() | CR0_WRITE_PROTECT);
+}
+
 void PagingInitialise(const BootInformation *information)
 {
     PhysicalAddress root;
@@ -331,6 +352,8 @@ void PagingInitialise(const BootInformation *information)
      * the translations the processor performs.
      */
     PagingDirectMapActive = true;
+
+    PagingEnableWriteProtection();
 }
 
 bool PagingDirectMapIsActive(void)
