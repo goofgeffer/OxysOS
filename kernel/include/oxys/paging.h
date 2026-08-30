@@ -36,6 +36,22 @@
 #define PAGE_ENTRY_GLOBAL    UINT64_C(0x100) /* Not invalidated by a CR3 write. */
 
 /*
+ * A flag reserved to software, marking a page as copy-on-write.
+ *
+ * Intel SDM, Volume 3A, Table 4-19 ("Format of a Page-Table Entry that Maps a
+ * 4-KByte Page"), records bits 11:9 as Ignored, meaning the processor neither
+ * interprets nor modifies them. Bit 9 is therefore available, and a page so
+ * marked is one whose frame may be shared and which must be duplicated before
+ * any write to it is permitted.
+ *
+ * A copy-on-write page is always mapped without PAGE_ENTRY_WRITABLE. The two
+ * conditions together are what cause the processor to raise the fault that the
+ * resolution routine then handles; the flag alone would be inert, since the
+ * processor ignores it.
+ */
+#define PAGE_ENTRY_COPY_ON_WRITE UINT64_C(0x200)
+
+/*
  * The bits of an entry that hold the physical address of the next structure or
  * of the mapped page. Bits 51:12 of the entry, the remainder being flags or
  * reserved.
@@ -100,6 +116,36 @@ void PagingMapKernelPage(VirtualAddress virtual_address,
  * translation. The frame that was mapped is not freed; the caller owns it.
  */
 void PagingUnmapKernelPage(VirtualAddress virtual_address);
+
+/*
+ * Marks a mapped page as copy-on-write: the writable flag is cleared and the
+ * software flag set, so that the next write to it raises a page fault which
+ * PagingResolveCopyOnWriteFault can resolve.
+ *
+ * Returns false if the address is not mapped by a 4 KiB page. Large pages are
+ * not supported, a copy-on-write fault upon one requiring the mapping to be
+ * split before it could be resolved.
+ */
+bool PagingMarkCopyOnWrite(VirtualAddress address);
+
+/* Reports whether the page containing the address carries the software flag. */
+bool PagingIsCopyOnWrite(VirtualAddress address);
+
+/*
+ * Attempts to resolve a page fault as a copy-on-write fault.
+ *
+ * Returns true if the fault was resolved, in which case the caller must return
+ * from the exception so that the offending instruction is restarted. Returns
+ * false if the fault was not a copy-on-write fault, or could not be resolved,
+ * in which case the caller must report it.
+ */
+bool PagingResolveCopyOnWriteFault(VirtualAddress address);
+
+/* The number of copy-on-write faults resolved, frames duplicated, and faults
+ * resolved without a duplication because the frame had a single referrer. */
+uint64_t PagingCopyOnWriteFaultCount(void);
+uint64_t PagingCopyOnWriteCopyCount(void);
+uint64_t PagingCopyOnWriteSoleOwnerCount(void);
 
 /* The physical address of the active page-map level 4 table. */
 PhysicalAddress PagingKernelRoot(void);

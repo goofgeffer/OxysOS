@@ -588,3 +588,93 @@ The used count has risen from the 288 of Section 7.5 by the paging structures,
 the arena's page tables, the heap's slabs and the pages of the reference table
 itself. The greatest count of three is that reached by the self-test, which takes
 a frame to three references and confirms it survives the release of two of them.
+
+
+## 13. Copy-on-write
+
+Sub-task 2.7 implements the resolution of a copy-on-write fault. Sub-task 2.8
+will create the shared pages that make it useful, by cloning an address space.
+
+### 13.1 How a page is marked
+
+A copy-on-write page is mapped with two properties: `PAGE_ENTRY_WRITABLE` is
+**clear**, and bit 9 of the page-table entry is **set**.
+
+Bit 9 is available because Intel SDM, Volume 3A, Table 4-19 ("Format of a
+Page-Table Entry that Maps a 4-KByte Page"), records bits 11:9 as *Ignored* — the
+processor neither interprets nor modifies them.
+
+Both properties are required and they do different work. The absence of write
+permission is what causes the processor to raise the fault; the software flag
+alone would be inert, since the processor ignores it. The flag records *why* the
+page is read-only, distinguishing a shared page from one that is genuinely
+constant, such as the kernel's `.rodata`.
+
+### 13.2 Resolution
+
+`PagingResolveCopyOnWriteFault` accepts a fault only when three conditions hold,
+and each rejection is meaningful:
+
+| Condition | Why |
+| --------- | --- |
+| The page is present | A fault upon an absent page is a different matter, to be resolved by supplying a page, not by copying one. |
+| The software flag is set | The page was never shared; its read-only state is deliberate and permanent. |
+| Write permission is absent | If the page is already writable the fault was raised for some other reason, and granting write permission again would resolve nothing — the instruction would restart and fault without end. |
+
+It then takes one of two paths:
+
+**More than one referrer.** A frame is allocated, the contents copied, and the
+private copy installed with write permission and the flag cleared. One reference
+to the original is then released. The frame returns to the allocator only when
+its last holder releases it, which is precisely the property sub-task 2.6 exists
+to provide.
+
+**A single referrer.** No copy is made; write permission is restored and the flag
+cleared. There is nobody to protect from the write, and copying would be pure
+waste. This is the common case once the other holders of a shared page have
+released it, and avoiding the copy is the whole economy of the scheme.
+
+### 13.3 The direct map earns its keep
+
+The copy is performed between `PhysicalToDirect` of the two frames. Neither need
+have any other virtual address, and the two need not be related in the address
+space of the faulting code. Without the direct map of sub-task 2.4 the kernel
+would have to construct a temporary mapping for each frame and tear it down
+afterwards, on every fault.
+
+### 13.4 Verification
+
+The self-test exercises the real handler rather than a substituted probe: the
+fault travels the same path a duplicated address space will take. Only the
+*sharing* is simulated, a reference being taken to the frame directly rather than
+by cloning, cloning being the subject of sub-task 2.8.
+
+Both paths are tested. The shared case asserts that the frame changed, that the
+duplicate retains all 4096 bytes of a pattern save the one written, that the flag
+and the read-only state are cleared afterwards, and that the original frame still
+carries the simulated holder's reference. The sole-owner case asserts that the
+frame did *not* change and that no duplication was counted.
+
+A leak assertion closes the test: the count of free frames must return to its
+starting value. Copy-on-write allocates on one path and releases a reference on
+another, and an imbalance between the two would leak physical memory in
+proportion to the number of faults — the least visible and most damaging way for
+the mechanism to be wrong.
+
+### 13.5 Observed state
+
+| Quantity | Value |
+| -------- | ----- |
+| Faults resolved | 2 |
+| Frames duplicated | 1 |
+| Resolved without duplication | 1 |
+
+### 13.6 Limitations
+
+1. Only 4 KiB pages are supported. A copy-on-write fault upon a large page would
+   require the mapping to be split first, which nothing yet needs.
+2. Resolution operates upon the kernel hierarchy alone. Per-process address
+   spaces arrive with sub-task 2.8 and Phase 6.
+3. No shootdown is performed. `INVLPG` invalidates the translation upon the
+   executing processor only; from sub-task 6.9 the other processors holding a
+   stale entry must be signalled by inter-processor interrupt.

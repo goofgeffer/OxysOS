@@ -56,8 +56,12 @@ its error code and CR2. The negative paging test deferred from sub-task 2.3 has
 been performed: a page mapped read-only was written to, the fault was observed
 and resolved, and the instruction restarted.
 
-**Sub-tasks 2.7 and 2.8 are now unblocked** and are the next work, being the
-copy-on-write fault path. Phase 3 resumes afterwards at sub-task 3.5.
+Sub-task 2.7 is complete: the page-fault handler attempts copy-on-write
+resolution before reporting, and a shared frame is duplicated upon a write while
+a frame with a single referrer is merely made writable again.
+
+**The next work is sub-task 2.8**, address-space cloning, which is what will
+create shared pages in earnest. Phase 3 resumes afterwards at sub-task 3.5.
 
 ## Legend
 
@@ -107,7 +111,7 @@ provide the copy-on-write primitives upon which `fork()` will later depend.
 - [x] 2.4 Implement a direct physical map region for kernel access to arbitrary frames.
 - [x] 2.5 Implement a kernel virtual-address-space allocator and a general-purpose kernel heap (slab allocator over a buddy-style page allocator).
 - [x] 2.6 Implement per-frame reference counting as the substrate for shared pages.
-- [ ] 2.7 Implement the page-fault handler dispatch path (dependent upon Phase 3) and the copy-on-write fault resolution routine.
+- [x] 2.7 Implement the page-fault handler dispatch path (dependent upon Phase 3) and the copy-on-write fault resolution routine.
 - [ ] 2.8 Implement address-space cloning that marks writable user pages read-only and increments frame reference counts.
 
 ---
@@ -315,6 +319,7 @@ ACPI Specification 6.5.
 | Date | Phase affected | Summary |
 | ---- | -------------- | ------- |
 | 2026-08-30 | Phase 1 | Project initialised. Directory structure, documentation corpus, boot code, kernel entry, VGA and serial output, build system and ISO generation completed. Boot verified under QEMU. |
+| 2026-08-30 | Phase 2 | Sub-task 2.7 completed. Copy-on-write fault resolution, using bit 9 of the page-table entry, which Intel SDM Table 4-19 records as ignored by the processor. A shared frame is duplicated through the direct map and one reference released; a frame with a single referrer is made writable without a copy. The page-fault handler attempts resolution before reporting. |
 | 2026-08-30 | Phase 3 | Sub-task 3.4 completed. Handlers for all thirty-two architecture-defined exceptions, with decoding of both error-code formats, a full register and control-register dump, and a bounded stack reproduction. `CR0.WP` is now set in `PagingInitialise`, without which the read-only kernel mappings were advisory only. The negative paging test deferred from sub-task 2.3 was performed and passed. |
 | 2026-08-30 | Phase 3 | Sub-task 3.3 completed. A dispatch table of 256 entries with a registration interface. An unregistered architecture-defined exception remains fatal until sub-task 3.4; an unregistered vector above that range is counted and ignored, which is the correct treatment of a spurious interrupt. A default breakpoint handler is registered, the breakpoint being a trap and therefore safe to resume from. |
 | 2026-08-30 | Phase 3 | Sub-task 3.2 completed. A stub for each of the 256 vectors, normalising the vector number and the presence of a processor error code into a uniform trap frame. A minimal kernel global descriptor table was established in the same work: the table loaded by `boot/boot.asm` lay at an address unmapped by sub-task 2.3, and interrupt delivery faulted upon reading it. `docs/INTERRUPTS.md` added. |

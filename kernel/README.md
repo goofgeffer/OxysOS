@@ -33,7 +33,7 @@ are separate.
 | `mm/vmm.c` | The kernel virtual address allocator. `KernelPagesAllocate` and `KernelPagesFree`. |
 | `include/oxys/heap.h` | The interface of the kernel heap. |
 | `include/oxys/vmm.h` | The kernel arena constants and the interface of the virtual address allocator. |
-| `mm/paging.c` | The permanent kernel paging hierarchy. `PagingInitialise`, `PagingTranslate`, `PagingAddressIsWritable` and the reporting routines. |
+| `mm/paging.c` | The permanent kernel paging hierarchy and copy-on-write. `PagingInitialise`, `PagingTranslate`, `PagingAddressIsWritable`, `PagingMarkCopyOnWrite`, `PagingResolveCopyOnWriteFault` and the reporting routines. |
 | `include/oxys/paging.h` | The paging-structure entry flags and the interface of the paging subsystem. |
 | `mm/pmm.c` | The physical frame allocator and per-frame reference counting. `PhysicalMemoryInitialise`, `FrameAllocate`, `FrameAllocateBelow`, `FrameFree`, `FrameReferenceInitialise`, `FrameReferenceIncrement` and the accounting accessors. |
 | `include/oxys/memory.h` | `PAGE_SIZE`, `PAGE_SHIFT`, `LOW_MEMORY_LIMIT` and the alignment helpers. |

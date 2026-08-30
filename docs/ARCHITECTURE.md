@@ -22,7 +22,9 @@ than as later additions, in accordance with `PROJECT_GUIDELINES.md`, Section 5:
 2. **Copy-on-write.** The physical frame allocator introduced in Phase 2
    maintains a per-frame reference count from the outset, because retrofitting
    reference counting to an allocator that lacks it would require the
-   modification of every consumer.
+   modification of every consumer. The fault resolution built upon it is
+   complete as of sub-task 2.7; sub-task 2.8 adds the address-space cloning that
+   creates shared pages in earnest.
 3. **Boot-protocol neutrality.** The kernel proper consumes a boot-protocol
    neutral handoff structure. In Phase 1 that structure is the Multiboot2
    information block read directly; in Phase 12 an equivalent structure is
@@ -112,9 +114,10 @@ Phase 3 is installed. The dependency is resolved by implementing the memory
 management structures of sub-tasks 2.1 to 2.6 first, then Phase 3, and finally
 returning to sub-tasks 2.7 and 2.8.
 
-**Status.** Sub-tasks 2.1 to 2.6 are complete. Work has therefore moved to
-Phase 3, and sub-tasks 2.7 and 2.8 will be taken up once sub-task 3.4 provides a
-fault handler capable of reporting, and then of resolving, a page fault.
+**Status.** Sub-tasks 2.1 to 2.7 and 3.1 to 3.4 are complete. The dependency
+described above has been discharged: sub-task 3.4 supplied the fault handler, and
+sub-task 2.7 the copy-on-write resolution beneath it. Sub-task 2.8 remains, after
+which work returns to sub-task 3.5.
 
 ## 5. Privilege and address-space model
 

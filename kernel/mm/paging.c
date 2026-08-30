@@ -72,6 +72,11 @@ static bool PagingDirectMapActive;
 /* The extent of physical memory covered by the direct map. */
 static uint64_t PagingDirectMapBytes;
 
+/* Copy-on-write accounting. */
+static uint64_t PagingCopyOnWriteFaults;
+static uint64_t PagingCopyOnWriteCopies;
+static uint64_t PagingCopyOnWriteSoleOwners;
+
 /* Extracts the index of each paging structure from a linear address. */
 static size_t PagingLevel4Index(VirtualAddress address)
 {
@@ -543,6 +548,199 @@ bool PagingAddressIsWritable(VirtualAddress address)
     return (accumulated & PAGE_ENTRY_WRITABLE) != 0U;
 }
 
+/*
+ * Locates the page-table entry that maps the given address, if the address is
+ * mapped by a 4 KiB page.
+ *
+ * Returns NULL where any level is absent, or where the translation is provided
+ * by a large page. A large page has no page-table entry to return, and a
+ * copy-on-write fault upon one could not be resolved without first splitting the
+ * mapping into 4 KiB pages, which nothing presently requires.
+ */
+static uint64_t *PagingLeafEntry(VirtualAddress address)
+{
+    uint64_t *entries;
+    uint64_t entry;
+    PhysicalAddress table;
+
+    entries = PagingTableAt(PagingRootTable);
+    entry = entries[PagingLevel4Index(address)];
+    if ((entry & PAGE_ENTRY_PRESENT) == 0U)
+    {
+        return NULL;
+    }
+
+    table = entry & PAGE_ENTRY_ADDRESS_MASK;
+    entries = PagingTableAt(table);
+    entry = entries[PagingLevel3Index(address)];
+    if ((entry & PAGE_ENTRY_PRESENT) == 0U || (entry & PAGE_ENTRY_LARGE) != 0U)
+    {
+        return NULL;
+    }
+
+    table = entry & PAGE_ENTRY_ADDRESS_MASK;
+    entries = PagingTableAt(table);
+    entry = entries[PagingLevel2Index(address)];
+    if ((entry & PAGE_ENTRY_PRESENT) == 0U || (entry & PAGE_ENTRY_LARGE) != 0U)
+    {
+        return NULL;
+    }
+
+    table = entry & PAGE_ENTRY_ADDRESS_MASK;
+    entries = PagingTableAt(table);
+
+    return &entries[PagingLevel1Index(address)];
+}
+
+/*
+ * Copies the contents of one frame to another, both being reached through the
+ * direct physical map.
+ *
+ * This is the operation for which the direct map of sub-task 2.4 exists. Neither
+ * frame need have any other virtual address, and the two need not be related in
+ * the address space of the faulting code.
+ */
+static void PagingCopyFrame(PhysicalAddress destination, PhysicalAddress source)
+{
+    const uint64_t *from = (const uint64_t *)(uintptr_t)PhysicalToDirect(source);
+    uint64_t *to = (uint64_t *)(uintptr_t)PhysicalToDirect(destination);
+
+    for (size_t index = 0U; index < (PAGE_SIZE / sizeof(uint64_t)); ++index)
+    {
+        to[index] = from[index];
+    }
+}
+
+bool PagingMarkCopyOnWrite(VirtualAddress address)
+{
+    uint64_t *entry = PagingLeafEntry(AlignDown(address, PAGE_SIZE));
+
+    if (entry == NULL || (*entry & PAGE_ENTRY_PRESENT) == 0U)
+    {
+        return false;
+    }
+
+    /*
+     * Write permission must be withdrawn as well as the flag set. The processor
+     * ignores the software flag entirely; it is the absence of write permission
+     * that raises the fault, and the flag merely records why.
+     */
+    *entry = (*entry & ~PAGE_ENTRY_WRITABLE) | PAGE_ENTRY_COPY_ON_WRITE;
+
+    PagingInvalidate(AlignDown(address, PAGE_SIZE));
+
+    return true;
+}
+
+bool PagingIsCopyOnWrite(VirtualAddress address)
+{
+    const uint64_t *entry = PagingLeafEntry(AlignDown(address, PAGE_SIZE));
+
+    if (entry == NULL || (*entry & PAGE_ENTRY_PRESENT) == 0U)
+    {
+        return false;
+    }
+
+    return (*entry & PAGE_ENTRY_COPY_ON_WRITE) != 0U;
+}
+
+bool PagingResolveCopyOnWriteFault(VirtualAddress address)
+{
+    const VirtualAddress page = AlignDown(address, PAGE_SIZE);
+    uint64_t *entry = PagingLeafEntry(page);
+    PhysicalAddress old_frame;
+    PhysicalAddress new_frame;
+    uint64_t flags;
+
+    if (entry == NULL)
+    {
+        return false;
+    }
+
+    /*
+     * Three conditions must hold for this to be a copy-on-write fault. The page
+     * must be present, for a fault upon an absent page is a different matter
+     * entirely. It must carry the software flag, for otherwise it was never
+     * shared. And it must lack write permission, for if it has write permission
+     * the fault was raised for some other reason and granting it again would
+     * resolve nothing, leaving the instruction to fault without end.
+     */
+    if ((*entry & PAGE_ENTRY_PRESENT) == 0U ||
+        (*entry & PAGE_ENTRY_COPY_ON_WRITE) == 0U ||
+        (*entry & PAGE_ENTRY_WRITABLE) != 0U)
+    {
+        return false;
+    }
+
+    ++PagingCopyOnWriteFaults;
+
+    old_frame = *entry & PAGE_ENTRY_ADDRESS_MASK;
+
+    /*
+     * Where the frame has but one referrer there is nothing to copy from and
+     * nothing to protect: the page may simply be made writable again. This is
+     * the common case once the other holders of a shared page have released it,
+     * and avoiding the copy is the whole economy of the scheme.
+     */
+    if (FrameReferenceCount(old_frame) <= 1U)
+    {
+        *entry = (*entry & ~PAGE_ENTRY_COPY_ON_WRITE) | PAGE_ENTRY_WRITABLE;
+        PagingInvalidate(page);
+        ++PagingCopyOnWriteSoleOwners;
+
+        return true;
+    }
+
+    new_frame = FrameAllocate();
+
+    if (new_frame == FRAME_ALLOCATION_FAILED)
+    {
+        /*
+         * The fault cannot be resolved. It is reported rather than retried:
+         * returning would restart the instruction and fault again immediately.
+         */
+        return false;
+    }
+
+    PagingCopyFrame(new_frame, old_frame);
+
+    /*
+     * Install the private copy, preserving every other attribute of the mapping,
+     * granting write permission and clearing the software flag. The page is no
+     * longer shared and must not fault again for this reason.
+     */
+    flags = *entry & ~PAGE_ENTRY_ADDRESS_MASK & ~PAGE_ENTRY_COPY_ON_WRITE;
+    *entry = new_frame | flags | PAGE_ENTRY_WRITABLE;
+
+    PagingInvalidate(page);
+
+    /*
+     * Release this holder's reference to the shared frame. The frame returns to
+     * the allocator only when the last holder does likewise, which is exactly
+     * the property sub-task 2.6 was built to provide.
+     */
+    FrameFree(old_frame);
+
+    ++PagingCopyOnWriteCopies;
+
+    return true;
+}
+
+uint64_t PagingCopyOnWriteFaultCount(void)
+{
+    return PagingCopyOnWriteFaults;
+}
+
+uint64_t PagingCopyOnWriteCopyCount(void)
+{
+    return PagingCopyOnWriteCopies;
+}
+
+uint64_t PagingCopyOnWriteSoleOwnerCount(void)
+{
+    return PagingCopyOnWriteSoleOwners;
+}
+
 PhysicalAddress PagingKernelRoot(void)
 {
     return PagingRootTable;
@@ -565,6 +763,14 @@ void PagingReport(void)
     KernelWriteString(" covering ");
     KernelWriteDecimal(PagingDirectMapBytes / 1024U);
     KernelWriteString(" KiB of physical memory.\n");
+
+    KernelWriteString("Copy-on-write: faults resolved ");
+    KernelWriteDecimal(PagingCopyOnWriteFaults);
+    KernelWriteString(", frames duplicated ");
+    KernelWriteDecimal(PagingCopyOnWriteCopies);
+    KernelWriteString(", resolved without duplication ");
+    KernelWriteDecimal(PagingCopyOnWriteSoleOwners);
+    KernelWriteString(".\n");
 
     KernelWriteString("Low identity mapping: ");
     KernelWriteString((entries[0] & PAGE_ENTRY_PRESENT) != 0U

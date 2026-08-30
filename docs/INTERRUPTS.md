@@ -242,7 +242,7 @@ Sub-task 3.4 registers a handler for every architecture-defined vector.
 | ------- | ------- | ----------- |
 | 3 `#BP` | Breakpoint | Reports and resumes. A trap, so returning does not re-enter. |
 | 4 `#OF` | Overflow | Reports and resumes. Likewise a trap. |
-| 14 `#PF` | Page fault | Reports, decodes the error code and `CR2`, and halts. Sub-task 2.8 adds resolution. |
+| 14 `#PF` | Page fault | Attempts copy-on-write resolution; failing that, reports, decodes the error code and `CR2`, and halts. |
 | All others 0–31 | Fatal | Reports and halts. |
 
 ### 8.2 The two error-code formats
@@ -325,8 +325,10 @@ the faulting instruction completed.
 
 ## 9. Present limitations
 
-1. No page fault is yet resolved. The handler reports and halts. Sub-tasks 2.7
-   and 2.8 add copy-on-write resolution.
+1. Only a copy-on-write fault is resolved. Every other page fault is reported
+   and fatal; demand paging and stack growth do not exist. The handler tests the
+   error code for a write to a present page before consulting the paging
+   structures at all, so the commoner faults cost nothing extra.
 2. No interrupt stack table entry is used. A fault taken on a bad stack cannot
    presently be reported. This requires the task state segment of sub-task 6.1.
 3. No hardware interrupt can yet arrive: the 8259A is not remapped until

@@ -71,6 +71,9 @@ Sections relied upon:
   the `PS` flag to map a 2 MiB page.
 - **Volume 3A, Table 4-15**, the paging-structure entry flags `P`, `R/W`, `U/S`
   and `PS`.
+- **Volume 3A, Table 4-19**, the format of a page-table entry that maps a 4-KByte
+  page: bits 11:9 are Ignored, and are therefore available to software. Bit 9 is
+  used to mark a page copy-on-write.
 - **Volume 3A, Section 4.6**, access rights: the permissions of a translation are
   the conjunction of those held at every level of the hierarchy, which is why a
   restriction must be applied at the leaf entry and not at an intermediate one.

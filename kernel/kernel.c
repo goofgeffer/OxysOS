@@ -1045,6 +1045,205 @@ static void KernelVerifyExceptions(void)
                           : "Exception self-test FAILED.\n");
 }
 
+/*
+ * Exercises copy-on-write fault resolution and reports the outcome.
+ *
+ * Unlike the probe of the exception self-test, this exercises the real handler:
+ * no handler is substituted, and the fault travels the same path that a
+ * duplicated address space will take in sub-task 2.8. What is simulated is only
+ * the sharing itself, a reference being taken to the frame directly rather than
+ * by cloning an address space, since the cloning is the subject of sub-task 2.8
+ * and does not yet exist.
+ *
+ * Two cases are distinguished, and they are the two the resolution routine
+ * distinguishes. A frame with more than one referrer must be duplicated, or a
+ * write by one holder would be visible to the other. A frame with a single
+ * referrer must not be duplicated, since there is nobody to protect from the
+ * write, and copying it would be pure waste.
+ */
+static void KernelVerifyCopyOnWrite(void)
+{
+    const uint64_t copies_before = PagingCopyOnWriteCopyCount();
+    const uint64_t sole_owners_before = PagingCopyOnWriteSoleOwnerCount();
+    const size_t free_frames_before = FrameFreeCount();
+    bool succeeded = true;
+    volatile uint8_t *shared_page;
+    volatile uint8_t *private_page;
+    PhysicalAddress original_frame;
+    PhysicalAddress replacement_frame;
+    PhysicalAddress private_frame;
+
+    /* --- A shared frame must be duplicated. --- */
+
+    shared_page = (volatile uint8_t *)KernelPagesAllocate(1U);
+
+    if (shared_page == NULL)
+    {
+        KernelWriteString("  A page could not be allocated.\n");
+        KernelWriteString("Copy-on-write self-test FAILED.\n");
+        return;
+    }
+
+    /* A pattern, so that a copy that omitted or corrupted the contents would be
+     * detected rather than merely a copy that failed to occur. */
+    for (size_t index = 0U; index < PAGE_SIZE; ++index)
+    {
+        shared_page[index] = (uint8_t)((index * 7U) + 3U);
+    }
+
+    original_frame = PagingTranslate((VirtualAddress)(uintptr_t)shared_page);
+
+    /* Simulate a second holder of the frame, as address-space cloning will
+     * create in sub-task 2.8. */
+    FrameReferenceIncrement(original_frame);
+
+    if (!PagingMarkCopyOnWrite((VirtualAddress)(uintptr_t)shared_page))
+    {
+        KernelWriteString("  The page could not be marked copy-on-write.\n");
+        succeeded = false;
+    }
+
+    if (PagingAddressIsWritable((VirtualAddress)(uintptr_t)shared_page))
+    {
+        KernelWriteString("  A copy-on-write page retained write permission.\n");
+        succeeded = false;
+    }
+
+    if (!PagingIsCopyOnWrite((VirtualAddress)(uintptr_t)shared_page))
+    {
+        KernelWriteString("  The copy-on-write flag was not recorded.\n");
+        succeeded = false;
+    }
+
+    /* This write faults, and the fault is resolved by duplication. */
+    shared_page[0] = 0xAAU;
+
+    replacement_frame = PagingTranslate((VirtualAddress)(uintptr_t)shared_page);
+
+    if (replacement_frame == original_frame)
+    {
+        KernelWriteString("  A shared frame was not duplicated.\n");
+        succeeded = false;
+    }
+
+    if (PagingCopyOnWriteCopyCount() != (copies_before + 1U))
+    {
+        KernelWriteString("  The duplication was not counted.\n");
+        succeeded = false;
+    }
+
+    if (shared_page[0] != 0xAAU)
+    {
+        KernelWriteString("  The faulting write did not take effect.\n");
+        succeeded = false;
+    }
+
+    /*
+     * Every byte but the one written must survive the duplication. A copy that
+     * moved the wrong frame, or copied a partial page, would pass every test
+     * above and fail here.
+     */
+    for (size_t index = 1U; index < PAGE_SIZE; ++index)
+    {
+        if (shared_page[index] != (uint8_t)((index * 7U) + 3U))
+        {
+            KernelWriteString("  The duplicated page does not retain its contents.\n");
+            succeeded = false;
+            break;
+        }
+    }
+
+    /* The page is now private and must neither be marked nor be read-only. */
+    if (PagingIsCopyOnWrite((VirtualAddress)(uintptr_t)shared_page) ||
+        !PagingAddressIsWritable((VirtualAddress)(uintptr_t)shared_page))
+    {
+        KernelWriteString("  The duplicated page remains copy-on-write.\n");
+        succeeded = false;
+    }
+
+    /*
+     * The simulated other holder must still hold the original frame. Had the
+     * resolution released it outright rather than dropping one reference, the
+     * frame would have returned to the allocator while still in use.
+     */
+    if (FrameReferenceCount(original_frame) != 1U)
+    {
+        KernelWriteString("  The original frame's reference count is wrong.\n");
+        succeeded = false;
+    }
+
+    /* Release the simulated holder. */
+    FrameFree(original_frame);
+
+    KernelPagesFree((void *)(uintptr_t)shared_page, 1U);
+
+    /* --- A frame with a single referrer must not be duplicated. --- */
+
+    private_page = (volatile uint8_t *)KernelPagesAllocate(1U);
+
+    if (private_page == NULL)
+    {
+        KernelWriteString("  A second page could not be allocated.\n");
+        KernelWriteString("Copy-on-write self-test FAILED.\n");
+        return;
+    }
+
+    private_page[0] = 0x5CU;
+    private_frame = PagingTranslate((VirtualAddress)(uintptr_t)private_page);
+
+    (void)PagingMarkCopyOnWrite((VirtualAddress)(uintptr_t)private_page);
+
+    /* This write faults, and is resolved by restoring write permission alone. */
+    private_page[0] = 0x3DU;
+
+    if (PagingTranslate((VirtualAddress)(uintptr_t)private_page) != private_frame)
+    {
+        KernelWriteString("  A frame with one referrer was needlessly duplicated.\n");
+        succeeded = false;
+    }
+
+    if (PagingCopyOnWriteSoleOwnerCount() != (sole_owners_before + 1U))
+    {
+        KernelWriteString("  The unduplicated resolution was not counted.\n");
+        succeeded = false;
+    }
+
+    if (PagingCopyOnWriteCopyCount() != (copies_before + 1U))
+    {
+        KernelWriteString("  A duplication occurred where none was required.\n");
+        succeeded = false;
+    }
+
+    if (private_page[0] != 0x3DU)
+    {
+        KernelWriteString("  The write to the sole-owner page did not take effect.\n");
+        succeeded = false;
+    }
+
+    KernelPagesFree((void *)(uintptr_t)private_page, 1U);
+
+    /*
+     * Every frame taken during the test must have been returned. Copy-on-write
+     * allocates a frame on one path and releases a reference on another, and an
+     * imbalance between the two would leak physical memory at a rate
+     * proportional to the number of faults - the least visible and most damaging
+     * way for this mechanism to be wrong.
+     */
+    if (FrameFreeCount() != free_frames_before)
+    {
+        KernelWriteString("  Frames were leaked: free count before ");
+        KernelWriteDecimal((uint64_t)free_frames_before);
+        KernelWriteString(", after ");
+        KernelWriteDecimal((uint64_t)FrameFreeCount());
+        KernelWriteString(".\n");
+        succeeded = false;
+    }
+
+    KernelWriteString(succeeded
+                          ? "Copy-on-write self-test passed.\n"
+                          : "Copy-on-write self-test FAILED.\n");
+}
+
 void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic)
 {
     /*
@@ -1126,10 +1325,12 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
     KernelVerifyInterruptStubs();
     KernelVerifyDispatcher();
     KernelVerifyExceptions();
+    KernelVerifyCopyOnWrite();
     InterruptReport();
+    PagingReport();
 
     VgaSetColour(VGA_COLOUR_LIGHT_GREEN, VGA_COLOUR_BLACK);
-    KernelWriteString("Phase 3.4 initialisation complete.\n");
+    KernelWriteString("Phase 2.7 initialisation complete.\n");
 
     VgaSetColour(VGA_COLOUR_LIGHT_GREY, VGA_COLOUR_BLACK);
     KernelWriteString("No further subsystems are implemented. Halting.\n");

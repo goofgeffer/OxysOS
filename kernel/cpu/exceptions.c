@@ -262,15 +262,27 @@ static void ExceptionFatalHandler(TrapFrame *frame)
  * that a further page fault may occur during execution of this handler and that
  * the register must be saved before that can happen.
  *
- * No fault is presently resolvable, so the report is followed by a halt.
- * Sub-tasks 2.7 and 2.8 add the copy-on-write resolution: a fault whose error
- * code records a write to a present page will then be examined, and where the
- * page is a shared copy-on-write page it will be duplicated and the instruction
- * restarted rather than the machine halted.
+ * A write to a page that is present is the only fault that can be a
+ * copy-on-write fault, and resolution is attempted for exactly that case. The
+ * two conditions are tested here rather than left to the resolution routine so
+ * that the far commoner faults - an absent page, or a read - do not walk the
+ * paging structures at all.
+ *
+ * Where the fault is resolved the handler returns, and the offending instruction
+ * is restarted against the corrected mapping. Any other fault is reported and
+ * the machine halted, since a fault whose cause has not been removed would
+ * re-enter without end.
  */
 static void ExceptionPageFaultHandler(TrapFrame *frame)
 {
     const uint64_t fault_address = ReadCr2();
+
+    if ((frame->error_code & PAGE_FAULT_WRITE) != 0U &&
+        (frame->error_code & PAGE_FAULT_PRESENT) != 0U &&
+        PagingResolveCopyOnWriteFault(fault_address))
+    {
+        return;
+    }
 
     ExceptionReportState(frame, fault_address);
     KernelPanic("An unresolved page fault was raised.");
