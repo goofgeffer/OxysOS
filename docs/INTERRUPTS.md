@@ -1,10 +1,12 @@
 # Interrupt and Exception Handling
 
-**Corresponding phase**: Phase 3, sub-tasks 3.1 and 3.2.
+**Corresponding phase**: Phase 3, sub-tasks 3.1 to 3.5.
 
 **Specifications**: Intel 64 and IA-32 Architectures Software Developer's Manual,
 Volume 3A, Chapter 6; Volume 3A, Sections 3.4 and 3.5; Volume 2A, `LGDT/LIDT`,
-`SGDT/SIDT` and `IRET/IRETQ`.
+`SGDT/SIDT` and `IRET/IRETQ`; Intel 8259A Programmable Interrupt Controller
+datasheet, sections "INITIALIZATION COMMAND WORDS (ICWS)" and "OPERATION COMMAND
+WORDS (OCWS)"; IBM Personal Computer AT technical reference.
 
 ## 1. The path an interrupt takes
 
@@ -323,7 +325,185 @@ written; that the error code records a protection violation rather than an absen
 translation, a write rather than a read, and a supervisor-mode access; and that
 the faulting instruction completed.
 
-## 9. Present limitations
+## 9. The 8259A programmable interrupt controller
+
+Sub-task 3.5 remaps the pair of cascaded controllers and establishes the
+end-of-interrupt protocol. The implementation is `drivers/pic/pic.c`; the
+interface is `kernel/include/oxys/pic.h`.
+
+### 9.1 Why remapping is not optional
+
+The 8259A holds no vector base of its own; it presents whatever ICW2 last
+supplied it. The firmware of the IBM Personal Computer AT and its successors
+programmes the master to present vectors 8 to 15 and the slave 0x70 to 0x77, and
+that is the state in which the kernel receives the machine. The distinction
+matters: the collision described here is a property of the firmware, recorded in
+the IBM Personal Computer AT technical reference, and not a property of the
+device.
+
+The first of those ranges is precisely that which Intel SDM, Volume 3A, Section
+6.2, reserves for architecture-defined exceptions:
+
+| Line | Vector as the firmware leaves it | The exception it collides with |
+| ---- | -------------------------------- | ------------------------------ |
+| IR0 (timer) | 8 | `#DF` Double Fault |
+| IR1 (keyboard) | 9 | Coprocessor Segment Overrun |
+| IR2 (cascade) | 10 | `#TS` Invalid TSS |
+| IR3 | 11 | `#NP` Segment Not Present |
+| IR4 | 12 | `#SS` Stack-Segment Fault |
+| IR5 | 13 | `#GP` General Protection |
+| IR6 | 14 | `#PF` Page Fault |
+| IR7 | 15 | (Intel reserved) |
+
+A timer tick would be indistinguishable from a double fault, and a keystroke
+from a page fault. The collision is not detectable after the event: the
+processor presents a vector and nothing else, and the error code the exception
+handler would decode is whatever happened to lie upon the stack.
+
+The controllers are therefore remapped to vectors 32 to 47, 32 being the first
+vector Section 6.2 leaves available. The base must be divisible by eight, since
+ICW2 supplies only bits 7 to 3 of the vector and the controller fills bits 2 to 0
+with the request level.
+
+### 9.2 The initialisation sequence
+
+The 8259A datasheet, section "INITIALIZATION COMMAND WORDS (ICWS)", defines a
+sequence of four words that must be issued in order, each to the port the
+controller expects next. A write to the command port with bit 4 set is
+interpreted as ICW1 and begins the sequence.
+
+| Word | Port | Master | Slave | Meaning |
+| ---- | ---- | ------ | ----- | ------- |
+| ICW1 | command | `0x11` | `0x11` | Begin initialisation; ICW4 will follow; cascaded, edge-triggered. |
+| ICW2 | data | `0x20` | `0x28` | The vector base of each controller. |
+| ICW3 | data | `0x04` | `0x02` | The cascade wiring. |
+| ICW4 | data | `0x01` | `0x01` | The 8086 mode. |
+
+ICW3 is expressed differently at the two controllers, which is easily mistaken
+for an inconsistency. At the master it is a *bit mask* of the request lines
+bearing a slave, so a slave upon IR2 is `1 << 2`, that is `0x04`. At the slave it
+is a *number*, the cascade identity, which must equal the master line the slave
+is attached to, that is `2`. Writing `0x04` to the slave would give it identity
+4, and it would ignore every cascade acknowledgement the master issued.
+
+ICW4 selects the 8086 mode, in which the controller presents an eight-bit vector.
+Without it the controller presents a `CALL` instruction in the manner of the
+8080, and the processor would execute nonsense.
+
+**ICW1 clears the interrupt mask register.** The datasheet lists this among the
+actions the word performs automatically, together with resetting the edge sense
+circuit, assigning IR7 the lowest priority, setting the slave mode address to
+seven and clearing the special mask mode. Every line is therefore *permitted* at
+the instant the sequence completes. `PicInitialise` masks all sixteen
+immediately afterwards, before anything can be delivered; masking them before the
+sequence would accomplish nothing, the sequence itself undoing it.
+
+### 9.3 Why every line begins masked
+
+A device whose driver does not yet exist would otherwise present a request that
+nothing could service. That is worse than it sounds. The controller withholds
+every request of equal or lower priority until the bit standing in its in-service
+register is reset, so a single unserviced request upon a high-priority line
+silences every line beneath it permanently. The interval timer is IR0, the
+highest priority of all.
+
+A driver unmasks its own line when it is ready to receive from it. Sub-task 3.6
+unmasks IR0 and sub-task 3.7 unmasks IR1.
+
+### 9.4 Why the controller owns the end-of-interrupt
+
+The signalling is performed by the routing layer of `pic.c` upon the return of
+the device handler, and a device driver neither may nor need perform it.
+
+The alternative — each driver signalling for itself — distributes a piece of
+protocol that belongs to the controller across every driver that will ever exist,
+and makes the consequence of forgetting it the permanent silencing of the
+machine rather than a local defect. There is nothing device-specific in the
+decision, so there is no reason for a device to make it.
+
+The cascade makes the same point. A request of the slave stands in the in-service
+register of **both** controllers, the master having accepted it upon IR2, so both
+must be signalled. Signalling only the slave would leave the master withholding
+every line of priority below IR2 — which is IR3 to IR7 and the whole of the
+slave. `PicSendEndOfInterrupt` therefore signals the slave first and the master
+always.
+
+The command used is the non-specific end-of-interrupt, OCW2 with R=0, SL=0 and
+EOI=1, which resets the highest priority bit set in the in-service register. It
+is correct here because the controller is operating in the fully nested mode it
+is initialised into, in which the highest priority bit in service is necessarily
+the one being completed.
+
+### 9.5 The spurious request
+
+The 8259A presents its lowest priority line — IR7 at the master, IR15 at the
+slave — when a request it had begun to accept is withdrawn before the vector is
+read. The commonest causes are noise upon the line and an end-of-interrupt sent
+at the wrong moment by an earlier handler.
+
+No line is genuinely in service, so **the bit is absent from the in-service
+register**, and that absence is the only means of distinguishing the case: the
+vector presented is identical to that of a real IR7.
+
+A spurious request must not be acknowledged. An end-of-interrupt issued in that
+state would reset the bit of whatever line *was* genuinely in service, discarding
+a real interrupt. The defect this produces is among the least tractable a kernel
+can have: it occurs at a rate governed by electrical noise, loses an interrupt
+belonging to an unrelated device, and reproduces nowhere.
+
+The slave's IR15 is the one exception, and it is not symmetric. The master did
+accept the cascade request and does hold a bit in its own in-service register, so
+the master alone is signalled and the slave is not.
+
+### 9.6 Verification
+
+`KernelVerifyPic` asserts the properties whose violation would be silent.
+
+| Assertion | The failure it detects |
+| --------- | ---------------------- |
+| Every line is masked after initialisation | The mask that ICW1 cleared was never re-established. |
+| Nothing is in service before a line is unmasked | The in-service register is not being read as intended. |
+| Unmasking IR1 clears exactly its bit | A mask read-modify-write that disturbs its neighbours. |
+| Unmasking IR12 also unmasks the cascade | A slave line permitted at the slave whose requests can never reach the processor — a device that simply never interrupts. |
+| A request upon a claimed line enters its handler | The routing layer confusing the vector with the request line, delivering every interrupt to the wrong driver. |
+| A request upon an unclaimed line is counted and acknowledged | An unclaimed device silencing every line beneath it. |
+| A request upon IR7 with an empty in-service register is counted spurious, not routed, and not acknowledged | The lost-interrupt defect of Section 9.5. |
+| The interrupt flag may be set with every line masked, and nothing is delivered | **The remapping itself.** |
+
+The last deserves comment, because it is the only assertion that establishes the
+remapping and it cannot be made by inspection. Reading the vector base back from
+the controller is not possible; the 8259A does not present ICW2 for reading.
+Instead the interrupt flag is set with every line masked and time is allowed to
+pass. The firmware leaves the interval timer running, so IR0 is being asserted
+throughout. Were the controllers still presenting the firmware's vectors, that
+request would arrive as vector 8 — the double fault — the instant the flag was
+set, and the machine would not reach the following line. Reaching it, with the
+request count unmoved, establishes both that the remapping took effect and that
+the mask is honoured.
+
+### 9.7 Observed state
+
+| Quantity | Value |
+| -------- | ----- |
+| Vectors | 32 to 47 |
+| Mask after initialisation | `0xFFFF` |
+| Requests dispatched by the self-test | 2 |
+| Of which unclaimed | 1 |
+| Spurious recognised | 1 |
+
+### 9.8 Limitations
+
+1. The controller is not disabled in favour of the local and I/O advanced
+   controllers until sub-task 6.7. `PicDisable` exists for that purpose and is
+   not yet called.
+2. Nothing here is safe against concurrent access. The read-modify-write of a
+   mask register is not atomic, and from sub-task 6.9 both it and the
+   registration of a handler require the spinlock governing this device.
+3. The routing layer names its interface after the 8259A. When the I/O advanced
+   controller supersedes it in sub-task 6.7, the device drivers of Phases 3 and 4
+   will require their registration calls to be redirected to the successor.
+
+## 10. Present limitations
 
 1. Only a copy-on-write fault is resolved. Every other page fault is reported
    and fatal; demand paging and stack growth do not exist. The handler tests the
@@ -331,5 +511,6 @@ the faulting instruction completed.
    structures at all, so the commoner faults cost nothing extra.
 2. No interrupt stack table entry is used. A fault taken on a bad stack cannot
    presently be reported. This requires the task state segment of sub-task 6.1.
-3. No hardware interrupt can yet arrive: the 8259A is not remapped until
-   sub-task 3.5, and the interrupt flag remains clear throughout.
+3. No device yet claims a request line, so although the controllers are remapped
+   and the interrupt flag may safely be set, every line remains masked. The
+   interval timer of sub-task 3.6 is the first device to unmask one.

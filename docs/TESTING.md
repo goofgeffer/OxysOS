@@ -6,9 +6,17 @@ milestone to be bootable and testable under QEMU and VirtualBox.
 ## 1. Automated verification
 
 The `verify` target executes the ISO under QEMU without a display, directs the
-serial port to a file, and asserts that the string `Phase 1 initialisation
-complete.` appears in the captured output. It requires no operator observation
-and is therefore suitable for use as a regression test after every change.
+serial port to a file, and asserts that the string `initialisation complete.`
+appears in the captured output. The assertion is deliberately made upon that
+fragment rather than upon the whole line, the line naming the sub-task most
+recently completed and therefore changing with every advance of `PLAN.md`. It
+requires no operator observation and is therefore suitable for use as a
+regression test after every change.
+
+The captured output also carries the result of every boot-time self-test. A
+self-test that fails reports the fact but does not prevent the kernel from
+reaching completion, so the output must be read and not merely the exit status
+consulted: the string `FAILED` appearing anywhere within it denotes a regression.
 
 ```sh
 export PATH="$HOME/opt/cross/bin:$PATH"
@@ -134,5 +142,6 @@ correct point at which to begin an examination of the boot sequence.
 | 2026-08-30 | `make iso` — ISO generation | Passed. |
 | 2026-08-30 | `make verify` — QEMU boot and serial assertion | Passed. |
 | 2026-08-30 | QEMU screendump — VGA text-mode rendering | Passed; the banner reads `Oxys-OS`. |
+| 2026-08-31 | `make verify` — sub-task 3.5, the interrupt controller self-test | Passed; the controllers are remapped, the mask is honoured, a spurious request is recognised, and the interrupt flag may be set without a double fault. |
 | — | VirtualBox boot | Passed; performed by the project owner upon the Windows host, `VBoxManage` being unavailable in this environment. |
 | — | Physical hardware boot | Not performed. |

@@ -49,7 +49,7 @@ than as later additions, in accordance with `PROJECT_GUIDELINES.md`, Section 5:
 
 ## 3. Present composition
 
-As of the completion of Phase 2 and of sub-tasks 3.1 to 3.4, the system comprises
+As of the completion of Phase 2 and of sub-tasks 3.1 to 3.5, the system comprises
 the following translation units.
 
 | Unit | Role |
@@ -69,6 +69,7 @@ the following translation units.
 | `kernel/kernel.c` | `KernelMain`, which validates the boot loader handover, initialises the early output devices, presents the identification banner and halts. `KernelPanic`, the unrecoverable-error path. |
 | `drivers/vga/vga.c` | The VGA colour text-mode output driver. |
 | `drivers/serial/serial.c` | The polled COM1 serial output driver used for diagnostics. |
+| `drivers/pic/pic.c` | The pair of cascaded 8259A interrupt controllers: their remapping, the masking of request lines, the routing of a request to the driver that claims it, and the end-of-interrupt protocol. |
 | `linker.ld` | The link script establishing the higher-half image layout. |
 
 ## 4. Subsystem dependency ordering
@@ -115,11 +116,12 @@ Phase 3 is installed. The dependency is resolved by implementing the memory
 management structures of sub-tasks 2.1 to 2.6 first, then Phase 3, and finally
 returning to sub-tasks 2.7 and 2.8.
 
-**Status.** Phase 2 is complete, as are sub-tasks 3.1 to 3.4. The dependency
+**Status.** Phase 2 is complete, as are sub-tasks 3.1 to 3.5. The dependency
 described above has been discharged: sub-task 3.4 supplied the fault handler,
 sub-task 2.7 the copy-on-write resolution beneath it, and sub-task 2.8 the
 address-space cloning that creates the shared pages the resolution acts upon.
-Work resumes at sub-task 3.5.
+Sub-task 3.5 has since remapped the interrupt controllers, so that a device may
+be heard. Work resumes at sub-task 3.6.
 
 ## 5. Privilege and address-space model
 

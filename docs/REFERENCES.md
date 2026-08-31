@@ -78,7 +78,9 @@ Sections relied upon:
   the conjunction of those held at every level of the hierarchy, which is why a
   restriction must be applied at the leaf entry and not at an intermediate one.
 - **Volume 3A, Section 6.2**, exception and interrupt vectors: vectors 0 to 31
-  are reserved for architecture-defined exceptions; 32 to 255 are available.
+  are reserved for architecture-defined exceptions; 32 to 255 are available. This
+  is the constraint that obliges the 8259A controllers to be remapped, their
+  reset vectors of 8 to 15 lying wholly within the reserved range.
 - **Volume 3A, Section 6.10**, the interrupt descriptor table and the IDTR
   register; the limit is one less than the size of the table in bytes.
 - **Volume 3A, Section 6.14.1 and Figure 6-8**, the 64-bit mode IDT: the index is
@@ -164,6 +166,41 @@ register; the loopback bit, being bit 4 of the modem control register.
 
 Used by: `drivers/serial/serial.c`.
 
+### Intel 8259A Programmable Interrupt Controller datasheet
+Intel Corporation, order number 231468-003, December 1988.
+`https://pdos.csail.mit.edu/6.828/2010/readings/hardware/8259A.pdf`
+
+Sections relied upon:
+
+- **"INITIALIZATION COMMAND WORDS (ICWS)"**, the initialisation sequence: a write
+  to the command port with bit 4 set is interpreted as ICW1 and begins the
+  sequence; ICW1 bit 0 (IC4) declares that ICW4 will follow and bit 1 (SNGL)
+  distinguishes a single controller from a cascaded pair; ICW2 supplies bits 7 to
+  3 of the vector, the controller filling bits 2 to 0 with the request level,
+  whence a vector base must be divisible by eight; ICW3 is a bit mask of the
+  lines bearing slaves at the master and the cascade identity at the slave; ICW4
+  bit 0 selects the 8086 mode, in which the controller presents an eight-bit
+  vector rather than a `CALL` instruction.
+- **The same section**, the actions ICW1 performs automatically: the edge sense
+  circuit is reset, **the interrupt mask register is cleared**, IR7 is assigned
+  the lowest priority, the slave mode address is set to seven, the special mask
+  mode is cleared and the status read is set to the interrupt request register.
+  The clearing of the mask register is why `drivers/pic/pic.c` masks every line
+  after the sequence and not before it.
+- **"OPERATION COMMAND WORDS (OCWS)"**, OCW1: the interrupt mask register,
+  reached at the data port, a set bit withholding the corresponding line.
+- **The same section**, OCW2: the R, SL and EOI bits, of which the encoding R=0,
+  SL=0, EOI=1 is the non-specific end-of-interrupt, resetting the highest
+  priority bit set in the in-service register. This is correct in the fully
+  nested mode the controller is initialised into, in which that bit is
+  necessarily the one being completed.
+- **The same section**, OCW3: the RR bit selects the register subsequently read
+  at the command port and the RIS bit chooses the in-service register when set
+  and the interrupt request register when clear. This is the mechanism by which a
+  spurious request is distinguished from a real one.
+
+Used by: `drivers/pic/pic.c`, `kernel/include/oxys/pic.h`, `kernel/kernel.c`.
+
 ### IBM Video Graphics Array technical reference
 The colour text mode 3, presenting 80 columns by 25 rows, whose frame buffer
 begins at physical address `0x000B8000` and whose cells comprise a code-point
@@ -186,8 +223,6 @@ Used by: `boot/grub/grub.cfg`, `Makefile`.
 
 | Specification | Phase | Subject |
 | ------------- | ----- | ------- |
-| Intel SDM, Volume 3A, Chapter 6 | 3 | Interrupt and exception handling; the 64-bit interrupt gate. |
-| Intel 8259A datasheet | 3 | The programmable interrupt controller and its remapping. |
 | IBM PS/2 technical reference | 3 | The keyboard controller and scancode set 1. |
 | PCI Local Bus Specification 3.0 | 4 | Configuration space and device enumeration. |
 | ATA/ATAPI Command Set (ACS-3) | 4 | `IDENTIFY DEVICE`; 28-bit and 48-bit logical block addressing. |

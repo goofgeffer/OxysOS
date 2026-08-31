@@ -20,6 +20,20 @@
  *   - Intel 64 and IA-32 Architectures Software Developer's Manual, Volume 2B,
  *     "HLT": the instruction halts the processor until an interrupt, a debug
  *     exception, a non-maskable interrupt, or a reset occurs.
+ *   - Intel SDM, Volume 3A, Section 6.2 and Table 6-1: vectors 0 to 31 are
+ *     reserved to the architecture-defined exceptions, of which vector 8 is the
+ *     double fault. Relied upon by the interrupt controller self-test, which
+ *     establishes the remapping by the fact that no double fault arises when the
+ *     interrupt flag is set.
+ *   - Intel 8259A Programmable Interrupt Controller datasheet, section
+ *     "OPERATION COMMAND WORDS (OCWS)": the non-specific end-of-interrupt resets
+ *     the highest priority bit set in the in-service register, and therefore does
+ *     nothing when no bit is set. Relied upon by the interrupt controller
+ *     self-test, which raises the controllers' vectors by software.
+ *   - IBM Personal Computer AT technical reference: the firmware leaves counter
+ *     0 of the interval timer running and its output attached to the interrupt
+ *     controller's IR0 input, which is what makes the self-test of the remapping
+ *     possible without programming the timer first.
  */
 
 #include <oxys/kernel.h>
@@ -34,6 +48,7 @@
 #include <oxys/interrupts.h>
 #include <oxys/exceptions.h>
 #include <oxys/cpu.h>
+#include <oxys/pic.h>
 #include <oxys/vga.h>
 #include <oxys/serial.h>
 
@@ -1441,6 +1456,196 @@ static void KernelVerifyAddressSpaces(void)
                           : "Address-space self-test FAILED.\n");
 }
 
+/* State recorded by the probe handler of the interrupt controller self-test. */
+static uint64_t KernelPicProbeCount;
+
+/* A probe handler standing in for a device driver upon a request line. */
+static void KernelPicProbeHandler(TrapFrame *frame)
+{
+    (void)frame;
+    ++KernelPicProbeCount;
+}
+
+/*
+ * Exercises the 8259A driver, being sub-task 3.5.
+ *
+ * Three properties are asserted, and the failure of each would present quite
+ * differently. A mask register that did not respond would leave a device unable
+ * to interrupt, or unable to stop; a routing layer that mistook the vector for
+ * the request line would deliver every interrupt to the wrong driver; and an
+ * end-of-interrupt sent upon a spurious request would reset the bit of whatever
+ * line was genuinely in service, losing a real interrupt at a rate governed by
+ * electrical noise and therefore reproducible nowhere.
+ */
+static void KernelVerifyPic(void)
+{
+    const uint64_t spurious_before = PicSpuriousCount();
+    const uint64_t requests_before = PicRequestCount();
+    const uint64_t unclaimed_before = PicUnclaimedCount();
+    bool succeeded = true;
+
+    /* --- Every line is withheld until a driver claims it. --- */
+
+    if (PicMaskValue() != UINT16_C(0xFFFF))
+    {
+        KernelWriteString("  Not every request line is masked after initialisation.\n");
+        succeeded = false;
+    }
+
+    /* Nothing can be in service, no line having been permitted. */
+    if (PicInServiceRegister() != 0U)
+    {
+        KernelWriteString("  A line is in service before any was unmasked.\n");
+        succeeded = false;
+    }
+
+    /* --- A mask register responds, and the correct controller is addressed. --- */
+
+    PicUnmaskLine(1U);
+
+    if (PicLineIsMasked(1U) || PicMaskValue() != UINT16_C(0xFFFD))
+    {
+        KernelWriteString("  A master line was not unmasked correctly.\n");
+        succeeded = false;
+    }
+
+    PicMaskLine(1U);
+
+    if (!PicLineIsMasked(1U) || PicMaskValue() != UINT16_C(0xFFFF))
+    {
+        KernelWriteString("  A master line was not masked again.\n");
+        succeeded = false;
+    }
+
+    /*
+     * Unmasking a slave line must unmask the cascade with it. Without that, the
+     * line would be permitted at the slave and the request would still never
+     * reach the processor, the slave's output being attached to the master's IR2.
+     */
+    PicUnmaskLine(12U);
+
+    if (PicLineIsMasked(12U))
+    {
+        KernelWriteString("  A slave line was not unmasked.\n");
+        succeeded = false;
+    }
+
+    if (PicLineIsMasked(PIC_CASCADE_IRQ))
+    {
+        KernelWriteString("  Unmasking a slave line did not unmask the cascade.\n");
+        succeeded = false;
+    }
+
+    PicMaskLine(12U);
+    PicMaskLine(PIC_CASCADE_IRQ);
+
+    /* --- A request is routed to the driver that claims its line. --- */
+
+    PicInstallHandler(3U, KernelPicProbeHandler, "self-test probe");
+
+    if (PicRegisteredHandler(3U) != KernelPicProbeHandler)
+    {
+        KernelWriteString("  The claimed line did not record its handler.\n");
+        succeeded = false;
+    }
+
+    /*
+     * Vector 35 is the third request line of the master. Raising it by software
+     * exercises the routing arithmetic without requiring a device to be present.
+     * The end-of-interrupt this provokes is harmless: per the 8259A datasheet,
+     * section "OPERATION COMMAND WORDS (OCWS)", a non-specific command resets the
+     * highest priority bit set in the in-service register, and no bit is set.
+     */
+    __asm__ __volatile__("int $35" : : : "memory");
+
+    if (KernelPicProbeCount != 1U)
+    {
+        KernelWriteString("  The claimed line's handler was not entered.\n");
+        succeeded = false;
+    }
+
+    if (PicRequestCount() != (requests_before + 1U))
+    {
+        KernelWriteString("  The request was not counted.\n");
+        succeeded = false;
+    }
+
+    PicRemoveHandler(3U);
+
+    /* An unclaimed line must still be acknowledged, and counted as unclaimed. */
+    __asm__ __volatile__("int $35" : : : "memory");
+
+    if (KernelPicProbeCount != 1U)
+    {
+        KernelWriteString("  A removed handler was entered.\n");
+        succeeded = false;
+    }
+
+    if (PicUnclaimedCount() != (unclaimed_before + 1U))
+    {
+        KernelWriteString("  An unclaimed request was not counted.\n");
+        succeeded = false;
+    }
+
+    /* --- A spurious request is recognised and not acknowledged. --- */
+
+    /*
+     * Vector 39 is the master's lowest priority line, upon which a spurious
+     * request is delivered. No line is in service, so the in-service register
+     * bit is clear and the request must be recognised as spurious: counted, not
+     * routed, and above all not acknowledged.
+     */
+    __asm__ __volatile__("int $39" : : : "memory");
+
+    if (PicSpuriousCount() != (spurious_before + 1U))
+    {
+        KernelWriteString("  A spurious request was not recognised.\n");
+        succeeded = false;
+    }
+
+    if (PicRequestCount() != (requests_before + 2U))
+    {
+        KernelWriteString("  A spurious request was counted as a genuine one.\n");
+        succeeded = false;
+    }
+
+    /* --- The remapping holds with the interrupt flag set. --- */
+
+    /*
+     * This is the assertion that the remapping itself is correct, and it cannot
+     * be made by inspection: the 8259A does not present ICW2 for reading, so the
+     * vector base cannot be read back from the device.
+     *
+     * Were the controllers still presenting the vectors the firmware programmed,
+     * the interval timer, which the IBM Personal Computer AT technical reference
+     * records as left running by the firmware upon IR0, would deliver its request
+     * as vector 8 the instant the interrupt flag was set. Vector 8 is the double
+     * fault, per Intel SDM, Volume 3A, Table 6-1, and the machine would not reach
+     * the following line.
+     *
+     * Every line is masked, so nothing should be delivered at all; the pause is
+     * long enough for many timer periods at the firmware's default rate.
+     */
+    __asm__ __volatile__("sti" : : : "memory");
+
+    for (volatile uint32_t spin = 0U; spin < 2000000U; ++spin)
+    {
+        /* Deliberately empty: time is allowed to pass with interrupts enabled. */
+    }
+
+    __asm__ __volatile__("cli" : : : "memory");
+
+    if (PicRequestCount() != (requests_before + 2U))
+    {
+        KernelWriteString("  A masked line was nevertheless delivered.\n");
+        succeeded = false;
+    }
+
+    KernelWriteString(succeeded
+                          ? "Interrupt controller self-test passed.\n"
+                          : "Interrupt controller self-test FAILED.\n");
+}
+
 void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic)
 {
     /*
@@ -1524,12 +1729,22 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
     KernelVerifyExceptions();
     KernelVerifyCopyOnWrite();
     KernelVerifyAddressSpaces();
+
+    /*
+     * The controllers are remapped only now, after the exception handlers exist.
+     * Remapping them earlier would have placed device vectors clear of the
+     * exceptions without providing anywhere for them to go.
+     */
+    PicInitialise();
+    KernelVerifyPic();
+    PicReport();
+
     InterruptReport();
     PagingReport();
     AddressSpaceReport();
 
     VgaSetColour(VGA_COLOUR_LIGHT_GREEN, VGA_COLOUR_BLACK);
-    KernelWriteString("Phase 2.8 initialisation complete.\n");
+    KernelWriteString("Phase 3.5 initialisation complete.\n");
 
     VgaSetColour(VGA_COLOUR_LIGHT_GREY, VGA_COLOUR_BLACK);
     KernelWriteString("No further subsystems are implemented. Halting.\n");

@@ -33,22 +33,28 @@ but one referrer; and an address space may be created, cloned by the
 copy-on-write discipline, activated and destroyed. The substrate upon which
 `fork()` is built in sub-task 6.6 is therefore complete.
 
-**Phase 3 is complete as far as sub-task 3.4.** The interrupt descriptor table is
+**Phase 3 is complete as far as sub-task 3.5.** The interrupt descriptor table is
 loaded, a stub is installed for each of the 256 vectors and constructs a uniform
 trap frame whatever the vector, a dispatch table routes each vector to a
 registered handler that may alter the frame to which control returns, and every
 architecture-defined exception has a handler that decodes its error code and
-emits a full diagnosis. A minimal kernel global descriptor table was established
-in the course of this work, for the reasons given in `docs/INTERRUPTS.md`,
-Section 5; it is recorded against sub-task 6.1, which it partly discharges.
+emits a full diagnosis. The pair of cascaded 8259A controllers is remapped to
+vectors 32 to 47, clear of the architecture-defined exceptions it would otherwise
+be indistinguishable from; every request line begins masked; a routing layer
+delivers a request to the driver that claims its line and signals the
+end-of-interrupt to both controllers upon its return; and a spurious request is
+recognised by the absence of its bit from the in-service register and deliberately
+left unacknowledged. The interrupt flag may now be set safely. A minimal kernel
+global descriptor table was established in the course of this work, for the
+reasons given in `docs/INTERRUPTS.md`, Section 5; it is recorded against sub-task
+6.1, which it partly discharges.
 
 Every property above is asserted at each boot by a self-test, no test harness
 being available before Phase 7. The procedure is `make verify`, described in
 `docs/TESTING.md`.
 
-**The next work is sub-task 3.5**, the remapping of the 8259A programmable
-interrupt controller, after which the interval timer and the keyboard complete
-Phase 3.
+**The next work is sub-task 3.6**, the programmable interval timer, which is the
+first device to claim a request line, after which the keyboard completes Phase 3.
 
 ## Legend
 
@@ -115,7 +121,7 @@ IBM PS/2 controller documentation.
 - [x] 3.2 Author assembly stubs for vectors 0–255, normalising the presence or absence of a processor-pushed error code.
 - [x] 3.3 Implement a C interrupt dispatcher operating on a formal trap frame structure.
 - [x] 3.4 Implement exception handlers with register and stack diagnostics emitted over the serial port.
-- [ ] 3.5 Remap the 8259A PIC to vectors 32–47 and implement end-of-interrupt signalling.
+- [x] 3.5 Remap the 8259A PIC to vectors 32–47 and implement end-of-interrupt signalling.
 - [ ] 3.6 Implement the Programmable Interval Timer as the initial timer source.
 - [ ] 3.7 Implement the PS/2 keyboard driver: controller initialisation, scancode set 1 translation, modifier state and a circular input buffer.
 
@@ -307,6 +313,7 @@ The rows are ordered with the most recent first.
 
 | Date | Phase affected | Summary |
 | ---- | -------------- | ------- |
+| 2026-08-31 | Phase 3 | Sub-task 3.5 completed. The cascaded 8259A pair is remapped to vectors 32 to 47, the vectors the firmware leaves them presenting having collided exactly with the architecture-defined exceptions, so that a timer tick was indistinguishable from a double fault. ICW1 clears the interrupt mask register, so every line is masked immediately after the sequence rather than before it. A routing layer owns the end-of-interrupt, signalling both controllers for a slave line, because the protocol belongs to the controller and the cost of a driver forgetting it is the permanent silencing of every lower-priority line. A spurious request upon IR7 or IR15 is recognised by the absence of its bit from the in-service register and left unacknowledged. The remapping is established by setting the interrupt flag with every line masked: had it failed, the running interval timer would have delivered a double fault at once. `docs/INTERRUPTS.md`, Section 9, records the design. |
 | 2026-08-31 | Phase 2 | Sub-task 2.8 completed, and Phase 2 with it. An address space may be created, cloned, activated and destroyed. A clone duplicates the paging structures of the lower half and shares the frames they map, withdrawing write permission and setting the copy-on-write flag in both hierarchies and recording a reference for the new holder; the higher half is shared with the kernel by copying the root entries, so the kernel is mapped identically in every address space. Paging now distinguishes the active hierarchy from the kernel's, a walk performed in software being obliged to follow the one the processor follows. `docs/MEMORY-LAYOUT.md`, Section 14, records the design. |
 | 2026-08-31 | — | This document reviewed and corrected. The status section had retained the claim that sub-tasks 2.7 and 2.8 could not proceed, which the completion of Phase 3 had discharged, and had accumulated as a chronological narrative duplicating this table; it is now a statement of present condition alone. Sub-task 1.11 is recorded as passed upon the project owner's own testing, and `docs/TESTING.md` amended to agree. The rows of this table were placed in order. |
 | 2026-08-30 | Phase 2 | Sub-task 2.7 completed. Copy-on-write fault resolution, using bit 9 of the page-table entry, which Intel SDM Table 4-19 records as ignored by the processor. A shared frame is duplicated through the direct map and one reference released; a frame with a single referrer is made writable without a copy. The page-fault handler attempts resolution before reporting. |

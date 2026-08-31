@@ -48,6 +48,7 @@ are separate.
 | `include/oxys/io.h` | `PortReadByte`, `PortWriteByte` and `IoWait`: the accessors for the x86 programmed input/output address space. |
 | `include/oxys/vga.h` | The interface of the VGA text-mode driver implemented in `drivers/vga/`. |
 | `include/oxys/serial.h` | The interface of the COM1 serial driver implemented in `drivers/serial/`. |
+| `include/oxys/pic.h` | The interface of the 8259A interrupt controller driver implemented in `drivers/pic/`: the remapped vector bases, the masking of a request line, the claiming of a line by a device driver, and the status registers. |
 
 ## The header corpus
 
