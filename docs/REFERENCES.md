@@ -79,8 +79,9 @@ Sections relied upon:
   restriction must be applied at the leaf entry and not at an intermediate one.
 - **Volume 3A, Section 6.2**, exception and interrupt vectors: vectors 0 to 31
   are reserved for architecture-defined exceptions; 32 to 255 are available. This
-  is the constraint that obliges the 8259A controllers to be remapped, their
-  reset vectors of 8 to 15 lying wholly within the reserved range.
+  is the constraint that obliges the 8259A controllers to be remapped, the
+  vectors 8 to 15 that the firmware leaves the master presenting lying wholly
+  within the reserved range.
 - **Volume 3A, Section 6.10**, the interrupt descriptor table and the IDTR
   register; the limit is one less than the size of the table in bytes.
 - **Volume 3A, Section 6.14.1 and Figure 6-8**, the 64-bit mode IDT: the index is
@@ -126,7 +127,8 @@ Sections relied upon:
   SSE and x87 units.
 
 Used by: `boot/boot.asm`, `linker.ld`, `Makefile`, `kernel/include/oxys/io.h`,
-`docs/MEMORY-LAYOUT.md`.
+`kernel/kernel.c`, `kernel/include/oxys/pic.h`, `kernel/include/oxys/pit.h`,
+`docs/MEMORY-LAYOUT.md`, `docs/INTERRUPTS.md`.
 
 ### System V Application Binary Interface, AMD64 Architecture Processor Supplement
 `https://gitlab.com/x86-psABIs/x86-64-ABI`
@@ -200,6 +202,71 @@ Sections relied upon:
   spurious request is distinguished from a real one.
 
 Used by: `drivers/pic/pic.c`, `kernel/include/oxys/pic.h`, `kernel/kernel.c`.
+
+### Intel 8254 Programmable Interval Timer datasheet
+Intel Corporation, order number 231164-005, September 1993.
+`https://www.scs.stanford.edu/10wi-cs140/pintos/specs/8254.pdf`
+
+Sections relied upon:
+
+- **"Programming the 8254"**, the control word format: bits 7 and 6 (SC1, SC0)
+  select the counter; bits 5 and 4 (RW1, RW0) select the read/write format, of
+  which the value 11 transfers the count as two bytes with the least significant
+  first; bits 3 to 1 (M2, M1, M0) select the operating mode; bit 0 selects binary
+  counting when clear. The control word must precede the count, the counter using
+  it to determine how many bytes to expect.
+- **"Mode 2: Rate Generator"**: the counter reloads automatically upon reaching
+  one, so the output is periodic without further intervention by software; and a
+  count of one is illegal in this mode, the output remaining high and no
+  interrupt being raised.
+- **"Mode 3: Square Wave Mode"**: the count is decremented by two upon each
+  clock so that the output's high and low phases are of equal duration, whence
+  the mode behaves as intended only for an even count. This is why the rate
+  generator is preferred for the system tick.
+- **"Counter Latch Command"**: a control word whose read/write field is 00
+  latches the present count into a holding register, which may then be read
+  without disturbing the counting in progress. Without it the two halves of a
+  sixteen-bit count would be sampled at different instants.
+
+Used by: `drivers/pit/pit.c`, `kernel/include/oxys/pit.h`, `kernel/kernel.c`.
+
+### IBM Personal Computer AT technical reference
+International Business Machines Corporation. The system technical reference for
+the IBM Personal Computer AT, which defines the peripheral complement that every
+subsequent x86 machine reproduces, and whose arrangement of ports and interrupt
+lines the firmware of a modern machine still presents.
+
+Sections relied upon:
+
+- **The interrupt controllers**: the master is decoded at I/O ports `0x20` and
+  `0x21` and the slave at `0xA0` and `0xA1`; the slave's output is attached to
+  the master's IR2 input, whence IR2 is unavailable as an ordinary request line.
+  The firmware programmes the master to present vectors 8 to 15 and the slave
+  0x70 to 0x77, which is the state in which the kernel receives the machine; the
+  8259A itself holds no vector base until ICW2 is written, so these values are a
+  property of the firmware and not of the device.
+- **The interrupt request assignment**: IR0 is the interval timer and IR1 the
+  keyboard controller.
+- **The interval timer**: counter 0 is decoded at port `0x40`, counter 1 at
+  `0x41`, counter 2 at `0x42` and the control register at `0x43`; counter 0's
+  output is attached to IR0, counter 1's to the dynamic memory refresh request
+  and counter 2's to the loudspeaker gate. The counters are driven at
+  1.193182 MHz, being the 14.31818 MHz reference oscillator divided by twelve,
+  that oscillator running at four times the 3.579545 MHz NTSC colour subcarrier.
+  The firmware leaves counter 0 running.
+- **The keyboard controller**: the 8042 is decoded at port `0x60` for data and
+  `0x64` for the status register when read and the command register when written;
+  status bit 0 is set while the output buffer holds a byte for the processor and
+  bit 1 while the input buffer still holds one for the controller.
+- **Scan code set 1**: a make code is the key's own code and the corresponding
+  break code is that code with bit 7 set; a code prefixed by `0xE0` denotes one
+  of the keys added after the original 84-key layout.
+- **The serial adapter**: the first adapter is decoded at I/O base address
+  `0x03F8`, and its reference oscillator yields 115200 baud with a divisor of one.
+
+Used by: `drivers/pic/pic.c`, `drivers/pit/pit.c`, `drivers/keyboard/keyboard.c`,
+`drivers/serial/serial.c`, `kernel/include/oxys/pic.h`,
+`kernel/include/oxys/pit.h`, `kernel/include/oxys/keyboard.h`, `kernel/kernel.c`.
 
 ### IBM Video Graphics Array technical reference
 The colour text mode 3, presenting 80 columns by 25 rows, whose frame buffer

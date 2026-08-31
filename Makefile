@@ -112,7 +112,8 @@ C_SOURCES := kernel/kernel.c \
              kernel/cpu/exceptions.c \
              drivers/vga/vga.c \
              drivers/serial/serial.c \
-             drivers/pic/pic.c
+             drivers/pic/pic.c \
+             drivers/pit/pit.c
 
 ASM_SOURCES := boot/boot.asm \
                kernel/cpu/interrupt_stubs.asm \

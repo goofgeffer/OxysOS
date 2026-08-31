@@ -49,6 +49,7 @@ are separate.
 | `include/oxys/vga.h` | The interface of the VGA text-mode driver implemented in `drivers/vga/`. |
 | `include/oxys/serial.h` | The interface of the COM1 serial driver implemented in `drivers/serial/`. |
 | `include/oxys/pic.h` | The interface of the 8259A interrupt controller driver implemented in `drivers/pic/`: the remapped vector bases, the masking of a request line, the claiming of a line by a device driver, and the status registers. |
+| `include/oxys/pit.h` | The interface of the interval timer driver implemented in `drivers/pit/`: the clock frequency, the tick counter, the conversion of ticks to elapsed time, and the bounded wait. |
 
 ## The header corpus
 

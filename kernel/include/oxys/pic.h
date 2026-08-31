@@ -145,7 +145,7 @@ uint64_t PicUnclaimedCount(void);
 
 /*
  * Masks every line of both controllers. Used in Phase 6, sub-task 6.7, when the
- * local and I/O advanced controllers supersede this device.
+ * Local APIC and the I/O APIC supersede this device.
  */
 void PicDisable(void);
 

@@ -49,6 +49,7 @@
 #include <oxys/exceptions.h>
 #include <oxys/cpu.h>
 #include <oxys/pic.h>
+#include <oxys/pit.h>
 #include <oxys/vga.h>
 #include <oxys/serial.h>
 
@@ -1646,6 +1647,216 @@ static void KernelVerifyPic(void)
                           : "Interrupt controller self-test FAILED.\n");
 }
 
+/*
+ * Exercises the programmable interval timer, being sub-task 3.6.
+ *
+ * This is the first self-test whose subject is a device that acts of its own
+ * accord, and the difficulty that introduces is that there is no second clock
+ * against which to check the first. Every assertion below is therefore either
+ * internal to the timer, or concerns the relationship between the timer and the
+ * interrupt controller beneath it, which is the part most likely to be wrong.
+ */
+static void KernelVerifyPit(void)
+{
+    const uint32_t expected_divisor = PIT_BASE_FREQUENCY / PIT_DEFAULT_FREQUENCY;
+    uint16_t first_reading;
+    uint16_t second_reading;
+    uint64_t ticks_before;
+    uint64_t ticks_after;
+    uint64_t ticks_while_masked;
+    bool observed_change = false;
+    bool succeeded = true;
+
+    if (!PitIsRunning())
+    {
+        KernelWriteString("  The timer reports that it was not initialised.\n");
+        KernelWriteString("Interval timer self-test FAILED.\n");
+        return;
+    }
+
+    /* --- The divisor took effect. --- */
+
+    /*
+     * The requested frequency is 1000 Hz and the clock 1193182 Hz, so the
+     * divisor rounds to 1193. A divisor that differed would mean the arithmetic
+     * of PitDivisorForFrequency was wrong, and every interval the kernel ever
+     * measured would be wrong with it.
+     */
+    if (PitDivisor() != expected_divisor && PitDivisor() != (expected_divisor + 1U))
+    {
+        KernelWriteString("  The divisor is not that required by the frequency.\n");
+        succeeded = false;
+    }
+
+    /* --- The counter is running, and running within the divisor. --- */
+
+    /*
+     * Two latched readings separated by a delay must differ. This is the only
+     * assertion available before interrupts are enabled, and it distinguishes a
+     * counter that was programmed from one that was not.
+     */
+    first_reading = PitReadCounter();
+
+    for (volatile uint32_t spin = 0U; spin < 100000U; ++spin)
+    {
+        /* Deliberately empty: time is allowed to pass. */
+    }
+
+    second_reading = PitReadCounter();
+
+    if (first_reading == second_reading)
+    {
+        KernelWriteString("  The counter is not counting.\n");
+        succeeded = false;
+    }
+
+    /*
+     * Every reading must lie within the divisor, the counter counting down from
+     * it and reloading. Were the divisor not in force the counter would range
+     * over the whole of its sixteen bits, and readings above the divisor would
+     * appear almost at once. This is the only means of confirming the divisor
+     * from within the machine, the 8254 offering no way to read a count back
+     * other than the one in progress.
+     */
+    for (size_t sample = 0U; sample < 64U; ++sample)
+    {
+        const uint16_t reading = PitReadCounter();
+
+        if ((uint32_t)reading > PitDivisor())
+        {
+            KernelWriteString("  A count exceeded the divisor.\n");
+            succeeded = false;
+            break;
+        }
+
+        if (reading != first_reading)
+        {
+            observed_change = true;
+        }
+    }
+
+    if (!observed_change)
+    {
+        KernelWriteString("  Repeated readings of the counter never changed.\n");
+        succeeded = false;
+    }
+
+    /* --- The line is claimed and permitted. --- */
+
+    if (PicRegisteredHandler(PIT_IRQ) == NULL)
+    {
+        KernelWriteString("  The timer did not claim its request line.\n");
+        succeeded = false;
+    }
+
+    if (PicLineIsMasked(PIT_IRQ))
+    {
+        KernelWriteString("  The timer's request line is masked.\n");
+        succeeded = false;
+    }
+
+    /* --- No tick is counted while interrupts are disabled. --- */
+
+    ticks_before = PitTickCount();
+
+    for (volatile uint32_t spin = 0U; spin < 500000U; ++spin)
+    {
+        /* Deliberately empty. */
+    }
+
+    if (PitTickCount() != ticks_before)
+    {
+        KernelWriteString("  A tick was counted with the interrupt flag clear.\n");
+        succeeded = false;
+    }
+
+    /* --- Ticks are counted once interrupts are enabled. --- */
+
+    __asm__ __volatile__("sti" : : : "memory");
+
+    /*
+     * The wait is bounded and reports its own failure rather than spinning for
+     * ever. A timer that never fires is precisely the defect this test exists to
+     * find, and a test that hung upon finding it would destroy the diagnosis it
+     * was written to produce.
+     */
+    if (!PitWaitTicks(10U))
+    {
+        KernelWriteString("  No tick arrived within the permitted interval.\n");
+        succeeded = false;
+    }
+
+    ticks_after = PitTickCount();
+
+    if (ticks_after < (ticks_before + 10U))
+    {
+        KernelWriteString("  The tick count did not advance as far as awaited.\n");
+        succeeded = false;
+    }
+
+    /*
+     * The request must have reached the routing layer of the interrupt
+     * controller and been counted there. A tick counted here but not there would
+     * mean the handler was being entered by some path other than the one the
+     * controller uses, and the end-of-interrupt would not be being sent.
+     */
+    if (PicRequestCount() == 0U)
+    {
+        KernelWriteString("  The controller recorded no request for the timer.\n");
+        succeeded = false;
+    }
+
+    if (PicUnclaimedCount() > 1U)
+    {
+        KernelWriteString("  A timer request was recorded as unclaimed.\n");
+        succeeded = false;
+    }
+
+    /*
+     * The elapsed time must agree with the tick count and the realised
+     * frequency. At 1000 Hz the two are numerically equal to within a
+     * millisecond, and a gross disagreement would denote an error in the
+     * conversion rather than in the timer.
+     */
+    if (PitMillisecondsElapsed() < (ticks_after - 1U) ||
+        PitMillisecondsElapsed() > (ticks_after + 1U))
+    {
+        KernelWriteString("  The elapsed time does not agree with the tick count.\n");
+        succeeded = false;
+    }
+
+    /* --- Masking the line stops the ticks, and unmasking resumes them. --- */
+
+    PicMaskLine(PIT_IRQ);
+
+    ticks_while_masked = PitTickCount();
+
+    for (volatile uint32_t spin = 0U; spin < 2000000U; ++spin)
+    {
+        /* Deliberately empty: far longer than a tick period. */
+    }
+
+    if (PitTickCount() != ticks_while_masked)
+    {
+        KernelWriteString("  A tick was counted while the line was masked.\n");
+        succeeded = false;
+    }
+
+    PicUnmaskLine(PIT_IRQ);
+
+    if (!PitWaitTicks(2U))
+    {
+        KernelWriteString("  Ticks did not resume when the line was unmasked.\n");
+        succeeded = false;
+    }
+
+    __asm__ __volatile__("cli" : : : "memory");
+
+    KernelWriteString(succeeded
+                          ? "Interval timer self-test passed.\n"
+                          : "Interval timer self-test FAILED.\n");
+}
+
 void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic)
 {
     /*
@@ -1739,12 +1950,21 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
     KernelVerifyPic();
     PicReport();
 
+    /*
+     * The timer is the first device to claim a request line, and therefore the
+     * first proof that the whole path from a device to a handler is sound.
+     */
+    PitInitialise(PIT_DEFAULT_FREQUENCY);
+    KernelVerifyPit();
+    PitReport();
+    PicReport();
+
     InterruptReport();
     PagingReport();
     AddressSpaceReport();
 
     VgaSetColour(VGA_COLOUR_LIGHT_GREEN, VGA_COLOUR_BLACK);
-    KernelWriteString("Phase 3.5 initialisation complete.\n");
+    KernelWriteString("Phase 3.6 initialisation complete.\n");
 
     VgaSetColour(VGA_COLOUR_LIGHT_GREY, VGA_COLOUR_BLACK);
     KernelWriteString("No further subsystems are implemented. Halting.\n");

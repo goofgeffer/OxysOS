@@ -493,14 +493,12 @@ the mask is honoured.
 
 ### 9.8 Limitations
 
-1. The controller is not disabled in favour of the local and I/O advanced
-   controllers until sub-task 6.7. `PicDisable` exists for that purpose and is
+1. The controller is not disabled in favour of the Local APIC and the I/O APIC until sub-task 6.7. `PicDisable` exists for that purpose and is
    not yet called.
 2. Nothing here is safe against concurrent access. The read-modify-write of a
    mask register is not atomic, and from sub-task 6.9 both it and the
    registration of a handler require the spinlock governing this device.
-3. The routing layer names its interface after the 8259A. When the I/O advanced
-   controller supersedes it in sub-task 6.7, the device drivers of Phases 3 and 4
+3. The routing layer names its interface after the 8259A. When the I/O APIC supersedes it in sub-task 6.7, the device drivers of Phases 3 and 4
    will require their registration calls to be redirected to the successor.
 
 ## 10. Present limitations
@@ -511,6 +509,11 @@ the mask is honoured.
    structures at all, so the commoner faults cost nothing extra.
 2. No interrupt stack table entry is used. A fault taken on a bad stack cannot
    presently be reported. This requires the task state segment of sub-task 6.1.
-3. No device yet claims a request line, so although the controllers are remapped
-   and the interrupt flag may safely be set, every line remains masked. The
-   interval timer of sub-task 3.6 is the first device to unmask one.
+3. One device claims a request line: the interval timer of sub-task 3.6 upon IR0,
+   described in `docs/TIME.md`. Every other line remains masked until a driver
+   for its device exists. The keyboard of sub-task 3.7 claims IR1.
+4. The interrupt flag is left clear except where a self-test sets it deliberately,
+   each such test clearing it again before it returns. `KernelHalt` clears it once
+   more before halting. Running with interrupts enabled as a matter of course
+   awaits something for the kernel to do between them, which is the scheduler of
+   sub-task 6.10.
