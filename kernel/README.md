@@ -35,6 +35,8 @@ are separate.
 | `include/oxys/vmm.h` | The kernel arena constants and the interface of the virtual address allocator. |
 | `mm/paging.c` | The permanent kernel paging hierarchy and copy-on-write. `PagingInitialise`, `PagingTranslate`, `PagingAddressIsWritable`, `PagingMarkCopyOnWrite`, `PagingResolveCopyOnWriteFault` and the reporting routines. |
 | `include/oxys/paging.h` | The paging-structure entry flags and the interface of the paging subsystem. |
+| `mm/addrspace.c` | The address space: creation, cloning by copy-on-write, activation and destruction. `AddressSpaceCreate`, `AddressSpaceClone`, `AddressSpaceDestroy`, `AddressSpaceSwitch`, `AddressSpaceMapPage` and the accounting accessors. |
+| `include/oxys/addrspace.h` | `AddressSpace`, the division of the root table between the two canonical halves, and the interface of address-space cloning. |
 | `mm/pmm.c` | The physical frame allocator and per-frame reference counting. `PhysicalMemoryInitialise`, `FrameAllocate`, `FrameAllocateBelow`, `FrameFree`, `FrameReferenceInitialise`, `FrameReferenceIncrement` and the accounting accessors. |
 | `include/oxys/memory.h` | `PAGE_SIZE`, `PAGE_SHIFT`, `LOW_MEMORY_LIMIT` and the alignment helpers. |
 | `include/oxys/pmm.h` | The interface of the physical frame allocator. |

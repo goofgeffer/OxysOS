@@ -26,6 +26,7 @@
 #include <oxys/bootinfo.h>
 #include <oxys/pmm.h>
 #include <oxys/paging.h>
+#include <oxys/addrspace.h>
 #include <oxys/vmm.h>
 #include <oxys/heap.h>
 #include <oxys/gdt.h>
@@ -1244,6 +1245,202 @@ static void KernelVerifyCopyOnWrite(void)
                           : "Copy-on-write self-test FAILED.\n");
 }
 
+/*
+ * The addresses within the lower half at which the test places its pages. Any
+ * lower-half address would serve; these lie a gibibyte in, clear of the first
+ * page, whose absence from every address space is a deliberate protection
+ * against the dereference of a null pointer.
+ */
+#define KERNEL_TEST_WRITABLE_PAGE UINT64_C(0x0000000040000000)
+#define KERNEL_TEST_READONLY_PAGE UINT64_C(0x0000000040001000)
+
+/* The byte written into each test page, and the byte later written over it. */
+#define KERNEL_TEST_PATTERN     0x71U
+#define KERNEL_TEST_OVERWRITTEN 0xBBU
+
+/*
+ * Verifies address-space cloning, being sub-task 2.8.
+ *
+ * The properties asserted are those whose violation would be silent. A clone
+ * that failed to protect the parent would leave the two spaces sharing memory
+ * that each believes to be private, and neither would report anything; a clone
+ * that copied the frames outright would be correct in every observable respect
+ * and merely slow; and a destruction that released a shared frame outright would
+ * hand a frame still in use back to the allocator.
+ */
+static void KernelVerifyAddressSpaces(void)
+{
+    AddressSpace parent;
+    AddressSpace child;
+    const size_t free_frames_before = FrameFreeCount();
+    PhysicalAddress writable_frame;
+    PhysicalAddress readonly_frame;
+    PhysicalAddress parent_frame;
+    volatile uint8_t *writable_page = (volatile uint8_t *)KERNEL_TEST_WRITABLE_PAGE;
+    volatile uint8_t *readonly_page = (volatile uint8_t *)KERNEL_TEST_READONLY_PAGE;
+    bool succeeded = true;
+
+    if (!AddressSpaceCreate(&parent))
+    {
+        KernelWriteString("  An address space could not be created.\n");
+        KernelWriteString("Address-space self-test FAILED.\n");
+        return;
+    }
+
+    writable_frame = FrameAllocate();
+    readonly_frame = FrameAllocate();
+
+    if (writable_frame == FRAME_ALLOCATION_FAILED ||
+        readonly_frame == FRAME_ALLOCATION_FAILED)
+    {
+        KernelWriteString("  A frame for the test could not be allocated.\n");
+        KernelWriteString("Address-space self-test FAILED.\n");
+        return;
+    }
+
+    /*
+     * The contents are placed through the direct map, the pages not yet being
+     * reachable by their own addresses: the hierarchy that maps them is not the
+     * active one.
+     */
+    *(volatile uint8_t *)(uintptr_t)PhysicalToDirect(writable_frame) = KERNEL_TEST_PATTERN;
+    *(volatile uint8_t *)(uintptr_t)PhysicalToDirect(readonly_frame) = KERNEL_TEST_PATTERN;
+
+    AddressSpaceMapPage(&parent, KERNEL_TEST_WRITABLE_PAGE, writable_frame,
+                        PAGE_ENTRY_WRITABLE | PAGE_ENTRY_USER);
+    AddressSpaceMapPage(&parent, KERNEL_TEST_READONLY_PAGE, readonly_frame,
+                        PAGE_ENTRY_USER);
+
+    AddressSpaceSwitch(&parent);
+
+    /* --- The clone must protect the parent, not merely the child. --- */
+
+    if (!AddressSpaceClone(&child, &parent))
+    {
+        AddressSpaceSwitch(AddressSpaceKernel());
+        KernelWriteString("  The address space could not be cloned.\n");
+        KernelWriteString("Address-space self-test FAILED.\n");
+        return;
+    }
+
+    if (child.root == parent.root)
+    {
+        KernelWriteString("  The clone shares the parent's root table.\n");
+        succeeded = false;
+    }
+
+    if (PagingAddressIsWritable(KERNEL_TEST_WRITABLE_PAGE) ||
+        !PagingIsCopyOnWrite(KERNEL_TEST_WRITABLE_PAGE))
+    {
+        KernelWriteString("  The parent's writable page was not protected.\n");
+        succeeded = false;
+    }
+
+    /*
+     * A page that was already read-only is shared as it stands. Marking it would
+     * be harmless but wasteful: it would provoke a fault that could resolve to
+     * nothing, the page having no write permission to restore.
+     */
+    if (PagingIsCopyOnWrite(KERNEL_TEST_READONLY_PAGE))
+    {
+        KernelWriteString("  A read-only page was needlessly marked.\n");
+        succeeded = false;
+    }
+
+    if (FrameReferenceCount(writable_frame) != 2U ||
+        FrameReferenceCount(readonly_frame) != 2U)
+    {
+        KernelWriteString("  The clone did not record its references.\n");
+        succeeded = false;
+    }
+
+    /* --- A write by the parent must not be observed by the child. --- */
+
+    writable_page[0] = KERNEL_TEST_OVERWRITTEN;
+
+    parent_frame = PagingTranslate(KERNEL_TEST_WRITABLE_PAGE);
+
+    if (parent_frame == writable_frame)
+    {
+        KernelWriteString("  The parent's write did not duplicate the frame.\n");
+        succeeded = false;
+    }
+
+    if (writable_page[0] != KERNEL_TEST_OVERWRITTEN)
+    {
+        KernelWriteString("  The parent's write did not take effect.\n");
+        succeeded = false;
+    }
+
+    if (FrameReferenceCount(writable_frame) != 1U)
+    {
+        KernelWriteString("  The shared frame's reference was not released.\n");
+        succeeded = false;
+    }
+
+    AddressSpaceSwitch(&child);
+
+    if (PagingTranslate(KERNEL_TEST_WRITABLE_PAGE) != writable_frame)
+    {
+        KernelWriteString("  The child no longer maps the original frame.\n");
+        succeeded = false;
+    }
+
+    if (writable_page[0] != KERNEL_TEST_PATTERN)
+    {
+        KernelWriteString("  The child observed the parent's write.\n");
+        succeeded = false;
+    }
+
+    /*
+     * The child now holds the frame alone, so its own write must be resolved by
+     * restoring write permission rather than by a second duplication.
+     */
+    writable_page[0] = KERNEL_TEST_OVERWRITTEN;
+
+    if (PagingTranslate(KERNEL_TEST_WRITABLE_PAGE) != writable_frame)
+    {
+        KernelWriteString("  The sole remaining holder duplicated needlessly.\n");
+        succeeded = false;
+    }
+
+    /* The read-only page is shared, and identical in both. */
+    if (PagingTranslate(KERNEL_TEST_READONLY_PAGE) != readonly_frame ||
+        readonly_page[0] != KERNEL_TEST_PATTERN)
+    {
+        KernelWriteString("  The read-only page was not shared.\n");
+        succeeded = false;
+    }
+
+    /* --- Destruction must release exactly what was taken. --- */
+
+    AddressSpaceSwitch(AddressSpaceKernel());
+
+    AddressSpaceDestroy(&child);
+
+    if (FrameReferenceCount(readonly_frame) != 1U)
+    {
+        KernelWriteString("  Destroying the child released a shared frame.\n");
+        succeeded = false;
+    }
+
+    AddressSpaceDestroy(&parent);
+
+    if (FrameFreeCount() != free_frames_before)
+    {
+        KernelWriteString("  Frames were leaked: free count before ");
+        KernelWriteDecimal((uint64_t)free_frames_before);
+        KernelWriteString(", after ");
+        KernelWriteDecimal((uint64_t)FrameFreeCount());
+        KernelWriteString(".\n");
+        succeeded = false;
+    }
+
+    KernelWriteString(succeeded
+                          ? "Address-space self-test passed.\n"
+                          : "Address-space self-test FAILED.\n");
+}
+
 void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic)
 {
     /*
@@ -1326,11 +1523,13 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
     KernelVerifyDispatcher();
     KernelVerifyExceptions();
     KernelVerifyCopyOnWrite();
+    KernelVerifyAddressSpaces();
     InterruptReport();
     PagingReport();
+    AddressSpaceReport();
 
     VgaSetColour(VGA_COLOUR_LIGHT_GREEN, VGA_COLOUR_BLACK);
-    KernelWriteString("Phase 2.7 initialisation complete.\n");
+    KernelWriteString("Phase 2.8 initialisation complete.\n");
 
     VgaSetColour(VGA_COLOUR_LIGHT_GREY, VGA_COLOUR_BLACK);
     KernelWriteString("No further subsystems are implemented. Halting.\n");

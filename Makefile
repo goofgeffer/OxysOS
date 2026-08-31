@@ -103,6 +103,7 @@ C_SOURCES := kernel/kernel.c \
              kernel/multiboot2.c \
              kernel/mm/pmm.c \
              kernel/mm/paging.c \
+             kernel/mm/addrspace.c \
              kernel/mm/vmm.c \
              kernel/mm/heap.c \
              kernel/cpu/gdt.c \

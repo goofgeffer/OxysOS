@@ -57,6 +57,18 @@ extern char KernelRodataEnd[];
 /* The physical address of the permanent page-map level 4 table. */
 static PhysicalAddress PagingRootTable;
 
+/*
+ * The physical address of the hierarchy presently loaded in CR3.
+ *
+ * Until sub-task 2.8 this was necessarily the kernel hierarchy, and the two were
+ * one value. An address space cloned from another may now be activated, and the
+ * distinction becomes material: a walk performed in software must follow the
+ * hierarchy the processor is following, whereas a mapping established for the
+ * kernel belongs in the kernel hierarchy, whose higher-half entries every
+ * address space shares.
+ */
+static PhysicalAddress PagingActiveTable;
+
 /* The number of frames consumed by the hierarchy, for reporting. */
 static size_t PagingTableFrameCount;
 
@@ -257,6 +269,17 @@ static bool PagingAddressIsReadOnly(VirtualAddress address)
 static void PagingActivate(PhysicalAddress root)
 {
     __asm__ __volatile__("mov %0, %%cr3" : : "r"((uint64_t)root) : "memory");
+    PagingActiveTable = root;
+}
+
+void PagingActivateRoot(PhysicalAddress root)
+{
+    PagingActivate(root);
+}
+
+PhysicalAddress PagingActiveRoot(void)
+{
+    return PagingActiveTable;
 }
 
 /*
@@ -447,12 +470,12 @@ PhysicalAddress PagingTranslate(VirtualAddress address)
     uint64_t entry;
     PhysicalAddress table;
 
-    if (PagingRootTable == 0U)
+    if (PagingActiveTable == 0U)
     {
         return 0U;
     }
 
-    entries = PagingTableAt(PagingRootTable);
+    entries = PagingTableAt(PagingActiveTable);
     entry = entries[PagingLevel4Index(address)];
     if ((entry & PAGE_ENTRY_PRESENT) == 0U)
     {
@@ -505,7 +528,7 @@ bool PagingAddressIsWritable(VirtualAddress address)
     PhysicalAddress table;
     uint64_t accumulated = PAGE_ENTRY_WRITABLE;
 
-    entries = PagingTableAt(PagingRootTable);
+    entries = PagingTableAt(PagingActiveTable);
     entry = entries[PagingLevel4Index(address)];
     if ((entry & PAGE_ENTRY_PRESENT) == 0U)
     {
@@ -563,7 +586,7 @@ static uint64_t *PagingLeafEntry(VirtualAddress address)
     uint64_t entry;
     PhysicalAddress table;
 
-    entries = PagingTableAt(PagingRootTable);
+    entries = PagingTableAt(PagingActiveTable);
     entry = entries[PagingLevel4Index(address)];
     if ((entry & PAGE_ENTRY_PRESENT) == 0U)
     {
@@ -744,6 +767,55 @@ uint64_t PagingCopyOnWriteSoleOwnerCount(void)
 PhysicalAddress PagingKernelRoot(void)
 {
     return PagingRootTable;
+}
+
+/*
+ * The three routines that follow expose to the address-space code of sub-task
+ * 2.8 the primitives with which this file builds a hierarchy. They are exposed
+ * rather than duplicated: an address space is a paging hierarchy and nothing
+ * else, and a second implementation of table allocation or of the walk would be
+ * a second thing to keep correct.
+ */
+uint64_t *PagingTableEntries(PhysicalAddress table)
+{
+    return PagingTableAt(table);
+}
+
+PhysicalAddress PagingAllocateStructure(void)
+{
+    return PagingAllocateTable();
+}
+
+void PagingMapPageIn(PhysicalAddress root, VirtualAddress virtual_address,
+                     PhysicalAddress physical_address, uint64_t flags)
+{
+    PagingMapPage(root, virtual_address, physical_address, flags);
+
+    /*
+     * The translation is invalidated only where the hierarchy is the active one.
+     * A hierarchy that CR3 does not name has no cached translations to discard,
+     * per Intel SDM, Volume 3A, Section 4.10.4, which describes the caches as
+     * holding translations derived from the paging structures in use.
+     */
+    if (root == PagingActiveTable)
+    {
+        PagingInvalidate(virtual_address);
+    }
+}
+
+void PagingInvalidatePage(VirtualAddress address)
+{
+    PagingInvalidate(address);
+}
+
+void PagingReleaseStructure(PhysicalAddress table)
+{
+    if (PagingTableFrameCount > 0U)
+    {
+        --PagingTableFrameCount;
+    }
+
+    FrameFree(table);
 }
 
 void PagingReport(void)

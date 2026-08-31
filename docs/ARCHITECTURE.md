@@ -23,8 +23,8 @@ than as later additions, in accordance with `PROJECT_GUIDELINES.md`, Section 5:
    maintains a per-frame reference count from the outset, because retrofitting
    reference counting to an allocator that lacks it would require the
    modification of every consumer. The fault resolution built upon it is
-   complete as of sub-task 2.7; sub-task 2.8 adds the address-space cloning that
-   creates shared pages in earnest.
+   complete as of sub-task 2.7, and sub-task 2.8 added the address-space cloning
+   that creates the shared pages upon which it acts.
 3. **Boot-protocol neutrality.** The kernel proper consumes a boot-protocol
    neutral handoff structure. In Phase 1 that structure is the Multiboot2
    information block read directly; in Phase 12 an equivalent structure is
@@ -49,8 +49,8 @@ than as later additions, in accordance with `PROJECT_GUIDELINES.md`, Section 5:
 
 ## 3. Present composition
 
-As of the completion of Phase 1 the system comprises the following translation
-units.
+As of the completion of Phase 2 and of sub-tasks 3.1 to 3.4, the system comprises
+the following translation units.
 
 | Unit | Role |
 | ---- | ---- |
@@ -62,7 +62,8 @@ units.
 | `kernel/cpu/idt.c` | The interrupt descriptor table: its storage, the installation of a gate, and the loading of the table. |
 | `kernel/mm/heap.c` | The kernel heap: a slab allocator of eight size classes over the kernel arena. |
 | `kernel/mm/vmm.c` | The kernel virtual address allocator, issuing ranges of the kernel arena backed by frames. |
-| `kernel/mm/paging.c` | The permanent kernel paging hierarchy: its construction, activation and software translation. |
+| `kernel/mm/paging.c` | The permanent kernel paging hierarchy: its construction, activation, software translation and copy-on-write fault resolution. |
+| `kernel/mm/addrspace.c` | The address space: its creation, its cloning by the copy-on-write discipline, its activation and its destruction. |
 | `kernel/mm/pmm.c` | The physical frame allocator: a bitmap of every 4 KiB frame below the highest usable address. |
 | `kernel/multiboot2.c` | The Multiboot2 parser, reducing the boot loader's structure to the neutral `BootInformation` description. |
 | `kernel/kernel.c` | `KernelMain`, which validates the boot loader handover, initialises the early output devices, presents the identification banner and halts. `KernelPanic`, the unrecoverable-error path. |
@@ -114,10 +115,11 @@ Phase 3 is installed. The dependency is resolved by implementing the memory
 management structures of sub-tasks 2.1 to 2.6 first, then Phase 3, and finally
 returning to sub-tasks 2.7 and 2.8.
 
-**Status.** Sub-tasks 2.1 to 2.7 and 3.1 to 3.4 are complete. The dependency
-described above has been discharged: sub-task 3.4 supplied the fault handler, and
-sub-task 2.7 the copy-on-write resolution beneath it. Sub-task 2.8 remains, after
-which work returns to sub-task 3.5.
+**Status.** Phase 2 is complete, as are sub-tasks 3.1 to 3.4. The dependency
+described above has been discharged: sub-task 3.4 supplied the fault handler,
+sub-task 2.7 the copy-on-write resolution beneath it, and sub-task 2.8 the
+address-space cloning that creates the shared pages the resolution acts upon.
+Work resumes at sub-task 3.5.
 
 ## 5. Privilege and address-space model
 

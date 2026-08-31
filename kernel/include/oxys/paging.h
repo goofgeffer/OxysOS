@@ -147,8 +147,42 @@ uint64_t PagingCopyOnWriteFaultCount(void);
 uint64_t PagingCopyOnWriteCopyCount(void);
 uint64_t PagingCopyOnWriteSoleOwnerCount(void);
 
-/* The physical address of the active page-map level 4 table. */
+/* The physical address of the kernel's page-map level 4 table. */
 PhysicalAddress PagingKernelRoot(void);
+
+/* The physical address of the page-map level 4 table presently named by CR3. */
+PhysicalAddress PagingActiveRoot(void);
+
+/*
+ * Loads a hierarchy into CR3 and records it as the active one.
+ *
+ * Every hierarchy the kernel constructs holds the same higher-half entries, so
+ * the kernel's own code, stack and data remain mapped across the change and
+ * execution continues at the following instruction.
+ */
+void PagingActivateRoot(PhysicalAddress root);
+
+/*
+ * The primitives with which a paging hierarchy is built, exposed for the
+ * address-space code of sub-task 2.8. A structure obtained from
+ * PagingAllocateStructure is cleared; entries returns a pointer through which a
+ * structure may be read and written, by way of the direct physical map.
+ */
+uint64_t *PagingTableEntries(PhysicalAddress table);
+PhysicalAddress PagingAllocateStructure(void);
+void PagingReleaseStructure(PhysicalAddress table);
+
+/*
+ * Establishes a 4 KiB mapping in an arbitrary hierarchy, creating the
+ * intermediate structures as required, and invalidates the translation if that
+ * hierarchy is the active one.
+ */
+void PagingMapPageIn(PhysicalAddress root, VirtualAddress virtual_address,
+                     PhysicalAddress physical_address, uint64_t flags);
+
+/* Invalidates the translation-lookaside-buffer entry for one page of the active
+ * hierarchy, per Intel SDM, Volume 3A, Section 4.10.4.1. */
+void PagingInvalidatePage(VirtualAddress address);
 
 /* Emits a summary of the hierarchy upon the console and the serial port. */
 void PagingReport(void);

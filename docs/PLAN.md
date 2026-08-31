@@ -20,16 +20,18 @@ diagnostics under `-Wall -Wextra -Werror`, is confirmed Multiboot2 compliant by
 banner upon the VGA text console and the COM1 serial port alike. Sub-task 1.12,
 boot from a physical USB medium, remains open.
 
-**Phase 2 is complete but for sub-task 2.8.** The Multiboot2 information
-structure is parsed into a boot-protocol-neutral `BootInformation` description; a
-bitmap allocator governs every physical frame and reserves those that are not
-free; a permanent paging hierarchy maps the kernel text and read-only data
-without write permission and the whole of physical memory at
-`0xFFFF800000000000`; a kernel virtual arena and a slab heap above it serve
-allocations of arbitrary size; every frame carries a reference count and is
-returned to the allocator only upon the release of its last reference; and the
-page-fault handler resolves a copy-on-write fault by duplicating a shared frame,
-or by restoring write permission where the frame has but one referrer.
+**Phase 2 is complete.** The Multiboot2 information structure is parsed into a
+boot-protocol-neutral `BootInformation` description; a bitmap allocator governs
+every physical frame and reserves those that are not free; a permanent paging
+hierarchy maps the kernel text and read-only data without write permission and
+the whole of physical memory at `0xFFFF800000000000`; a kernel virtual arena and
+a slab heap above it serve allocations of arbitrary size; every frame carries a
+reference count and is returned to the allocator only upon the release of its
+last reference; the page-fault handler resolves a copy-on-write fault by
+duplicating a shared frame, or by restoring write permission where the frame has
+but one referrer; and an address space may be created, cloned by the
+copy-on-write discipline, activated and destroyed. The substrate upon which
+`fork()` is built in sub-task 6.6 is therefore complete.
 
 **Phase 3 is complete as far as sub-task 3.4.** The interrupt descriptor table is
 loaded, a stub is installed for each of the 256 vectors and constructs a uniform
@@ -44,8 +46,9 @@ Every property above is asserted at each boot by a self-test, no test harness
 being available before Phase 7. The procedure is `make verify`, described in
 `docs/TESTING.md`.
 
-**The next work is sub-task 2.8**, address-space cloning, which is what will
-create shared pages in earnest. Phase 3 resumes afterwards at sub-task 3.5.
+**The next work is sub-task 3.5**, the remapping of the 8259A programmable
+interrupt controller, after which the interval timer and the keyboard complete
+Phase 3.
 
 ## Legend
 
@@ -96,7 +99,7 @@ provide the copy-on-write primitives upon which `fork()` will later depend.
 - [x] 2.5 Implement a kernel virtual-address-space allocator and a general-purpose kernel heap (slab allocator over a buddy-style page allocator).
 - [x] 2.6 Implement per-frame reference counting as the substrate for shared pages.
 - [x] 2.7 Implement the page-fault handler dispatch path (dependent upon Phase 3) and the copy-on-write fault resolution routine.
-- [ ] 2.8 Implement address-space cloning that marks writable user pages read-only and increments frame reference counts.
+- [x] 2.8 Implement address-space cloning that marks writable user pages read-only and increments frame reference counts.
 
 ---
 
@@ -304,6 +307,7 @@ The rows are ordered with the most recent first.
 
 | Date | Phase affected | Summary |
 | ---- | -------------- | ------- |
+| 2026-08-31 | Phase 2 | Sub-task 2.8 completed, and Phase 2 with it. An address space may be created, cloned, activated and destroyed. A clone duplicates the paging structures of the lower half and shares the frames they map, withdrawing write permission and setting the copy-on-write flag in both hierarchies and recording a reference for the new holder; the higher half is shared with the kernel by copying the root entries, so the kernel is mapped identically in every address space. Paging now distinguishes the active hierarchy from the kernel's, a walk performed in software being obliged to follow the one the processor follows. `docs/MEMORY-LAYOUT.md`, Section 14, records the design. |
 | 2026-08-31 | — | This document reviewed and corrected. The status section had retained the claim that sub-tasks 2.7 and 2.8 could not proceed, which the completion of Phase 3 had discharged, and had accumulated as a chronological narrative duplicating this table; it is now a statement of present condition alone. Sub-task 1.11 is recorded as passed upon the project owner's own testing, and `docs/TESTING.md` amended to agree. The rows of this table were placed in order. |
 | 2026-08-30 | Phase 2 | Sub-task 2.7 completed. Copy-on-write fault resolution, using bit 9 of the page-table entry, which Intel SDM Table 4-19 records as ignored by the processor. A shared frame is duplicated through the direct map and one reference released; a frame with a single referrer is made writable without a copy. The page-fault handler attempts resolution before reporting. |
 | 2026-08-30 | Phase 3 | Sub-task 3.4 completed. Handlers for all thirty-two architecture-defined exceptions, with decoding of both error-code formats, a full register and control-register dump, and a bounded stack reproduction. `CR0.WP` is now set in `PagingInitialise`, without which the read-only kernel mappings were advisory only. The negative paging test deferred from sub-task 2.3 was performed and passed. |

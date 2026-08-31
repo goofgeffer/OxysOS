@@ -1,10 +1,11 @@
 # Oxys-OS Memory Layout
 
-**Corresponding phase**: Phase 1, sub-tasks 1.2 and 1.4. This document will be
-extended substantially in Phase 2.
+**Corresponding phases**: Phase 1, sub-tasks 1.2 and 1.4, which establish the
+layout and the boot-time hierarchy; and the whole of Phase 2, which realises it.
 
 **Specifications**: Intel 64 and IA-32 Architectures Software Developer's Manual,
-Volume 3A, Sections 3.3.7.1, 4.1.2, 4.5 and Table 4-15.
+Volume 3A, Sections 3.3.7.1, 4.1.2, 4.5, 4.6, 4.10.4 and 6.15, and Tables 4-15
+and 4-19; Volume 1, Section 3.3.7.1.
 
 ## 1. The canonical address space
 
@@ -592,8 +593,9 @@ a frame to three references and confirms it survives the release of two of them.
 
 ## 13. Copy-on-write
 
-Sub-task 2.7 implements the resolution of a copy-on-write fault. Sub-task 2.8
-will create the shared pages that make it useful, by cloning an address space.
+Sub-task 2.7 implements the resolution of a copy-on-write fault. Sub-task 2.8,
+described in Section 14, creates the shared pages that make it useful, by cloning
+an address space.
 
 ### 13.1 How a page is marked
 
@@ -644,10 +646,10 @@ afterwards, on every fault.
 
 ### 13.4 Verification
 
-The self-test exercises the real handler rather than a substituted probe: the
-fault travels the same path a duplicated address space will take. Only the
-*sharing* is simulated, a reference being taken to the frame directly rather than
-by cloning, cloning being the subject of sub-task 2.8.
+The self-test exercises the real handler rather than a substituted probe. Only
+the *sharing* is simulated, a reference being taken to the frame directly rather
+than by cloning; the test of Section 14.6 exercises the same handler upon pages
+that a genuine clone has shared.
 
 Both paths are tested. The shared case asserts that the frame changed, that the
 duplicate retains all 4096 bytes of a pattern save the one written, that the flag
@@ -663,18 +665,164 @@ the mechanism to be wrong.
 
 ### 13.5 Observed state
 
+The figures are those reported at the end of a boot, and count the faults of both
+this section's test and that of Section 14.6.
+
 | Quantity | Value |
 | -------- | ----- |
-| Faults resolved | 2 |
-| Frames duplicated | 1 |
-| Resolved without duplication | 1 |
+| Faults resolved | 4 |
+| Frames duplicated | 2 |
+| Resolved without duplication | 2 |
 
 ### 13.6 Limitations
 
 1. Only 4 KiB pages are supported. A copy-on-write fault upon a large page would
    require the mapping to be split first, which nothing yet needs.
-2. Resolution operates upon the kernel hierarchy alone. Per-process address
-   spaces arrive with sub-task 2.8 and Phase 6.
+2. Resolution operates upon whichever hierarchy CR3 names, which from sub-task
+   2.8 need not be the kernel's. It has no means of resolving a fault in an
+   address space that is not the active one, and needs none: a fault is raised
+   only by the processor that is translating through that space.
 3. No shootdown is performed. `INVLPG` invalidates the translation upon the
    executing processor only; from sub-task 6.9 the other processors holding a
    stale entry must be signalled by inter-processor interrupt.
+
+## 14. Address-space cloning
+
+Sub-task 2.8 completes the memory-management substrate. An address space is a
+paging hierarchy that may be created, cloned by the copy-on-write discipline,
+activated and destroyed. `fork()`, in sub-task 6.6, is little more than a clone
+of the calling process's address space together with a copy of its thread state.
+
+The implementation is `kernel/mm/addrspace.c`; the interface is
+`kernel/include/oxys/addrspace.h`.
+
+### 14.1 The two halves
+
+The page-map level 4 index occupies bits 47:39 of a linear address, so an index
+below 256 has bit 47 clear. Intel SDM, Volume 1, Section 3.3.7.1, requires bits
+63:48 to replicate bit 47 for an address to be canonical. The 512 entries of the
+root table therefore divide exactly into the two canonical halves:
+
+| Entries | Linear addresses | Treatment |
+| ------- | ---------------- | --------- |
+| 0 to 255 | `0x0000000000000000` to `0x00007FFFFFFFFFFF` | The address space proper. Cloned. |
+| 256 to 511 | `0xFFFF800000000000` to `0xFFFFFFFFFFFFFFFF` | The kernel. Shared. |
+
+`AddressSpaceCreate` copies the higher-half entries from the kernel hierarchy, so
+every address space refers to the *same* kernel page tables rather than to copies
+of them. Three consequences follow, and all three are wanted:
+
+1. The kernel is mapped identically wherever execution is. An interrupt may be
+   delivered whichever space is active, and its handler finds its code, its stack
+   and its data where it left them.
+2. A change of CR3 does not disturb the executing kernel. This is what permits
+   `AddressSpaceSwitch` to be called from ordinary C code.
+3. A mapping the kernel establishes afterwards is visible in every existing
+   address space, the structures beneath those entries being the very ones the
+   kernel modifies.
+
+The third holds only for a mapping that requires no *new* page-map level 4 entry.
+The kernel establishes all of its higher-half entries during `PagingInitialise`,
+before any address space can exist, so the case does not presently arise. Should
+a later phase extend the kernel's half into a fresh root entry, every existing
+address space would have to be amended.
+
+### 14.2 What is copied and what is shared
+
+| Object | Treatment | Why |
+| ------ | --------- | --- |
+| Paging structures of the lower half | Duplicated | The two spaces must be able to diverge, and they diverge by acquiring different entries. A shared table would propagate every such change from one space to the other. |
+| Frames mapped by those structures | Shared, with a reference recorded | This is the economy the whole mechanism exists for. A clone costs one frame per paging structure, not one per page of the address space. |
+| Higher half | Shared, no reference taken | The kernel is not owned by any address space and outlives all of them. |
+
+### 14.3 Protecting the parent
+
+For each present leaf entry of the lower half:
+
+- **The page is writable.** `PAGE_ENTRY_WRITABLE` is cleared and
+  `PAGE_ENTRY_COPY_ON_WRITE` set, in **both** hierarchies, and the reference
+  count of the frame is incremented.
+- **The page is already read-only.** It is shared unchanged. Neither holder can
+  write to it, so neither can observe a change made by the other, and there is
+  nothing for the protection to prevent. Marking it would be worse than
+  redundant: the mark would provoke a fault that could resolve to nothing, there
+  being no write permission to restore.
+
+Marking both hierarchies is essential rather than symmetric. Were only the child
+protected, a write by the parent would proceed into the shared frame and the
+child would observe it — the exact failure the mechanism exists to prevent, and
+one that would produce no diagnostic of any kind.
+
+### 14.4 Invalidation
+
+The clone modifies the source hierarchy: pages that were writable are so no
+longer. Where the source is the active hierarchy, the processor may hold cached
+translations that still grant write permission, and a write through such a
+translation would proceed without raising the fault upon which everything
+depends.
+
+CR3 is therefore rewritten at the end of a successful clone, rather than each
+protected page being invalidated in turn. Intel SDM, Volume 3A, Section 4.10.4.1,
+provides that writing CR3 discards every translation-lookaside-buffer entry for
+the current process context save those marked global, and no mapping the kernel
+establishes is global. The choice is one of bounded cost: a clone may protect an
+arbitrary number of pages, so a sequence of `INVLPG` instructions is unbounded
+where the single write is not.
+
+The destination hierarchy needs no invalidation at all. It has never been loaded
+into CR3, so the processor holds no translation derived from it.
+
+### 14.5 Destruction
+
+`AddressSpaceDestroy` walks the lower half, releasing one reference to each
+mapped frame and releasing each paging structure outright. A frame still shared
+with another address space survives, `FrameFree` returning it to the allocator
+only upon the last reference. The higher half is not walked; it is the kernel's
+and is merely referred to.
+
+Destroying the active address space is refused with a panic. The hierarchy the
+processor is translating through cannot be dismantled beneath it.
+
+### 14.6 Verification
+
+The self-test builds a parent address space containing two lower-half pages, one
+writable and one read-only, clones it, and asserts the properties whose violation
+would be silent:
+
+| Assertion | The failure it detects |
+| --------- | ---------------------- |
+| The clone has a distinct root table | A clone that shared the hierarchy entirely. |
+| The parent's writable page is read-only and marked | The failure of Section 14.3 — two spaces sharing memory each believes to be private. |
+| The read-only page is *not* marked | A mark that would provoke an unresolvable fault. |
+| Both frames carry two references | A clone that shared frames without recording the fact, so that the first release would free a frame still in use. |
+| A write by the parent duplicates the frame | Sharing that was never protected. |
+| The child still maps the original frame, holding the original contents | The parent's write leaking into the child. |
+| The original frame falls to one reference | A resolution that released the frame outright rather than dropping one reference. |
+| The child's own write duplicates nothing | The sole-owner path of Section 13.2, upon a genuinely shared page rather than a simulated one. |
+| Destroying the child leaves the read-only frame allocated | A destruction that released a shared frame. |
+| The count of free frames returns to its starting value | A leak of frames or of paging structures, in proportion to the number of clones. |
+
+The test is performed with the parent and then the child actually loaded into
+CR3, so the faults it provokes are resolved by the real page-fault handler within
+the real hierarchy, not by a probe.
+
+### 14.7 Observed state
+
+| Quantity | Value |
+| -------- | ----- |
+| Clones performed | 1 |
+| Pages shared | 2 |
+| Of which protected | 1 |
+
+### 14.8 Limitations
+
+1. A large page in the lower half is rejected rather than provided for. Sharing
+   one at 4 KiB granularity would require the mapping to be split first, and
+   nothing yet establishes such a mapping.
+2. There is no accounting of an address space's extent, and therefore no means of
+   answering what a space maps without walking it. The process control block of
+   sub-task 6.4 is where that record belongs.
+3. Cloning is not safe against a concurrent fault upon the same address space.
+   From sub-task 6.9 it must be performed under the lock governing the space, and
+   the invalidation of Section 14.4 accompanied by a shootdown to the other
+   processors upon which the source may be active.
