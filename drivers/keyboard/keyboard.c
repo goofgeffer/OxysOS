@@ -149,6 +149,16 @@ static KeyEvent KeyboardBuffer[KEYBOARD_BUFFER_CAPACITY];
 static volatile uint32_t KeyboardWriteIndex;
 static volatile uint32_t KeyboardReadIndex;
 
+/*
+ * The capacity must be a power of two, an index being reduced to a subscript by
+ * a bitwise mask. The requirement is load-bearing rather than an optimisation: a
+ * capacity of, say, one hundred would leave the remainder operator correct but
+ * would make the mask address only the first sixty-four entries, silently
+ * corrupting the buffer. The assertion converts that into a build failure.
+ */
+_Static_assert((KEYBOARD_BUFFER_CAPACITY & (KEYBOARD_BUFFER_CAPACITY - 1U)) == 0U,
+               "The keyboard buffer capacity must be a power of two.");
+
 /* Accounting. */
 static uint64_t KeyboardScancodesDecoded;
 static uint64_t KeyboardEventsProduced;

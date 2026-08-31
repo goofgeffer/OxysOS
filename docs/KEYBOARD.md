@@ -162,8 +162,17 @@ mean either an empty buffer or a full one, and requires a further datum to say
 which. Here the difference of the two indices *is* the occupancy, and unsigned
 arithmetic keeps that true across the wrap of the indices themselves.
 
-The capacity is a power of two so that the masking is a bitwise operation rather
-than a division, the operation being performed inside an interrupt handler.
+The capacity is a power of two so that the reduction of an index to a subscript
+is a bitwise mask rather than a division, the reduction being performed inside an
+interrupt handler.
+
+That property is load-bearing rather than an optimisation, and it is enforced at
+compilation by a `_Static_assert` beside the buffer. Were the capacity changed to
+a value that is not a power of two — one hundred, say — a remainder would remain
+correct while the mask would address only the first sixty-four entries, and the
+buffer would be corrupted silently. The assertion converts that into a build
+failure, and was confirmed to do so by temporarily setting the capacity to one
+hundred and observing the compilation fail.
 
 ### 5.2 Why an overrun discards the newest event
 
