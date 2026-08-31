@@ -21,6 +21,7 @@ The design documentation resides in [`docs/`](docs/).
 | [`MEMORY-LAYOUT.md`](docs/MEMORY-LAYOUT.md) | The physical and virtual address space layout, and the boot-time paging hierarchy. |
 | [`INTERRUPTS.md`](docs/INTERRUPTS.md) | The interrupt descriptor table, the stubs and the dispatcher, the exception handlers, and the 8259A interrupt controllers. |
 | [`TIME.md`](docs/TIME.md) | The kernel's time sources: the programmable interval timer, the system tick, and what remains to be added. |
+| [`KEYBOARD.md`](docs/KEYBOARD.md) | The 8042 controller, scan code set 1 and its translation, the modifier discipline and the input buffer. |
 | [`TOOLCHAIN.md`](docs/TOOLCHAIN.md) | The cross-compilation toolchain, its construction, and the build system. |
 | [`CODING-STANDARDS.md`](docs/CODING-STANDARDS.md) | The mandatory conventions of style, naming, documentation and compiler diagnostics. |
 | [`TESTING.md`](docs/TESTING.md) | The test procedure under QEMU, VirtualBox, OVMF and physical hardware. |

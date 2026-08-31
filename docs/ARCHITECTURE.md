@@ -49,7 +49,7 @@ than as later additions, in accordance with `PROJECT_GUIDELINES.md`, Section 5:
 
 ## 3. Present composition
 
-As of the completion of Phase 2 and of sub-tasks 3.1 to 3.6, the system comprises
+As of the completion of Phases 2 and 3, the system comprises
 the following translation units.
 
 | Unit | Role |
@@ -71,6 +71,7 @@ the following translation units.
 | `drivers/serial/serial.c` | The polled COM1 serial output driver used for diagnostics. |
 | `drivers/pic/pic.c` | The pair of cascaded 8259A interrupt controllers: their remapping, the masking of request lines, the routing of a request to the driver that claims it, and the end-of-interrupt protocol. |
 | `drivers/pit/pit.c` | Counter 0 of the 8253 interval timer: the system tick, the elapsed-time conversion and the bounded wait. |
+| `drivers/keyboard/keyboard.c` | The 8042 controller and the PS/2 keyboard: initialisation, the decoding of scan code set 1, the modifier state and the circular event buffer. |
 | `linker.ld` | The link script establishing the higher-half image layout. |
 
 ## 4. Subsystem dependency ordering
@@ -117,13 +118,13 @@ Phase 3 is installed. The dependency is resolved by implementing the memory
 management structures of sub-tasks 2.1 to 2.6 first, then Phase 3, and finally
 returning to sub-tasks 2.7 and 2.8.
 
-**Status.** Phase 2 is complete, as are sub-tasks 3.1 to 3.6. The dependency
+**Status.** Phases 2 and 3 are complete. The dependency
 described above has been discharged: sub-task 3.4 supplied the fault handler,
 sub-task 2.7 the copy-on-write resolution beneath it, and sub-task 2.8 the
 address-space cloning that creates the shared pages the resolution acts upon.
 Sub-task 3.5 has since remapped the interrupt controllers, so that a device may
-be heard, and sub-task 3.6 has supplied the first device that speaks. Work
-resumes at sub-task 3.7.
+be heard; sub-task 3.6 supplied the first device that speaks; and sub-task 3.7
+the first that a person operates. Work resumes at Phase 4.
 
 ## 5. Privilege and address-space model
 

@@ -1,0 +1,1 @@
+x86_64-elf-ld: warning: build/oxys.elf has a LOAD segment with RWX permissions

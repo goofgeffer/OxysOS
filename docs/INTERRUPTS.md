@@ -509,11 +509,12 @@ the mask is honoured.
    structures at all, so the commoner faults cost nothing extra.
 2. No interrupt stack table entry is used. A fault taken on a bad stack cannot
    presently be reported. This requires the task state segment of sub-task 6.1.
-3. One device claims a request line: the interval timer of sub-task 3.6 upon IR0,
-   described in `docs/TIME.md`. Every other line remains masked until a driver
-   for its device exists. The keyboard of sub-task 3.7 claims IR1.
+3. Two devices claim a request line: the interval timer of sub-task 3.6 upon IR0,
+   described in `docs/TIME.md`, and the PS/2 keyboard of sub-task 3.7 upon IR1,
+   described in `docs/KEYBOARD.md`. Every other line remains masked until a driver
+   for its device exists.
 4. The interrupt flag is left clear except where a self-test sets it deliberately,
-   each such test clearing it again before it returns. `KernelHalt` clears it once
-   more before halting. Running with interrupts enabled as a matter of course
-   awaits something for the kernel to do between them, which is the scheduler of
-   sub-task 6.10.
+   each such test clearing it again before it returns. From sub-task 3.7 the
+   keyboard echo loop of `docs/KEYBOARD.md`, Section 7.2, sets it permanently at
+   the completion of initialisation, and the kernel thereafter runs with
+   interrupts enabled and halts between them.

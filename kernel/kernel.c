@@ -1,11 +1,12 @@
 /*
  * File: kernel/kernel.c
  * Purpose: Contains the C entry point of the Oxys-OS kernel. It validates the
- *          state established by the boot loader, initialises the early
- *          diagnostic output devices, presents the system identification banner,
- *          and halts the processor pending the subsystems of subsequent phases.
- * Key functions: KernelMain, KernelPanic, KernelHalt, KernelWriteString,
- *          KernelWriteHexadecimal, KernelWriteDecimal.
+ *          state established by the boot loader, initialises in dependency order
+ *          every subsystem of Phases 1 to 3, asserts the properties of each by a
+ *          boot-time self-test, and then either enters the keyboard echo loop,
+ *          where a keyboard is present, or halts the processor where none is.
+ * Key functions: KernelMain, KernelPanic, KernelHalt, KernelKeyboardEcho,
+ *          KernelWriteString, KernelWriteHexadecimal, KernelWriteDecimal.
  * References:
  *   - Multiboot2 Specification 2.0, Section 3.3 ("I386 machine state"): EAX
  *     contains 0x36D76289 and EBX the physical address of the Multiboot2
@@ -20,6 +21,12 @@
  *   - Intel 64 and IA-32 Architectures Software Developer's Manual, Volume 2B,
  *     "HLT": the instruction halts the processor until an interrupt, a debug
  *     exception, a non-maskable interrupt, or a reset occurs.
+ *   - Intel SDM, Volume 2B, "STI": the instruction's effect upon the interrupt
+ *     flag is delayed by one instruction, so that an interrupt cannot be
+ *     delivered until after the instruction following it. This is what makes the
+ *     sequence STI followed immediately by HLT free of the window in which a
+ *     keyboard echo loop would otherwise service an interrupt and then halt with
+ *     nothing left to wake it.
  *   - Intel SDM, Volume 3A, Section 6.2 and Table 6-1: vectors 0 to 31 are
  *     reserved to the architecture-defined exceptions, of which vector 8 is the
  *     double fault. Relied upon by the interrupt controller self-test, which
@@ -50,6 +57,7 @@
 #include <oxys/cpu.h>
 #include <oxys/pic.h>
 #include <oxys/pit.h>
+#include <oxys/keyboard.h>
 #include <oxys/vga.h>
 #include <oxys/serial.h>
 
@@ -1058,7 +1066,8 @@ static void KernelVerifyExceptions(void)
     KernelPagesFree((void *)(uintptr_t)KernelFaultProbePage, 1U);
 
     KernelWriteString(succeeded
-                          ? "Exception self-test passed: a read-only page faulted and was resolved.\n"
+                          ? "Exception self-test passed: a read-only page faulted "
+                            "and was resolved.\n"
                           : "Exception self-test FAILED.\n");
 }
 
@@ -1857,6 +1866,363 @@ static void KernelVerifyPit(void)
                           : "Interval timer self-test FAILED.\n");
 }
 
+/*
+ * Drives the keyboard decoder with one scancode and yields the character of the
+ * event it produced, or zero where it produced none.
+ *
+ * The decoder is driven directly rather than by way of the controller, which is
+ * what permits the whole of scan code set 1 to be exercised upon a machine at
+ * which nobody is typing. The path from the controller to the decoder is covered
+ * separately, by the assertions upon the request line.
+ */
+static char KernelKeyboardDecode(uint8_t scancode)
+{
+    KeyEvent event;
+
+    KeyboardProcessScancode(scancode);
+
+    if (!KeyboardReadEvent(&event))
+    {
+        return '\0';
+    }
+
+    return event.pressed ? event.character : '\0';
+}
+
+/*
+ * Exercises the PS/2 keyboard driver, being sub-task 3.7.
+ *
+ * A keyboard cannot be made to produce a keystroke by the kernel that drives it,
+ * so the test is divided. The controller and the request line are asserted as
+ * configured state; the decoding of scan code set 1, the modifier discipline and
+ * the circular buffer are asserted by driving the decoder with codes of the
+ * kernel's own choosing, which is exactly what the hardware would deliver.
+ */
+static void KernelVerifyKeyboard(void)
+{
+    KeyEvent event;
+    char character;
+    uint64_t discarded_before;
+    bool succeeded = true;
+
+    if (!KeyboardIsPresent())
+    {
+        /*
+         * Not a failure of the test. A machine may genuinely have no PS/2
+         * keyboard, and the driver is required to discover that without
+         * blocking; reaching this line at all is evidence that it did.
+         */
+        KernelWriteString("  No keyboard was found; the decoder is not exercised.\n");
+        KernelWriteString("Keyboard self-test skipped.\n");
+        return;
+    }
+
+    /* --- The controller was configured and the line claimed. --- */
+
+    if (PicRegisteredHandler(KEYBOARD_IRQ) == NULL)
+    {
+        KernelWriteString("  The keyboard did not claim its request line.\n");
+        succeeded = false;
+    }
+
+    if (PicLineIsMasked(KEYBOARD_IRQ))
+    {
+        KernelWriteString("  The keyboard's request line is masked.\n");
+        succeeded = false;
+    }
+
+    /* Begin from a known state, the firmware having used the keyboard before us. */
+    KeyboardFlush();
+
+    if (KeyboardHasEvent() || KeyboardReadEvent(&event))
+    {
+        KernelWriteString("  The buffer is not empty after a flush.\n");
+        succeeded = false;
+    }
+
+    if (KeyboardModifiers() != 0U)
+    {
+        KernelWriteString("  A modifier is in force after a flush.\n");
+        succeeded = false;
+    }
+
+    /* --- An unshifted key yields its lower-case character. --- */
+
+    if (KernelKeyboardDecode(0x1EU) != 'a')
+    {
+        KernelWriteString("  An unshifted key did not yield its character.\n");
+        succeeded = false;
+    }
+
+    /* --- A release is recorded, and is distinguished from a depression. --- */
+
+    KeyboardProcessScancode(0x9EU);
+
+    if (!KeyboardReadEvent(&event))
+    {
+        KernelWriteString("  A release produced no event.\n");
+        succeeded = false;
+    }
+    else if (event.pressed || event.scancode != 0x1EU)
+    {
+        KernelWriteString("  A release was decoded as a depression.\n");
+        succeeded = false;
+    }
+
+    /* --- A modifier produces no event of its own, and alters the next key. --- */
+
+    KeyboardProcessScancode(0x2AU);
+
+    if (KeyboardHasEvent())
+    {
+        KernelWriteString("  A modifier key produced an event of its own.\n");
+        succeeded = false;
+    }
+
+    if ((KeyboardModifiers() & KEYBOARD_MODIFIER_SHIFT) == 0U)
+    {
+        KernelWriteString("  A depressed shift key did not set its flag.\n");
+        succeeded = false;
+    }
+
+    if (KernelKeyboardDecode(0x1EU) != 'A')
+    {
+        KernelWriteString("  A shifted letter did not yield its capital.\n");
+        succeeded = false;
+    }
+
+    /* A shifted digit yields its punctuation, which capitals lock must not. */
+    if (KernelKeyboardDecode(0x02U) != '!')
+    {
+        KernelWriteString("  A shifted digit did not yield its punctuation.\n");
+        succeeded = false;
+    }
+
+    KeyboardProcessScancode(0xAAU);
+
+    if ((KeyboardModifiers() & KEYBOARD_MODIFIER_SHIFT) != 0U)
+    {
+        KernelWriteString("  A released shift key did not clear its flag.\n");
+        succeeded = false;
+    }
+
+    if (KernelKeyboardDecode(0x1EU) != 'a')
+    {
+        KernelWriteString("  The letter did not revert when shift was released.\n");
+        succeeded = false;
+    }
+
+    /* --- Capitals lock is a latch, and applies to letters alone. --- */
+
+    KeyboardProcessScancode(0x3AU);
+    KeyboardProcessScancode(0xBAU);
+
+    if ((KeyboardModifiers() & KEYBOARD_MODIFIER_CAPS_LOCK) == 0U)
+    {
+        KernelWriteString("  Capitals lock did not latch upon a full keystroke.\n");
+        succeeded = false;
+    }
+
+    if (KernelKeyboardDecode(0x1EU) != 'A')
+    {
+        KernelWriteString("  Capitals lock did not capitalise a letter.\n");
+        succeeded = false;
+    }
+
+    /*
+     * The lock must not act upon a digit. Were it implemented as a second shift
+     * this would yield an exclamation mark, which is the commonest way for this
+     * to be got wrong.
+     */
+    if (KernelKeyboardDecode(0x02U) != '1')
+    {
+        KernelWriteString("  Capitals lock altered a digit.\n");
+        succeeded = false;
+    }
+
+    /*
+     * Shift with the lock engaged yields the lower-case letter. The two combine
+     * as an exclusive disjunction, not as a disjunction.
+     */
+    KeyboardProcessScancode(0x2AU);
+
+    if (KernelKeyboardDecode(0x1EU) != 'a')
+    {
+        KernelWriteString("  Shift with capitals lock did not yield lower case.\n");
+        succeeded = false;
+    }
+
+    KeyboardProcessScancode(0xAAU);
+
+    /* Release the latch, so that the state left behind is the state found. */
+    KeyboardProcessScancode(0x3AU);
+    KeyboardProcessScancode(0xBAU);
+
+    if ((KeyboardModifiers() & KEYBOARD_MODIFIER_CAPS_LOCK) != 0U)
+    {
+        KernelWriteString("  Capitals lock did not unlatch.\n");
+        succeeded = false;
+    }
+
+    /* --- The extended prefix is consumed and marks the event it precedes. --- */
+
+    KeyboardProcessScancode(0xE0U);
+    KeyboardProcessScancode(0x1DU);
+
+    if (KeyboardHasEvent())
+    {
+        KernelWriteString("  The right control key produced an event.\n");
+        succeeded = false;
+    }
+
+    if ((KeyboardModifiers() & KEYBOARD_MODIFIER_CONTROL) == 0U)
+    {
+        KernelWriteString("  The right control key did not set the control flag.\n");
+        succeeded = false;
+    }
+
+    KeyboardProcessScancode(0xE0U);
+    KeyboardProcessScancode(0x9DU);
+
+    if ((KeyboardModifiers() & KEYBOARD_MODIFIER_CONTROL) != 0U)
+    {
+        KernelWriteString("  The right control key did not clear the control flag.\n");
+        succeeded = false;
+    }
+
+    /*
+     * An extended key that is not a modifier produces an event marked extended
+     * and bearing no character, its number being shared with an ordinary key.
+     */
+    KeyboardProcessScancode(0xE0U);
+    KeyboardProcessScancode(0x48U);
+
+    if (!KeyboardReadEvent(&event))
+    {
+        KernelWriteString("  An extended key produced no event.\n");
+        succeeded = false;
+    }
+    else if (!event.extended || event.character != '\0' || event.scancode != 0x48U)
+    {
+        KernelWriteString("  An extended key was decoded as its ordinary twin.\n");
+        succeeded = false;
+    }
+
+    /* --- Reading a character skips releases. --- */
+
+    KeyboardProcessScancode(0x30U); /* 'b' depressed. */
+    KeyboardProcessScancode(0xB0U); /* 'b' released. */
+    KeyboardProcessScancode(0x2EU); /* 'c' depressed. */
+
+    if (!KeyboardReadCharacter(&character) || character != 'b')
+    {
+        KernelWriteString("  A character was not read from the buffer.\n");
+        succeeded = false;
+    }
+
+    if (!KeyboardReadCharacter(&character) || character != 'c')
+    {
+        KernelWriteString("  A release was not skipped when reading a character.\n");
+        succeeded = false;
+    }
+
+    if (KeyboardReadCharacter(&character))
+    {
+        KernelWriteString("  A character was read from an exhausted buffer.\n");
+        succeeded = false;
+    }
+
+    /* --- The buffer is circular, and an overrun is counted rather than silent. --- */
+
+    discarded_before = KeyboardOverflowCount();
+
+    for (size_t index = 0U; index < (KEYBOARD_BUFFER_CAPACITY + 8U); ++index)
+    {
+        KeyboardProcessScancode(0x1EU);
+    }
+
+    if (KeyboardOverflowCount() != (discarded_before + 8U))
+    {
+        KernelWriteString("  An overrun was not counted exactly.\n");
+        succeeded = false;
+    }
+
+    /*
+     * The events that were accepted must still be readable and intact. An
+     * overrun that corrupted the buffer rather than refusing the surplus would
+     * be far worse than one that simply lost keystrokes.
+     */
+    {
+        size_t recovered = 0U;
+
+        while (KeyboardReadEvent(&event))
+        {
+            if (event.scancode != 0x1EU || !event.pressed)
+            {
+                KernelWriteString("  An event survived the overrun corrupted.\n");
+                succeeded = false;
+                break;
+            }
+
+            ++recovered;
+        }
+
+        if (recovered != KEYBOARD_BUFFER_CAPACITY)
+        {
+            KernelWriteString("  The buffer did not hold its stated capacity.\n");
+            succeeded = false;
+        }
+    }
+
+    KeyboardFlush();
+
+    KernelWriteString(succeeded
+                          ? "Keyboard self-test passed.\n"
+                          : "Keyboard self-test FAILED.\n");
+}
+
+/*
+ * Echoes typed characters upon both output devices, indefinitely.
+ *
+ * This is the one thing the self-tests cannot establish. They drive the decoder
+ * directly, which exercises the whole of scan code set 1 upon a machine at which
+ * nobody is typing, but leaves the path from the physical key to the decoder —
+ * the controller raising its request line, the interrupt controller routing it,
+ * the handler reading the data port — asserted only as configured state. Here
+ * that path is exercised in full, by the only means available: a person, or a
+ * virtual machine monitor, actually pressing a key.
+ *
+ * The loop halts the processor between keystrokes rather than spinning. The
+ * sequence STI followed immediately by HLT is the correct idiom and not merely a
+ * compact one: Intel SDM, Volume 2B, "STI", provides that the effect of the
+ * instruction is delayed by one instruction, so the HLT is executed before any
+ * interrupt can be taken. Were the order reversed, or a further instruction
+ * placed between them, a keystroke arriving in the interval would be serviced
+ * and the processor would then halt with nothing left to wake it.
+ */
+static _Noreturn void KernelKeyboardEcho(void)
+{
+    VgaSetColour(VGA_COLOUR_LIGHT_CYAN, VGA_COLOUR_BLACK);
+    KernelWriteString("\nKeyboard echo. Type upon the console; characters appear "
+                      "here and upon COM1.\n");
+    VgaSetColour(VGA_COLOUR_LIGHT_GREY, VGA_COLOUR_BLACK);
+
+    for (;;)
+    {
+        char character;
+
+        __asm__ __volatile__("sti; hlt");
+
+        while (KeyboardReadCharacter(&character))
+        {
+            /* A one-character string, the output routines taking no other form. */
+            const char text[2] = { character, '\0' };
+
+            KernelWriteString(text);
+        }
+    }
+}
+
 void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic)
 {
     /*
@@ -1957,16 +2323,36 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
     PitInitialise(PIT_DEFAULT_FREQUENCY);
     KernelVerifyPit();
     PitReport();
-    PicReport();
 
+    /*
+     * The keyboard is the last device of Phase 3. A machine without one is not
+     * in error, so the return value is recorded rather than acted upon; the
+     * report and the self-test both accommodate its absence.
+     */
+    (void)KeyboardInitialise();
+    KernelVerifyKeyboard();
+    KeyboardReport();
+
+    PicReport();
     InterruptReport();
     PagingReport();
     AddressSpaceReport();
 
     VgaSetColour(VGA_COLOUR_LIGHT_GREEN, VGA_COLOUR_BLACK);
-    KernelWriteString("Phase 3.6 initialisation complete.\n");
+    KernelWriteString("Phase 3 initialisation complete.\n");
 
     VgaSetColour(VGA_COLOUR_LIGHT_GREY, VGA_COLOUR_BLACK);
+
+    /*
+     * With a keyboard the kernel has something to wait for, and waiting for it
+     * demonstrates the interrupt path end to end. Without one there is nothing
+     * further to do.
+     */
+    if (KeyboardIsPresent())
+    {
+        KernelKeyboardEcho();
+    }
+
     KernelWriteString("No further subsystems are implemented. Halting.\n");
 
     KernelHalt();

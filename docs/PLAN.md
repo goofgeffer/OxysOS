@@ -33,8 +33,8 @@ but one referrer; and an address space may be created, cloned by the
 copy-on-write discipline, activated and destroyed. The substrate upon which
 `fork()` is built in sub-task 6.6 is therefore complete.
 
-**Phase 3 is complete as far as sub-task 3.6.** The interrupt descriptor table is
-loaded, a stub is installed for each of the 256 vectors and constructs a uniform
+**Phase 3 is complete.** The interrupt descriptor table is loaded, a stub is
+installed for each of the 256 vectors and constructs a uniform
 trap frame whatever the vector, a dispatch table routes each vector to a
 registered handler that may alter the frame to which control returns, and every
 architecture-defined exception has a handler that decodes its error code and
@@ -48,16 +48,29 @@ left unacknowledged. Counter 0 of the 8253 interval timer is programmed as a rat
 generator at 1000.152 Hz, claims the controller's IR0 line and maintains a
 monotonic tick counter, from which elapsed time and a bounded wait are derived;
 it is the first device to claim a line, and therefore the first demonstration
-that the whole path from a device to its driver is sound. The interrupt flag may
-now be set safely. A minimal kernel global descriptor table was established in
-the course of this work, for the reasons given in `docs/INTERRUPTS.md`, Section
-5; it is recorded against sub-task 6.1, which it partly discharges.
+that the whole path from a device to its driver is sound. The PS/2 keyboard is
+initialised through the 8042 controller, whose translation of scan code set 2
+into set 1 is established rather than assumed; scancodes are decoded into key
+events carrying the character, the modifiers and the distinction between a
+depression and a release, and delivered through a circular buffer of 128 events
+whose overrun is counted rather than silent. The interrupt flag may now be set
+safely. A minimal kernel global descriptor table was established in the course of
+this work, for the reasons given in `docs/INTERRUPTS.md`, Section 5; it is
+recorded against sub-task 6.1, which it partly discharges.
 
 Every property above is asserted at each boot by a self-test, no test harness
 being available before Phase 7. The procedure is `make verify`, described in
 `docs/TESTING.md`.
 
-**The next work is sub-task 3.7**, the PS/2 keyboard, which completes Phase 3.
+At the completion of Phase 3 the kernel enters an echo loop rather than halting,
+printing every character typed. This is the project's first end-to-end exercise
+of a device: a physical keystroke traverses the controller, the interrupt
+controller, the handler and the decoder, and emerges as a character.
+
+**The next work is Phase 4**, the basic device drivers, beginning with sub-task
+4.1, the promotion of the early serial routine to a formal interrupt-driven
+driver — for which the interrupt machinery completed in Phase 3 is the
+prerequisite.
 
 ## Legend
 
@@ -126,7 +139,7 @@ IBM PS/2 controller documentation.
 - [x] 3.4 Implement exception handlers with register and stack diagnostics emitted over the serial port.
 - [x] 3.5 Remap the 8259A PIC to vectors 32–47 and implement end-of-interrupt signalling.
 - [x] 3.6 Implement the Programmable Interval Timer as the initial timer source.
-- [ ] 3.7 Implement the PS/2 keyboard driver: controller initialisation, scancode set 1 translation, modifier state and a circular input buffer.
+- [x] 3.7 Implement the PS/2 keyboard driver: controller initialisation, scancode set 1 translation, modifier state and a circular input buffer.
 
 ---
 
@@ -316,6 +329,7 @@ The rows are ordered with the most recent first.
 
 | Date | Phase affected | Summary |
 | ---- | -------------- | ------- |
+| 2026-08-31 | Phase 3 | Sub-task 3.7 completed, and Phase 3 with it. The 8042 controller is initialised, its configuration byte written a second time after the controller self-test because that test resets the controller upon some implementations. The translation of scan code set 2 into set 1 is set explicitly rather than assumed: a PS/2 keyboard powers up in set 2, and a driver that assumed set 1 would work upon most machines and elsewhere deliver plausible characters that were simply the wrong ones. Scancodes are decoded into key events, retaining releases and the codes of keys that produce no character, since a later window system needs both. Capitals lock is a latch toggled upon depression alone, and combines with shift as an exclusive disjunction for letters while leaving every other key alone. The buffer's indices are free-running and masked, so that their difference is the occupancy directly; an overrun discards the newest event and counts it. Every wait upon the controller is bounded, so that a machine without one proceeds rather than hanging. The kernel now enters an echo loop in place of halting, which exercises the interrupt path end to end; keystrokes driven from the QEMU monitor were echoed correctly. `docs/KEYBOARD.md` added and records the design. |
 | 2026-08-31 | Phase 3 | Sub-task 3.6 completed. Counter 0 of the 8253 interval timer is programmed as a rate generator, mode 2 being preferred to mode 3 because the square wave mode decrements by two and so admits only even divisors, and nothing here has any interest in the shape of the waveform. A divisor of 1193 realises 1000.152 Hz against the 1000 Hz requested, and elapsed time is converted by the frequency realised rather than the one requested, an error of a known size that does not announce itself being worse than a coarse clock. The divisor is confirmed from within the machine by latching the counter and asserting that no reading exceeds it, there being no second clock to check the first against. The bounded wait exists so that a timer which never fires reports itself instead of hanging. `docs/TIME.md` added and records the design. |
 | 2026-08-31 | Phase 3 | Sub-task 3.5 completed. The cascaded 8259A pair is remapped to vectors 32 to 47, the vectors the firmware leaves them presenting having collided exactly with the architecture-defined exceptions, so that a timer tick was indistinguishable from a double fault. ICW1 clears the interrupt mask register, so every line is masked immediately after the sequence rather than before it. A routing layer owns the end-of-interrupt, signalling both controllers for a slave line, because the protocol belongs to the controller and the cost of a driver forgetting it is the permanent silencing of every lower-priority line. A spurious request upon IR7 or IR15 is recognised by the absence of its bit from the in-service register and left unacknowledged. The remapping is established by setting the interrupt flag with every line masked: had it failed, the running interval timer would have delivered a double fault at once. `docs/INTERRUPTS.md`, Section 9, records the design. |
 | 2026-08-31 | Phase 2 | Sub-task 2.8 completed, and Phase 2 with it. An address space may be created, cloned, activated and destroyed. A clone duplicates the paging structures of the lower half and shares the frames they map, withdrawing write permission and setting the copy-on-write flag in both hierarchies and recording a reference for the new holder; the higher half is shared with the kernel by copying the root entries, so the kernel is mapped identically in every address space. Paging now distinguishes the active hierarchy from the kernel's, a walk performed in software being obliged to follow the one the processor follows. `docs/MEMORY-LAYOUT.md`, Section 14, records the design. |

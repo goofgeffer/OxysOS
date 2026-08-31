@@ -60,6 +60,11 @@ Sections relied upon:
   support in `EDX` bit 29.
 - **Volume 2B, "HLT"**: the instruction halts the processor until an interrupt,
   a debug exception, a non-maskable interrupt or a reset occurs.
+- **Volume 2B, "STI"**: the instruction's effect upon the interrupt flag is
+  delayed by one instruction, so that an interrupt cannot be delivered until
+  after the instruction following it. This is why the idiom `STI; HLT` has no
+  window in which an interrupt is serviced before the processor halts, and why
+  nothing may be placed between the two.
 - **Volume 3A, Section 3.3.7.1**, canonical addressing: bits 63 to 47 of a linear
   address must be identical.
 - **Volume 3A, Section 3.4.5 and Figure 3-8**, the segment descriptor format,
@@ -268,6 +273,39 @@ Used by: `drivers/pic/pic.c`, `drivers/pit/pit.c`, `drivers/keyboard/keyboard.c`
 `drivers/serial/serial.c`, `kernel/include/oxys/pic.h`,
 `kernel/include/oxys/pit.h`, `kernel/include/oxys/keyboard.h`, `kernel/kernel.c`.
 
+### The 8042 controller and PS/2 device command sets
+The command sets of the IBM Personal Computer AT keyboard controller and of the
+devices attached to its two ports. Recorded in the IBM Personal Computer AT
+technical reference and in the PS/2 hardware interface technical reference, and
+reproduced consistently by every subsequent implementation.
+
+Controller commands, written to port `0x64`:
+
+- **0x20**, read the controller configuration byte; **0x60**, write it. The byte
+  carries the first port's interrupt enable in bit 0, the second port's in bit 1,
+  the first port's clock disable in bit 4, and the translation of scan code set 2
+  into set 1 in bit 6.
+- **0xAD** and **0xAE**, disable and enable the first device port; **0xA7**,
+  disable the second.
+- **0xAA**, the controller self-test, answered by `0x55` upon success. It resets
+  the controller upon some implementations, discarding the configuration byte,
+  which must therefore be written again afterwards.
+- **0xAB**, test the first device port, answered by `0x00` upon success.
+
+Device commands, written to port `0x60` and forwarded by the controller:
+
+- **0xFF**, reset, answered by `0xFA` and then by `0xAA` where the device's own
+  self-test passed.
+- **0xF4**, enable scanning.
+- The answers **0xFA**, acknowledged, and **0xFE**, send the command again.
+
+Note that the two command sets use overlapping numbers for unrelated purposes:
+`0xAA` is the controller's self-test command and also a device's report that its
+own self-test passed. The port to which a byte is written is what distinguishes
+them.
+
+Used by: `drivers/keyboard/keyboard.c`, `kernel/include/oxys/keyboard.h`.
+
 ### IBM Video Graphics Array technical reference
 The colour text mode 3, presenting 80 columns by 25 rows, whose frame buffer
 begins at physical address `0x000B8000` and whose cells comprise a code-point
@@ -290,7 +328,6 @@ Used by: `boot/grub/grub.cfg`, `Makefile`.
 
 | Specification | Phase | Subject |
 | ------------- | ----- | ------- |
-| IBM PS/2 technical reference | 3 | The keyboard controller and scancode set 1. |
 | PCI Local Bus Specification 3.0 | 4 | Configuration space and device enumeration. |
 | ATA/ATAPI Command Set (ACS-3) | 4 | `IDENTIFY DEVICE`; 28-bit and 48-bit logical block addressing. |
 | The Second Extended File System (Poirier) | 5 | Superblock, group descriptors, inodes and directories. |

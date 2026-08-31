@@ -19,19 +19,19 @@ interface and never upon a driver's location.
 | `serial/serial.c` | The 16550-compatible UART at COM1, polled. | `<oxys/serial.h>` | 1 |
 | `pic/pic.c` | The pair of cascaded 8259A interrupt controllers. | `<oxys/pic.h>` | 3 |
 | `pit/pit.c` | Counter 0 of the 8253 interval timer, the system tick. | `<oxys/pit.h>` | 3 |
+| `keyboard/keyboard.c` | The 8042 controller and the PS/2 keyboard upon its first port. | `<oxys/keyboard.h>` | 3 |
 
 ## Planned contents
 
 | Path | Device | Phase, sub-task |
 | ---- | ------ | --------------- |
-| `keyboard/` | The PS/2 keyboard, scancode set 1. | 3.7 |
 | `pci/` | Configuration-space enumeration. | 4.3 |
 | `ata/` | The ATA PIO disk driver. | 4.4 |
 | `block/` | The generic block-device layer and the buffer cache. | 4.5, 4.6 |
 | `mouse/` | The PS/2 mouse. | 9.4 |
 | `net/` | The Ethernet controller. | 11.1 |
 
-## The two drivers presently implemented
+## The drivers presently implemented
 
 ### `vga/` — the text-mode display
 
@@ -87,6 +87,25 @@ any interest in the shape of the output waveform. The reasoning, the divisor
 arithmetic and the accuracy actually obtained are recorded in
 [`../docs/TIME.md`](../docs/TIME.md).
 
+### `keyboard/` — the PS/2 keyboard
+
+Initialises the 8042 controller and the keyboard upon its first port, decodes
+scan code set 1 into key events carrying the character and the modifier state,
+and delivers them through a circular buffer of 128 events.
+
+Two points are easily got wrong and are recorded in
+[`../docs/KEYBOARD.md`](../docs/KEYBOARD.md). The keyboard and the controller are
+different devices reached through the same pair of ports, and they use
+overlapping command numbers for unrelated purposes. And the keyboard does not
+send set 1: it powers up in set 2, and set 1 is what the controller presents on
+its behalf when the translation bit of the configuration byte is set, which this
+driver establishes rather than assumes.
+
+Every wait upon the controller is bounded, in accordance with convention 4 below.
+A machine with no PS/2 controller decodes its ports as a constant, and an
+unbounded wait upon a bit of that constant would hang the kernel during
+initialisation.
+
 ## Specifications implemented
 
 | Specification | Applied to |
@@ -95,6 +114,7 @@ arithmetic and the accuracy actually obtained are recorded in
 | National Semiconductor PC16550D datasheet | The register map at offsets 0 to 7; the divisor latch access bit, being bit 7 of the line control register; the transmitter holding register empty flag, being bit 5 of the line status register; the loopback bit, being bit 4 of the modem control register. |
 | IBM Personal Computer AT technical reference | The COM1 base address `0x03F8`, and the divisor of one yielding 115200 baud. The interrupt controllers at ports `0x20`/`0x21` and `0xA0`/`0xA1`, the slave's output attached to the master's IR2 input, IR0 being the interval timer and IR1 the keyboard. |
 | Intel 8259A datasheet, sections "INITIALIZATION COMMAND WORDS (ICWS)" and "OPERATION COMMAND WORDS (OCWS)" | The four-word initialisation sequence and its side effects; OCW1 the mask register; OCW2 the non-specific end-of-interrupt; OCW3 the selection of the in-service and request registers for reading. |
+| 8042 controller and PS/2 device command sets | The controller commands 0x20 and 0x60 reading and writing the configuration byte, 0xAD/0xAE and 0xA7 enabling and disabling the device ports, 0xAA the controller self-test answered by 0x55, and 0xAB the first port's test answered by 0x00; the configuration byte's interrupt-enable, clock-disable and translation bits; the device commands 0xFF reset and 0xF4 enable scanning, and the answers 0xFA acknowledge and 0xFE resend. |
 | Intel 8254 datasheet, sections "Programming the 8254", "Mode 2: Rate Generator" and "Counter Latch Command" | The control word fields; the two-byte transfer of the count, least significant first; the periodic reload of the rate generator and the illegality of a count of one within it; the latching of a running count for reading. |
 | Intel SDM, Volume 1, Section 18.3 | The programmed input/output address space through which both devices are reached. |
 

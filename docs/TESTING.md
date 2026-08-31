@@ -18,6 +18,12 @@ self-test that fails reports the fact but does not prevent the kernel from
 reaching completion, so the output must be read and not merely the exit status
 consulted: the string `FAILED` appearing anywhere within it denotes a regression.
 
+**From sub-task 3.7 the target always runs for the full 25 seconds.** The kernel
+no longer halts at the end of initialisation; where a keyboard is present it
+enters the echo loop of `docs/KEYBOARD.md`, Section 7.2, and the run is ended by
+the `timeout` that bounds it. The assertion is unaffected, the expected string
+having been emitted before the loop is entered.
+
 ```sh
 export PATH="$HOME/opt/cross/bin:$PATH"
 make verify
@@ -144,5 +150,7 @@ correct point at which to begin an examination of the boot sequence.
 | 2026-08-30 | QEMU screendump — VGA text-mode rendering | Passed; the banner reads `Oxys-OS`. |
 | 2026-08-31 | `make verify` — sub-task 3.5, the interrupt controller self-test | Passed; the controllers are remapped, the mask is honoured, a spurious request is recognised, and the interrupt flag may be set without a double fault. |
 | 2026-08-31 | `make verify` — sub-task 3.6, the interval timer self-test | Passed; divisor 1193 realising 1000.152 Hz, ticks counted only with interrupts enabled and only while the line is unmasked. |
+| 2026-08-31 | `make verify` — sub-task 3.7, the keyboard self-test | Passed; the controller and port self-tests pass, and the decoder, the modifier discipline and the buffer overrun behave as `docs/KEYBOARD.md`, Section 7.1, requires. |
+| 2026-08-31 | QEMU `sendkey` — the keyboard interrupt path, end to end | Passed; the keystrokes `h e l l o spc o x y s` were echoed upon the serial port as `hello oxys`. |
 | — | VirtualBox boot | Passed; performed by the project owner upon the Windows host, `VBoxManage` being unavailable in this environment. |
 | — | Physical hardware boot | Not performed. |

@@ -81,7 +81,7 @@ documented. The following are in use.
 
 | Extension | Where | Rationale |
 | --------- | ----- | --------- |
-| GNU C extended inline assembly (`__asm__ __volatile__`) | `kernel/include/oxys/io.h`, `kernel/kernel.c`, `kernel/include/oxys/cpu.h` | ISO C provides no means of expressing the `IN`, `OUT`, `CLI`, `STI`, `HLT`, `INT n` or control-register instructions. No conforming alternative exists. `STI` and `INT n` are used only by the boot-time self-tests, which must raise an interrupt deliberately in order to observe how one is handled. |
+| GNU C extended inline assembly (`__asm__ __volatile__`) | `kernel/include/oxys/io.h`, `kernel/kernel.c`, `kernel/include/oxys/cpu.h` | ISO C provides no means of expressing the `IN`, `OUT`, `CLI`, `STI`, `HLT`, `INT n` or control-register instructions. No conforming alternative exists. `INT n` is used only by the boot-time self-tests, which must raise an interrupt deliberately in order to observe how one is handled. `STI` is used by those tests and by the keyboard echo loop of `docs/KEYBOARD.md`, Section 7.2, where it must immediately precede `HLT` for the reason given there. |
 | `_Noreturn` | `kernel/kernel.c` | This is an ISO C11 keyword, not an extension. It is listed here for completeness because it affects code generation. |
 
 ## 8. Prohibitions
