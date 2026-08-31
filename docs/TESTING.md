@@ -86,10 +86,12 @@ serial port to `build/vbox-serial.log`, attaches the ISO to an IDE controller,
 and starts the machine.
 
 **Present status**: `VBoxManage` is not installed in this WSL2 environment, so
-the target cannot be executed here. Sub-task 1.11 of `PLAN.md` remains open in
-consequence. VirtualBox is a Windows host application; execution requires either
-that the Windows `VBoxManage.exe` be reachable from WSL2 or that the test be
-performed from a Windows command prompt against the ISO in the WSL2 filesystem.
+the target cannot be executed here. VirtualBox is a Windows host application;
+execution requires either that the Windows `VBoxManage.exe` be reachable from
+WSL2 or that the test be performed from a Windows command prompt against the ISO
+in the WSL2 filesystem. The project owner performs this test upon the Windows
+host directly, and sub-task 1.11 of `PLAN.md` is recorded as passed upon that
+authority.
 
 ## 6. Testing upon physical hardware
 
@@ -132,5 +134,5 @@ correct point at which to begin an examination of the boot sequence.
 | 2026-08-30 | `make iso` — ISO generation | Passed. |
 | 2026-08-30 | `make verify` — QEMU boot and serial assertion | Passed. |
 | 2026-08-30 | QEMU screendump — VGA text-mode rendering | Passed; the banner reads `Oxys-OS`. |
-| — | VirtualBox boot | Not performed; `VBoxManage` is unavailable. |
+| — | VirtualBox boot | Passed; performed by the project owner upon the Windows host, `VBoxManage` being unavailable in this environment. |
 | — | Physical hardware boot | Not performed. |

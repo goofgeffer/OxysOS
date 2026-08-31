@@ -10,55 +10,39 @@ is made, in accordance with `PROJECT_GUIDELINES.md`, Section 7.
 
 ## Current status
 
-**Phase 1 is functionally complete.** The kernel builds without diagnostics under
-`-Wall -Wextra -Werror`, is confirmed Multiboot2 compliant by `grub-file`, and
-boots under QEMU, where it presents its banner upon both the VGA text console and
-the COM1 serial port. Two sub-tasks remain open for environmental reasons alone
-and are recorded as such: 1.11, because VirtualBox is not installed in the
-present WSL2 environment, and 1.12, physical hardware testing.
+This section states the present condition of the work. The chronological account
+of how that condition was reached is the Revision History at the foot of this
+document.
 
-**Phase 2 is in progress.** Sub-task 2.1 is complete: the Multiboot2 information
-structure is parsed into a boot-protocol-neutral `BootInformation` description,
-and the memory map is reported at boot. Sub-task 2.2 is complete: a bitmap frame
-allocator governs every frame below the highest usable address, reserving the low
-mebibyte, the kernel image, the boot information structure and its own bitmap,
-and passing a boot-time self-test. Sub-task 2.3 is complete: a permanent paging
-hierarchy is built from allocated frames and activated, the kernel's text and
-read-only data are mapped without write permission, and the low identity map
-established by `boot/boot.asm` is gone.
+**Phase 1 is complete but for sub-task 1.12.** The kernel builds without
+diagnostics under `-Wall -Wextra -Werror`, is confirmed Multiboot2 compliant by
+`grub-file`, and boots under both QEMU and VirtualBox, where it presents its
+banner upon the VGA text console and the COM1 serial port alike. Sub-task 1.12,
+boot from a physical USB medium, remains open.
 
-Sub-task 2.4 is complete: the whole of physical memory is mapped at
-`0xFFFF800000000000`, and the restriction confining kernel-addressable frames to
-the first gibibyte is lifted.
+**Phase 2 is complete but for sub-task 2.8.** The Multiboot2 information
+structure is parsed into a boot-protocol-neutral `BootInformation` description; a
+bitmap allocator governs every physical frame and reserves those that are not
+free; a permanent paging hierarchy maps the kernel text and read-only data
+without write permission and the whole of physical memory at
+`0xFFFF800000000000`; a kernel virtual arena and a slab heap above it serve
+allocations of arbitrary size; every frame carries a reference count and is
+returned to the allocator only upon the release of its last reference; and the
+page-fault handler resolves a copy-on-write fault by duplicating a shared frame,
+or by restoring write permission where the frame has but one referrer.
 
-Sub-task 2.5 is complete: the kernel arena issues virtually contiguous page
-ranges backed by frames, and a slab heap above it serves allocations of arbitrary
-size. Sub-task 2.6 is complete: every frame carries a reference count, and a
-frame returns to the allocator only when its last reference is released.
+**Phase 3 is complete as far as sub-task 3.4.** The interrupt descriptor table is
+loaded, a stub is installed for each of the 256 vectors and constructs a uniform
+trap frame whatever the vector, a dispatch table routes each vector to a
+registered handler that may alter the frame to which control returns, and every
+architecture-defined exception has a handler that decodes its error code and
+emits a full diagnosis. A minimal kernel global descriptor table was established
+in the course of this work, for the reasons given in `docs/INTERRUPTS.md`,
+Section 5; it is recorded against sub-task 6.1, which it partly discharges.
 
-**Sub-tasks 2.7 and 2.8 cannot proceed here.** Both concern the copy-on-write
-fault path, and a fault handler is unreachable until the interrupt descriptor
-table of Phase 3 is installed. The dependency is recorded in
-`docs/ARCHITECTURE.md`, Section 4.
-
-**Phase 3 is in progress.** Sub-tasks 3.1 and 3.2 are complete: the interrupt
-descriptor table is loaded, a stub is installed for each of the 256 vectors, and
-the trap frame they construct is uniform whatever the vector. A minimal kernel
-global descriptor table was established in the same work, for the reasons given
-in `docs/INTERRUPTS.md`, Section 5.
-
-Sub-task 3.3 is complete: a dispatch table routes each vector to a registered
-handler, and a handler may alter the frame to which control returns.
-
-Sub-task 3.4 is complete: every architecture-defined exception has a handler,
-each fatal exception emits a full diagnosis, and the page-fault handler decodes
-its error code and CR2. The negative paging test deferred from sub-task 2.3 has
-been performed: a page mapped read-only was written to, the fault was observed
-and resolved, and the instruction restarted.
-
-Sub-task 2.7 is complete: the page-fault handler attempts copy-on-write
-resolution before reporting, and a shared frame is duplicated upon a write while
-a frame with a single referrer is merely made writable again.
+Every property above is asserted at each boot by a self-test, no test harness
+being available before Phase 7. The procedure is `make verify`, described in
+`docs/TESTING.md`.
 
 **The next work is sub-task 2.8**, address-space cloning, which is what will
 create shared pages in earnest. Phase 3 resumes afterwards at sub-task 3.5.
@@ -92,7 +76,7 @@ Chapters 2, 4 and 9; System V ABI for AMD64.
 - [x] 1.8 Implement `KernelMain`, which clears the screen and prints the string "Oxys-OS".
 - [x] 1.9 Author the `Makefile` with the targets `all`, `clean`, `iso`, `run-qemu`, `run-vbox` and `run-uefi`.
 - [x] 1.10 Generate the ISO image and verify boot under QEMU.
-- [x] 1.11 Verify boot under VirtualBox. 
+- [x] 1.11 Verify boot under VirtualBox.
 - [ ] 1.12 Verify boot on physical hardware from a USB medium.
 
 ---
@@ -316,9 +300,11 @@ ACPI Specification 6.5.
 
 ## Revision History
 
+The rows are ordered with the most recent first.
+
 | Date | Phase affected | Summary |
 | ---- | -------------- | ------- |
-| 2026-08-30 | Phase 1 | Project initialised. Directory structure, documentation corpus, boot code, kernel entry, VGA and serial output, build system and ISO generation completed. Boot verified under QEMU. |
+| 2026-08-31 | — | This document reviewed and corrected. The status section had retained the claim that sub-tasks 2.7 and 2.8 could not proceed, which the completion of Phase 3 had discharged, and had accumulated as a chronological narrative duplicating this table; it is now a statement of present condition alone. Sub-task 1.11 is recorded as passed upon the project owner's own testing, and `docs/TESTING.md` amended to agree. The rows of this table were placed in order. |
 | 2026-08-30 | Phase 2 | Sub-task 2.7 completed. Copy-on-write fault resolution, using bit 9 of the page-table entry, which Intel SDM Table 4-19 records as ignored by the processor. A shared frame is duplicated through the direct map and one reference released; a frame with a single referrer is made writable without a copy. The page-fault handler attempts resolution before reporting. |
 | 2026-08-30 | Phase 3 | Sub-task 3.4 completed. Handlers for all thirty-two architecture-defined exceptions, with decoding of both error-code formats, a full register and control-register dump, and a bounded stack reproduction. `CR0.WP` is now set in `PagingInitialise`, without which the read-only kernel mappings were advisory only. The negative paging test deferred from sub-task 2.3 was performed and passed. |
 | 2026-08-30 | Phase 3 | Sub-task 3.3 completed. A dispatch table of 256 entries with a registration interface. An unregistered architecture-defined exception remains fatal until sub-task 3.4; an unregistered vector above that range is counted and ignored, which is the correct treatment of a spurious interrupt. A default breakpoint handler is registered, the breakpoint being a trap and therefore safe to resume from. |
@@ -332,3 +318,4 @@ ACPI Specification 6.5.
 | 2026-08-30 | Phase 2 | Sub-task 2.2 completed. A bitmap physical frame allocator, with a boot-time self-test. 131039 frames governed under QEMU with 512 MiB, of which 288 are reserved: 256 for the low mebibyte, 27 for the kernel image, 4 for the bitmap and 1 for the boot information structure. |
 | 2026-08-30 | Phase 2 | Sub-task 2.1 completed. The Multiboot2 information structure is parsed into the neutral `BootInformation` description: the memory map, the ELF section count, the boot loader name and the command line. The kernel and boot information extents are recorded for the frame allocator to reserve. |
 | 2026-08-30 | Phase 1 | `PROJECT_GUIDELINES.md` amended at the project owner's request by the addition of Section 10, requiring directory-level documentation. `boot/README.md`, `kernel/README.md` and `drivers/README.md` created accordingly, and `docs/README.md`, since relocated to the repository root, extended to index them. |
+| 2026-08-30 | Phase 1 | Project initialised. Directory structure, documentation corpus, boot code, kernel entry, VGA and serial output, build system and ISO generation completed. Boot verified under QEMU. |
