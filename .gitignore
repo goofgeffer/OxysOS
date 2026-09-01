@@ -108,3 +108,7 @@ userland/sbin/
 
 # Temporary files from the Claude tool (if used)
 .claude/
+
+# Build errors and crash dumps
+*.stackdump
+build_err.txt
