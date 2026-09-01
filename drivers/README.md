@@ -20,12 +20,12 @@ interface and never upon a driver's location.
 | `pic/pic.c` | The pair of cascaded 8259A interrupt controllers. | `<oxys/pic.h>` | 3 |
 | `pit/pit.c` | Counter 0 of the 8253 interval timer, the system tick. | `<oxys/pit.h>` | 3 |
 | `keyboard/keyboard.c` | The 8042 controller and the PS/2 keyboard upon its first port. | `<oxys/keyboard.h>` | 3 |
+| `pci/pci.c` | The PCI bus: configuration-space enumeration by mechanism one. | `<oxys/pci.h>` | 4.3 |
 
 ## Planned contents
 
 | Path | Device | Phase, sub-task |
 | ---- | ------ | --------------- |
-| `pci/` | Configuration-space enumeration. | 4.3 |
 | `ata/` | The ATA PIO disk driver. | 4.4 |
 | `block/` | The generic block-device layer and the buffer cache. | 4.5, 4.6 |
 | `mouse/` | The PS/2 mouse. | 9.4 |
@@ -68,6 +68,28 @@ person reading the screen can see that anything is wrong.
 
 The frame buffer pointer is declared `volatile`, because the memory is examined
 by the display hardware independently of the processor.
+
+### `pci/` — the bus enumeration
+
+Not a device driver but the means of finding one. Every device driven before it
+was found by knowing where it is, those addresses being inherited from the IBM
+Personal Computer; no device introduced afterwards may be assumed in the same
+way, and the configuration space is how a machine is asked what it contains.
+
+Access mechanism one is used: an address composed of a bus, device, function and
+register number is written to CONFIG_ADDRESS at `0x0CF8`, and the register then
+appears at CONFIG_DATA at `0x0CFC`. Every access at the hardware is a double word,
+so the narrower accessors extract their field from the word containing it. A
+function that is not there returns all ones rather than failing, which is how
+absence is detected and also why the self-test asserts that particular devices
+were found: an enumerator with its address arithmetic wrong reports an empty
+machine, which looks exactly like a machine with nothing in it.
+
+Buses are reached through the host bridge and through each PCI-to-PCI bridge
+found, rather than by sweeping all 256; the queue of buses awaiting a scan is
+explicit rather than the call stack, and a bitmap records those already visited so
+that malformed hardware cannot send the walk around a cycle. Nothing is claimed or
+configured. See [`../docs/PCI.md`](../docs/PCI.md).
 
 ### `serial/` — the COM1 diagnostic port
 

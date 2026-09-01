@@ -71,6 +71,7 @@ the following translation units.
 | `drivers/serial/serial.c` | The interrupt-driven COM1 serial driver used for diagnostics and input. |
 | `drivers/pic/pic.c` | The pair of cascaded 8259A interrupt controllers: their remapping, the masking of request lines, the routing of a request to the driver that claims it, and the end-of-interrupt protocol. |
 | `drivers/pit/pit.c` | Counter 0 of the 8253 interval timer: the system tick, the elapsed-time conversion and the bounded wait. |
+| `drivers/pci/pci.c` | The PCI configuration-space enumeration by access mechanism one: the walk of buses, devices and functions, and the searches by which a driver finds its hardware. |
 | `drivers/keyboard/keyboard.c` | The 8042 controller and the PS/2 keyboard: initialisation, the decoding of scan code set 1, the modifier state and the circular event buffer. |
 | `linker.ld` | The link script establishing the higher-half image layout. |
 

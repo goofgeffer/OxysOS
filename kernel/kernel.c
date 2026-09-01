@@ -6,7 +6,8 @@
  *          boot-time self-test, and then either enters the keyboard echo loop,
  *          where a keyboard is present, or halts the processor where none is.
  * Key functions: KernelMain, KernelPanic, KernelHalt, KernelVerifyVga,
- *          KernelVerifySerial, KernelEchoBackspace, KernelEchoLoop,
+ *          KernelVerifySerial, KernelVerifyPci, KernelEchoBackspace,
+ *          KernelEchoLoop,
  *          KernelWriteString, KernelWriteHexadecimal, KernelWriteDecimal.
  * References:
  *   - Multiboot2 Specification 2.0, Section 3.3 ("I386 machine state"): EAX
@@ -61,6 +62,7 @@
 #include <oxys/keyboard.h>
 #include <oxys/vga.h>
 #include <oxys/serial.h>
+#include <oxys/pci.h>
 
 /*
  * The name and version of the system, presented upon the console and emitted
@@ -2635,6 +2637,148 @@ static void KernelVerifyVga(void)
 }
 
 /*
+ * Asserts that the bus enumeration reached the hardware and understood what it
+ * read.
+ *
+ * The failure this guards against is that the enumeration is unfalsifiable by
+ * inspection. A configuration read of a function that is not there returns all
+ * ones rather than failing, and so does a read composed with the bus, device and
+ * function fields shifted into the wrong positions: an enumerator with its
+ * address arithmetic wrong finds nothing at all and reports an empty bus, which
+ * is indistinguishable from a machine that has no devices. The test therefore
+ * asserts that specific things were found and that the accessors agree with one
+ * another, rather than that the enumeration completed.
+ */
+static void KernelVerifyPci(void)
+{
+    static const PciAddress host = { 0U, 0U, 0U };
+    static const PciAddress absent = { 255U, 31U, 7U };
+    const PciFunction *entry;
+    uint32_t identifiers;
+    size_t found_at = 0U;
+    bool succeeded = true;
+
+    if (!PciMechanismOnePresent())
+    {
+        KernelWriteString("  Configuration mechanism one did not answer.\n");
+        KernelWriteString("Bus self-test FAILED.\n");
+        return;
+    }
+
+    /* An address nothing decodes must read as all ones, not as a device. */
+    if (PciReadConfiguration32(absent, PCI_OFFSET_VENDOR_ID) != UINT32_C(0xFFFFFFFF))
+    {
+        KernelWriteString("  An absent function did not read as all ones.\n");
+        succeeded = false;
+    }
+
+    /*
+     * The narrow accessors extract their field from the double word containing
+     * it. A shift taken from the wrong bits of the offset would yield a
+     * plausible number rather than an obviously wrong one, so the halves are
+     * compared against the whole.
+     */
+    identifiers = PciReadConfiguration32(host, PCI_OFFSET_VENDOR_ID);
+
+    if ((PciReadConfiguration16(host, PCI_OFFSET_VENDOR_ID) !=
+         (uint16_t)(identifiers & 0xFFFFU)) ||
+        (PciReadConfiguration16(host, PCI_OFFSET_DEVICE_ID) !=
+         (uint16_t)(identifiers >> 16)) ||
+        (PciReadConfiguration8(host, PCI_OFFSET_VENDOR_ID) != (uint8_t)(identifiers & 0xFFU)))
+    {
+        KernelWriteString("  The narrow accessors disagree with the wide one.\n");
+        succeeded = false;
+    }
+
+    /* Something must have been found, and the first bus must have been scanned. */
+    if ((PciFunctionCount() == 0U) || (PciBusesScanned() == 0U))
+    {
+        KernelWriteString("  The enumeration found nothing at all.\n");
+        succeeded = false;
+    }
+
+    if (PciFunctionsDiscarded() != 0U)
+    {
+        KernelWriteString("  More functions answered than the table holds.\n");
+        succeeded = false;
+    }
+
+    /*
+     * Every machine this kernel runs upon presents a host bridge at the first
+     * address of the first bus. Its absence means the enumeration is reading
+     * somewhere other than where it believes.
+     */
+    entry = PciFunctionAt(0U);
+
+    if ((entry == NULL) || (entry->address.bus != 0U) || (entry->address.device != 0U) ||
+        (entry->address.function != 0U) || (entry->class_code != PCI_CLASS_BRIDGE) ||
+        (entry->subclass != PCI_SUBCLASS_HOST_BRIDGE))
+    {
+        KernelWriteString("  No host bridge stands at the root of the bus.\n");
+        succeeded = false;
+    }
+
+    /* The index is bounded, and the search finds what the table holds. */
+    if (PciFunctionAt(PciFunctionCount()) != NULL)
+    {
+        KernelWriteString("  A function was reported beyond the end of the table.\n");
+        succeeded = false;
+    }
+
+    if ((entry != NULL) &&
+        (PciFindByIdentifier(entry->vendor_id, entry->device_id) == NULL))
+    {
+        KernelWriteString("  A recorded function was not found by its identifiers.\n");
+        succeeded = false;
+    }
+
+    if (PciFindByClass(PCI_CLASS_BRIDGE, PCI_SUBCLASS_HOST_BRIDGE, 0U, &found_at) == NULL)
+    {
+        KernelWriteString("  The host bridge was not found by its class.\n");
+        succeeded = false;
+    }
+
+    if (PciFindByClass(0xFFU, 0xFFU, PciFunctionCount(), NULL) != NULL)
+    {
+        KernelWriteString("  A search beginning past the table returned a function.\n");
+        succeeded = false;
+    }
+
+    /*
+     * Every function recorded must be a function that answered, and every base
+     * address must have had its type and attribute bits removed. A base address
+     * still carrying them would be a port number or an address off by up to
+     * fifteen, which addresses hardware that is nearly right.
+     */
+    for (size_t index = 0U; index < PciFunctionCount(); ++index)
+    {
+        const PciFunction *const current = PciFunctionAt(index);
+
+        if ((current == NULL) || (current->vendor_id == PCI_VENDOR_INVALID))
+        {
+            KernelWriteString("  A function was recorded that did not answer.\n");
+            succeeded = false;
+            break;
+        }
+
+        for (size_t bar = 0U; bar < PCI_BAR_COUNT; ++bar)
+        {
+            const uint64_t base = PciBarBase(current, bar);
+            const uint64_t alignment = PciBarIsIoPort(current, bar) ? 3U : 15U;
+
+            if ((base & alignment) != 0U)
+            {
+                KernelWriteString("  A base address retains its type bits.\n");
+                succeeded = false;
+                break;
+            }
+        }
+    }
+
+    KernelWriteString(succeeded ? "Bus self-test passed.\n" : "Bus self-test FAILED.\n");
+}
+
+/*
  * Moves the cursor of a serial terminal to a column of the current line, the
  * column being counted from one, by the sequence ECMA-48 calls CHA — Cursor
  * Character Absolute, CSI Pn G. The display driver crosses a row boundary upon a
@@ -2930,13 +3074,23 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
     SerialReport();
     VgaReport();
 
+    /*
+     * The bus is enumerated once every device driven so far is working, so that
+     * a failure in the enumeration is reported through channels already proved.
+     * Nothing is claimed or configured here; the enumeration only establishes
+     * what the machine contains, which the disk driver then searches.
+     */
+    (void)PciInitialise();
+    KernelVerifyPci();
+    PciReport();
+
     PicReport();
     InterruptReport();
     PagingReport();
     AddressSpaceReport();
 
     VgaSetColour(VGA_COLOUR_LIGHT_GREEN, VGA_COLOUR_BLACK);
-    KernelWriteString("Phase 4 initialisation complete to sub-task 4.2.\n");
+    KernelWriteString("Phase 4 initialisation complete to sub-task 4.3.\n");
 
     VgaSetColour(VGA_COLOUR_LIGHT_GREY, VGA_COLOUR_BLACK);
 

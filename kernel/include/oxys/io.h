@@ -2,7 +2,8 @@
  * File: kernel/include/oxys/io.h
  * Purpose: Provides inline accessors for the x86 programmed input/output address
  *          space, which is separate from the memory address space.
- * Key definitions: PortReadByte, PortWriteByte, IoWait.
+ * Key definitions: PortReadByte, PortWriteByte, PortReadDoubleWord,
+ *          PortWriteDoubleWord, IoWait.
  * References:
  *   - Intel 64 and IA-32 Architectures Software Developer's Manual, Volume 1,
  *     Section 18.3 (Input/Output): the I/O address space comprises 65536
@@ -40,6 +41,27 @@ static inline uint8_t PortReadByte(uint16_t port)
 static inline void PortWriteByte(uint16_t port, uint8_t value)
 {
     __asm__ __volatile__("outb %0, %1" : : "a"(value), "Nd"(port) : "memory");
+}
+
+/*
+ * Reads a 32-bit double word from the specified I/O port. The PCI configuration
+ * data register is defined only for accesses of this width.
+ */
+static inline uint32_t PortReadDoubleWord(uint16_t port)
+{
+    uint32_t value;
+
+    __asm__ __volatile__("inl %1, %0" : "=a"(value) : "Nd"(port) : "memory");
+
+    return value;
+}
+
+/*
+ * Writes a 32-bit double word to the specified I/O port.
+ */
+static inline void PortWriteDoubleWord(uint16_t port, uint32_t value)
+{
+    __asm__ __volatile__("outl %0, %1" : : "a"(value), "Nd"(port) : "memory");
 }
 
 /*

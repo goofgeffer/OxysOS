@@ -402,6 +402,54 @@ and only where the display driver has carried its own cursor into the row above.
 
 Used by: `kernel/kernel.c`.
 
+### PCI Local Bus Specification, revision 3.0
+PCI Special Interest Group.
+
+Sections relied upon:
+
+- **Configuration Space Access Mechanism #1**: two 32-bit I/O locations,
+  CONFIG_ADDRESS at `0x0CF8` and CONFIG_DATA at `0x0CFC`. Bit 31 of the former is
+  the enable flag, bits 30 to 24 are reserved, bits 23 to 16 the bus number, bits
+  15 to 11 the device number, bits 10 to 8 the function number and bits 7 to 2 the
+  register number; the two least significant bits are always zero, every
+  configuration access being aligned to a double word.
+- **Configuration Space Header**: the first sixteen bytes common to every header
+  type — the vendor and device identifiers at offsets `0x00` and `0x02`, the
+  command and status registers at `0x04` and `0x06`, the revision, programming
+  interface, subclass and class code at `0x08` to `0x0B`, and the header type at
+  `0x0E`, whose bit 7 marks a multifunction device.
+- **Absence**: "When a configuration access attempts to select a device that does
+  not exist, the host bridge will complete the access without error, dropping all
+  data on writes and returning all ones on reads."
+- **PCI-to-PCI bridge header (type 1)**: the primary, secondary and subordinate
+  bus numbers at offsets `0x18`, `0x19` and `0x1A`.
+- **Base Address Registers**: bit 0 clear denotes memory space and set denotes
+  I/O space; for memory, bits 2 and 1 give the width, the value 2 meaning a
+  64-bit address whose upper half is the following register, and bit 3 marks the
+  region prefetchable. The base address is the register with its low four bits
+  cleared for memory and its low two bits cleared for I/O.
+
+The specification is not distributed publicly by the PCI SIG. The field layouts
+above were taken from two independent secondary renderings of it and
+cross-verified against one another before being relied upon, as Section 6 of
+`PROJECT_GUIDELINES.md` requires; they agree in every particular used here.
+
+Used by: `drivers/pci/pci.c`, `kernel/include/oxys/pci.h`.
+
+### PCI Code and ID Assignment Specification
+PCI Special Interest Group.
+
+The base class, subclass and programming interface codes: class `0x01` mass
+storage, whose subclass `0x01` is an IDE controller and `0x06` a serial ATA
+controller; class `0x02` network; class `0x03` display; class `0x06` bridge,
+whose subclass `0x00` is a host bridge, `0x01` an ISA bridge and `0x04` a
+PCI-to-PCI bridge; class `0x0C` serial bus, whose subclass `0x05` is SMBus. For
+an IDE controller, bit 0 of the programming interface denotes the primary channel
+in native mode and bit 2 the secondary, each clear meaning the compatibility mode
+that answers upon the legacy ports.
+
+Used by: `drivers/pci/pci.c`.
+
 ### GNU GRUB Manual
 Free Software Foundation.
 `https://www.gnu.org/software/grub/manual/grub/grub.html`
