@@ -315,6 +315,20 @@ data port `0x03D5`.
 
 Used by: `drivers/vga/vga.c`, `boot/boot.asm`.
 
+### ANSI X3.4-1986, Coded Character Set — 7-Bit American National Standard Code for Information Interchange
+American National Standards Institute. Republished, with the same repertoire of
+control characters, as ISO/IEC 646.
+
+The definitions of the control characters relied upon by the display driver:
+**BS** (`0x08`) moves the active position one character position backward;
+**HT** (`0x09`) advances it to the next horizontal tabulation stop; **LF**
+(`0x0A`) moves it one line down; **CR** (`0x0D`) moves it to the first character
+position of the line. None of the four erases the character it moves over, which
+is why erasure upon the display and upon a terminal alike is expressed as the
+sequence `BS`, `SP`, `BS`.
+
+Used by: `drivers/vga/vga.c`, `kernel/include/oxys/vga.h`, `kernel/kernel.c`.
+
 ### GNU GRUB Manual
 Free Software Foundation.
 `https://www.gnu.org/software/grub/manual/grub/grub.html`

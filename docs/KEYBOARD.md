@@ -282,6 +282,26 @@ The captured serial output ends `hello oxys`. This is the only assertion in the
 project so far that exercises a device end to end, from a physical event to a
 character, and it is the reason the echo loop exists.
 
+The backspace is echoed as the three-character sequence `"\b \b"` rather than as
+the character itself. The backspace moves the cursor and erases nothing, upon the
+display and upon a serial terminal alike, so an echo that wrote it alone would
+leave the character the user meant to delete standing until something else was
+typed over it. The erasure is the echo's business rather than the display
+driver's, because the driver implements the character as ANSI X3.4-1986 defines
+it and a caller that wants something else composes it. Driven the same way:
+
+```sh
+( sleep 6; for k in o x y s spc b a d; do echo "sendkey $k"; sleep 0.15; done; \
+  for i in 1 2 3; do echo "sendkey backspace"; sleep 0.15; done; \
+  for k in g o o d; do echo "sendkey $k"; sleep 0.15; done; \
+  sleep 1; echo quit ) \
+  | qemu-system-x86_64 -machine q35 -cpu qemu64 -smp cores=2 -m 512M \
+      -cdrom build/oxys.iso -display none -monitor stdio -serial file:/tmp/bs.log
+```
+
+The captured output ends `oxys bad` followed by the erasing sequence three times
+and then `good`, which a terminal renders as `oxys good`.
+
 ### 7.3 The loop halts the processor, and the order of two instructions matters
 
 The loop executes `STI` followed immediately by `HLT`. Intel SDM, Volume 2B,

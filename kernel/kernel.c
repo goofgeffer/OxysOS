@@ -5,7 +5,8 @@
  *          every subsystem of Phases 1 to 3, asserts the properties of each by a
  *          boot-time self-test, and then either enters the keyboard echo loop,
  *          where a keyboard is present, or halts the processor where none is.
- * Key functions: KernelMain, KernelPanic, KernelHalt, KernelKeyboardEcho,
+ * Key functions: KernelMain, KernelPanic, KernelHalt, KernelVerifyVga,
+ *          KernelKeyboardEcho,
  *          KernelWriteString, KernelWriteHexadecimal, KernelWriteDecimal.
  * References:
  *   - Multiboot2 Specification 2.0, Section 3.3 ("I386 machine state"): EAX
@@ -2182,6 +2183,99 @@ static void KernelVerifyKeyboard(void)
 }
 
 /*
+ * Asserts that the display driver moves the cursor as the control characters
+ * require. The failure this guards against is a silent one: a control character
+ * for which the driver has no case is written into the frame buffer as whatever
+ * glyph the adapter's font holds at that code point, and the cursor then advances
+ * to the right. The display is not corrupted in any way the machine can notice,
+ * and the defect is visible only to somebody reading the screen. That is exactly
+ * how the backspace came to be broken.
+ *
+ * The test writes upon the display, so it begins at the start of a row and
+ * returns to it, leaving its own result to overwrite the characters used.
+ */
+static void KernelVerifyVga(void)
+{
+    size_t row;
+    size_t column;
+    size_t original_row;
+    bool succeeded = true;
+
+    VgaPutCharacter('\n');
+    VgaCursorPosition(&original_row, &column);
+
+    if (column != 0U)
+    {
+        KernelWriteString("  A line feed did not return the cursor to the first column.\n");
+        succeeded = false;
+    }
+
+    /* A backspace in the first column must not move to the preceding row. */
+    VgaPutCharacter('\b');
+    VgaCursorPosition(&row, &column);
+
+    if ((row != original_row) || (column != 0U))
+    {
+        KernelWriteString("  A backspace in the first column moved the cursor.\n");
+        succeeded = false;
+    }
+
+    /* A backspace elsewhere retreats by exactly one column. */
+    VgaPutCharacter('X');
+    VgaPutCharacter('Y');
+    VgaPutCharacter('\b');
+    VgaCursorPosition(&row, &column);
+
+    if ((row != original_row) || (column != 1U))
+    {
+        KernelWriteString("  A backspace did not retreat by one column.\n");
+        succeeded = false;
+    }
+
+    /*
+     * The erasing sequence the callers use must leave the cursor where the
+     * erased character stood, so that the next character written replaces it.
+     */
+    VgaWriteString("\b \b");
+    VgaCursorPosition(&row, &column);
+
+    if ((row != original_row) || (column != 0U))
+    {
+        KernelWriteString("  The erasing sequence did not restore the cursor.\n");
+        succeeded = false;
+    }
+
+    /* A tabulation advances to a multiple of eight columns, not by eight. */
+    VgaPutCharacter('A');
+    VgaPutCharacter('\t');
+    VgaCursorPosition(&row, &column);
+
+    if (column != 8U)
+    {
+        KernelWriteString("  A tabulation did not advance to a multiple of eight.\n");
+        succeeded = false;
+    }
+
+    /* A carriage return returns to the first column without changing the row. */
+    VgaPutCharacter('\r');
+    VgaCursorPosition(&row, &column);
+
+    if ((row != original_row) || (column != 0U))
+    {
+        KernelWriteString("  A carriage return did not return to the first column.\n");
+        succeeded = false;
+    }
+
+    /*
+     * The characters written above stand upon this row still. The result is
+     * written over them, and padded so that none survives to its right.
+     */
+    KernelWriteString(succeeded
+                          ? "Display self-test passed.            \n"
+                          : "Display self-test FAILED.            \n");
+}
+
+/*
  * Echoes typed characters upon both output devices, indefinitely.
  *
  * This is the one thing the self-tests cannot establish. They drive the decoder
@@ -2218,7 +2312,16 @@ static _Noreturn void KernelKeyboardEcho(void)
             /* A one-character string, the output routines taking no other form. */
             const char text[2] = { character, '\0' };
 
-            KernelWriteString(text);
+            /*
+             * A backspace moves the cursor without erasing, upon the display and
+             * upon a serial terminal alike, so an echo that wrote it alone would
+             * leave the character the user meant to delete upon the screen and
+             * then overwrite it with whatever was typed next. The erasure is the
+             * echo's business, not the driver's: the sequence steps back, writes
+             * a space over the character, and steps back again to stand where the
+             * character was.
+             */
+            KernelWriteString((character == '\b') ? "\b \b" : text);
         }
     }
 }
@@ -2253,6 +2356,13 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
     }
 
     KernelWriteString("Multiboot2 magic value verified.\n");
+
+    /*
+     * The display is tested first because it is the instrument through which
+     * every later test reports, and because it needs nothing that is not already
+     * established at this point.
+     */
+    KernelVerifyVga();
 
     /*
      * Reduce the Multiboot2 structure to the neutral description upon which the

@@ -2,7 +2,7 @@
  * File: kernel/include/oxys/vga.h
  * Purpose: Declares the interface of the VGA colour text-mode output driver.
  * Key definitions: VgaColour, VgaInitialise, VgaClear, VgaPutCharacter,
- *          VgaWriteString, VgaSetColour.
+ *          VgaWriteString, VgaSetColour, VgaCursorPosition.
  * References:
  *   - IBM Video Graphics Array technical reference: mode 3 presents an 80 by 25
  *     character display whose frame buffer begins at physical address 0x000B8000.
@@ -10,6 +10,8 @@
  *     and the attribute in the second, the attribute comprising a four-bit
  *     foreground index in bits 0 to 3 and a background index in bits 4 to 6,
  *     with bit 7 controlling blinking or intensity according to configuration.
+ *   - ANSI X3.4-1986 (ISO/IEC 646), the control characters: the treatment of the
+ *     backspace, the line feed and the carriage return by VgaPutCharacter.
  */
 
 #ifndef OXYS_VGA_H
@@ -69,10 +71,22 @@ void VgaClear(void);
 /*
  * Writes a single character at the cursor position and advances the cursor. The
  * line feed character advances to the beginning of the following row; the
- * carriage return returns to the beginning of the current row. The display is
- * scrolled upward by one row when the cursor passes the final row.
+ * carriage return returns to the beginning of the current row; the horizontal
+ * tabulation advances to the next multiple of eight columns. The backspace moves
+ * the cursor one column to the left without erasing, as ANSI X3.4-1986 defines
+ * it, and has no effect in the first column; a caller that means to erase writes
+ * "\b \b". The display is scrolled upward by one row when the cursor passes the
+ * final row.
  */
 void VgaPutCharacter(char character);
+
+/*
+ * Reports the position at which the next character will be written. Either
+ * pointer may be null, in which case that component is not reported. It exists
+ * so that the boot-time self-test may assert the cursor movements above, which
+ * are otherwise observable only by a person looking at the display.
+ */
+void VgaCursorPosition(size_t *row, size_t *column);
 
 /*
  * Writes a null-terminated string by repeated application of VgaPutCharacter.

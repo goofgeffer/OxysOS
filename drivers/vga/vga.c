@@ -4,7 +4,7 @@
  *          directly to the legacy character frame buffer and manages the cursor
  *          position, scrolling and colour attributes.
  * Key functions: VgaInitialise, VgaSetColour, VgaClear, VgaPutCharacter,
- *          VgaWriteString, VgaScroll, VgaUpdateHardwareCursor.
+ *          VgaWriteString, VgaCursorPosition, VgaScroll, VgaUpdateHardwareCursor.
  * References:
  *   - IBM Video Graphics Array technical reference: mode 3 provides an 80 by 25
  *     character display whose frame buffer begins at physical address 0x000B8000
@@ -17,6 +17,10 @@
  *     Section 4.5: the frame buffer is reachable at PhysicalToVirtual(0xB8000)
  *     because the boot-time paging hierarchy maps the first gibibyte of physical
  *     memory into the higher half.
+ *   - ANSI X3.4-1986 (ISO/IEC 646), the control characters: BS (0x08) moves the
+ *     active position one character position backward, LF (0x0A) moves it one
+ *     line down and CR (0x0D) moves it to the first position of the line. None of
+ *     the three erases anything.
  */
 
 #include <oxys/vga.h>
@@ -167,6 +171,27 @@ void VgaPutCharacter(char character)
         VgaCursorColumn = 0U;
         break;
 
+    case '\b':
+        /*
+         * ISO/IEC 646 and ANSI X3.4 define the backspace as a movement of the
+         * active position one character backward, and no more: it does not erase
+         * the character it moves over. A caller that means to erase writes the
+         * three-character sequence "\b \b", which erases upon a serial terminal
+         * equally.
+         *
+         * The cursor stops at the first column rather than wrapping to the end of
+         * the preceding row. Nothing here records whether a row ended because the
+         * text wrapped or because a line feed was written, so a wrap would let a
+         * backspace destroy output that the user never typed. The distinction
+         * belongs to the line discipline of Phase 8, which knows where each line
+         * of input began.
+         */
+        if (VgaCursorColumn > 0U)
+        {
+            --VgaCursorColumn;
+        }
+        break;
+
     case '\t':
         /* A horizontal tabulation advances to the next multiple of eight columns. */
         do
@@ -188,6 +213,19 @@ void VgaPutCharacter(char character)
     }
 
     VgaUpdateHardwareCursor();
+}
+
+void VgaCursorPosition(size_t *row, size_t *column)
+{
+    if (row != NULL)
+    {
+        *row = VgaCursorRow;
+    }
+
+    if (column != NULL)
+    {
+        *column = VgaCursorColumn;
+    }
 }
 
 void VgaWriteString(const char *string)

@@ -63,9 +63,19 @@ standard output stream of the invoking terminal.
 
 ## 3. Verification of the text-mode display
 
+The cursor movements of the display driver are asserted at each boot by
+`KernelVerifyVga`, which reads the cursor position back through
+`VgaCursorPosition` after writing each control character. That test guards a
+failure mode which is silent to the machine and visible only to a person reading
+the screen: a control character for which the driver has no case is written into
+the frame buffer as whatever glyph the adapter's font holds at that code point,
+and the cursor then advances rightward. The backspace was broken in exactly that
+way until 2026-08-31.
+
+What the self-test cannot establish is that the frame buffer is rendered at all.
 The serial path and the display path are independent, and a defect in the VGA
 driver would not be detected by the serial assertion alone. The display is
-therefore verified by capturing a screen image through the QEMU monitor:
+therefore also verified by capturing a screen image through the QEMU monitor:
 
 ```sh
 ( sleep 10; echo "screendump /tmp/oxys.ppm"; sleep 3; echo "quit" ) \
@@ -152,5 +162,7 @@ correct point at which to begin an examination of the boot sequence.
 | 2026-08-31 | `make verify` — sub-task 3.6, the interval timer self-test | Passed; divisor 1193 realising 1000.152 Hz, ticks counted only with interrupts enabled and only while the line is unmasked. |
 | 2026-08-31 | `make verify` — sub-task 3.7, the keyboard self-test | Passed; the controller and port self-tests pass, and the decoder, the modifier discipline and the buffer overrun behave as `docs/KEYBOARD.md`, Section 7.1, requires. |
 | 2026-08-31 | QEMU `sendkey` — the keyboard interrupt path, end to end | Passed; the keystrokes `h e l l o spc o x y s` were echoed upon the serial port as `hello oxys`. |
+| 2026-08-31 | `make verify` — the display self-test | Passed; the backspace, the tabulation, the carriage return and the line feed move the cursor as ANSI X3.4-1986 defines them, and a backspace in the first column does not move it. |
+| 2026-08-31 | QEMU `sendkey` — the backspace, end to end | Passed; `o x y s spc b a d` followed by three backspaces and `g o o d` produced `oxys bad` then the erasing sequence three times then `good` upon the serial port, a terminal rendering it `oxys good`. |
 | — | VirtualBox boot | Passed; performed by the project owner upon the Windows host, `VBoxManage` being unavailable in this environment. |
 | — | Physical hardware boot | Not performed. |

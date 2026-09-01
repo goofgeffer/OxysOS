@@ -37,9 +37,22 @@ interface and never upon a driver's location.
 
 Writes directly to the character frame buffer at physical `0x000B8000`, reached
 through the higher-half mapping. It maintains the cursor position, handles the
-line feed, carriage return and horizontal tabulation characters, scrolls the
-display when the final row is passed, and mirrors the cursor position into the
-CRT controller so that the hardware cursor is displayed correctly.
+line feed, carriage return, horizontal tabulation and backspace characters,
+scrolls the display when the final row is passed, and mirrors the cursor position
+into the CRT controller so that the hardware cursor is displayed correctly.
+
+The backspace moves the cursor one column to the left and erases nothing, which
+is what ANSI X3.4-1986 defines it to be; a caller that means to erase writes
+`"\b \b"`. It does not wrap to the preceding row, because nothing here records
+whether a row ended by wrapping or by a line feed, and a wrap would therefore let
+a backspace destroy output the user never typed. That distinction belongs to the
+line discipline of Phase 8.
+
+The cursor movements are asserted at each boot by `KernelVerifyVga`, through the
+`VgaCursorPosition` accessor that exists for the purpose. The failure guarded
+against is silent: a control character the driver does not handle is written into
+the frame buffer as a glyph and the cursor advances rightward, which nothing in
+the machine can notice and only a person reading the screen can see.
 
 The frame buffer pointer is declared `volatile`, because the memory is examined
 by the display hardware independently of the processor.
