@@ -1,6 +1,6 @@
 # `docs/storage/` — From a Medium to a Caller
 
-Three documents describing one stack, bottom upwards. They are grouped apart from
+Four documents describing one stack, bottom upwards. They are grouped apart from
 [`../devices/`](../devices/) because each exists to serve the one above it, and
 because the whole stack is what the filesystem of Phase 5 will be written against.
 
@@ -9,6 +9,7 @@ because the whole stack is what the filesystem of Phase 5 will be written agains
 | [`DISK.md`](DISK.md) | The ATA disk in programmed input/output mode: the task file, the two addressing modes, the identification of what answered, and the cache flush that makes a write durable. | [`../../drivers/ata/ata.c`](../../drivers/ata/ata.c) | 4.4 |
 | [`BLOCK.md`](BLOCK.md) | The generic block-device layer: what a driver supplies to register a device, and what the layer refuses before any driver is reached. | [`../../drivers/block/block.c`](../../drivers/block/block.c) | 4.5 |
 | [`BUFFER.md`](BUFFER.md) | The buffer cache: how a block is found, what is discarded when the store is full, and when a modified block reaches its device. | [`../../drivers/block/buffer.c`](../../drivers/block/buffer.c) | 4.6 |
+| [`EXT2.md`](EXT2.md) | The EXT2 volume: where the superblock is, how its fields are decoded, and which volumes this kernel refuses to address. | [`../../kernel/fs/ext2.c`](../../kernel/fs/ext2.c) | 5.1 |
 
 ## The two rules that run through all three
 

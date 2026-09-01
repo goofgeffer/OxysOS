@@ -214,7 +214,30 @@ sed 's/^set default=0/set default=2/' boot/grub/grub.cfg > isodir/boot/grub/grub
 grub-mkrescue -o write.iso isodir
 ```
 
-## 7. Execution under UEFI firmware
+## 7. Verification of the EXT2 superblock
+
+The parser is asserted at every boot against a volume composed within the
+memory-backed block device, which is what makes it verifiable upon a machine with
+no disk. That establishes the parser consistent with itself; the corroboration
+must come from a volume built by something else.
+
+```sh
+mke2fs -q -t ext2 -b 1024 -L oxys-root -F ext2.img 16384
+
+qemu-system-x86_64 -machine pc -cpu qemu64 -smp cores=2 -m 512M \
+    -cdrom build/oxys.iso \
+    -drive file=ext2.img,format=raw,if=ide,index=0,media=disk \
+    -display none -serial file:ext2.log
+```
+
+Every figure the kernel reports is then compared against `dumpe2fs -h` upon the
+same image: the block and inode counts, both free counts, the block size, the
+geometry of the groups, the inode size, the first usable inode and the three
+feature words. A second image of 4096-byte blocks exercises the other block size
+this kernel accepts, and a disk holding no filesystem is expected to be refused
+for want of the magic number.
+
+## 8. Execution under UEFI firmware
 
 ```sh
 make run-uefi
@@ -225,7 +248,7 @@ present, because the ISO carries only the legacy BIOS boot path of GRUB. The
 target is provided in advance so that the UEFI work of Phase 12 has an
 established point of entry; sub-task 12.7 will render it functional.
 
-## 8. Execution under VirtualBox
+## 9. Execution under VirtualBox
 
 ```sh
 make run-vbox
@@ -244,7 +267,7 @@ in the WSL2 filesystem. The project owner performs this test upon the Windows
 host directly, and sub-task 1.11 of `PLAN.md` is recorded as passed upon that
 authority.
 
-## 9. Testing upon physical hardware
+## 10. Testing upon physical hardware
 
 The ISO produced by `grub-mkrescue` is a hybrid image and may be written
 directly to a USB medium:
@@ -261,7 +284,7 @@ support module, since the UEFI boot path is not implemented until Phase 12.
 Diagnostic output should be captured through a serial adapter where the machine
 provides one. Sub-task 1.12 remains open.
 
-## 10. Debugging with GDB
+## 11. Debugging with GDB
 
 QEMU provides a GDB stub. The kernel is compiled with `-g`, so the DWARF
 information in `build/oxys.elf` may be used directly:
@@ -276,7 +299,7 @@ Note that breakpoints upon higher-half symbols cannot be serviced until paging
 has been enabled. A breakpoint at `_start`, whose address is physical, is the
 correct point at which to begin an examination of the boot sequence.
 
-## 11. Test record
+## 12. Test record
 
 | Date | Test | Result |
 | ---- | ---- | ------ |
@@ -307,3 +330,7 @@ correct point at which to begin an examination of the boot sequence.
 | 2026-09-01 | `make verify` — sub-task 4.5, the block self-test | Passed; a device of memory is registered and withdrawn, a duplicate name and a device whose nature and operations disagree are refused, a range that would wrap a 64-bit block number is refused, a two-block transfer carries both blocks in order, and the accounting matches the blocks that moved. |
 | 2026-09-01 | QEMU i440fx — the ATA disk presented through the block layer | Passed; the disk of the primary master registered as `ata0`, 536870912 blocks of 512 bytes, writable. |
 | 2026-09-01 | `make verify` — sub-task 4.6, the buffer self-test | Passed; a block held is not read again, a modified block does not reach the device until it is written back, a dirty block evicted under pressure is written back as it goes, a buffer held by a caller survives 64 subsequent misses, a request is refused rather than served when every buffer is held, and invalidation writes back and discards. |
+| 2026-09-01 | `make verify` — sub-task 5.1, the volume self-test | Passed; every field of a composed superblock is read from the offset the format defines, the geometry derived from it is correct, a revision 0 volume receives its fixed values, and each of the twelve refusals refuses — including a volume whose block count and inode count imply different group counts. |
+| 2026-09-01 | QEMU i440fx with an image from `mke2fs` — 1024-byte blocks | Passed; the kernel reported 16384 blocks of 1024 bytes with 15211 free, 4096 inodes of 256 bytes with 4085 free, 2 groups of 8192 blocks and 2048 inodes, first data block 1, first usable inode 11, and features `0x38`/`0x2`/`0x3`. Every figure matches `dumpe2fs -h` upon the same image. |
+| 2026-09-01 | QEMU i440fx with an image from `mke2fs` — 4096-byte blocks | Passed; 20000 blocks of 4096 bytes, one group, first data block 0 as the format requires of any block size but 1024. |
+| 2026-09-01 | QEMU i440fx with a disk holding no filesystem | Passed; refused with *the volume bears no EXT2 magic number*, and the kernel proceeded. |

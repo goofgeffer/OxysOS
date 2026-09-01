@@ -501,6 +501,50 @@ cross-verified against one another before being relied upon, as Section 6 of
 
 Used by: `drivers/ata/ata.c`, `kernel/include/oxys/ata.h`.
 
+### The Second Extended File System: Internal Layout
+Poirier, D. `https://www.nongnu.org/ext2-doc/ext2.html`
+
+Sections relied upon:
+
+- **The Superblock**: it lies 1024 bytes from the start of the volume and
+  occupies 1024 bytes, the first kibibyte being reserved for a boot sector; the
+  field table giving the offset and width of every field, of which this kernel
+  reads all those up to `s_last_mounted` at offset 136; `s_magic` at offset 56
+  holding `0xEF53`; the block size being `1024 << s_log_block_size`;
+  `s_first_data_block` at offset 20 being 1 upon a volume of 1024-byte blocks and
+  0 upon any other.
+- **Revision Levels**: revision 0 (`EXT2_GOOD_OLD_REV`) has no field for the
+  inode size or the first usable inode, both being fixed; revision 1
+  (`EXT2_DYNAMIC_REV`) states them at offsets 88 and 84 and adds the three
+  feature fields at 92, 96 and 100.
+- **Reserved Inodes**: inodes 1 to 10 are reserved, so the first inode available
+  to a file upon a revision 0 volume is 11.
+- **The feature fields**: a volume declaring an incompatible feature the
+  implementation lacks may not be read; one declaring a read-only compatible
+  feature it lacks may be read and not written; a compatible feature may be
+  ignored entirely. The bits: incompatible — compression `0x0001`, file type in
+  directory entries `0x0002`, journal recovery `0x0004`, journal device `0x0008`,
+  meta block groups `0x0010`; read-only compatible — sparse superblocks `0x0001`,
+  large files `0x0002`, binary tree directories `0x0004`.
+- **`s_state`**: 1 denotes a cleanly unmounted volume and 2 one upon which errors
+  were detected.
+- **Byte order**: every quantity upon the volume is stored least significant byte
+  first, irrespective of the machine.
+
+Used by: `kernel/fs/ext2.c`, `kernel/include/oxys/ext2.h`.
+
+### Linux kernel documentation, the ext4 superblock
+Linux kernel source, `Documentation/filesystems/ext4/super.rst`.
+
+Consulted as an independent statement of the superblock field offsets, the two
+formats sharing the layout of every field this kernel reads. It confirms
+`s_magic` at `0x38`, `s_first_ino` at `0x54`, `s_inode_size` at `0x58`,
+`s_block_group_nr` at `0x5A`, the three feature fields at `0x5C`, `0x60` and
+`0x64`, `s_uuid` at `0x68`, `s_volume_name` at `0x78` and `s_last_mounted` at
+`0x88`, and the magic value `0xEF53`.
+
+Used by: `kernel/fs/ext2.c`, `kernel/include/oxys/ext2.h`.
+
 ### GNU GRUB Manual
 Free Software Foundation.
 `https://www.gnu.org/software/grub/manual/grub/grub.html`

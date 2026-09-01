@@ -16,7 +16,7 @@ complementary, and neither replaces the other.
 | [`project/`](project/) | How the work is conducted: the plan, the tests, the toolchain, the standards, the bibliography. | You are about to make a change, or want to know what is done and what is not. |
 | [`design/`](design/) | The kernel itself: its architecture, its boot, its address space, its interrupts. | You want to know how the machine is brought up and how it is arranged once it is. |
 | [`devices/`](devices/) | The hardware the kernel drives, one document per device. | You are working upon a driver, or want to know what a device does and why the driver treats it so. |
-| [`storage/`](storage/) | The path from a medium to a caller: the disk, the block layer above it, the cache above that. | You are working anywhere between a sector and a filesystem. |
+| [`storage/`](storage/) | The path from a medium to a caller: the disk, the block layer above it, the cache above that, and the filesystem above that. | You are working anywhere between a sector and a file. |
 
 ## Contents
 
@@ -56,6 +56,7 @@ complementary, and neither replaces the other.
 | [`DISK.md`](storage/DISK.md) | The ATA disk in programmed input/output mode. | `drivers/ata/` |
 | [`BLOCK.md`](storage/BLOCK.md) | The generic block-device layer. | `drivers/block/block.c` |
 | [`BUFFER.md`](storage/BUFFER.md) | The buffer cache. | `drivers/block/buffer.c` |
+| [`EXT2.md`](storage/EXT2.md) | The EXT2 volume and its superblock. | `kernel/fs/ext2.c` |
 
 ## The form of a document
 

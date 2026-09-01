@@ -84,6 +84,31 @@ documented. The following are in use.
 | GNU C extended inline assembly (`__asm__ __volatile__`) | `kernel/include/oxys/io.h`, `kernel/kernel.c`, `kernel/include/oxys/cpu.h` | ISO C provides no means of expressing the `IN`, `OUT`, `CLI`, `STI`, `HLT`, `INT n`, `PUSHFQ` or control-register instructions. No conforming alternative exists. `INT n` is used only by the boot-time self-tests, which must raise an interrupt deliberately in order to observe how one is handled. `STI` is used by those tests and by the echo loop of `docs/devices/KEYBOARD.md`, Section 7.2, where it must immediately precede `HLT` for the reason given there. `PUSHFQ` is used by `ReadRflags`, upon which a driver's choice between waiting for an interrupt and polling for the same condition depends; see `docs/devices/SERIAL.md`, Section 4. `REP INSW` moves the 256 words of a disk sector without the overhead of 256 separate transfers upon a path that is already the slowest way to reach a disk; there is deliberately no corresponding writer, for the reason given in `docs/storage/DISK.md`, Section 5. |
 | `_Noreturn` | `kernel/kernel.c` | This is an ISO C11 keyword, not an extension. It is listed here for completeness because it affects code generation. |
 
+## 7.1 On-disk and on-wire structures
+
+A structure defined by a format outside this project — a filesystem's superblock,
+a protocol's header — is **decoded field by field from a buffer of bytes**, and is
+never declared as a C structure laid over those bytes.
+
+Two reasons, both recorded at length in [`../storage/EXT2.md`](../storage/EXT2.md),
+Section 3. Overlaying requires the structure to be packed, which is a compiler
+extension admitted only where no conforming alternative exists, and here one does.
+And overlaying makes the format's byte order invisible: written out, the decoder
+states that the first byte is the least significant, which is a fact about the
+format; overlaid, the same result is a property of the processor the code happens
+to be compiled for, recorded nowhere.
+
+The offsets are named in the interface header rather than in the decoder, so that
+a self-test composing such a structure uses the same names the decoder reads. A
+test that restated the offsets would agree with a mistaken decoder as readily as
+with a correct one.
+
+The exception already in the tree is `kernel/include/oxys/multiboot2.h`, which
+describes a structure the boot loader places in memory rather than one read from
+a medium: its fields are naturally aligned by the specification and are read by
+the processor that was handed them, so no packing and no byte-order decision
+arises.
+
 ## 8. Prohibitions
 
 - Floating-point and vector arithmetic in the kernel. The corresponding

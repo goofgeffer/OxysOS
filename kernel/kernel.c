@@ -7,7 +7,8 @@
  *          where a keyboard is present, or halts the processor where none is.
  * Key functions: KernelMain, KernelPanic, KernelHalt, KernelVerifyVga,
  *          KernelVerifySerial, KernelVerifyPci, KernelVerifyAta,
- *          KernelVerifyBlock, KernelVerifyBuffer, KernelCommandLineHasOption,
+ *          KernelVerifyBlock, KernelVerifyBuffer, KernelVerifyExt2,
+ *          KernelCommandLineHasOption,
  *          KernelEchoBackspace,
  *          KernelEchoLoop,
  *          KernelWriteString, KernelWriteHexadecimal, KernelWriteDecimal.
@@ -68,6 +69,7 @@
 #include <oxys/ata.h>
 #include <oxys/block.h>
 #include <oxys/buffer.h>
+#include <oxys/ext2.h>
 
 /*
  * The extents of the kernel text section, established by the link script. They
@@ -3641,6 +3643,377 @@ static void KernelVerifyBuffer(void)
 }
 
 /*
+ * Reads and reports the superblock of every block device the machine carries.
+ *
+ * Nothing is mounted and nothing is retained. The purpose is that a volume the
+ * machine actually holds is put through the parser at every boot, since the
+ * self-test's composed volume is by construction the volume the parser expects.
+ */
+static void KernelReportVolumes(void)
+{
+    const size_t count = BlockDeviceCount();
+
+    if (count == 0U)
+    {
+        KernelWriteString("EXT2: no block device to examine.\n");
+        return;
+    }
+
+    for (size_t index = 0U; index < count; ++index)
+    {
+        BlockDevice *const device = BlockDeviceAt(index);
+        Ext2Superblock superblock;
+
+        if (device == NULL)
+        {
+            break;
+        }
+
+        if (Ext2ReadSuperblock(device, &superblock))
+        {
+            Ext2ReportVolume(&superblock, device->name);
+        }
+        else
+        {
+            KernelWriteString("EXT2: ");
+            KernelWriteString(device->name);
+            KernelWriteString(" holds no volume this kernel can read: ");
+            KernelWriteString(Ext2LastError());
+            KernelWriteString("\n");
+        }
+    }
+}
+
+/*
+ * The composition of an EXT2 superblock within the device of memory, so that
+ * the parser may be asserted against a volume whose every field is known.
+ *
+ * No machine this kernel is verified upon carries an EXT2 volume, and one that
+ * did would carry somebody's data. The superblock is therefore built here, field
+ * by field, from the offsets the format defines — the same names the parser
+ * reads, so that a mistaken offset cannot agree with itself.
+ */
+static void KernelSetVolumeHalf(size_t offset, uint16_t value)
+{
+    uint8_t *const field = &KernelMemoryDeviceStore[EXT2_SUPERBLOCK_OFFSET + offset];
+
+    field[0] = (uint8_t)(value & 0xFFU);
+    field[1] = (uint8_t)((value >> 8) & 0xFFU);
+}
+
+static void KernelSetVolumeWord(size_t offset, uint32_t value)
+{
+    uint8_t *const field = &KernelMemoryDeviceStore[EXT2_SUPERBLOCK_OFFSET + offset];
+
+    field[0] = (uint8_t)(value & 0xFFU);
+    field[1] = (uint8_t)((value >> 8) & 0xFFU);
+    field[2] = (uint8_t)((value >> 16) & 0xFFU);
+    field[3] = (uint8_t)((value >> 24) & 0xFFU);
+}
+
+/*
+ * Composes a volume that every rule of the parser accepts: revision 1, blocks of
+ * 1024 bytes, one group, and the two features this kernel implements.
+ */
+static void KernelComposeVolume(void)
+{
+    static const char label[] = "oxys-test";
+
+    for (size_t index = 0U; index < EXT2_SUPERBLOCK_SIZE; ++index)
+    {
+        KernelMemoryDeviceStore[EXT2_SUPERBLOCK_OFFSET + index] = 0U;
+    }
+
+    KernelSetVolumeWord(EXT2_OFFSET_INODE_COUNT, 16U);
+    KernelSetVolumeWord(EXT2_OFFSET_BLOCK_COUNT, 128U);
+    KernelSetVolumeWord(EXT2_OFFSET_RESERVED_BLOCKS, 6U);
+    KernelSetVolumeWord(EXT2_OFFSET_FREE_BLOCKS, 100U);
+    KernelSetVolumeWord(EXT2_OFFSET_FREE_INODES, 5U);
+    KernelSetVolumeWord(EXT2_OFFSET_FIRST_DATA_BLOCK, 1U);
+    KernelSetVolumeWord(EXT2_OFFSET_LOG_BLOCK_SIZE, 0U);
+    KernelSetVolumeWord(EXT2_OFFSET_LOG_FRAGMENT_SIZE, 0U);
+    KernelSetVolumeWord(EXT2_OFFSET_BLOCKS_PER_GROUP, 8192U);
+    KernelSetVolumeWord(EXT2_OFFSET_FRAGS_PER_GROUP, 8192U);
+    KernelSetVolumeWord(EXT2_OFFSET_INODES_PER_GROUP, 16U);
+    KernelSetVolumeHalf(EXT2_OFFSET_MAGIC, EXT2_SUPER_MAGIC);
+    KernelSetVolumeHalf(EXT2_OFFSET_STATE, (uint16_t)EXT2_VALID_FS);
+    KernelSetVolumeHalf(EXT2_OFFSET_ERRORS, 1U);
+    KernelSetVolumeWord(EXT2_OFFSET_REVISION, EXT2_DYNAMIC_REV);
+    KernelSetVolumeWord(EXT2_OFFSET_FIRST_INODE, EXT2_GOOD_OLD_FIRST_INODE);
+    KernelSetVolumeHalf(EXT2_OFFSET_INODE_SIZE, (uint16_t)EXT2_GOOD_OLD_INODE_SIZE);
+    KernelSetVolumeWord(EXT2_OFFSET_FEATURE_INCOMPAT, EXT2_FEATURE_INCOMPAT_FILETYPE);
+    KernelSetVolumeWord(EXT2_OFFSET_FEATURE_RO_COMPAT, EXT2_FEATURE_RO_COMPAT_SPARSE_SUPER);
+
+    for (size_t index = 0U; label[index] != '\0'; ++index)
+    {
+        KernelMemoryDeviceStore[EXT2_SUPERBLOCK_OFFSET + EXT2_OFFSET_VOLUME_NAME + index] =
+            (uint8_t)label[index];
+    }
+}
+
+/*
+ * Alters one field of the composed volume and reports whether the parser refused
+ * the result, restoring the volume afterwards.
+ *
+ * The cache is invalidated around the alteration. The superblock is written into
+ * the device's storage directly, beneath both the block layer and the cache, so
+ * a cache holding the previous contents would answer the next read with them and
+ * the assertion would be made against the volume that no longer exists.
+ */
+static bool KernelVolumeRefusedWith(BlockDevice *device, size_t offset, uint32_t value,
+                                    bool half)
+{
+    Ext2Superblock superblock;
+    bool refused;
+
+    if (half)
+    {
+        KernelSetVolumeHalf(offset, (uint16_t)value);
+    }
+    else
+    {
+        KernelSetVolumeWord(offset, value);
+    }
+
+    (void)BufferInvalidateDevice(device);
+    refused = !Ext2ReadSuperblock(device, &superblock);
+
+    KernelComposeVolume();
+    (void)BufferInvalidateDevice(device);
+    return refused;
+}
+
+/*
+ * Asserts that the superblock of a volume is read as it stands, and that a
+ * volume this kernel must not address is refused rather than read hopefully.
+ *
+ * A filesystem parser fails silently by construction: every field it reads is a
+ * number, and a number read from the wrong offset is still a number. A block
+ * size taken from the fragment size, a count read as a half where the format
+ * stores a word, an offset four bytes adrift — each yields a volume that looks
+ * plausible and addresses the wrong blocks for the rest of the machine's life.
+ * The assertions below name the value that each field must have, which is the
+ * only form of assertion that catches that.
+ */
+static void KernelVerifyExt2(void)
+{
+    BlockDevice *device;
+    Ext2Superblock superblock;
+    bool succeeded = true;
+
+    device = BlockRegister("mem0", &KernelMemoryDeviceOperations, NULL, BLOCK_SIZE_DEFAULT,
+                           KERNEL_MEMORY_DEVICE_BLOCKS, false);
+
+    if (device == NULL)
+    {
+        KernelWriteString("  A device of memory could not be registered.\n");
+        KernelWriteString("Volume self-test FAILED.\n");
+        return;
+    }
+
+    KernelComposeVolume();
+    (void)BufferInvalidateDevice(device);
+
+    if (!Ext2ReadSuperblock(device, &superblock))
+    {
+        KernelWriteString("  A well-formed volume was refused: ");
+        KernelWriteString(Ext2LastError());
+        KernelWriteString("\n");
+        KernelWriteString("Volume self-test FAILED.\n");
+        (void)BufferInvalidateDevice(device);
+        (void)BlockUnregister(device);
+        return;
+    }
+
+    /*
+     * Every field is compared against the value composed above. A parser reading
+     * the right number from the wrong offset is the failure this catches, and
+     * only naming the values catches it.
+     */
+    if ((superblock.magic != EXT2_SUPER_MAGIC) || (superblock.revision != EXT2_DYNAMIC_REV) ||
+        (superblock.inode_count != 16U) || (superblock.block_count != 128U) ||
+        (superblock.reserved_block_count != 6U) || (superblock.free_block_count != 100U) ||
+        (superblock.free_inode_count != 5U) || (superblock.first_data_block != 1U) ||
+        (superblock.blocks_per_group != 8192U) || (superblock.inodes_per_group != 16U) ||
+        (superblock.state != EXT2_VALID_FS))
+    {
+        KernelWriteString("  A field of the superblock was read from the wrong place.\n");
+        succeeded = false;
+    }
+
+    /* The block size is derived, not stored, and the geometry follows from it. */
+    if ((superblock.block_size != 1024U) || (superblock.sectors_per_block != 2U) ||
+        (superblock.group_count != 1U) || (Ext2GroupCount(&superblock) != 1U))
+    {
+        KernelWriteString("  The geometry derived from the superblock is wrong.\n");
+        succeeded = false;
+    }
+
+    /* The revision 1 fields, including the label, which is padded and not
+     * terminated upon the volume. */
+    if ((superblock.first_inode != EXT2_GOOD_OLD_FIRST_INODE) ||
+        (superblock.inode_size != EXT2_GOOD_OLD_INODE_SIZE) ||
+        (superblock.feature_incompatible != EXT2_FEATURE_INCOMPAT_FILETYPE) ||
+        (superblock.feature_read_only != EXT2_FEATURE_RO_COMPAT_SPARSE_SUPER) ||
+        (superblock.volume_name[0] != 'o') || (superblock.volume_name[8] != 't') ||
+        (superblock.volume_name[9] != '\0'))
+    {
+        KernelWriteString("  The revision 1 fields were not read correctly.\n");
+        succeeded = false;
+    }
+
+    /* A volume declaring only features this kernel implements may be written. */
+    if (superblock.read_only)
+    {
+        KernelWriteString("  A volume this kernel fully implements was marked read-only.\n");
+        succeeded = false;
+    }
+
+    /* The refusals. Each is a volume this kernel must not address as it stands. */
+    if (!KernelVolumeRefusedWith(device, EXT2_OFFSET_MAGIC, 0x1234U, true))
+    {
+        KernelWriteString("  A volume bearing no magic number was accepted.\n");
+        succeeded = false;
+    }
+
+    if (!KernelVolumeRefusedWith(device, EXT2_OFFSET_REVISION, 2U, false))
+    {
+        KernelWriteString("  A volume of an unknown revision was accepted.\n");
+        succeeded = false;
+    }
+
+    if (!KernelVolumeRefusedWith(device, EXT2_OFFSET_LOG_BLOCK_SIZE, 4U, false))
+    {
+        KernelWriteString("  A block size beyond this kernel was accepted.\n");
+        succeeded = false;
+    }
+
+    if (!KernelVolumeRefusedWith(device, EXT2_OFFSET_FIRST_DATA_BLOCK, 0U, false))
+    {
+        KernelWriteString("  A first data block contradicting the block size was "
+                          "accepted.\n");
+        succeeded = false;
+    }
+
+    if (!KernelVolumeRefusedWith(device, EXT2_OFFSET_BLOCKS_PER_GROUP, 0U, false) ||
+        !KernelVolumeRefusedWith(device, EXT2_OFFSET_BLOCK_COUNT, 0U, false))
+    {
+        KernelWriteString("  A degenerate geometry was accepted.\n");
+        succeeded = false;
+    }
+
+    /*
+     * The group count is derivable from the blocks and from the inodes, and the
+     * two must agree. Halving the inodes per group leaves a volume every other
+     * rule accepts.
+     */
+    if (!KernelVolumeRefusedWith(device, EXT2_OFFSET_INODES_PER_GROUP, 8U, false))
+    {
+        KernelWriteString("  A volume whose two group counts disagree was accepted.\n");
+        succeeded = false;
+    }
+
+    if (!KernelVolumeRefusedWith(device, EXT2_OFFSET_FREE_BLOCKS, 1000U, false))
+    {
+        KernelWriteString("  A volume reporting more free blocks than it holds was "
+                          "accepted.\n");
+        succeeded = false;
+    }
+
+    if (!KernelVolumeRefusedWith(device, EXT2_OFFSET_INODE_SIZE, 100U, true) ||
+        !KernelVolumeRefusedWith(device, EXT2_OFFSET_INODE_SIZE, 2048U, true))
+    {
+        KernelWriteString("  An inode size that is not a power of two within a block was "
+                          "accepted.\n");
+        succeeded = false;
+    }
+
+    if (!KernelVolumeRefusedWith(device, EXT2_OFFSET_FIRST_INODE, 2U, false))
+    {
+        KernelWriteString("  A first usable inode among the reserved ones was accepted.\n");
+        succeeded = false;
+    }
+
+    /*
+     * An incompatible feature this kernel lacks makes the volume unreadable; a
+     * read-only compatible one makes it unwritable. The distinction is the whole
+     * purpose of the two fields, so both directions are asserted.
+     */
+    if (!KernelVolumeRefusedWith(device, EXT2_OFFSET_FEATURE_INCOMPAT,
+                                 EXT2_FEATURE_INCOMPAT_RECOVER, false))
+    {
+        KernelWriteString("  A volume requiring an unimplemented feature was accepted.\n");
+        succeeded = false;
+    }
+
+    KernelSetVolumeWord(EXT2_OFFSET_FEATURE_RO_COMPAT, EXT2_FEATURE_RO_COMPAT_BTREE_DIR);
+    (void)BufferInvalidateDevice(device);
+
+    if (!Ext2ReadSuperblock(device, &superblock) || !superblock.read_only)
+    {
+        KernelWriteString("  A volume with an unimplemented read-only feature was not "
+                          "made read-only.\n");
+        succeeded = false;
+    }
+
+    KernelComposeVolume();
+    KernelSetVolumeHalf(EXT2_OFFSET_STATE, (uint16_t)EXT2_ERROR_FS);
+    (void)BufferInvalidateDevice(device);
+
+    if (!Ext2ReadSuperblock(device, &superblock) || !superblock.read_only)
+    {
+        KernelWriteString("  A volume that was not cleanly unmounted was not made "
+                          "read-only.\n");
+        succeeded = false;
+    }
+
+    /* A volume of revision 0 states neither inode size nor first inode. */
+    KernelComposeVolume();
+    KernelSetVolumeWord(EXT2_OFFSET_REVISION, EXT2_GOOD_OLD_REV);
+    KernelSetVolumeWord(EXT2_OFFSET_FEATURE_INCOMPAT, EXT2_FEATURE_INCOMPAT_RECOVER);
+    (void)BufferInvalidateDevice(device);
+
+    if (!Ext2ReadSuperblock(device, &superblock) ||
+        (superblock.inode_size != EXT2_GOOD_OLD_INODE_SIZE) ||
+        (superblock.first_inode != EXT2_GOOD_OLD_FIRST_INODE) ||
+        (superblock.feature_incompatible != 0U) || (superblock.volume_name[0] != '\0'))
+    {
+        KernelWriteString("  A volume of revision 0 was not given its fixed values.\n");
+        succeeded = false;
+    }
+
+    KernelComposeVolume();
+    (void)BufferInvalidateDevice(device);
+
+    /* A device with nowhere to put a superblock, and requests without one. */
+    if (Ext2ReadSuperblock(NULL, &superblock) || Ext2ReadSuperblock(device, NULL))
+    {
+        KernelWriteString("  A degenerate request was accepted.\n");
+        succeeded = false;
+    }
+
+    (void)BufferInvalidateDevice(device);
+    (void)BlockUnregister(device);
+
+    device = BlockRegister("mem1", &KernelMemoryDeviceOperations, NULL, BLOCK_SIZE_DEFAULT, 2U,
+                           false);
+
+    if ((device == NULL) || Ext2ReadSuperblock(device, &superblock))
+    {
+        KernelWriteString("  A device too short to hold a superblock was accepted.\n");
+        succeeded = false;
+    }
+
+    if (device != NULL)
+    {
+        (void)BufferInvalidateDevice(device);
+        (void)BlockUnregister(device);
+    }
+
+    KernelWriteString(succeeded ? "Volume self-test passed.\n" : "Volume self-test FAILED.\n");
+}
+
+/*
  * Moves the cursor of a serial terminal to a column of the current line, the
  * column being counted from one, by the sequence ECMA-48 calls CHA — Cursor
  * Character Absolute, CSI Pn G. The display driver crosses a row boundary upon a
@@ -3975,13 +4348,21 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
     KernelVerifyBuffer();
     BufferReport();
 
+    /*
+     * Phase 5 begins here. Nothing is mounted: the superblock of any volume the
+     * machine actually carries is read and reported, and the parser itself is
+     * asserted against a volume composed in memory.
+     */
+    KernelVerifyExt2();
+    KernelReportVolumes();
+
     PicReport();
     InterruptReport();
     PagingReport();
     AddressSpaceReport();
 
     VgaSetColour(VGA_COLOUR_LIGHT_GREEN, VGA_COLOUR_BLACK);
-    KernelWriteString("Phase 4 initialisation complete to sub-task 4.6.\n");
+    KernelWriteString("Phase 4 initialisation complete; Phase 5 begun to sub-task 5.1.\n");
 
     VgaSetColour(VGA_COLOUR_LIGHT_GREY, VGA_COLOUR_BLACK);
 
