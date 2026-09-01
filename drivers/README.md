@@ -23,12 +23,12 @@ interface and never upon a driver's location.
 | `pci/pci.c` | The PCI bus: configuration-space enumeration by mechanism one. | `<oxys/pci.h>` | 4.3 |
 | `ata/ata.c` | The ATA disk, in programmed input/output mode. | `<oxys/ata.h>` | 4.4 |
 | `block/block.c` | The generic block-device layer above the disk drivers. | `<oxys/block.h>` | 4.5 |
+| `block/buffer.c` | The buffer cache above the block layer. | `<oxys/buffer.h>` | 4.6 |
 
 ## Planned contents
 
 | Path | Device | Phase, sub-task |
 | ---- | ------ | --------------- |
-| `block/` | The buffer cache above the block layer. | 4.6 |
 | `mouse/` | The PS/2 mouse. | 9.4 |
 | `net/` | The Ethernet controller. | 11.1 |
 
@@ -136,6 +136,15 @@ The adaptor that presents an ATA disk as a block device lives in `ata/ata.c`, so
 that the dependency runs one way: a driver knows the layer it presents itself
 through, and the layer knows nothing of ATA. See
 [`../docs/BLOCK.md`](../docs/BLOCK.md).
+
+`block/buffer.c` holds the buffer cache above it: sixty-four blocks of 512 bytes
+found through a hash of the device and the block number, discarded in least
+recently used order, and written back rather than through. A buffer a caller is
+holding is passed over by the eviction and never taken away, a request being
+refused instead — handing the same storage to two callers would appear as
+corruption somewhere else entirely. A dirty buffer is written back before its
+storage is reused, since dropping it would lose a write already reported as
+successful. See [`../docs/BUFFER.md`](../docs/BUFFER.md).
 
 ### `serial/` — the COM1 diagnostic port
 

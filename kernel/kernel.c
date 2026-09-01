@@ -7,7 +7,8 @@
  *          where a keyboard is present, or halts the processor where none is.
  * Key functions: KernelMain, KernelPanic, KernelHalt, KernelVerifyVga,
  *          KernelVerifySerial, KernelVerifyPci, KernelVerifyAta,
- *          KernelVerifyBlock, KernelCommandLineHasOption, KernelEchoBackspace,
+ *          KernelVerifyBlock, KernelVerifyBuffer, KernelCommandLineHasOption,
+ *          KernelEchoBackspace,
  *          KernelEchoLoop,
  *          KernelWriteString, KernelWriteHexadecimal, KernelWriteDecimal.
  * References:
@@ -66,6 +67,7 @@
 #include <oxys/pci.h>
 #include <oxys/ata.h>
 #include <oxys/block.h>
+#include <oxys/buffer.h>
 
 /*
  * The extents of the kernel text section, established by the link script. They
@@ -3076,7 +3078,7 @@ static void KernelVerifyAta(void)
  * makes the layer testable everywhere and testable exactly — the assertions
  * below can state what a read must return rather than merely that it returned.
  */
-#define KERNEL_MEMORY_DEVICE_BLOCKS 32U
+#define KERNEL_MEMORY_DEVICE_BLOCKS 256U
 
 static uint8_t KernelMemoryDeviceStore[KERNEL_MEMORY_DEVICE_BLOCKS * BLOCK_SIZE_DEFAULT];
 
@@ -3332,6 +3334,310 @@ static void KernelVerifyBlock(void)
     }
 
     KernelWriteString(succeeded ? "Block self-test passed.\n" : "Block self-test FAILED.\n");
+}
+
+/* The buffers held at once by the assertion that every buffer may be held. */
+static Buffer *KernelHeldBuffers[BUFFER_CAPACITY];
+
+/*
+ * Asserts that the cache returns the block that was asked for, that a block held
+ * is not read again, that a modified block reaches its device, and that a buffer
+ * somebody is using is never taken from them.
+ *
+ * A cache is a thing that lies about where data came from, and every one of its
+ * failures is silent by construction. A lookup that matched the wrong device
+ * returns a block; an eviction that discarded a dirty buffer reports success and
+ * loses a write; a buffer handed to two callers at once corrupts whichever of
+ * them writes second, at a place unrelated to the defect. The assertions below
+ * are chosen so that each of those produces a failure here instead.
+ *
+ * They are made against the device of memory, for the reasons given where it is
+ * defined: this must be assertable upon a machine with no disk, and must not
+ * write to a machine that has one.
+ */
+static void KernelVerifyBuffer(void)
+{
+    BlockDevice *device;
+    Buffer *first;
+    Buffer *second;
+    uint64_t reads;
+    uint64_t writes;
+    uint64_t hits;
+    uint64_t misses;
+    uint64_t evictions;
+    bool succeeded = true;
+
+    if (BufferCount() == 0U)
+    {
+        KernelWriteString("  The cache has no buffers; its storage was not allocated.\n");
+        KernelWriteString("Buffer self-test FAILED.\n");
+        return;
+    }
+
+    device = BlockRegister("mem0", &KernelMemoryDeviceOperations, NULL, BLOCK_SIZE_DEFAULT,
+                           KERNEL_MEMORY_DEVICE_BLOCKS, false);
+
+    if (device == NULL)
+    {
+        KernelWriteString("  A device of memory could not be registered.\n");
+        KernelWriteString("Buffer self-test FAILED.\n");
+        return;
+    }
+
+    /* Blocks 5, 6 and 7 are given contents the assertions below can name. */
+    KernelFillPattern(KernelBlockBufferA, BLOCK_SIZE_DEFAULT, 0x55U);
+    (void)BlockWrite(device, 5U, 1U, KernelBlockBufferA);
+    KernelFillPattern(KernelBlockBufferA, BLOCK_SIZE_DEFAULT, 0x66U);
+    (void)BlockWrite(device, 6U, 1U, KernelBlockBufferA);
+    KernelFillPattern(KernelBlockBufferA, BLOCK_SIZE_DEFAULT, 0x77U);
+    (void)BlockWrite(device, 7U, 1U, KernelBlockBufferA);
+
+    /* A block not held is read from the device, and read correctly. */
+    reads = device->blocks_read;
+    first = BufferGet(device, 5U);
+
+    if ((first == NULL) || (device->blocks_read != (reads + 1U)) ||
+        !KernelPatternMatches(first->data, BLOCK_SIZE_DEFAULT, 0x55U) ||
+        (first->block != 5U) || (first->device != device))
+    {
+        KernelWriteString("  A block was not fetched from the device correctly.\n");
+        KernelWriteString("Buffer self-test FAILED.\n");
+        (void)BufferInvalidateDevice(device);
+        (void)BlockUnregister(device);
+        return;
+    }
+
+    BufferRelease(first);
+
+    /* The same block is then found in the cache, and the device is not touched. */
+    hits = BufferHits();
+    reads = device->blocks_read;
+    second = BufferGet(device, 5U);
+
+    if ((second != first) || (BufferHits() != (hits + 1U)) || (device->blocks_read != reads))
+    {
+        KernelWriteString("  A block already held was fetched from the device again.\n");
+        succeeded = false;
+    }
+
+    BufferRelease(second);
+
+    /* Two different blocks occupy two different buffers. */
+    first = BufferGet(device, 6U);
+    second = BufferGet(device, 7U);
+
+    if ((first == NULL) || (second == NULL) || (first == second) ||
+        !KernelPatternMatches(first->data, BLOCK_SIZE_DEFAULT, 0x66U) ||
+        !KernelPatternMatches(second->data, BLOCK_SIZE_DEFAULT, 0x77U))
+    {
+        KernelWriteString("  Two blocks were confused for one another.\n");
+        succeeded = false;
+    }
+
+    BufferRelease(second);
+
+    /*
+     * A modified block does not reach the device until it is written back. That
+     * deferral is the whole difference between this cache and none at all, so it
+     * is asserted directly: the device must still hold the old contents.
+     */
+    if (first != NULL)
+    {
+        KernelFillPattern(first->data, BLOCK_SIZE_DEFAULT, 0x88U);
+        BufferMarkDirty(first);
+        BufferRelease(first);
+    }
+
+    writes = device->blocks_written;
+
+    if ((device->blocks_written != writes) ||
+        !BlockRead(device, 6U, 1U, KernelBlockBufferB) ||
+        !KernelPatternMatches(KernelBlockBufferB, BLOCK_SIZE_DEFAULT, 0x66U))
+    {
+        KernelWriteString("  A modified block reached the device before it was written "
+                          "back.\n");
+        succeeded = false;
+    }
+
+    if (BufferDirtyCount() == 0U)
+    {
+        KernelWriteString("  A modified block was not recorded as dirty.\n");
+        succeeded = false;
+    }
+
+    /* Synchronising writes it back, and the device then holds the new contents. */
+    if (!BufferSync() || (device->blocks_written != (writes + 1U)) ||
+        !BlockRead(device, 6U, 1U, KernelBlockBufferB) ||
+        !KernelPatternMatches(KernelBlockBufferB, BLOCK_SIZE_DEFAULT, 0x88U) ||
+        (BufferDirtyCount() != 0U))
+    {
+        KernelWriteString("  A modified block did not reach the device upon "
+                          "synchronisation.\n");
+        succeeded = false;
+    }
+
+    /*
+     * A dirty block evicted under pressure must be written back as it goes. The
+     * failure this catches is the one that loses data: an eviction that dropped
+     * the contents would report nothing and be discovered only by a later read.
+     */
+    first = BufferGet(device, 7U);
+
+    if (first != NULL)
+    {
+        KernelFillPattern(first->data, BLOCK_SIZE_DEFAULT, 0x99U);
+        BufferMarkDirty(first);
+        BufferRelease(first);
+    }
+
+    evictions = BufferEvictions();
+
+    for (uint64_t block = 16U; block < (16U + (uint64_t)BUFFER_CAPACITY); ++block)
+    {
+        Buffer *const transient = BufferGet(device, block);
+
+        BufferRelease(transient);
+    }
+
+    if ((BufferEvictions() <= evictions) || !BlockRead(device, 7U, 1U, KernelBlockBufferB) ||
+        !KernelPatternMatches(KernelBlockBufferB, BLOCK_SIZE_DEFAULT, 0x99U))
+    {
+        KernelWriteString("  A dirty block was evicted without being written back.\n");
+        succeeded = false;
+    }
+
+    /* Having been evicted, the block is fetched from the device once more. */
+    misses = BufferMisses();
+    reads = device->blocks_read;
+    first = BufferGet(device, 5U);
+
+    if ((first == NULL) || (BufferMisses() != (misses + 1U)) ||
+        (device->blocks_read != (reads + 1U)))
+    {
+        KernelWriteString("  An evicted block was reported as still held.\n");
+        succeeded = false;
+    }
+
+    /*
+     * A buffer a caller is holding is passed over by the eviction, however long
+     * it has been there. The reference above is deliberately not released.
+     */
+    for (uint64_t block = 128U; block < (128U + (uint64_t)BUFFER_CAPACITY); ++block)
+    {
+        Buffer *const transient = BufferGet(device, block);
+
+        BufferRelease(transient);
+    }
+
+    hits = BufferHits();
+    second = BufferGet(device, 5U);
+
+    if ((second != first) || (BufferHits() != (hits + 1U)) ||
+        !KernelPatternMatches(first->data, BLOCK_SIZE_DEFAULT, 0x55U))
+    {
+        KernelWriteString("  A buffer being held by a caller was evicted beneath them.\n");
+        succeeded = false;
+    }
+
+    BufferRelease(second);
+    BufferRelease(first);
+
+    /*
+     * With every buffer held, a further request is refused rather than served by
+     * evicting one of them. Handing out storage twice is the failure this
+     * prevents, and it would appear as corruption somewhere else entirely.
+     */
+    for (size_t index = 0U; index < BUFFER_CAPACITY; ++index)
+    {
+        KernelHeldBuffers[index] = BufferGet(device, (uint64_t)index);
+
+        if (KernelHeldBuffers[index] == NULL)
+        {
+            KernelWriteString("  A buffer could not be held while others were.\n");
+            succeeded = false;
+            break;
+        }
+    }
+
+    if (BufferHeldCount() != BUFFER_CAPACITY)
+    {
+        KernelWriteString("  The cache does not agree upon how many buffers are held.\n");
+        succeeded = false;
+    }
+
+    if (BufferGet(device, (uint64_t)BUFFER_CAPACITY + 1U) != NULL)
+    {
+        KernelWriteString("  A buffer was issued when every one of them was held.\n");
+        succeeded = false;
+    }
+
+    /* Nor may a device be discarded while its buffers are held. */
+    if (BufferInvalidateDevice(device))
+    {
+        KernelWriteString("  A device was invalidated while its buffers were held.\n");
+        succeeded = false;
+    }
+
+    for (size_t index = 0U; index < BUFFER_CAPACITY; ++index)
+    {
+        BufferRelease(KernelHeldBuffers[index]);
+        KernelHeldBuffers[index] = NULL;
+    }
+
+    if (BufferHeldCount() != 0U)
+    {
+        KernelWriteString("  A buffer remained held after being released.\n");
+        succeeded = false;
+    }
+
+    /*
+     * Invalidation writes back what is dirty and then discards everything of the
+     * device, which is what makes it safe to withdraw the device afterwards.
+     */
+    first = BufferGet(device, 4U);
+
+    if (first != NULL)
+    {
+        KernelFillPattern(first->data, BLOCK_SIZE_DEFAULT, 0xAAU);
+        BufferMarkDirty(first);
+        BufferRelease(first);
+    }
+
+    if (!BufferInvalidateDevice(device) || (BufferValidCount() != 0U) ||
+        !BlockRead(device, 4U, 1U, KernelBlockBufferB) ||
+        !KernelPatternMatches(KernelBlockBufferB, BLOCK_SIZE_DEFAULT, 0xAAU))
+    {
+        KernelWriteString("  Invalidation did not write back and discard the device.\n");
+        succeeded = false;
+    }
+
+    misses = BufferMisses();
+    first = BufferGet(device, 5U);
+
+    if ((first == NULL) || (BufferMisses() != (misses + 1U)))
+    {
+        KernelWriteString("  A block survived the invalidation of its device.\n");
+        succeeded = false;
+    }
+
+    BufferRelease(first);
+
+    /*
+     * Nothing beneath the cache failed. Every transfer the test performed was of
+     * a block the device holds, so a failure here means the cache asked for one
+     * it should not have.
+     */
+    if (BufferFailures() != 0U)
+    {
+        KernelWriteString("  A transfer beneath the cache failed.\n");
+        succeeded = false;
+    }
+
+    /* The device is discarded and withdrawn in that order, as it must be. */
+    (void)BufferInvalidateDevice(device);
+    (void)BlockUnregister(device);
+
+    KernelWriteString(succeeded ? "Buffer self-test passed.\n" : "Buffer self-test FAILED.\n");
 }
 
 /*
@@ -3660,13 +3966,22 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
     KernelVerifyBlock();
     BlockReport();
 
+    /*
+     * The cache stands between the block layer and everything that will read a
+     * medium. Its storage comes from the kernel heap, so it cannot be prepared
+     * until that exists, which it has since Phase 2.
+     */
+    (void)BufferInitialise();
+    KernelVerifyBuffer();
+    BufferReport();
+
     PicReport();
     InterruptReport();
     PagingReport();
     AddressSpaceReport();
 
     VgaSetColour(VGA_COLOUR_LIGHT_GREEN, VGA_COLOUR_BLACK);
-    KernelWriteString("Phase 4 initialisation complete to sub-task 4.5.\n");
+    KernelWriteString("Phase 4 initialisation complete to sub-task 4.6.\n");
 
     VgaSetColour(VGA_COLOUR_LIGHT_GREY, VGA_COLOUR_BLACK);
 
