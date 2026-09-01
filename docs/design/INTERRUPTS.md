@@ -510,12 +510,12 @@ the mask is honoured.
 2. No interrupt stack table entry is used. A fault taken on a bad stack cannot
    presently be reported. This requires the task state segment of sub-task 6.1.
 3. Three devices claim a request line: the interval timer of sub-task 3.6 upon
-   IR0, described in `docs/TIME.md`; the PS/2 keyboard of sub-task 3.7 upon IR1,
-   described in `docs/KEYBOARD.md`; and the 16550 serial adapter of sub-task 4.1
-   upon IR4, described in `docs/SERIAL.md`. Every other line remains masked until
+   IR0, described in `docs/devices/TIME.md`; the PS/2 keyboard of sub-task 3.7 upon IR1,
+   described in `docs/devices/KEYBOARD.md`; and the 16550 serial adapter of sub-task 4.1
+   upon IR4, described in `docs/devices/SERIAL.md`. Every other line remains masked until
    a driver for its device exists.
 4. The interrupt flag is left clear except where a self-test sets it deliberately,
    each such test clearing it again before it returns. From sub-task 3.7 the
-   echo loop of `docs/KEYBOARD.md`, Section 7.2, sets it permanently at
+   echo loop of `docs/devices/KEYBOARD.md`, Section 7.2, sets it permanently at
    the completion of initialisation, and the kernel thereafter runs with
    interrupts enabled and halts between them.

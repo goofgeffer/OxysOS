@@ -5,7 +5,7 @@
  * Key definitions: KernelAllocate, KernelAllocateZeroed, KernelFree,
  *          KernelHeapInitialise, KernelHeapReport.
  * References:
- *   - docs/MEMORY-LAYOUT.md, Section 11: the design of the heap.
+ *   - docs/design/MEMORY-LAYOUT.md, Section 11: the design of the heap.
  *   - Bonwick, J., "The Slab Allocator: An Object-Caching Kernel Memory
  *     Allocator", USENIX Summer 1994. Consulted for the object-caching concept
  *     alone; the implementation here is original and considerably simpler,

@@ -46,7 +46,7 @@
  *   This driver therefore sets the bit explicitly and keeps it set. The
  *   alternative, clearing it and decoding set 2 directly, is defensible and is
  *   what a driver supporting a USB-attached keyboard would eventually want; it
- *   is not what sub-task 3.7 of docs/PLAN.md specifies.
+ *   is not what sub-task 3.7 of docs/project/PLAN.md specifies.
  *
  * Concurrency. The circular buffer has a single producer, the interrupt handler,
  * and a single consumer. The producer advances the write index alone and the

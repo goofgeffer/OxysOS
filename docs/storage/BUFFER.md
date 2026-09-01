@@ -1,11 +1,11 @@
 # The Buffer Cache
 
-**Phase**: 4, sub-task 4.6, of [`PLAN.md`](PLAN.md).
+**Phase**: 4, sub-task 4.6, of [`PLAN.md`](../project/PLAN.md).
 
 **Authority**: `PROJECT_GUIDELINES.md`, Sections 2, 3 and 6.
 
-**Implementation**: [`../drivers/block/buffer.c`](../drivers/block/buffer.c),
-[`../kernel/include/oxys/buffer.h`](../kernel/include/oxys/buffer.h).
+**Implementation**: [`../drivers/block/buffer.c`](../../drivers/block/buffer.c),
+[`../kernel/include/oxys/buffer.h`](../../kernel/include/oxys/buffer.h).
 
 ## 1. What the cache is for
 

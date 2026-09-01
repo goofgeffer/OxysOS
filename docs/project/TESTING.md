@@ -20,7 +20,7 @@ consulted: the string `FAILED` appearing anywhere within it denotes a regression
 
 **From sub-task 3.7 the target always runs for the full 25 seconds.** The kernel
 no longer halts at the end of initialisation; where a keyboard is present it
-enters the echo loop of `docs/KEYBOARD.md`, Section 7.2, and the run is ended by
+enters the echo loop of `docs/devices/KEYBOARD.md`, Section 7.2, and the run is ended by
 the `timeout` that bounds it. The assertion is unaffected, the expected string
 having been emitted before the loop is entered.
 
@@ -78,7 +78,7 @@ the backspace that crosses into the row above, the agreement between the driver'
 cursor position and the one read back out of the CRT controller, the refusal of a
 position outside the display and of an impossible cursor shape, the hiding and
 restoration of the hardware cursor, and a scroll that moves the display by
-exactly one row. The table in `docs/DISPLAY.md`, Section 7.1, pairs each property
+exactly one row. The table in `docs/devices/DISPLAY.md`, Section 7.1, pairs each property
 with the failure it would catch.
 
 The scroll assertion reads the frame buffer back through `VgaCharacterAt` and
@@ -204,7 +204,7 @@ the self-test reads the final sector, writes a pattern, reads it back, compares
 it byte for byte, and restores the sector from what it first read, verifying the
 restoration in its turn. Anybody may boot this kernel upon their own machine, and
 a self-test that wrote to their disk unbidden would destroy their data; see
-`docs/DISK.md`, Section 6.
+`docs/storage/DISK.md`, Section 6.
 
 The entry is selected at the menu. For an unattended run, an ISO may be generated
 with `set default=2` in place of `set default=0`:
@@ -287,7 +287,7 @@ correct point at which to begin an examination of the boot sequence.
 | 2026-08-30 | QEMU screendump — VGA text-mode rendering | Passed; the banner reads `Oxys-OS`. |
 | 2026-08-31 | `make verify` — sub-task 3.5, the interrupt controller self-test | Passed; the controllers are remapped, the mask is honoured, a spurious request is recognised, and the interrupt flag may be set without a double fault. |
 | 2026-08-31 | `make verify` — sub-task 3.6, the interval timer self-test | Passed; divisor 1193 realising 1000.152 Hz, ticks counted only with interrupts enabled and only while the line is unmasked. |
-| 2026-08-31 | `make verify` — sub-task 3.7, the keyboard self-test | Passed; the controller and port self-tests pass, and the decoder, the modifier discipline and the buffer overrun behave as `docs/KEYBOARD.md`, Section 7.1, requires. |
+| 2026-08-31 | `make verify` — sub-task 3.7, the keyboard self-test | Passed; the controller and port self-tests pass, and the decoder, the modifier discipline and the buffer overrun behave as `docs/devices/KEYBOARD.md`, Section 7.1, requires. |
 | 2026-08-31 | QEMU `sendkey` — the keyboard interrupt path, end to end | Passed; the keystrokes `h e l l o spc o x y s` were echoed upon the serial port as `hello oxys`. |
 | 2026-08-31 | `make verify` — the display self-test | Passed; the backspace, the tabulation, the carriage return and the line feed move the cursor as ANSI X3.4-1986 defines them, and a backspace in the first column does not move it. |
 | 2026-08-31 | `make verify` — sub-task 4.1, the serial self-test | Passed; the request line is claimed and unmasked, a sequence returns unaltered through local loopback, an impossible line configuration is refused, 9600 baud yields a divisor of twelve, a written string raises the adapter's interrupt, and the transmitter interrupt is withdrawn once idle. |

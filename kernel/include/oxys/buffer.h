@@ -9,9 +9,9 @@
  *          BufferMarkDirty, BufferFlush, BufferSync, BufferInvalidateDevice,
  *          BufferReport.
  * References:
- *   - docs/BUFFER.md: the design of the cache, the eviction policy and the
+ *   - docs/storage/BUFFER.md: the design of the cache, the eviction policy and the
  *     reasons for write-back rather than write-through.
- *   - docs/BLOCK.md: the layer beneath, whose devices this cache holds blocks
+ *   - docs/storage/BLOCK.md: the layer beneath, whose devices this cache holds blocks
  *     of, and whose withdrawal discipline requires BufferInvalidateDevice.
  */
 
@@ -71,7 +71,7 @@ void BufferRelease(Buffer *buffer);
 /*
  * Records that the buffer's contents differ from the device's. The block is
  * written back when the buffer is evicted, flushed or synchronised, and not
- * before; see docs/BUFFER.md, Section 4.
+ * before; see docs/storage/BUFFER.md, Section 4.
  */
 void BufferMarkDirty(Buffer *buffer);
 

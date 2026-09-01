@@ -1,13 +1,13 @@
 # The PCI Bus
 
-**Phase**: 4, sub-task 4.3, of [`PLAN.md`](PLAN.md).
+**Phase**: 4, sub-task 4.3, of [`PLAN.md`](../project/PLAN.md).
 
 **Authority**: `PROJECT_GUIDELINES.md`, Sections 2, 3 and 6. Every assertion of
 hardware behaviour below carries a citation, and every specification named is
-registered in [`REFERENCES.md`](REFERENCES.md).
+registered in [`REFERENCES.md`](../project/REFERENCES.md).
 
-**Implementation**: [`../drivers/pci/pci.c`](../drivers/pci/pci.c),
-[`../kernel/include/oxys/pci.h`](../kernel/include/oxys/pci.h).
+**Implementation**: [`../drivers/pci/pci.c`](../../drivers/pci/pci.c),
+[`../kernel/include/oxys/pci.h`](../../kernel/include/oxys/pci.h).
 
 ## 1. What the enumeration is for
 

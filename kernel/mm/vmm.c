@@ -8,7 +8,7 @@
  * References:
  *   - Intel 64 and IA-32 Architectures Software Developer's Manual, Volume 3A,
  *     Section 4.5: the 4 KiB page is the unit of mapping.
- *   - docs/MEMORY-LAYOUT.md, Section 10: the design of the arena.
+ *   - docs/design/MEMORY-LAYOUT.md, Section 10: the design of the arena.
  *
  * Design note. Address space is allocated by a bump pointer with a free list of
  * released ranges searched first. The free list is a fixed-capacity array rather

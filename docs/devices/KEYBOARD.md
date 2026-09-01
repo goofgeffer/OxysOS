@@ -232,7 +232,7 @@ The controller raises its request once for each byte it has to offer. A handler
 that drained the buffer in a loop would consume bytes whose requests had not yet
 been delivered, and those requests would then arrive to find nothing to read.
 They would be counted as spurious or unclaimed, and the accounting of
-`docs/INTERRUPTS.md`, Section 9, would cease to mean anything.
+`docs/design/INTERRUPTS.md`, Section 9, would cease to mean anything.
 
 ## 7. Verification
 
@@ -283,7 +283,7 @@ project so far that exercises a device end to end, from a physical event to a
 character, and it is the reason the echo loop exists.
 
 From sub-task 4.1 the loop drains the serial receive buffer as well, so the same
-demonstration is available for the serial adapter; `docs/SERIAL.md`, Section 8.2,
+demonstration is available for the serial adapter; `docs/devices/SERIAL.md`, Section 8.2,
 records it.
 
 The backspace is echoed by `KernelEchoBackspace`, which composes an erasure

@@ -1,14 +1,14 @@
 # The Serial Adapter
 
-**Phase**: 4, sub-task 4.1, of [`PLAN.md`](PLAN.md). The polled subset upon which
+**Phase**: 4, sub-task 4.1, of [`PLAN.md`](../project/PLAN.md). The polled subset upon which
 this driver was built belongs to Phase 1, sub-task 1.9.
 
 **Authority**: `PROJECT_GUIDELINES.md`, Sections 2, 3 and 6. Every assertion of
 hardware behaviour below carries a citation, and every specification named is
-registered in [`REFERENCES.md`](REFERENCES.md).
+registered in [`REFERENCES.md`](../project/REFERENCES.md).
 
-**Implementation**: [`../drivers/serial/serial.c`](../drivers/serial/serial.c),
-[`../kernel/include/oxys/serial.h`](../kernel/include/oxys/serial.h).
+**Implementation**: [`../drivers/serial/serial.c`](../../drivers/serial/serial.c),
+[`../kernel/include/oxys/serial.h`](../../kernel/include/oxys/serial.h).
 
 ## 1. What the adapter is, and why it matters more than it appears to
 
@@ -20,7 +20,7 @@ the only channel by which the kernel can report anything to a machine that is no
 the one it is running upon.
 
 That is why it was implemented in Phase 1 rather than being deferred with the
-rest of Phase 4. `make verify`, described in [`TESTING.md`](TESTING.md), boots
+rest of Phase 4. `make verify`, described in [`TESTING.md`](../project/TESTING.md), boots
 the kernel with no display attached and asserts upon what arrives at COM1. Every
 regression test the project has depends upon this device.
 

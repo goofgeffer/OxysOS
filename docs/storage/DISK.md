@@ -1,13 +1,13 @@
 # The Disk
 
-**Phase**: 4, sub-task 4.4, of [`PLAN.md`](PLAN.md).
+**Phase**: 4, sub-task 4.4, of [`PLAN.md`](../project/PLAN.md).
 
 **Authority**: `PROJECT_GUIDELINES.md`, Sections 2, 3 and 6. Every assertion of
 hardware behaviour below carries a citation, and every specification named is
-registered in [`REFERENCES.md`](REFERENCES.md).
+registered in [`REFERENCES.md`](../project/REFERENCES.md).
 
-**Implementation**: [`../drivers/ata/ata.c`](../drivers/ata/ata.c),
-[`../kernel/include/oxys/ata.h`](../kernel/include/oxys/ata.h).
+**Implementation**: [`../drivers/ata/ata.c`](../../drivers/ata/ata.c),
+[`../kernel/include/oxys/ata.h`](../../kernel/include/oxys/ata.h).
 
 ## 1. What is different about a disk
 
@@ -249,7 +249,7 @@ presents no device this driver can address; the disk self-test there reports tha
 nothing answered and asserts nothing, which is the correct outcome and is
 recorded as such. The disk tests are run upon the i440fx board, which presents
 the PIIX3 IDE controller at `0:1.1` in compatibility mode. Both are recorded in
-[`TESTING.md`](TESTING.md).
+[`TESTING.md`](../project/TESTING.md).
 
 ## 8. Limitations
 
@@ -257,7 +257,7 @@ the PIIX3 IDE controller at `0:1.1` in compatibility mode. Both are recorded in
    does not read the base address registers of a controller in native mode, nor
    set the bits of the programming interface that would return it to
    compatibility mode. Every machine of interest presents the legacy addresses;
-   the PCI enumeration of [`PCI.md`](PCI.md) records the controller, and using
+   the PCI enumeration of [`PCI.md`](../devices/PCI.md) records the controller, and using
    what it recorded is the natural next step.
 2. **Polled, not interrupt-driven.** The device's interrupt is disabled at the
    device by nIEN, rather than merely masked, because nothing claims IRQ14 or

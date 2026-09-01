@@ -45,11 +45,25 @@ than as later additions, in accordance with `PROJECT_GUIDELINES.md`, Section 5:
 | `crypto/` | The random-number generator, the hash function and the symmetric cipher. | Phase 10 |
 | `net/` | The network protocol stack. | Phase 11 |
 | `uefi/` | The UEFI application entry point and the UEFI handoff path. | Phase 12 |
-| `docs/` | The documentation corpus indexed by the repository `README.md`. | Phase 1 |
+| `docs/` | The documentation corpus, grouped by subject into `project/`, `design/`, `devices/` and `storage/` and indexed by [`docs/README.md`](../README.md). | Phase 1 |
+
+### 2.1 The grouping of `docs/`
+
+| Directory | Holds |
+| --------- | ----- |
+| `docs/project/` | How the work is conducted: the plan, the test procedure and record, the toolchain, the coding standards, the bibliography. |
+| `docs/design/` | The kernel itself: this document, the boot sequence, the address space, the interrupts. |
+| `docs/devices/` | One document per device the kernel drives. |
+| `docs/storage/` | The stack from a medium to a caller: the disk, the block layer, the buffer cache. |
+
+The grouping is by subject and not by phase, since a document is amended in every
+phase that touches its subject. A directory `README.md` describes its directory's
+contents locally; these documents describe the system by subject. The two are
+complementary and neither replaces the other.
 
 ## 3. Present composition
 
-As of the completion of Phases 2 and 3, the system comprises
+As of the completion of Phase 4, the system comprises
 the following translation units.
 
 | Unit | Role |
@@ -149,12 +163,12 @@ From sub-task 4.1 the serial path is buffered and carried by interrupt, but it
 retains its polled path and reverts to it whenever the interrupt flag is clear.
 That is not a fallback for hardware that fails: it is the ordinary path of a
 panic, which reports with interrupts disabled and must not be left holding its
-message in a buffer that nothing will drain. `docs/SERIAL.md`, Section 4, records
+message in a buffer that nothing will drain. `docs/devices/SERIAL.md`, Section 4, records
 the rule and the single place it is decided.
 
 From sub-task 4.2 the display path is a formal driver equally. It is not the path
 the tests read and not the path a panic can most be relied upon to reach; it is
 the path a person looking at the machine has, and the property it is built for is
 that the machine can verify what it displayed rather than merely that it wrote
-something. `docs/DISPLAY.md`, Section 7, records why a display is unusually hard
+something. `docs/devices/DISPLAY.md`, Section 7, records why a display is unusually hard
 to test and what is asserted at each boot in consequence.

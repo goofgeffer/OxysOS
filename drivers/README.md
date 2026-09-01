@@ -1,7 +1,7 @@
 # `drivers/` — Device Drivers
 
 **Phase**: 1, sub-task 1.7, for the early output drivers. Phase 4 in full.
-**Detailed design**: [`../docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md),
+**Detailed design**: [`../docs/design/ARCHITECTURE.md`](../docs/design/ARCHITECTURE.md),
 Section 6, records the diagnostic policy these drivers serve.
 
 ## Purpose
@@ -59,7 +59,7 @@ and it will not retreat past the **erase limit**, a position recorded by
 `VgaSetEraseLimit` before which no backspace may pass. The limit is what
 distinguishes a line of input from the boot log above it, the driver having no
 other way to tell them apart; whoever reads the input sets it. See
-[`../docs/DISPLAY.md`](../docs/DISPLAY.md), Section 6.
+[`../docs/devices/DISPLAY.md`](../docs/devices/DISPLAY.md), Section 6.
 
 The driver is asserted at each boot by `KernelVerifyVga`, which checks the cursor
 movements, the erase limit, the read-back of the hardware cursor position from
@@ -90,7 +90,7 @@ Buses are reached through the host bridge and through each PCI-to-PCI bridge
 found, rather than by sweeping all 256; the queue of buses awaiting a scan is
 explicit rather than the call stack, and a bitmap records those already visited so
 that malformed hardware cannot send the walk around a cycle. Nothing is claimed or
-configured. See [`../docs/PCI.md`](../docs/PCI.md).
+configured. See [`../docs/devices/PCI.md`](../docs/devices/PCI.md).
 
 ### `ata/` — the disk
 
@@ -116,7 +116,7 @@ throughout initialisation.
 
 The self-test reads unconditionally and writes only when the operator has booted
 the GRUB entry that passes `disk-write-test`, and then only to a sector it first
-read and afterwards restores. See [`../docs/DISK.md`](../docs/DISK.md).
+read and afterwards restores. See [`../docs/storage/DISK.md`](../docs/storage/DISK.md).
 
 ### `block/` — the generic block-device layer
 
@@ -135,7 +135,7 @@ making the obvious sum wrap so that a range wholly outside the device would pass
 The adaptor that presents an ATA disk as a block device lives in `ata/ata.c`, so
 that the dependency runs one way: a driver knows the layer it presents itself
 through, and the layer knows nothing of ATA. See
-[`../docs/BLOCK.md`](../docs/BLOCK.md).
+[`../docs/storage/BLOCK.md`](../docs/storage/BLOCK.md).
 
 `block/buffer.c` holds the buffer cache above it: sixty-four blocks of 512 bytes
 found through a hash of the device and the block number, discarded in least
@@ -144,7 +144,7 @@ holding is passed over by the eviction and never taken away, a request being
 refused instead — handing the same storage to two callers would appear as
 corruption somewhere else entirely. A dirty buffer is written back before its
 storage is reused, since dropping it would lose a write already reported as
-successful. See [`../docs/BUFFER.md`](../docs/BUFFER.md).
+successful. See [`../docs/storage/BUFFER.md`](../docs/storage/BUFFER.md).
 
 ### `serial/` — the COM1 diagnostic port
 
@@ -172,10 +172,10 @@ interrupt is enabled only while characters are queued, the condition it reports
 being a level rather than an event.
 
 This driver is the basis of the automated verification described in
-[`../docs/TESTING.md`](../docs/TESTING.md): it is what makes a headless
+[`../docs/project/TESTING.md`](../docs/project/TESTING.md): it is what makes a headless
 regression test possible, which is why its polled subset was implemented in
 Phase 1 rather than being deferred with the rest of Phase 4. The design is
-recorded in [`../docs/SERIAL.md`](../docs/SERIAL.md).
+recorded in [`../docs/devices/SERIAL.md`](../docs/devices/SERIAL.md).
 
 ### `pic/` — the interrupt controllers
 
@@ -189,7 +189,7 @@ the cascade requires it.
 This driver differs from the others in that it is not a peripheral but the
 mechanism by which every other peripheral will be heard. It consequently owns the
 end-of-interrupt protocol on behalf of all of them, for the reasons set out in
-[`../docs/INTERRUPTS.md`](../docs/INTERRUPTS.md), Section 9.4. A device driver
+[`../docs/design/INTERRUPTS.md`](../docs/design/INTERRUPTS.md), Section 9.4. A device driver
 registers its handler with `PicInstallHandler` and unmasks its own line; it does
 not signal completion.
 
@@ -204,7 +204,7 @@ Mode 2 is used in preference to mode 3 because the square wave mode decrements
 the count by two and therefore admits only even divisors, while nothing here has
 any interest in the shape of the output waveform. The reasoning, the divisor
 arithmetic and the accuracy actually obtained are recorded in
-[`../docs/TIME.md`](../docs/TIME.md).
+[`../docs/devices/TIME.md`](../docs/devices/TIME.md).
 
 ### `keyboard/` — the PS/2 keyboard
 
@@ -213,7 +213,7 @@ scan code set 1 into key events carrying the character and the modifier state,
 and delivers them through a circular buffer of 128 events.
 
 Two points are easily got wrong and are recorded in
-[`../docs/KEYBOARD.md`](../docs/KEYBOARD.md). The keyboard and the controller are
+[`../docs/devices/KEYBOARD.md`](../docs/devices/KEYBOARD.md). The keyboard and the controller are
 different devices reached through the same pair of ports, and they use
 overlapping command numbers for unrelated purposes. And the keyboard does not
 send set 1: it powers up in set 2, and set 1 is what the controller presents on
@@ -237,7 +237,7 @@ initialisation.
 | Intel 8254 datasheet, sections "Programming the 8254", "Mode 2: Rate Generator" and "Counter Latch Command" | The control word fields; the two-byte transfer of the count, least significant first; the periodic reload of the rate generator and the illegality of a count of one within it; the latching of a running count for reading. |
 | Intel SDM, Volume 1, Section 18.3 | The programmed input/output address space through which both devices are reached. |
 
-Full citations are held in [`../docs/REFERENCES.md`](../docs/REFERENCES.md).
+Full citations are held in [`../docs/project/REFERENCES.md`](../docs/project/REFERENCES.md).
 
 ## Conventions for drivers added later
 

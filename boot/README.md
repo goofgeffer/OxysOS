@@ -1,7 +1,7 @@
 # `boot/` — Bootstrapping and Boot Loader Configuration
 
 **Phase**: 1, sub-tasks 1.3 to 1.6 and 1.9.
-**Detailed design**: [`../docs/BOOT.md`](../docs/BOOT.md).
+**Detailed design**: [`../docs/design/BOOT.md`](../docs/design/BOOT.md).
 
 ## Purpose
 
@@ -33,7 +33,7 @@ GRUB  --->  _start  --->  BootLongModeEntry  --->  KernelEntryHigh  --->  Kernel
 
 The intermediate trampoline exists because the far jump that enters 64-bit mode
 encodes a 32-bit offset and cannot name an address in the upper half of the
-address space. `docs/BOOT.md`, Section 7, sets out the reasoning.
+address space. `docs/design/BOOT.md`, Section 7, sets out the reasoning.
 
 ## Specifications implemented
 
@@ -47,7 +47,7 @@ address space. `docs/BOOT.md`, Section 7, sets out the reasoning.
 | Intel SDM, Volume 3A | 3.4.5, Figure 3-8 | The segment descriptor format and the `L` flag of a 64-bit code segment. |
 | GNU GRUB Manual | 6, 16.3.16 | The configuration file and the `multiboot2` command. |
 
-Full citations are held in [`../docs/REFERENCES.md`](../docs/REFERENCES.md).
+Full citations are held in [`../docs/project/REFERENCES.md`](../docs/project/REFERENCES.md).
 
 ## Diagnostics
 

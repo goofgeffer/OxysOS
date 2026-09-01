@@ -6,7 +6,7 @@
  * Key functions: BlockRegister, BlockUnregister, BlockRead, BlockWrite,
  *          BlockDeviceAt, BlockFindByName, BlockReport.
  * References:
- *   - docs/BLOCK.md: the design of this layer, and the reasons for validating
+ *   - docs/storage/BLOCK.md: the design of this layer, and the reasons for validating
  *     here rather than in each driver.
  *   - ISO/IEC 9899:2011, Section 6.7.3: the const qualifier upon the write
  *     buffer, which this layer preserves down to the driver's operation.
@@ -27,7 +27,7 @@ static uint64_t BlockErrors;
 /*
  * Records a request the layer declined to pass to a driver. It is counted
  * separately from a failure of the hardware, for the reason given in
- * docs/DISK.md, Section 7: a refusal is this layer working, and a figure that
+ * docs/storage/DISK.md, Section 7: a refusal is this layer working, and a figure that
  * added the two together would show a healthy machine accumulating errors.
  */
 static bool BlockRefuse(BlockDevice *device)

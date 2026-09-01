@@ -8,8 +8,8 @@
  * Key functions: BufferInitialise, BufferGet, BufferRelease, BufferMarkDirty,
  *          BufferFlush, BufferSync, BufferInvalidateDevice, BufferReport.
  * References:
- *   - docs/BUFFER.md: the design, the policies and what each self-test asserts.
- *   - docs/BLOCK.md, Section 4: the order — flush, invalidate, withdraw — that a
+ *   - docs/storage/BUFFER.md: the design, the policies and what each self-test asserts.
+ *   - docs/storage/BLOCK.md, Section 4: the order — flush, invalidate, withdraw — that a
  *     device's removal requires, and why this cache must be told of it.
  *   - ISO/IEC 9899:2011, Section 6.3.2.3: the conversion of a pointer to an
  *     integer type, used to derive a hash from a device's address.

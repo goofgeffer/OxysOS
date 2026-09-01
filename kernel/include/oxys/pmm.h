@@ -11,7 +11,7 @@
  *   - Multiboot2 Specification 2.0, Section 3.6.8: the memory map from which the
  *     set of existing frames is derived, and its warning that the map includes
  *     regions occupied by the kernel and the boot information structure.
- *   - docs/MEMORY-LAYOUT.md, Section 6: the extents reserved and the reasons.
+ *   - docs/design/MEMORY-LAYOUT.md, Section 6: the extents reserved and the reasons.
  */
 
 #ifndef OXYS_PMM_H

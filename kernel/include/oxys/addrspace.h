@@ -18,7 +18,7 @@
  *   - Intel SDM, Volume 3A, Section 4.10.4.1: writing CR3 invalidates every
  *     translation-lookaside-buffer entry for the current process context save
  *     those marked global.
- *   - docs/MEMORY-LAYOUT.md, Section 14: the design of address-space cloning.
+ *   - docs/design/MEMORY-LAYOUT.md, Section 14: the design of address-space cloning.
  */
 
 #ifndef OXYS_ADDRSPACE_H

@@ -32,7 +32,7 @@
 /*
  * The base of the direct physical map, at which the whole of physical memory is
  * mapped once Phase 2, sub-task 2.4, has run. The region occupies the 64 TiB
- * beginning at this address; refer to docs/MEMORY-LAYOUT.md, Section 2.
+ * beginning at this address; refer to docs/design/MEMORY-LAYOUT.md, Section 2.
  */
 #define DIRECT_MAP_BASE UINT64_C(0xFFFF800000000000)
 

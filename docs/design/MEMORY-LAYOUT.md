@@ -318,7 +318,7 @@ without that machinery, and it is taken now rather than retrofitted.
 only when that flag is set; it is clear upon reset and GRUB does not set it.
 Until Phase 3, sub-task 3.4, added the flag to `PagingInitialise`, the read-only
 mappings described here were advisory: the kernel could write through them and no
-fault would arise. Refer to `docs/INTERRUPTS.md`, Section 8.4.
+fault would arise. Refer to `docs/design/INTERRUPTS.md`, Section 8.4.
 
 Restrictions are applied at the leaf entry, never at an intermediate one. Intel
 SDM, Volume 3A, Section 4.6, provides that the permissions of a translation are
@@ -347,7 +347,7 @@ No segment register was reloaded after the switch, so the cached descriptors
 remained in force and the table was never read again — until Phase 3 installed
 interrupt gates, delivery of which obliges the processor to read the descriptor
 named by the gate's selector. The consequence and the remedy are recorded in
-`docs/INTERRUPTS.md`, Section 5. The general rule it illustrates is that a
+`docs/design/INTERRUPTS.md`, Section 5. The general rule it illustrates is that a
 structure the processor reads directly must remain mapped for as long as the
 processor may read it, and such reads are not visible in the source.
 

@@ -17,7 +17,7 @@
  *     translation-lookaside-buffer entry for the current process context save
  *     those marked global. No mapping here is marked global, so the write
  *     performed by PagingActivate flushes the whole of the buffer.
- *   - docs/MEMORY-LAYOUT.md, Section 8: the design of this hierarchy.
+ *   - docs/design/MEMORY-LAYOUT.md, Section 8: the design of this hierarchy.
  *
  * Concurrency. This code runs once, before any application processor is started,
  * and requires no synchronisation. From sub-task 6.9, any later modification of

@@ -10,7 +10,7 @@
  * References:
  *   - Multiboot2 Specification 2.0, Section 3.6.8: the memory region types from
  *     which BootMemoryType is derived.
- *   - docs/ARCHITECTURE.md, Section 1, premise 3: boot-protocol neutrality is a
+ *   - docs/design/ARCHITECTURE.md, Section 1, premise 3: boot-protocol neutrality is a
  *     design constraint of the project, not a later accommodation.
  */
 

@@ -16,8 +16,8 @@ practices that are prohibited.
 - **Specification-Driven Development**: Before implementing any subsystem, the contributor must retrieve and cite the official authoritative specifications (e.g., Intel manuals, Multiboot2, EXT2, System V ABI, UEFI Specification, relevant RFCs). No implementation shall proceed without referenced specification.
 - **Synchronous Documentation**: Every single code change must be immediately reflected in:
   - Updated inline comments and file-header blocks.
-  - Corresponding design notes within the `docs/` folder.
-  - The living roadmap `docs/PLAN.md` (marking completed tasks and adjusting subsequent steps).
+  - Corresponding design notes within the `docs/` folder, in the group its subject belongs to: `project/`, `design/`, `devices/` or `storage/`, as `docs/README.md` sets out.
+  - The living roadmap `docs/project/PLAN.md` (marking completed tasks and adjusting subsequent steps).
 - **No External Code Copying**: All source code must be original. Reference implementations may be studied for understanding but must not be transcribed. The only permitted inclusions are standard public domain headers or minimal stub code explicitly required by the toolchain (e.g., linker scripts).
 - **Testing Mandate**: Every milestone must be bootable and testable in both QEMU (with `-machine q35 -cpu qemu64 -smp cores=2` for SMP testing) and VirtualBox. UEFI testing requires QEMU with OVMF firmware (`-bios /usr/share/ovmf/OVMF.fd`). Real hardware compatibility must be considered from the first ISO build.
 
@@ -43,7 +43,7 @@ practices that are prohibited.
 - **Compiler Flags**: `-Wall -Wextra -Werror` shall be enabled at the earliest stable stage, with exceptions explicitly documented in the Makefile.
 
 ## 5. Project Milestones (13 Formal Phases)
-The roadmap is enumerated in full in `docs/PLAN.md`, which is the single source
+The roadmap is enumerated in full in `docs/project/PLAN.md`, which is the single source
 of truth for progress. It comprises 13 major phases, ordered by dependency:
 
 1. **Bootstrapping & Early Output** — Cross-compiler, Multiboot2, long-mode, VGA text output, ISO generation.
@@ -75,7 +75,7 @@ Each phase shall be broken into atomic, testable sub-tasks. The GUI is explicitl
 - **Citing**: Every design document and relevant code comment must include a formal citation (e.g., "Refer to Intel Vol. 3A, Section 4.1 for paging structure details").
 
 ## 7. Update Discipline
-- `docs/PLAN.md` is the single source of truth for task tracking. It shall be updated in every session after any functional change.
+- `docs/project/PLAN.md` is the single source of truth for task tracking. It shall be updated in every session after any functional change.
 - This document is amended only by explicit decision of the project owner. Any such amendment must be acknowledged, and the reason for it recorded, in the commit that makes it.
 
 ## 8. Prohibited Practices
@@ -88,12 +88,12 @@ Each phase shall be broken into atomic, testable sub-tasks. The GUI is explicitl
 At the start of each working session, the contributor shall verify:
 - The working directory is `~/oxys-os`.
 - The cross-compiler is available in `$PATH`.
-- `docs/PLAN.md` exists and reflects the current state of progress.
+- `docs/project/PLAN.md` exists and reflects the current state of progress.
 - The latest code compiles without fatal errors (if applicable).
 
 ## 10. Directory-Level Documentation
 - Every high-level folder containing useful material (like `crypto/`, `drivers/`, `boot/`, or `kernel/`) should have ATLEAST a `README.md` for documentation.
-- Such a `README.md` shall state the purpose of the directory, enumerate its contents, cite the specifications its material implements, and identify the phase of `docs/PLAN.md` to which that material belongs.
+- Such a `README.md` shall state the purpose of the directory, enumerate its contents, cite the specifications its material implements, and identify the phase of `docs/project/PLAN.md` to which that material belongs.
 - A directory that is presently empty, having been created in anticipation of a later phase, acquires its `README.md` at the moment material is first placed within it.
 - This requirement is subordinate to the Synchronous Documentation rule of Section 2: a directory `README.md` must be updated in the same change that alters the contents it describes.
 

@@ -1,11 +1,11 @@
 # The Block Layer
 
-**Phase**: 4, sub-task 4.5, of [`PLAN.md`](PLAN.md).
+**Phase**: 4, sub-task 4.5, of [`PLAN.md`](../project/PLAN.md).
 
 **Authority**: `PROJECT_GUIDELINES.md`, Sections 2, 3 and 6.
 
-**Implementation**: [`../drivers/block/block.c`](../drivers/block/block.c),
-[`../kernel/include/oxys/block.h`](../kernel/include/oxys/block.h).
+**Implementation**: [`../drivers/block/block.c`](../../drivers/block/block.c),
+[`../kernel/include/oxys/block.h`](../../kernel/include/oxys/block.h).
 
 ## 1. What the layer is for
 

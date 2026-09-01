@@ -8,7 +8,7 @@
  *          BlockRead, BlockWrite, BlockDeviceCount, BlockDeviceAt,
  *          BlockFindByName, BlockReport.
  * References:
- *   - docs/BLOCK.md: the design of this layer and the reasons for its shape.
+ *   - docs/storage/BLOCK.md: the design of this layer and the reasons for its shape.
  *   - AT Attachment with Packet Interface: the device this layer is first
  *     implemented over transfers 512-byte sectors addressed by logical block
  *     number, which is the interface generalised here.

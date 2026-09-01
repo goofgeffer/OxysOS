@@ -2,8 +2,8 @@
 
 **Phase**: 1, sub-tasks 1.7 and 1.8. This directory grows in every subsequent
 phase.
-**Detailed design**: [`../docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md) and
-[`../docs/MEMORY-LAYOUT.md`](../docs/MEMORY-LAYOUT.md).
+**Detailed design**: [`../docs/design/ARCHITECTURE.md`](../docs/design/ARCHITECTURE.md) and
+[`../docs/design/MEMORY-LAYOUT.md`](../docs/design/MEMORY-LAYOUT.md).
 
 ## Purpose
 
@@ -93,7 +93,7 @@ processor permanently.
 | Intel SDM, Volume 2B, "HLT" | — | The halt instruction and the conditions that resume it. |
 | Intel SDM, Volume 3A | 3.3.7.1, 4.5 | Canonical addressing, and the higher-half translation helpers. |
 
-Full citations are held in [`../docs/REFERENCES.md`](../docs/REFERENCES.md).
+Full citations are held in [`../docs/project/REFERENCES.md`](../docs/project/REFERENCES.md).
 
 ## Present limitations
 
@@ -101,11 +101,11 @@ Full citations are held in [`../docs/REFERENCES.md`](../docs/REFERENCES.md).
    window and are valid only below one gibibyte. For arbitrary physical memory
    use `PhysicalToDirect` and `DirectToPhysical`, which are valid once
    `PagingInitialise` has run. The distinction is explained in
-   `docs/MEMORY-LAYOUT.md`, Section 9.2.
+   `docs/design/MEMORY-LAYOUT.md`, Section 9.2.
 2. There is no formatted output. `KernelWriteHexadecimal` is a deliberate
    minimum, to be superseded when the C library of Phase 7 exists.
 4. The frame allocator is not yet safe against concurrent access; from sub-task
    6.9 its bitmap and search hint require a spinlock. Nothing here is yet safe
    against concurrent access. Every structure
    introduced from Phase 2 onward must record its locking discipline in its
-   defining file's header, as `docs/ARCHITECTURE.md`, Section 1, requires.
+   defining file's header, as `docs/design/ARCHITECTURE.md`, Section 1, requires.

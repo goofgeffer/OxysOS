@@ -81,7 +81,7 @@ documented. The following are in use.
 
 | Extension | Where | Rationale |
 | --------- | ----- | --------- |
-| GNU C extended inline assembly (`__asm__ __volatile__`) | `kernel/include/oxys/io.h`, `kernel/kernel.c`, `kernel/include/oxys/cpu.h` | ISO C provides no means of expressing the `IN`, `OUT`, `CLI`, `STI`, `HLT`, `INT n`, `PUSHFQ` or control-register instructions. No conforming alternative exists. `INT n` is used only by the boot-time self-tests, which must raise an interrupt deliberately in order to observe how one is handled. `STI` is used by those tests and by the echo loop of `docs/KEYBOARD.md`, Section 7.2, where it must immediately precede `HLT` for the reason given there. `PUSHFQ` is used by `ReadRflags`, upon which a driver's choice between waiting for an interrupt and polling for the same condition depends; see `docs/SERIAL.md`, Section 4. `REP INSW` moves the 256 words of a disk sector without the overhead of 256 separate transfers upon a path that is already the slowest way to reach a disk; there is deliberately no corresponding writer, for the reason given in `docs/DISK.md`, Section 5. |
+| GNU C extended inline assembly (`__asm__ __volatile__`) | `kernel/include/oxys/io.h`, `kernel/kernel.c`, `kernel/include/oxys/cpu.h` | ISO C provides no means of expressing the `IN`, `OUT`, `CLI`, `STI`, `HLT`, `INT n`, `PUSHFQ` or control-register instructions. No conforming alternative exists. `INT n` is used only by the boot-time self-tests, which must raise an interrupt deliberately in order to observe how one is handled. `STI` is used by those tests and by the echo loop of `docs/devices/KEYBOARD.md`, Section 7.2, where it must immediately precede `HLT` for the reason given there. `PUSHFQ` is used by `ReadRflags`, upon which a driver's choice between waiting for an interrupt and polling for the same condition depends; see `docs/devices/SERIAL.md`, Section 4. `REP INSW` moves the 256 words of a disk sector without the overhead of 256 separate transfers upon a path that is already the slowest way to reach a disk; there is deliberately no corresponding writer, for the reason given in `docs/storage/DISK.md`, Section 5. |
 | `_Noreturn` | `kernel/kernel.c` | This is an ISO C11 keyword, not an extension. It is listed here for completeness because it affects code generation. |
 
 ## 8. Prohibitions
@@ -104,7 +104,7 @@ documented. The following are in use.
 
 1. The inline comments and the file header of every file touched are current.
 2. The affected documents within `docs/` are updated.
-3. `docs/PLAN.md` reflects the new state of progress.
+3. `docs/project/PLAN.md` reflects the new state of progress.
 
 A change that satisfies the compiler but not this discipline is incomplete.
 

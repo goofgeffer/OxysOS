@@ -24,7 +24,7 @@
 #define PAGE_SIZE_LARGE UINT64_C(0x200000)
 
 /* The extent of the low memory reserved in its entirety; refer to
- * docs/MEMORY-LAYOUT.md, Section 6.1, for the reasons. */
+ * docs/design/MEMORY-LAYOUT.md, Section 6.1, for the reasons. */
 #define LOW_MEMORY_LIMIT UINT64_C(0x100000)
 
 /*

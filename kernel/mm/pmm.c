@@ -12,7 +12,7 @@
  *   - Multiboot2 Specification 2.0, Section 3.6.8: the memory map, and its
  *     warning that the map "includes the regions occupied by kernel, mbi,
  *     segments and modules" and that the kernel must not overwrite them.
- *   - docs/MEMORY-LAYOUT.md, Section 6: the reserved extents and their reasons.
+ *   - docs/design/MEMORY-LAYOUT.md, Section 6: the reserved extents and their reasons.
  *
  * Design note. A bitmap is chosen in preference to a free-frame stack because it
  * permits a frame to be reserved by address, which the initialisation sequence

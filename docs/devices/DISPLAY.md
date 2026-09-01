@@ -1,14 +1,14 @@
 # The Text-Mode Display
 
-**Phase**: 4, sub-task 4.2, of [`PLAN.md`](PLAN.md). The routine upon which this
+**Phase**: 4, sub-task 4.2, of [`PLAN.md`](../project/PLAN.md). The routine upon which this
 driver was built belongs to Phase 1, sub-task 1.8.
 
 **Authority**: `PROJECT_GUIDELINES.md`, Sections 2, 3 and 6. Every assertion of
 hardware behaviour below carries a citation, and every specification named is
-registered in [`REFERENCES.md`](REFERENCES.md).
+registered in [`REFERENCES.md`](../project/REFERENCES.md).
 
-**Implementation**: [`../drivers/vga/vga.c`](../drivers/vga/vga.c),
-[`../kernel/include/oxys/vga.h`](../kernel/include/oxys/vga.h).
+**Implementation**: [`../drivers/vga/vga.c`](../../drivers/vga/vga.c),
+[`../kernel/include/oxys/vga.h`](../../kernel/include/oxys/vga.h).
 
 ## 1. What the display is, and what it is for
 
@@ -30,7 +30,7 @@ twenty-five rows, each cell two bytes, the code point first and the attribute
 second, the whole beginning at physical address `0x000B8000` (IBM VGA technical
 reference). The buffer is reached at `PhysicalToVirtual(0xB8000)`, the boot-time
 paging hierarchy mapping the first gibibyte of physical memory into the higher
-half; see [`MEMORY-LAYOUT.md`](MEMORY-LAYOUT.md).
+half; see [`MEMORY-LAYOUT.md`](../design/MEMORY-LAYOUT.md).
 
 ## 2. Which registers the adapter answers upon
 
@@ -254,7 +254,7 @@ or a virtual machine monitor, typing at the echo loop.
 The backspace across a row boundary was exercised both ways for this sub-task:
 characters delivered over COM1, and the same characters delivered as scan codes
 by the QEMU monitor's `sendkey`. Both produced the identical echo, recorded in
-[`TESTING.md`](TESTING.md).
+[`TESTING.md`](../project/TESTING.md).
 
 ### 7.3 Observed state
 

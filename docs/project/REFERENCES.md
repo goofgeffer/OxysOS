@@ -133,7 +133,7 @@ Sections relied upon:
 
 Used by: `boot/boot.asm`, `linker.ld`, `Makefile`, `kernel/include/oxys/io.h`,
 `kernel/kernel.c`, `kernel/include/oxys/pic.h`, `kernel/include/oxys/pit.h`,
-`docs/MEMORY-LAYOUT.md`, `docs/INTERRUPTS.md`.
+`docs/design/MEMORY-LAYOUT.md`, `docs/design/INTERRUPTS.md`.
 
 ### System V Application Binary Interface, AMD64 Architecture Processor Supplement
 `https://gitlab.com/x86-psABIs/x86-64-ABI`
@@ -199,7 +199,7 @@ cannot be quoted by number with confidence; the tables and sections above are
 named as they are printed.
 
 Used by: `drivers/serial/serial.c`, `kernel/include/oxys/serial.h`,
-`docs/SERIAL.md`.
+`docs/devices/SERIAL.md`.
 
 ### Intel 8259A Programmable Interrupt Controller datasheet
 Intel Corporation, order number 231468-003, December 1988.
