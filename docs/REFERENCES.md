@@ -166,12 +166,40 @@ Used by: the whole of the C source.
 The universal asynchronous receiver/transmitter of the IBM Personal Computer AT
 and its successors.
 
-Sections relied upon: the register map at offsets 0 to 7 from the base address;
-the divisor latch access bit, being bit 7 of the line control register; the
-transmitter holding register empty flag, being bit 5 of the line status
-register; the loopback bit, being bit 4 of the modem control register.
+Sections and tables relied upon:
 
-Used by: `drivers/serial/serial.c`.
+- **Table 1**, "Summary of Registers": the bit assignments of every register.
+- **Table 2**, "Register Addresses": the eight registers at consecutive offsets
+  from the base address, and the overlay of the divisor latches upon offsets 0
+  and 1 while the divisor latch access bit is set.
+- **Table 5**, "Interrupt Control Functions": bit 0 of the interrupt
+  identification register is clear while an interrupt is pending; bits 3 to 1
+  identify the highest-priority pending source, being 011 the receiver line
+  status, 010 received data available, 110 the character timeout, 001 the
+  transmitter holding register empty and 000 the modem status; and the action
+  that resets each, the transmitter interrupt being reset by reading that
+  register or by writing the transmitter holding register.
+- **Section "Line Control Register"**: bits 1 and 0 the word length, bit 2 the
+  number of stop bits, bits 5 to 3 the parity including stick parity, bit 7 the
+  divisor latch access bit.
+- **Section "Line Status Register"**: bit 0 a received character, bits 1 to 4 the
+  overrun, parity, framing and break conditions, bit 5 the transmitter holding
+  register empty, bit 6 the transmitter wholly idle.
+- **Section "Programmable Baud Generator"**: the divisor is the reference
+  oscillator frequency divided by sixteen times the desired signalling rate.
+- **Section "FIFO Interrupt Mode Operation"**: the transmitter first-in-first-out
+  buffer holds sixteen characters, and the adapter reports it empty when it has
+  room for a full complement.
+- **Section "MODEM Control Register"**: bit 3 the auxiliary output OUT2, bit 4
+  local loopback, in which the modem control outputs are internally connected to
+  the corresponding inputs.
+
+The datasheet is distributed as a scanned document, so the figures within it
+cannot be quoted by number with confidence; the tables and sections above are
+named as they are printed.
+
+Used by: `drivers/serial/serial.c`, `kernel/include/oxys/serial.h`,
+`docs/SERIAL.md`.
 
 ### Intel 8259A Programmable Interrupt Controller datasheet
 Intel Corporation, order number 231468-003, December 1988.
@@ -267,7 +295,12 @@ Sections relied upon:
   break code is that code with bit 7 set; a code prefixed by `0xE0` denotes one
   of the keys added after the original 84-key layout.
 - **The serial adapter**: the first adapter is decoded at I/O base address
-  `0x03F8`, and its reference oscillator yields 115200 baud with a divisor of one.
+  `0x03F8` and the second at `0x02F8`; the first and third raise IRQ4 and the
+  second and fourth IRQ3. The reference oscillator is 1.8432 MHz, which yields
+  115200 baud at a divisor of one. The adapter's interrupt output reaches its
+  request line through a buffer enabled by the auxiliary output OUT2, which the
+  UART's own datasheet describes only as user-designated; an adapter whose OUT2
+  is clear is therefore never heard by the interrupt controller.
 
 Used by: `drivers/pic/pic.c`, `drivers/pit/pit.c`, `drivers/keyboard/keyboard.c`,
 `drivers/serial/serial.c`, `kernel/include/oxys/pic.h`,

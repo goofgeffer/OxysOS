@@ -16,7 +16,7 @@ interface and never upon a driver's location.
 | Path | Device | Interface | Phase |
 | ---- | ------ | --------- | ----- |
 | `vga/vga.c` | The VGA colour text-mode display, mode 3. | `<oxys/vga.h>` | 1 |
-| `serial/serial.c` | The 16550-compatible UART at COM1, polled. | `<oxys/serial.h>` | 1 |
+| `serial/serial.c` | The 16550-compatible UART at COM1, interrupt-driven. | `<oxys/serial.h>` | 1, 4.1 |
 | `pic/pic.c` | The pair of cascaded 8259A interrupt controllers. | `<oxys/pic.h>` | 3 |
 | `pit/pit.c` | Counter 0 of the 8253 interval timer, the system tick. | `<oxys/pit.h>` | 3 |
 | `keyboard/keyboard.c` | The 8042 controller and the PS/2 keyboard upon its first port. | `<oxys/keyboard.h>` | 3 |
@@ -59,17 +59,34 @@ by the display hardware independently of the processor.
 
 ### `serial/` — the COM1 diagnostic port
 
-Configures the adapter for 115200 baud, eight data bits, no parity and one stop
-bit, and transmits by polling the transmitter holding register empty flag. A
-loopback test at initialisation determines whether an adapter is present; if none
-is, every subsequent write is discarded, so that a machine without a serial port
+An interrupt-driven driver for the 16550 compatible adapter at I/O base address
+`0x03F8`, claiming IRQ4. The line parameters — signalling rate, word length,
+parity and stop bits — are configurable through `SerialConfigure`, which computes
+the divisor and refuses a configuration the adapter cannot express. A loopback
+test at initialisation determines whether an adapter is present; if none is,
+every subsequent write is discarded, so that a machine without a serial port
 proceeds unimpeded rather than blocking forever upon a status flag that will
 never be set.
 
+The driver has two modes and needs both. It begins polled, because it serves the
+diagnostics of the earliest initialisation, at which point no interrupt
+controller exists; `SerialActivateInterrupts` promotes it once one does. The
+polled path remains in use wherever no interrupt could arrive — before the line
+is claimed, and whenever the interrupt flag is clear, which includes every panic.
+A driver that assumed interrupts were available would queue a panic message and
+halt without transmitting it.
+
+Both directions are buffered. A writer that fills the transmit buffer waits for
+room rather than losing the character; a receiver that fills the receive buffer
+discards the newest and counts it, having no one to wait for. The transmitter
+interrupt is enabled only while characters are queued, the condition it reports
+being a level rather than an event.
+
 This driver is the basis of the automated verification described in
 [`../docs/TESTING.md`](../docs/TESTING.md): it is what makes a headless
-regression test possible, which is why it was implemented in Phase 1 rather than
-being deferred with the rest of Phase 4.
+regression test possible, which is why its polled subset was implemented in
+Phase 1 rather than being deferred with the rest of Phase 4. The design is
+recorded in [`../docs/SERIAL.md`](../docs/SERIAL.md).
 
 ### `pic/` — the interrupt controllers
 

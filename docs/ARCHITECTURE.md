@@ -68,7 +68,7 @@ the following translation units.
 | `kernel/multiboot2.c` | The Multiboot2 parser, reducing the boot loader's structure to the neutral `BootInformation` description. |
 | `kernel/kernel.c` | `KernelMain`, which validates the boot loader handover, initialises the early output devices, presents the identification banner and halts. `KernelPanic`, the unrecoverable-error path. |
 | `drivers/vga/vga.c` | The VGA colour text-mode output driver. |
-| `drivers/serial/serial.c` | The polled COM1 serial output driver used for diagnostics. |
+| `drivers/serial/serial.c` | The interrupt-driven COM1 serial driver used for diagnostics and input. |
 | `drivers/pic/pic.c` | The pair of cascaded 8259A interrupt controllers: their remapping, the masking of request lines, the routing of a request to the driver that claims it, and the end-of-interrupt protocol. |
 | `drivers/pit/pit.c` | Counter 0 of the 8253 interval timer: the system tick, the elapsed-time conversion and the bounded wait. |
 | `drivers/keyboard/keyboard.c` | The 8042 controller and the PS/2 keyboard: initialisation, the decoding of scan code set 1, the modifier state and the circular event buffer. |
@@ -140,3 +140,10 @@ operator-facing path; the COM1 serial port is the machine-readable path, and is
 the basis of the automated verification described in `TESTING.md`. Every
 diagnostic message of consequence is written to both, so that a failure is
 recorded irrespective of which device remains functional.
+
+From sub-task 4.1 the serial path is buffered and carried by interrupt, but it
+retains its polled path and reverts to it whenever the interrupt flag is clear.
+That is not a fallback for hardware that fails: it is the ordinary path of a
+panic, which reports with interrupts disabled and must not be left holding its
+message in a buffer that nothing will drain. `docs/SERIAL.md`, Section 4, records
+the rule and the single place it is decided.

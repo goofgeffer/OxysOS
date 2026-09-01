@@ -6,7 +6,7 @@
  *          boot-time self-test, and then either enters the keyboard echo loop,
  *          where a keyboard is present, or halts the processor where none is.
  * Key functions: KernelMain, KernelPanic, KernelHalt, KernelVerifyVga,
- *          KernelKeyboardEcho,
+ *          KernelVerifySerial, KernelEchoLoop,
  *          KernelWriteString, KernelWriteHexadecimal, KernelWriteDecimal.
  * References:
  *   - Multiboot2 Specification 2.0, Section 3.3 ("I386 machine state"): EAX
@@ -77,6 +77,14 @@
  */
 static _Noreturn void KernelHalt(void)
 {
+    /*
+     * The diagnostic channel is buffered once its interrupts are active, and the
+     * halt below clears the interrupt flag permanently, so anything still queued
+     * would never be carried. A machine that stops has usually just written the
+     * one thing worth reading.
+     */
+    SerialFlush();
+
     for (;;)
     {
         __asm__ __volatile__("cli; hlt");
@@ -2183,6 +2191,194 @@ static void KernelVerifyKeyboard(void)
 }
 
 /*
+ * Exercises the serial driver, being sub-task 4.1.
+ *
+ * Three things here can fail silently, and they are what the test is for.
+ *
+ * The first is the transmitter interrupt. The condition it reports is a level
+ * and not an event: an adapter with nothing to send holds its transmitter
+ * holding register empty permanently, so a driver that left the interrupt
+ * enabled would be asked to service a condition it could not dismiss, and the
+ * machine would make no further progress while reporting nothing at all.
+ *
+ * The second is the interrupt path itself. The driver retains a polled path for
+ * the circumstances in which no interrupt can arrive, and that path works
+ * whether or not the request line was ever claimed; a driver that had claimed
+ * nothing would therefore appear to function perfectly. The count of the
+ * adapter's interrupts is what distinguishes the two.
+ *
+ * The third is the line parameters. A divisor computed wrongly yields output at
+ * a rate nothing is listening at, which is indistinguishable from an absent
+ * adapter, and the rate realised is not in general the rate requested.
+ */
+static void KernelVerifySerial(void)
+{
+    static const SerialConfiguration alternative = {
+        9600U, 7U, SERIAL_PARITY_EVEN, SERIAL_STOP_BITS_TWO
+    };
+    static const SerialConfiguration standard = {
+        115200U, 8U, SERIAL_PARITY_NONE, SERIAL_STOP_BITS_ONE
+    };
+
+    /*
+     * A rate of zero, a rate above the greatest the oscillator can produce, and
+     * word lengths on either side of the five to eight the register can express.
+     * Each must be refused with the parameters in force left untouched.
+     */
+    static const SerialConfiguration impossible[] = {
+        { 0U, 8U, SERIAL_PARITY_NONE, SERIAL_STOP_BITS_ONE },
+        { 230400U, 8U, SERIAL_PARITY_NONE, SERIAL_STOP_BITS_ONE },
+        { 9600U, 4U, SERIAL_PARITY_NONE, SERIAL_STOP_BITS_ONE },
+        { 9600U, 9U, SERIAL_PARITY_NONE, SERIAL_STOP_BITS_ONE }
+    };
+
+    uint64_t interrupts_before;
+    uint64_t transmitted_before;
+    bool loopback_passed;
+    bool rejected_impossible = true;
+    bool accepted_alternative;
+    bool alternative_divisor_correct;
+    bool restored;
+    bool succeeded = true;
+
+    if (!SerialIsPresent())
+    {
+        /*
+         * Not a failure of the test. A machine may genuinely have no serial
+         * adapter, and the loopback test at initialisation is what discovers it.
+         */
+        KernelWriteString("Serial self-test skipped; no adapter is present.\n");
+        return;
+    }
+
+    /* --- The line was claimed and the request line permitted. --- */
+
+    if (!SerialInterruptsActive())
+    {
+        KernelWriteString("  The serial driver is still polling.\n");
+        succeeded = false;
+    }
+
+    if (PicRegisteredHandler(SERIAL_COM1_IRQ) == NULL)
+    {
+        KernelWriteString("  The serial adapter did not claim its request line.\n");
+        succeeded = false;
+    }
+
+    if (PicLineIsMasked(SERIAL_COM1_IRQ))
+    {
+        KernelWriteString("  The serial adapter's request line is masked.\n");
+        succeeded = false;
+    }
+
+    /* --- The adapter carries a character out and back unaltered. --- */
+
+    loopback_passed = SerialLoopbackTest();
+
+    if (!loopback_passed)
+    {
+        KernelWriteString("  A sequence did not return unaltered through the loopback.\n");
+        succeeded = false;
+    }
+
+    /*
+     * --- The line parameters are computed, and the impossible refused. ---
+     *
+     * Nothing is written to the console between the two configurations below.
+     * The alternative rate is applied to the adapter, and anything transmitted
+     * while it stood would reach a listening terminal as noise.
+     */
+
+    for (size_t index = 0U;
+         index < (sizeof impossible / sizeof impossible[0]);
+         ++index)
+    {
+        if (SerialConfigure(&impossible[index]))
+        {
+            rejected_impossible = false;
+        }
+    }
+
+    if (SerialConfigure(NULL))
+    {
+        rejected_impossible = false;
+    }
+
+    accepted_alternative = SerialConfigure(&alternative);
+    alternative_divisor_correct =
+        (SerialDivisor() == 12U) && (SerialRealisedBaudRate() == 9600U);
+    restored = SerialConfigure(&standard) && (SerialDivisor() == 1U) &&
+               (SerialRealisedBaudRate() == SERIAL_MAXIMUM_BAUD_RATE);
+
+    if (!rejected_impossible)
+    {
+        KernelWriteString("  An impossible line configuration was accepted.\n");
+        succeeded = false;
+    }
+
+    if (!accepted_alternative || !alternative_divisor_correct)
+    {
+        KernelWriteString("  9600 baud did not yield a divisor of twelve.\n");
+        succeeded = false;
+    }
+
+    if (!restored)
+    {
+        KernelWriteString("  The default line parameters were not restored.\n");
+        succeeded = false;
+    }
+
+    /* --- Characters leave by way of an interrupt, and the request is withdrawn. --- */
+
+    interrupts_before = SerialInterruptCount();
+    transmitted_before = SerialCharactersTransmitted();
+
+    /*
+     * The interrupt flag is set for the duration, this being the only way an
+     * interrupt can be taken; the flag is otherwise clear throughout
+     * initialisation. The string is written to the adapter alone, the display
+     * having no part in what is being asserted.
+     */
+    __asm__ __volatile__("sti" : : : "memory");
+
+    SerialWriteString("Serial self-test: this line was carried by interrupt.\n");
+    SerialFlush();
+
+    __asm__ __volatile__("cli" : : : "memory");
+
+    if (SerialInterruptCount() == interrupts_before)
+    {
+        KernelWriteString("  The adapter transmitted without raising an interrupt.\n");
+        succeeded = false;
+    }
+
+    if (SerialCharactersTransmitted() == transmitted_before)
+    {
+        KernelWriteString("  No character was transmitted.\n");
+        succeeded = false;
+    }
+
+    if (SerialTransmitInterruptEnabled())
+    {
+        KernelWriteString("  The transmitter interrupt was not withdrawn when idle.\n");
+        succeeded = false;
+    }
+
+    if (SerialLineErrorCount() != 0U)
+    {
+        KernelWriteString("  The line reported an error during the test.\n");
+        succeeded = false;
+    }
+
+    /* The loopback and the firmware may both have left characters behind. */
+    SerialFlushBuffers();
+
+    KernelWriteString(succeeded
+                          ? "Serial self-test passed.\n"
+                          : "Serial self-test FAILED.\n");
+}
+
+/*
  * Asserts that the display driver moves the cursor as the control characters
  * require. The failure this guards against is a silent one: a control character
  * for which the driver has no case is written into the frame buffer as whatever
@@ -2276,15 +2472,18 @@ static void KernelVerifyVga(void)
 }
 
 /*
- * Echoes typed characters upon both output devices, indefinitely.
+ * Echoes characters from the keyboard and from the serial line upon both output
+ * devices, indefinitely.
  *
  * This is the one thing the self-tests cannot establish. They drive the decoder
  * directly, which exercises the whole of scan code set 1 upon a machine at which
  * nobody is typing, but leaves the path from the physical key to the decoder —
  * the controller raising its request line, the interrupt controller routing it,
- * the handler reading the data port — asserted only as configured state. Here
- * that path is exercised in full, by the only means available: a person, or a
- * virtual machine monitor, actually pressing a key.
+ * the handler reading the data port — asserted only as configured state. The
+ * same is true of the serial receiver, whose self-test can say what becomes of a
+ * character that has arrived but not that one arrives. Here both paths are
+ * exercised in full, by the only means available: a person, or a virtual machine
+ * monitor, actually sending a character.
  *
  * The loop halts the processor between keystrokes rather than spinning. The
  * sequence STI followed immediately by HLT is the correct idiom and not merely a
@@ -2294,11 +2493,11 @@ static void KernelVerifyVga(void)
  * placed between them, a keystroke arriving in the interval would be serviced
  * and the processor would then halt with nothing left to wake it.
  */
-static _Noreturn void KernelKeyboardEcho(void)
+static _Noreturn void KernelEchoLoop(void)
 {
     VgaSetColour(VGA_COLOUR_LIGHT_CYAN, VGA_COLOUR_BLACK);
-    KernelWriteString("\nKeyboard echo. Type upon the console; characters appear "
-                      "here and upon COM1.\n");
+    KernelWriteString("\nEcho loop. Characters typed upon the console or sent "
+                      "upon COM1 appear upon both.\n");
     VgaSetColour(VGA_COLOUR_LIGHT_GREY, VGA_COLOUR_BLACK);
 
     for (;;)
@@ -2306,6 +2505,19 @@ static _Noreturn void KernelKeyboardEcho(void)
         char character;
 
         __asm__ __volatile__("sti; hlt");
+
+        /*
+         * The serial line is a source of characters equally, now that its
+         * receiver is interrupt-driven. Echoing them exercises the receive path
+         * end to end, which the self-test cannot: it needs a character actually
+         * arriving from outside the machine.
+         */
+        while (SerialReadCharacter(&character))
+        {
+            const char text[2] = { character, '\0' };
+
+            KernelWriteString((character == '\b') ? "\b \b" : text);
+        }
 
         while (KeyboardReadCharacter(&character))
         {
@@ -2443,13 +2655,23 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
     KernelVerifyKeyboard();
     KeyboardReport();
 
+    /*
+     * Phase 4 begins here. The serial adapter was configured in the first
+     * instruction of this function, so that a failure anywhere above would be
+     * recorded; only now, the interrupt controller existing, can it be promoted
+     * from polling to interrupts and become a driver rather than a routine.
+     */
+    SerialActivateInterrupts();
+    KernelVerifySerial();
+    SerialReport();
+
     PicReport();
     InterruptReport();
     PagingReport();
     AddressSpaceReport();
 
     VgaSetColour(VGA_COLOUR_LIGHT_GREEN, VGA_COLOUR_BLACK);
-    KernelWriteString("Phase 3 initialisation complete.\n");
+    KernelWriteString("Phase 4 initialisation complete to sub-task 4.1.\n");
 
     VgaSetColour(VGA_COLOUR_LIGHT_GREY, VGA_COLOUR_BLACK);
 
@@ -2460,7 +2682,7 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
      */
     if (KeyboardIsPresent())
     {
-        KernelKeyboardEcho();
+        KernelEchoLoop();
     }
 
     KernelWriteString("No further subsystems are implemented. Halting.\n");

@@ -87,7 +87,27 @@ The resulting image is 720 by 400 pixels, which is the pixel resolution of VGA
 mode 3, and contains the rendered banner. This was performed at the completion of
 Phase 1 and the banner was confirmed to read `Oxys-OS`.
 
-## 4. Execution under UEFI firmware
+## 4. Verification of the serial receive path
+
+The self-tests cannot establish that a character arrives from outside the
+machine; they can only establish what happens to one that already has. The echo
+loop the kernel enters at the completion of initialisation drains the serial
+receive buffer as well as the keyboard's, so the path may be driven from the
+host by attaching the emulated line to the standard input stream:
+
+```sh
+( sleep 9; printf 'serial-in-works'; sleep 4 ) \
+  | qemu-system-x86_64 -machine q35 -cpu qemu64 -smp cores=2 -m 512M \
+      -cdrom build/oxys.iso -display none -monitor none -serial stdio
+```
+
+The typed characters are expected to appear upon the captured output after the
+echo loop's banner, having traversed the adapter, IRQ4, the interrupt
+controller, the handler and the receive buffer. The delay before the text is
+sent must exceed the time the self-tests take, since anything arriving earlier is
+discarded by `SerialFlushBuffers` at the close of the serial self-test.
+
+## 5. Execution under UEFI firmware
 
 ```sh
 make run-uefi
@@ -98,7 +118,7 @@ present, because the ISO carries only the legacy BIOS boot path of GRUB. The
 target is provided in advance so that the UEFI work of Phase 12 has an
 established point of entry; sub-task 12.7 will render it functional.
 
-## 5. Execution under VirtualBox
+## 6. Execution under VirtualBox
 
 ```sh
 make run-vbox
@@ -117,7 +137,7 @@ in the WSL2 filesystem. The project owner performs this test upon the Windows
 host directly, and sub-task 1.11 of `PLAN.md` is recorded as passed upon that
 authority.
 
-## 6. Testing upon physical hardware
+## 7. Testing upon physical hardware
 
 The ISO produced by `grub-mkrescue` is a hybrid image and may be written
 directly to a USB medium:
@@ -134,7 +154,7 @@ support module, since the UEFI boot path is not implemented until Phase 12.
 Diagnostic output should be captured through a serial adapter where the machine
 provides one. Sub-task 1.12 remains open.
 
-## 7. Debugging with GDB
+## 8. Debugging with GDB
 
 QEMU provides a GDB stub. The kernel is compiled with `-g`, so the DWARF
 information in `build/oxys.elf` may be used directly:
@@ -149,7 +169,7 @@ Note that breakpoints upon higher-half symbols cannot be serviced until paging
 has been enabled. A breakpoint at `_start`, whose address is physical, is the
 correct point at which to begin an examination of the boot sequence.
 
-## 8. Test record
+## 9. Test record
 
 | Date | Test | Result |
 | ---- | ---- | ------ |
@@ -163,6 +183,8 @@ correct point at which to begin an examination of the boot sequence.
 | 2026-08-31 | `make verify` — sub-task 3.7, the keyboard self-test | Passed; the controller and port self-tests pass, and the decoder, the modifier discipline and the buffer overrun behave as `docs/KEYBOARD.md`, Section 7.1, requires. |
 | 2026-08-31 | QEMU `sendkey` — the keyboard interrupt path, end to end | Passed; the keystrokes `h e l l o spc o x y s` were echoed upon the serial port as `hello oxys`. |
 | 2026-08-31 | `make verify` — the display self-test | Passed; the backspace, the tabulation, the carriage return and the line feed move the cursor as ANSI X3.4-1986 defines them, and a backspace in the first column does not move it. |
+| 2026-08-31 | `make verify` — sub-task 4.1, the serial self-test | Passed; the request line is claimed and unmasked, a sequence returns unaltered through local loopback, an impossible line configuration is refused, 9600 baud yields a divisor of twelve, a written string raises the adapter's interrupt, and the transmitter interrupt is withdrawn once idle. |
+| 2026-08-31 | QEMU `-serial stdio` — the serial receive path, end to end | Passed; `serial-in-works`, typed upon the host, was received by interrupt and echoed back. |
 | 2026-08-31 | QEMU `sendkey` — the backspace, end to end | Passed; `o x y s spc b a d` followed by three backspaces and `g o o d` produced `oxys bad` then the erasing sequence three times then `good` upon the serial port, a terminal rendering it `oxys good`. |
 | — | VirtualBox boot | Passed; performed by the project owner upon the Windows host, `VBoxManage` being unavailable in this environment. |
 | — | Physical hardware boot | Not performed. |

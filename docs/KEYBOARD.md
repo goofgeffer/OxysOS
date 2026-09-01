@@ -267,7 +267,7 @@ The above establishes the decoder and leaves the path from the physical key to
 it — the controller raising IR1, the interrupt controller routing it, the handler
 reading the data port — asserted only as configured state.
 
-That path is exercised by the echo loop `KernelKeyboardEcho`, which the kernel
+That path is exercised by the echo loop `KernelEchoLoop`, which the kernel
 enters at the completion of Phase 3 in place of halting, and which prints every
 character typed. It was driven from the QEMU monitor:
 
@@ -281,6 +281,10 @@ character typed. It was driven from the QEMU monitor:
 The captured serial output ends `hello oxys`. This is the only assertion in the
 project so far that exercises a device end to end, from a physical event to a
 character, and it is the reason the echo loop exists.
+
+From sub-task 4.1 the loop drains the serial receive buffer as well, so the same
+demonstration is available for the serial adapter; `docs/SERIAL.md`, Section 8.2,
+records it.
 
 The backspace is echoed as the three-character sequence `"\b \b"` rather than as
 the character itself. The backspace moves the cursor and erases nothing, upon the

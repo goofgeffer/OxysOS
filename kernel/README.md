@@ -21,7 +21,7 @@ are separate.
 | `kernel.c` | `KernelMain`, the C entry point: it validates the boot loader handover, initialises every subsystem of Phases 1 to 3 in dependency order, runs the boot-time self-tests, and enters the keyboard echo loop where a keyboard is present or halts where none is. `KernelPanic`, the unrecoverable-error path. `KernelHalt`, `KernelWriteString`, `KernelWriteDecimal` and `KernelWriteHexadecimal`. |
 | `cpu/exceptions.c` | The exception handlers, the decoding of both error-code formats, and `ExceptionReportState`. |
 | `include/oxys/exceptions.h` | The error-code flags of both formats and the exception interface. |
-| `include/oxys/cpu.h` | Accessors for the control registers `CR0`, `CR2`, `CR3` and `CR4`. |
+| `include/oxys/cpu.h` | Accessors for the control registers `CR0`, `CR2`, `CR3` and `CR4`, and for `RFLAGS`, by which a driver determines whether an interrupt it means to wait for could be delivered at all. |
 | `cpu/interrupt_stubs.asm` | The 256 per-vector stubs, the common stub, and the table of stub addresses. |
 | `cpu/interrupts.c` | `InterruptInitialise`, `InterruptDispatch`, the dispatch table and its registration interface, and the frame reporting routines. |
 | `cpu/gdt.c`, `cpu/gdt.asm` | The kernel global descriptor table and the segment reload. |
@@ -47,7 +47,7 @@ are separate.
 | `include/oxys/kernel.h` | `KERNEL_VIRTUAL_BASE`, the address translation helpers `PhysicalToVirtual` and `VirtualToPhysical`, and the declarations of `KernelMain` and `KernelPanic`. |
 | `include/oxys/io.h` | `PortReadByte`, `PortWriteByte` and `IoWait`: the accessors for the x86 programmed input/output address space. |
 | `include/oxys/vga.h` | The interface of the VGA text-mode driver implemented in `drivers/vga/`. |
-| `include/oxys/serial.h` | The interface of the COM1 serial driver implemented in `drivers/serial/`. |
+| `include/oxys/serial.h` | The interface of the interrupt-driven COM1 serial driver implemented in `drivers/serial/`, including the line parameters and the accounting the self-test reads. |
 | `include/oxys/pic.h` | The interface of the 8259A interrupt controller driver implemented in `drivers/pic/`: the remapped vector bases, the masking of a request line, the claiming of a line by a device driver, and the status registers. |
 | `include/oxys/pit.h` | The interface of the interval timer driver implemented in `drivers/pit/`: the clock frequency, the tick counter, the conversion of ticks to elapsed time, and the bounded wait. |
 | `include/oxys/keyboard.h` | The interface of the PS/2 keyboard driver implemented in `drivers/keyboard/`: `KeyEvent`, the modifier flags, the buffer capacity, and the reading of events and characters. |
