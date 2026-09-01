@@ -21,12 +21,12 @@ interface and never upon a driver's location.
 | `pit/pit.c` | Counter 0 of the 8253 interval timer, the system tick. | `<oxys/pit.h>` | 3 |
 | `keyboard/keyboard.c` | The 8042 controller and the PS/2 keyboard upon its first port. | `<oxys/keyboard.h>` | 3 |
 | `pci/pci.c` | The PCI bus: configuration-space enumeration by mechanism one. | `<oxys/pci.h>` | 4.3 |
+| `ata/ata.c` | The ATA disk, in programmed input/output mode. | `<oxys/ata.h>` | 4.4 |
 
 ## Planned contents
 
 | Path | Device | Phase, sub-task |
 | ---- | ------ | --------------- |
-| `ata/` | The ATA PIO disk driver. | 4.4 |
 | `block/` | The generic block-device layer and the buffer cache. | 4.5, 4.6 |
 | `mouse/` | The PS/2 mouse. | 9.4 |
 | `net/` | The Ethernet controller. | 11.1 |
@@ -90,6 +90,32 @@ found, rather than by sweeping all 256; the queue of buses awaiting a scan is
 explicit rather than the call stack, and a bitmap records those already visited so
 that malformed hardware cannot send the walk around a cycle. Nothing is claimed or
 configured. See [`../docs/PCI.md`](../docs/PCI.md).
+
+### `ata/` — the disk
+
+Reads and writes sectors by programmed input/output, at the compatibility
+addresses `0x01F0` and `0x0170` inherited from the IBM Personal Computer AT. Both
+channels are reset, and each of their two devices is identified: an ATA device
+answers `IDENTIFY DEVICE` with 256 words describing itself, while a packet device
+or a serial ATA device declines the command and leaves a signature in the address
+registers, which is the only way to tell them from a disk that failed.
+
+Both addressing modes are implemented. The 28-bit form keeps the four most
+significant bits of the address in the register that also selects the device; the
+48-bit form writes each register twice, high-order byte first, the device
+retaining the previous content in a hidden half. A count register of zero means
+the greatest count the mode allows, so the limits are 256 and 65536 sectors. A
+write is followed by a cache flush within the same sequence, a device that has
+accepted data without committing it reporting success and losing it.
+
+The driver polls, and disables the device's interrupt at the device rather than
+masking it, nothing claiming IRQ14 or IRQ15. Its only clock is the read of an I/O
+port, the interval timer counting by interrupt and the interrupt flag being clear
+throughout initialisation.
+
+The self-test reads unconditionally and writes only when the operator has booted
+the GRUB entry that passes `disk-write-test`, and then only to a sector it first
+read and afterwards restores. See [`../docs/DISK.md`](../docs/DISK.md).
 
 ### `serial/` — the COM1 diagnostic port
 

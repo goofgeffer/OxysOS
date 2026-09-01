@@ -301,10 +301,14 @@ Sections relied upon:
   request line through a buffer enabled by the auxiliary output OUT2, which the
   UART's own datasheet describes only as user-designated; an adapter whose OUT2
   is clear is therefore never heard by the interrupt controller.
+- **The fixed disk adapter**: the first channel's command block is decoded at
+  `0x01F0` with its control register at `0x03F6` and raises IRQ14; the second
+  channel answers at `0x0170` and `0x0376` upon IRQ15.
 
 Used by: `drivers/pic/pic.c`, `drivers/pit/pit.c`, `drivers/keyboard/keyboard.c`,
 `drivers/serial/serial.c`, `kernel/include/oxys/pic.h`,
-`kernel/include/oxys/pit.h`, `kernel/include/oxys/keyboard.h`, `kernel/kernel.c`.
+`kernel/include/oxys/pit.h`, `kernel/include/oxys/keyboard.h`,
+`drivers/ata/ata.c`, `kernel/include/oxys/ata.h`, `kernel/kernel.c`.
 
 ### The 8042 controller and PS/2 device command sets
 The command sets of the IBM Personal Computer AT keyboard controller and of the
@@ -449,6 +453,53 @@ in native mode and bit 2 the secondary, each clear meaning the compatibility mod
 that answers upon the legacy ports.
 
 Used by: `drivers/pci/pci.c`.
+
+### AT Attachment with Packet Interface (ATA/ATAPI)
+ANSI INCITS, Technical Committee T13. The revisions relied upon are ATA/ATAPI-6
+and later, 48-bit addressing having been introduced in the sixth.
+
+Sections relied upon:
+
+- **Command block registers**: at offsets 0 to 7 from the base address, the data
+  register, the error register (features when written), the sector count, the
+  logical block address low, mid and high registers, the device register and the
+  status register (the command register when written). The alternate status
+  register (the device control register when written) lies in the separate
+  control block.
+- **Status register**: bit 7 BSY, bit 6 DRDY, bit 5 DF — a device fault, which
+  does not set ERR — bit 3 DRQ, bit 0 ERR.
+- **Device control register**: bit 1 nIEN, which stops the device asserting its
+  interrupt; bit 2 SRST, which when set and then cleared resets both devices upon
+  the channel.
+- **Timing**: the status presented by a device is not valid for 400 nanoseconds
+  after a command is written or a device selected. The delay is obtained by
+  reading the alternate status register, which has no side effect; an input from
+  an I/O port may be assumed to take at least 30 nanoseconds.
+- **Command set**, cross-verified against an independent table of opcodes in
+  opcode order: `20h` READ SECTOR(S), `24h` READ SECTOR(S) EXT, `30h` WRITE
+  SECTOR(S), `34h` WRITE SECTOR(S) EXT, `E7h` FLUSH CACHE, `EAh` FLUSH CACHE EXT,
+  `ECh` IDENTIFY DEVICE, `A1h` IDENTIFY PACKET DEVICE.
+- **Identification data**: words 10 to 19 the serial number and 27 to 46 the
+  model number, each word holding two characters with the first in its high half;
+  words 60 and 61 the number of sectors addressable by 28 bits; bit 10 of word 83
+  the support of 48-bit addressing; words 100 to 103 the number of sectors
+  addressable by 48 bits.
+- **Addressing**: a sector count register of zero means the greatest count the
+  mode allows — 256 for the 28-bit commands and 65536 for the 48-bit ones. The
+  four most significant bits of a 28-bit address lie in the device register. The
+  48-bit commands write each address and count register twice, the high-order
+  byte first, the device retaining the previous content in a hidden half.
+- **Signatures**: a device that declines IDENTIFY DEVICE leaves `14h` and `EBh`
+  in the address mid and high registers if it is a packet device, `3Ch` and `C3h`
+  if it is a serial ATA device, and zeroes if it is an ATA device that aborted
+  the command.
+
+The standard is not distributed publicly by the committee. The register and
+command details above were taken from two independent secondary renderings and
+cross-verified against one another before being relied upon, as Section 6 of
+`PROJECT_GUIDELINES.md` requires.
+
+Used by: `drivers/ata/ata.c`, `kernel/include/oxys/ata.h`.
 
 ### GNU GRUB Manual
 Free Software Foundation.

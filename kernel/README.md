@@ -46,6 +46,7 @@ are separate.
 | `include/oxys/types.h` | The fixed-width integer types, and the distinct address types `PhysicalAddress` and `VirtualAddress`. |
 | `include/oxys/kernel.h` | `KERNEL_VIRTUAL_BASE`, the address translation helpers `PhysicalToVirtual` and `VirtualToPhysical`, and the declarations of `KernelMain` and `KernelPanic`. |
 | `include/oxys/io.h` | `PortReadByte`, `PortWriteByte` and `IoWait`: the accessors for the x86 programmed input/output address space. |
+| `include/oxys/ata.h` | The interface of the ATA driver implemented in `drivers/ata/`: the description of a device and the reading and writing of sectors. |
 | `include/oxys/pci.h` | The interface of the PCI enumeration implemented in `drivers/pci/`: the configuration accessors, the description of a function, and the searches by class and by identifier. |
 | `include/oxys/vga.h` | The interface of the VGA text-mode display driver implemented in `drivers/vga/`: colour, cursor control, scrolling, cell read-back and the erase limit. |
 | `include/oxys/serial.h` | The interface of the interrupt-driven COM1 serial driver implemented in `drivers/serial/`, including the line parameters and the accounting the self-test reads. |

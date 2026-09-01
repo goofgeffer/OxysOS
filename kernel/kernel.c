@@ -6,7 +6,8 @@
  *          boot-time self-test, and then either enters the keyboard echo loop,
  *          where a keyboard is present, or halts the processor where none is.
  * Key functions: KernelMain, KernelPanic, KernelHalt, KernelVerifyVga,
- *          KernelVerifySerial, KernelVerifyPci, KernelEchoBackspace,
+ *          KernelVerifySerial, KernelVerifyPci, KernelVerifyAta,
+ *          KernelCommandLineHasOption, KernelEchoBackspace,
  *          KernelEchoLoop,
  *          KernelWriteString, KernelWriteHexadecimal, KernelWriteDecimal.
  * References:
@@ -63,6 +64,7 @@
 #include <oxys/vga.h>
 #include <oxys/serial.h>
 #include <oxys/pci.h>
+#include <oxys/ata.h>
 
 /*
  * The name and version of the system, presented upon the console and emitted
@@ -2779,6 +2781,276 @@ static void KernelVerifyPci(void)
 }
 
 /*
+ * True if the boot loader's command line contains the stated option as a
+ * complete word.
+ *
+ * The kernel has no other means of being told anything at the moment it starts,
+ * and one thing it must be told is whether it is permitted to write to a disk.
+ * Comparing complete words rather than substrings matters: an option is a
+ * decision the operator made, and a decision must not be triggered by a longer
+ * word that happens to contain it.
+ */
+static bool KernelCommandLineHasOption(const char *option)
+{
+    const char *const line = KernelBootInformation.command_line;
+    size_t position = 0U;
+
+    while (line[position] != '\0')
+    {
+        size_t length = 0U;
+
+        while ((line[position] == ' ') || (line[position] == '\t'))
+        {
+            ++position;
+        }
+
+        while ((option[length] != '\0') && (line[position + length] == option[length]))
+        {
+            ++length;
+        }
+
+        if ((option[length] == '\0') &&
+            ((line[position + length] == '\0') || (line[position + length] == ' ') ||
+             (line[position + length] == '\t')))
+        {
+            return true;
+        }
+
+        while ((line[position] != '\0') && (line[position] != ' ') && (line[position] != '\t'))
+        {
+            ++position;
+        }
+    }
+
+    return false;
+}
+
+/*
+ * The buffers the disk self-test reads into. They are of static storage duration
+ * because the boot stack is 64 KiB and three sectors of it would be a
+ * disproportionate share of what remains after the self-tests above.
+ */
+static uint8_t KernelDiskBufferA[ATA_SECTOR_SIZE * 2U];
+static uint8_t KernelDiskBufferB[ATA_SECTOR_SIZE * 2U];
+
+/* True if two regions hold the same bytes. */
+static bool KernelRegionsMatch(const uint8_t *left, const uint8_t *right, size_t length)
+{
+    for (size_t index = 0U; index < length; ++index)
+    {
+        if (left[index] != right[index])
+        {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+/*
+ * Asserts that the disk driver addresses the sector it was asked for and
+ * transfers exactly its contents.
+ *
+ * The failure this guards against is the worst kind the kernel has yet had to
+ * consider: a driver that reads the wrong sector returns data, and data that
+ * arrived is indistinguishable from data that is correct until something tries
+ * to interpret it. An address composed with a byte in the wrong register, a
+ * transfer of 255 words instead of 256, a second sector written over the first —
+ * each of these produces a disk that appears to work and a filesystem that
+ * decays. Every assertion below is chosen to make one of those visible.
+ *
+ * The test reads. It writes only when the operator has asked for it upon the
+ * command line, and then only to a sector whose previous contents it has read
+ * and restores afterwards: a self-test that wrote to a disk unbidden would
+ * destroy the data of anybody who booted this kernel upon their own machine.
+ */
+static void KernelVerifyAta(void)
+{
+    const AtaDevice *const disk = AtaFirstDisk();
+    bool succeeded = true;
+
+    if (AtaDeviceCount() == 0U)
+    {
+        KernelWriteString("Disk self-test: no device answered; nothing to assert.\n");
+        return;
+    }
+
+    if (disk == NULL)
+    {
+        KernelWriteString("Disk self-test: devices answered but none is a disk.\n");
+        return;
+    }
+
+    /* An identification that yielded no capacity was not understood. */
+    if ((disk->sector_count == 0U) || (disk->model[0] == '\0'))
+    {
+        KernelWriteString("  The identification data yielded no capacity or model.\n");
+        succeeded = false;
+    }
+
+    /* The first sector must be readable, and must read the same way twice. */
+    if (!AtaRead(disk, 0U, 1U, KernelDiskBufferA))
+    {
+        KernelWriteString("  The first sector could not be read: ");
+        KernelWriteString(AtaLastError());
+        KernelWriteString("\n");
+        succeeded = false;
+    }
+    else if (!AtaRead(disk, 0U, 1U, KernelDiskBufferB) ||
+             !KernelRegionsMatch(KernelDiskBufferA, KernelDiskBufferB, ATA_SECTOR_SIZE))
+    {
+        KernelWriteString("  The same sector read differently upon a second attempt.\n");
+        succeeded = false;
+    }
+
+    /*
+     * A two-sector read must place the second sector after the first, and the
+     * first must be what a one-sector read of the same address returned. A
+     * driver that lost synchronisation between sectors, or that overwrote the
+     * first with the second, passes every other assertion here.
+     */
+    if (disk->sector_count >= 2U)
+    {
+        if (!AtaRead(disk, 0U, 2U, KernelDiskBufferB))
+        {
+            KernelWriteString("  A two-sector read failed.\n");
+            succeeded = false;
+        }
+        else
+        {
+            if (!KernelRegionsMatch(KernelDiskBufferA, KernelDiskBufferB, ATA_SECTOR_SIZE))
+            {
+                KernelWriteString("  A two-sector read did not begin where a one-sector "
+                                  "read did.\n");
+                succeeded = false;
+            }
+
+            if (!AtaRead(disk, 1U, 1U, KernelDiskBufferA) ||
+                !KernelRegionsMatch(KernelDiskBufferA, &KernelDiskBufferB[ATA_SECTOR_SIZE],
+                                    ATA_SECTOR_SIZE))
+            {
+                KernelWriteString("  The second sector of a two-sector read is not the "
+                                  "sector that follows.\n");
+                succeeded = false;
+            }
+        }
+    }
+
+    /* A range beyond the capacity is refused rather than attempted. */
+    if (AtaRead(disk, disk->sector_count, 1U, KernelDiskBufferA) ||
+        AtaRead(disk, disk->sector_count - 1U, 2U, KernelDiskBufferA))
+    {
+        KernelWriteString("  A read beyond the capacity of the device was accepted.\n");
+        succeeded = false;
+    }
+
+    /* A request without a buffer, and one for no sectors, are both harmless. */
+    if (AtaRead(disk, 0U, 1U, NULL) || !AtaRead(disk, 0U, 0U, KernelDiskBufferA))
+    {
+        KernelWriteString("  A degenerate request was mishandled.\n");
+        succeeded = false;
+    }
+
+    /*
+     * A device larger than 28 bits can name exercises the 48-bit commands, which
+     * are otherwise never reached. The register writing they require is
+     * different in kind and not merely in width — each register is written
+     * twice, high-order byte first — so a driver that has never issued one has
+     * not been tested at all in that mode.
+     */
+    if (disk->supports_lba48 && (disk->sector_count > ATA_LBA28_LIMIT))
+    {
+        if (!AtaRead(disk, ATA_LBA28_LIMIT + 1U, 1U, KernelDiskBufferA))
+        {
+            KernelWriteString("  A sector beyond the 28-bit limit could not be read: ");
+            KernelWriteString(AtaLastError());
+            KernelWriteString("\n");
+            succeeded = false;
+        }
+    }
+
+    /*
+     * The write path, only upon request. The sector is read, overwritten with a
+     * pattern, read back, compared, and then restored from what was read; the
+     * restoration is verified in its turn, since a test that damaged the disk
+     * and reported success would be worse than no test.
+     */
+    if (KernelCommandLineHasOption("disk-write-test"))
+    {
+        const uint64_t target = disk->sector_count - 1U;
+
+        KernelWriteString("  Writing to the final sector, as the command line permits.\n");
+
+        if (!AtaRead(disk, target, 1U, KernelDiskBufferA))
+        {
+            KernelWriteString("  The sector to be written could not first be read.\n");
+            succeeded = false;
+        }
+        else
+        {
+            for (size_t index = 0U; index < ATA_SECTOR_SIZE; ++index)
+            {
+                KernelDiskBufferB[index] = (uint8_t)(index ^ 0xA5U);
+            }
+
+            if (!AtaWrite(disk, target, 1U, KernelDiskBufferB))
+            {
+                KernelWriteString("  The pattern could not be written: ");
+                KernelWriteString(AtaLastError());
+                KernelWriteString("\n");
+                succeeded = false;
+            }
+            else if (!AtaRead(disk, target, 1U, &KernelDiskBufferB[ATA_SECTOR_SIZE]))
+            {
+                KernelWriteString("  The pattern could not be read back.\n");
+                succeeded = false;
+            }
+            else
+            {
+                for (size_t index = 0U; index < ATA_SECTOR_SIZE; ++index)
+                {
+                    if (KernelDiskBufferB[ATA_SECTOR_SIZE + index] != (uint8_t)(index ^ 0xA5U))
+                    {
+                        KernelWriteString("  The pattern read back altered.\n");
+                        succeeded = false;
+                        break;
+                    }
+                }
+            }
+
+            /* Whatever happened above, the sector is put back as it was found. */
+            if (!AtaWrite(disk, target, 1U, KernelDiskBufferA) ||
+                !AtaRead(disk, target, 1U, KernelDiskBufferB) ||
+                !KernelRegionsMatch(KernelDiskBufferA, KernelDiskBufferB, ATA_SECTOR_SIZE))
+            {
+                KernelWriteString("  The sector was not restored to its previous contents.\n");
+                succeeded = false;
+            }
+        }
+    }
+
+    if (AtaTimeoutCount() != 0U)
+    {
+        KernelWriteString("  A device failed to respond within the driver's patience.\n");
+        succeeded = false;
+    }
+
+    /*
+     * Every refusal above was provoked deliberately; an error is a failure of the
+     * hardware and none was expected.
+     */
+    if (AtaErrorCount() != 0U)
+    {
+        KernelWriteString("  A device reported an error: ");
+        KernelWriteString(AtaLastError());
+        KernelWriteString("\n");
+        succeeded = false;
+    }
+
+    KernelWriteString(succeeded ? "Disk self-test passed.\n" : "Disk self-test FAILED.\n");
+}
+
+/*
  * Moves the cursor of a serial terminal to a column of the current line, the
  * column being counted from one, by the sequence ECMA-48 calls CHA — Cursor
  * Character Absolute, CSI Pn G. The display driver crosses a row boundary upon a
@@ -3084,13 +3356,23 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
     KernelVerifyPci();
     PciReport();
 
+    /*
+     * The disk is the last device of this phase and the first whose failure is
+     * silent in the ordinary case: a driver that reads the wrong sector returns
+     * data, and data that arrived is indistinguishable from data that is right
+     * until something tries to interpret it.
+     */
+    (void)AtaInitialise();
+    KernelVerifyAta();
+    AtaReport();
+
     PicReport();
     InterruptReport();
     PagingReport();
     AddressSpaceReport();
 
     VgaSetColour(VGA_COLOUR_LIGHT_GREEN, VGA_COLOUR_BLACK);
-    KernelWriteString("Phase 4 initialisation complete to sub-task 4.3.\n");
+    KernelWriteString("Phase 4 initialisation complete to sub-task 4.4.\n");
 
     VgaSetColour(VGA_COLOUR_LIGHT_GREY, VGA_COLOUR_BLACK);
 

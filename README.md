@@ -22,6 +22,7 @@ The design documentation resides in [`docs/`](docs/).
 | [`INTERRUPTS.md`](docs/INTERRUPTS.md) | The interrupt descriptor table, the stubs and the dispatcher, the exception handlers, and the 8259A interrupt controllers. |
 | [`TIME.md`](docs/TIME.md) | The kernel's time sources: the programmable interval timer, the system tick, and what remains to be added. |
 | [`DISPLAY.md`](docs/DISPLAY.md) | The VGA text-mode display: the register configuration, the cursor, the attributes, the control characters and how far a backspace may retreat. |
+| [`DISK.md`](docs/DISK.md) | The ATA disk in programmed input/output mode: the registers, the two addressing modes, and why a disk driver's failures are silent. |
 | [`PCI.md`](docs/PCI.md) | The PCI bus: configuration space access mechanism one, the walk of buses and functions, and what the enumeration records. |
 | [`SERIAL.md`](docs/SERIAL.md) | The 16550 serial adapter: the line parameters, the two output modes, the buffering discipline and the interrupt service. |
 | [`KEYBOARD.md`](docs/KEYBOARD.md) | The 8042 controller, scan code set 1 and its translation, the modifier discipline and the input buffer. |

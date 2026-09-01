@@ -163,7 +163,58 @@ then erase `b` and `a` in the ordinary way. A sixth would do nothing at all, the
 cursor then standing at the erase limit, which the echo loop set below its own
 banner.
 
-## 6. Execution under UEFI firmware
+## 6. Verification of the disk
+
+`make verify` runs upon the q35 board, whose storage controller is AHCI; no
+device answers the ATA driver there, and the disk self-test reports as much and
+asserts nothing. That is the correct outcome upon that machine and is not a
+failure.
+
+The disk is exercised upon the i440fx board, which presents the PIIX3 IDE
+controller at `0:1.1` in compatibility mode. The image is created sparse and
+larger than 28-bit addressing can name, so that the 48-bit commands — whose
+register discipline differs in kind and not merely in width — are reachable at
+all; it occupies a few kilobytes upon the host.
+
+```sh
+qemu-img create -f raw disk.img 256G
+# seed sector 0, sector 1, and sector 0x10000001 with distinguishable text
+
+qemu-system-x86_64 -machine pc -cpu qemu64 -smp cores=2 -m 512M \
+    -cdrom build/oxys.iso \
+    -drive file=disk.img,format=raw,if=ide,index=0,media=disk \
+    -display none -serial file:ata.log
+```
+
+The driver is expected to report a disk of 536870912 sectors with 48-bit
+addressing upon the primary master, and the optical drive holding the ISO as an
+ATAPI packet device upon the secondary master — recognised by its signature
+rather than mistaken for a disk.
+
+The self-test cannot know what the medium holds, so the seeded content is
+confirmed from outside: each seeded sector was read back by the driver and
+compared against what was written to the image, including the sector beyond the
+28-bit limit.
+
+### 6.1 The write path
+
+The driver writes only when the operator has asked for it. The GRUB entry
+*Oxys-OS (disk write self-test)* passes the option `disk-write-test`, upon which
+the self-test reads the final sector, writes a pattern, reads it back, compares
+it byte for byte, and restores the sector from what it first read, verifying the
+restoration in its turn. Anybody may boot this kernel upon their own machine, and
+a self-test that wrote to their disk unbidden would destroy their data; see
+`docs/DISK.md`, Section 6.
+
+The entry is selected at the menu. For an unattended run, an ISO may be generated
+with `set default=2` in place of `set default=0`:
+
+```sh
+sed 's/^set default=0/set default=2/' boot/grub/grub.cfg > isodir/boot/grub/grub.cfg
+grub-mkrescue -o write.iso isodir
+```
+
+## 7. Execution under UEFI firmware
 
 ```sh
 make run-uefi
@@ -174,7 +225,7 @@ present, because the ISO carries only the legacy BIOS boot path of GRUB. The
 target is provided in advance so that the UEFI work of Phase 12 has an
 established point of entry; sub-task 12.7 will render it functional.
 
-## 7. Execution under VirtualBox
+## 8. Execution under VirtualBox
 
 ```sh
 make run-vbox
@@ -193,7 +244,7 @@ in the WSL2 filesystem. The project owner performs this test upon the Windows
 host directly, and sub-task 1.11 of `PLAN.md` is recorded as passed upon that
 authority.
 
-## 8. Testing upon physical hardware
+## 9. Testing upon physical hardware
 
 The ISO produced by `grub-mkrescue` is a hybrid image and may be written
 directly to a USB medium:
@@ -210,7 +261,7 @@ support module, since the UEFI boot path is not implemented until Phase 12.
 Diagnostic output should be captured through a serial adapter where the machine
 provides one. Sub-task 1.12 remains open.
 
-## 9. Debugging with GDB
+## 10. Debugging with GDB
 
 QEMU provides a GDB stub. The kernel is compiled with `-g`, so the DWARF
 information in `build/oxys.elf` may be used directly:
@@ -225,7 +276,7 @@ Note that breakpoints upon higher-half symbols cannot be serviced until paging
 has been enabled. A breakpoint at `_start`, whose address is physical, is the
 correct point at which to begin an examination of the boot sequence.
 
-## 10. Test record
+## 11. Test record
 
 | Date | Test | Result |
 | ---- | ---- | ------ |
@@ -249,3 +300,7 @@ correct point at which to begin an examination of the boot sequence.
 | 2026-09-01 | QEMU `sendkey` — the backspace across a row boundary | Passed; the same sequence delivered as scan codes produced an identical echo, so the keyboard path and the serial path share the behaviour. |
 | 2026-09-01 | QEMU `-serial stdio` and `sendkey` — the backspace consumes the separator alone | Passed; after `ab`, a line feed and `cd`, the third backspace left the cursor after `ab` with both characters standing, and the fourth and fifth erased them in turn. |
 | 2026-09-01 | `make verify` — sub-task 4.3, the bus self-test | Passed; mechanism one answers its own probe, an absent function reads as all ones, the narrow accessors agree with the wide one, a host bridge stands at `0:0.0`, and every base address has had its type bits removed. Six functions were enumerated upon one bus, each corresponding to a device QEMU is known to emulate upon the q35 board. |
+| 2026-09-01 | `make verify` — sub-task 4.4, the disk self-test upon q35 | Passed; no ATA device answers upon that board, the self-test reports as much and asserts nothing, and the kernel proceeds. |
+| 2026-09-01 | QEMU i440fx with a 256 GiB sparse image — the disk self-test | Passed; a disk of 536870912 sectors with 48-bit addressing was identified upon the primary master and the ISO's optical drive recognised as a packet device by its signature. The relationship between sectors was asserted: a two-sector read begins where a one-sector read did and continues with the sector that follows; a range beyond the capacity is refused; a sector beyond the 28-bit limit reads. |
+| 2026-09-01 | QEMU i440fx — the seeded content, confirmed from outside | Passed; sectors 0, 1 and 0x10000001 of the image were seeded upon the host and each was read back by the driver with its content intact, which is the one property the self-test cannot establish for itself. |
+| 2026-09-01 | QEMU i440fx with `disk-write-test` — the write path | Passed; a pattern written to the final sector read back byte for byte, the sector was restored to its previous contents, and the restoration was confirmed both by the kernel and by inspection of the image upon the host. |
