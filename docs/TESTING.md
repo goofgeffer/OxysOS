@@ -131,7 +131,7 @@ that the serial terminal is told of it, must be driven from outside.
 Both sources of characters were exercised for sub-task 4.2. Over the serial line:
 
 ```sh
-( sleep 6; printf 'ab\ncd\b\b\b\b'; sleep 4 ) \
+( sleep 6; printf 'ab\ncd\b\b\b\b\b'; sleep 4 ) \
   | qemu-system-x86_64 -machine q35 -cpu qemu64 -smp cores=2 \
       -cdrom build/oxys.iso -display none -serial stdio
 ```
@@ -139,8 +139,8 @@ Both sources of characters were exercised for sub-task 4.2. Over the serial line
 and by scan code, through the QEMU monitor:
 
 ```sh
-( sleep 7; for k in a b ret c d backspace backspace backspace backspace; do \
-      echo "sendkey $k"; sleep 0.3; done; sleep 2; echo quit ) \
+( sleep 7; for k in a b ret c d backspace backspace backspace backspace backspace; \
+      do echo "sendkey $k"; sleep 0.3; done; sleep 2; echo quit ) \
   | qemu-system-x86_64 -machine q35 -cpu qemu64 -smp cores=2 \
       -cdrom build/oxys.iso -display none -monitor stdio -serial file:kbd.log
 ```
@@ -150,16 +150,18 @@ visible by `cat -v`:
 
 ```
 ab
-cd^H ^H^H ^H^[[A^[[2G ^[[2G^H ^H
+cd^H ^H^H ^H^[[A^[[3G ^[[3G^H ^H^H ^H
 ```
 
 The first two backspaces erase `d` and `c` within the row. The third finds the
 cursor in the first column, so the display crosses into the row above and stops
-upon `b`, and the serial terminal is told to do the same by ECMA-48 CUU followed
-by CHA to column 2 — the columns being numbered from one — a space, and CHA
-again. The fourth erases `a` within that row. A fifth would do nothing at all,
-the cursor then standing at the erase limit, which the echo loop set below its
-own banner.
+immediately after `ab`, in column 3 counting from one; the separator between the
+rows is consumed and no character is. The serial terminal is told of that
+movement by ECMA-48 CUU followed by CHA to column 3, a space — which lands upon a
+column that was already blank — and CHA again. The fourth and fifth backspaces
+then erase `b` and `a` in the ordinary way. A sixth would do nothing at all, the
+cursor then standing at the erase limit, which the echo loop set below its own
+banner.
 
 ## 6. Execution under UEFI firmware
 
@@ -245,3 +247,4 @@ correct point at which to begin an examination of the boot sequence.
 | 2026-09-01 | `make verify` — sub-task 4.2, the display self-test | Passed; the adapter reports its colour configuration at `0x03D4`, blinking is disabled, every control character moves the cursor as ANSI X3.4-1986 defines it, the backspace crosses into the row above and stops at the erase limit, the CRT controller holds the position the driver believes it holds, an impossible cursor position and shape are refused, and a scroll moves the display by exactly one row. |
 | 2026-09-01 | QEMU `-serial stdio` — the backspace across a row boundary | Passed; `ab`, a line feed, `cd` and four backspaces erased both rows' characters in turn, the third backspace crossing into the row above and emitting the ECMA-48 correction to the terminal. |
 | 2026-09-01 | QEMU `sendkey` — the backspace across a row boundary | Passed; the same sequence delivered as scan codes produced an identical echo, so the keyboard path and the serial path share the behaviour. |
+| 2026-09-01 | QEMU `-serial stdio` and `sendkey` — the backspace consumes the separator alone | Passed; after `ab`, a line feed and `cd`, the third backspace left the cursor after `ab` with both characters standing, and the fourth and fifth erased them in turn. |

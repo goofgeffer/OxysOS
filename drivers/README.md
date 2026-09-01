@@ -52,8 +52,9 @@ being reached through a flip-flop whose state is not otherwise observable.
 
 The backspace moves the cursor and erases nothing, which is what ANSI X3.4-1986
 defines it to be; a caller that means to erase writes `"\b \b"`. In the first
-column it crosses into the row above and stops upon the last character standing
-there, and it will not retreat past the **erase limit**, a position recorded by
+column it crosses into the row above and stops immediately after the text
+standing there, having consumed the separator between the rows and nothing else,
+and it will not retreat past the **erase limit**, a position recorded by
 `VgaSetEraseLimit` before which no backspace may pass. The limit is what
 distinguishes a line of input from the boot log above it, the driver having no
 other way to tell them apart; whoever reads the input sets it. See

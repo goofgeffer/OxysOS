@@ -283,13 +283,26 @@ static void VgaAdvanceRow(void)
 }
 
 /*
- * The column of the last character standing upon a row, or zero if the row is
- * blank. It is where the cursor belongs after a backspace has crossed into the
- * row from the row below: the position preceding the first column of a row is
- * the end of the text above it, not the eightieth column of blanks that was
- * never written to.
+ * The column immediately after the last character standing upon a row, which is
+ * where the next character written upon that row would go; zero if the row is
+ * blank.
+ *
+ * It is where the cursor belongs after a backspace has crossed into the row from
+ * the row below. The position preceding the first column of a row is the end of
+ * the text above it and not the eightieth column of blanks that was never
+ * written to; but it is the position after that text, not the position of its
+ * last character. A backspace at the beginning of a row consumes the line
+ * separator and nothing else, exactly as a backspace within a row consumes one
+ * character and nothing else. The character at the end of the row above is
+ * erased by the next backspace, if the user presses it again.
+ *
+ * A row that is entirely occupied is the exception, and reveals why the column
+ * is computed from the contents rather than remembered. Such a row did not end
+ * because a line feed was written: it ended because the text wrapped, and there
+ * is no separator between it and the row below to consume. The cursor therefore
+ * stops upon the final character, which the same backspace goes on to erase.
  */
-static size_t VgaLastOccupiedColumn(size_t row)
+static size_t VgaFirstFreeColumn(size_t row)
 {
     size_t column = VGA_WIDTH;
 
@@ -299,7 +312,7 @@ static size_t VgaLastOccupiedColumn(size_t row)
 
         if ((char)(VgaBuffer[VgaOffset(row, column)] & 0x00FFU) != ' ')
         {
-            return column;
+            return (column + 1U < VGA_WIDTH) ? (column + 1U) : column;
         }
     }
 
@@ -337,7 +350,7 @@ static void VgaBackspace(void)
     else
     {
         --VgaCursorRow;
-        VgaCursorColumn = VgaLastOccupiedColumn(VgaCursorRow);
+        VgaCursorColumn = VgaFirstFreeColumn(VgaCursorRow);
     }
 
     /*

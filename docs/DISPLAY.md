@@ -163,11 +163,21 @@ Within that constraint the backspace behaves as the standard describes:
 
 1. If the cursor stands at or before the limit, nothing happens.
 2. If the cursor is not in the first column, it retreats one column.
-3. Otherwise it moves to the row above, to the column of **the last character
-   standing upon that row**, not to the eightieth column. The eightieth column of
-   a short row was never written to, and a cursor placed there would erase a
-   space and leave the text untouched, which is not what a person pressing
-   backspace asked for.
+3. Otherwise it moves to the row above, to the column **immediately after the
+   text standing upon that row**. Not to the eightieth column, which a short row
+   was never written to and where an erasure would consume a space and leave the
+   text untouched; and not onto the last character of the text, which the
+   backspace has not reached. A backspace at the beginning of a row consumes the
+   separator between the two rows and nothing else, just as a backspace within a
+   row consumes one character and nothing else. Pressing it again erases the
+   character now standing before the cursor, in the ordinary way.
+
+   A row that is entirely occupied is the exception, and is why the column is
+   computed from the contents of the display rather than remembered. Such a row
+   did not end because a line feed was written; it ended because the text
+   wrapped, and there is no separator between it and the row below to consume.
+   The cursor therefore stops upon its final character, which the same backspace
+   goes on to erase.
 4. If either movement would carry the cursor past the limit — the limit standing
    in the middle of a row it shares with a prompt — the cursor is placed at the
    limit instead.
@@ -220,7 +230,7 @@ chosen because its failure would otherwise be silent.
 | A backspace at the limit does not move. | The same. |
 | A backspace elsewhere retreats by one column. | The defect this sub-task's predecessor fixed. |
 | `BS SP BS` erases the cell and restores the cursor. | An erasure that moves the cursor but leaves the character. |
-| A backspace in the first column crosses to the last character of the row above. | The movement this sub-task added not happening, or landing upon column 79. |
+| A backspace in the first column crosses to the position after the text of the row above, leaving that text intact. | The movement not happening; landing upon column 79; or consuming a character along with the separator, so that one keystroke deletes two things. |
 | Erasing across the boundary and then continuing stops at the limit. | An off-by-one at the boundary that steps one character into the kernel's output. |
 | The hardware cursor holds the position the driver believes it holds. | The cursor location written to the wrong index, or to the wrong port pair. |
 | A cursor position outside the display is refused. | A write past the end of the frame buffer. |

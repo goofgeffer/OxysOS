@@ -2501,10 +2501,11 @@ static void KernelVerifyVga(void)
     }
 
     /*
-     * A backspace in the first column crosses into the row above and stops upon
-     * the last character standing there, which is where the erasing sequence
-     * needs it in order to erase that character. This is what allows a line of
-     * input to be corrected after it has wrapped or after a line feed.
+     * A backspace in the first column crosses into the row above and stops
+     * immediately after the text standing there, having consumed the separator
+     * between the two rows and nothing else. This is what allows a line of input
+     * to be corrected after a line feed; the character at the end of the row
+     * above is erased by the next backspace, not by this one.
      */
     scroll_marker = VgaScrollCount();
     VgaWriteString("ab\n");
@@ -2522,18 +2523,18 @@ static void KernelVerifyVga(void)
     VgaPutCharacter('\b');
     VgaCursorPosition(&row, &column);
 
-    if ((row != original_row) || (column != 1U))
+    if ((row != original_row) || (column != 2U) || (VgaCharacterAt(row, 1U) != 'b'))
     {
-        KernelWriteString("  A backspace did not cross into the row above.\n");
+        KernelWriteString("  A backspace across the row boundary consumed a character.\n");
         succeeded = false;
     }
 
     /* Erasing both characters returns the cursor to the limit, and no further. */
-    VgaWriteString(" \b");
+    VgaWriteString("\b \b");
     VgaWriteString("\b \b");
     VgaCursorPosition(&row, &column);
 
-    if ((row != original_row) || (column != 0U))
+    if ((row != original_row) || (column != 0U) || (VgaCharacterAt(row, 1U) != ' '))
     {
         KernelWriteString("  Erasing across the row boundary left the cursor astray.\n");
         succeeded = false;

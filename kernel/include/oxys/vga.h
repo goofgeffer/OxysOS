@@ -133,10 +133,13 @@ void VgaClear(void);
  *
  * The backspace moves the cursor one position backward without erasing, as ANSI
  * X3.4-1986 defines it; a caller that means to erase writes "\b \b". In the
- * first column the position preceding the cursor is the last character written
- * upon the row above, not the eightieth column of blanks that was never written
- * to, and the cursor therefore retreats to it. It will not retreat past the
- * erase limit; see VgaSetEraseLimit.
+ * first column it crosses into the row above, to the position immediately after
+ * the text standing there — not to the eightieth column of blanks that was never
+ * written to, and not onto the last character, which the backspace has not
+ * reached and must not consume. A row that is entirely occupied is the
+ * exception: it ended by wrapping rather than by a line feed, so there is no
+ * separator to consume and the cursor stops upon its final character. The
+ * movement will not pass the erase limit; see VgaSetEraseLimit.
  *
  * The display is scrolled upward by one row when the cursor passes the final row.
  */
