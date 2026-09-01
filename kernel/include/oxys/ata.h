@@ -6,7 +6,7 @@
  *          logical block addressing.
  * Key definitions: ATA_SECTOR_SIZE, AtaDeviceKind, AtaDevice, AtaInitialise,
  *          AtaDeviceCount, AtaDeviceAt, AtaFirstDisk, AtaRead, AtaWrite,
- *          AtaReport.
+ *          AtaRegisterBlockDevices, AtaReport.
  * References:
  *   - AT Attachment with Packet Interface (ATA/ATAPI-6 and later), the command
  *     block registers: at offsets 0 to 7 from the base address lie the data
@@ -128,6 +128,17 @@ bool AtaRead(const AtaDevice *device, uint64_t lba, uint32_t count, void *buffer
  * The conditions of failure are those of AtaRead.
  */
 bool AtaWrite(const AtaDevice *device, uint64_t lba, uint32_t count, const void *buffer);
+
+/*
+ * Registers every disk identified as a device of the generic block layer, named
+ * "ata0" to "ata3" by channel and drive, and returns how many were registered.
+ *
+ * The adaptor lives here, and not in the block layer, so that the dependency
+ * runs in one direction only: a driver knows the layer it presents itself
+ * through, and the layer knows nothing of ATA. A packet device is not
+ * registered, this driver being unable to read one.
+ */
+size_t AtaRegisterBlockDevices(void);
 
 /* Accounting, read by the boot-time self-test and by AtaReport. */
 uint64_t AtaSectorsRead(void);

@@ -22,12 +22,13 @@ interface and never upon a driver's location.
 | `keyboard/keyboard.c` | The 8042 controller and the PS/2 keyboard upon its first port. | `<oxys/keyboard.h>` | 3 |
 | `pci/pci.c` | The PCI bus: configuration-space enumeration by mechanism one. | `<oxys/pci.h>` | 4.3 |
 | `ata/ata.c` | The ATA disk, in programmed input/output mode. | `<oxys/ata.h>` | 4.4 |
+| `block/block.c` | The generic block-device layer above the disk drivers. | `<oxys/block.h>` | 4.5 |
 
 ## Planned contents
 
 | Path | Device | Phase, sub-task |
 | ---- | ------ | --------------- |
-| `block/` | The generic block-device layer and the buffer cache. | 4.5, 4.6 |
+| `block/` | The buffer cache above the block layer. | 4.6 |
 | `mouse/` | The PS/2 mouse. | 9.4 |
 | `net/` | The Ethernet controller. | 11.1 |
 
@@ -116,6 +117,25 @@ throughout initialisation.
 The self-test reads unconditionally and writes only when the operator has booted
 the GRUB entry that passes `disk-write-test`, and then only to a sector it first
 read and afterwards restores. See [`../docs/DISK.md`](../docs/DISK.md).
+
+### `block/` — the generic block-device layer
+
+Not a driver either, but what the drivers of a medium present themselves through.
+A driver registers a device by supplying a read and a write operation, a context
+that means something to it and nothing to the layer, and a geometry; a caller
+addresses a device by name and block number and knows nothing else about it.
+
+Every request is judged before a driver is reached: a driver is never called with
+a null buffer, a count of zero, a range outside the device, or a write to a
+read-only device. Those four tests are written here once instead of in each
+driver, which is most of the reason the layer exists. The range is bounded by
+subtraction rather than addition, a 64-bit block number near its greatest value
+making the obvious sum wrap so that a range wholly outside the device would pass.
+
+The adaptor that presents an ATA disk as a block device lives in `ata/ata.c`, so
+that the dependency runs one way: a driver knows the layer it presents itself
+through, and the layer knows nothing of ATA. See
+[`../docs/BLOCK.md`](../docs/BLOCK.md).
 
 ### `serial/` — the COM1 diagnostic port
 

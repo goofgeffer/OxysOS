@@ -116,7 +116,8 @@ C_SOURCES := kernel/kernel.c \
              drivers/pit/pit.c \
              drivers/keyboard/keyboard.c \
              drivers/pci/pci.c \
-             drivers/ata/ata.c
+             drivers/ata/ata.c \
+             drivers/block/block.c
 
 ASM_SOURCES := boot/boot.asm \
                kernel/cpu/interrupt_stubs.asm \

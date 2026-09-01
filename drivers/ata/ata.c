@@ -5,7 +5,8 @@
  *          it, and the reading and writing of sectors by 28-bit and 48-bit
  *          logical block addressing.
  * Key functions: AtaInitialise, AtaIdentify, AtaRead, AtaWrite, AtaTransfer,
- *          AtaSelect, AtaWaitNotBusy, AtaWaitForData, AtaFail, AtaReject, AtaReport.
+ *          AtaSelect, AtaWaitNotBusy, AtaWaitForData, AtaFail, AtaReject,
+ *          AtaRegisterBlockDevices, AtaReport.
  * References:
  *   - AT Attachment with Packet Interface, the command block registers: the data
  *     register at offset 0, the error register (features when written) at 1, the
@@ -48,6 +49,7 @@
 #include <oxys/ata.h>
 #include <oxys/kernel.h>
 #include <oxys/io.h>
+#include <oxys/block.h>
 
 /* The command block registers, as offsets from the base address. */
 #define ATA_REGISTER_DATA          0U
@@ -774,6 +776,53 @@ uint64_t AtaTimeoutCount(void)
 const char *AtaLastError(void)
 {
     return AtaError;
+}
+
+/*
+ * The operations by which the block layer reaches this driver. The context is
+ * the AtaDevice the layer was given at registration, so the adaptor is a cast
+ * and a call: the validation of the request has already been performed above,
+ * and repeating it here would be two statements of one rule.
+ */
+static bool AtaBlockRead(void *context, uint64_t block, uint32_t count, void *buffer)
+{
+    return AtaRead((const AtaDevice *)context, block, count, buffer);
+}
+
+static bool AtaBlockWrite(void *context, uint64_t block, uint32_t count, const void *buffer)
+{
+    return AtaWrite((const AtaDevice *)context, block, count, buffer);
+}
+
+static const BlockOperations AtaBlockOperations = { AtaBlockRead, AtaBlockWrite };
+
+size_t AtaRegisterBlockDevices(void)
+{
+    static char names[ATA_DEVICE_COUNT][5] = { "ata0", "ata1", "ata2", "ata3" };
+    size_t registered = 0U;
+
+    for (size_t position = 0U; position < ATA_DEVICE_COUNT; ++position)
+    {
+        AtaDevice *const device = &AtaDevices[position];
+
+        /*
+         * Only a disk is registered. A packet device answered the enumeration
+         * and is reported, but this driver cannot read one, and a block device
+         * whose every transfer fails is worse than an absent one.
+         */
+        if ((device->kind != ATA_DEVICE_ATA) || (device->sector_count == 0U))
+        {
+            continue;
+        }
+
+        if (BlockRegister(names[position], &AtaBlockOperations, device, ATA_SECTOR_SIZE,
+                          device->sector_count, false) != NULL)
+        {
+            ++registered;
+        }
+    }
+
+    return registered;
 }
 
 /* The printable name of what was found at an address. */

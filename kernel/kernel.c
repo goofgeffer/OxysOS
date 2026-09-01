@@ -7,7 +7,7 @@
  *          where a keyboard is present, or halts the processor where none is.
  * Key functions: KernelMain, KernelPanic, KernelHalt, KernelVerifyVga,
  *          KernelVerifySerial, KernelVerifyPci, KernelVerifyAta,
- *          KernelCommandLineHasOption, KernelEchoBackspace,
+ *          KernelVerifyBlock, KernelCommandLineHasOption, KernelEchoBackspace,
  *          KernelEchoLoop,
  *          KernelWriteString, KernelWriteHexadecimal, KernelWriteDecimal.
  * References:
@@ -65,6 +65,15 @@
 #include <oxys/serial.h>
 #include <oxys/pci.h>
 #include <oxys/ata.h>
+#include <oxys/block.h>
+
+/*
+ * The extents of the kernel text section, established by the link script. They
+ * are arrays of char because a linker symbol has an address and no value; taking
+ * the address of the array yields the address the linker assigned.
+ */
+extern char KernelTextStart[];
+extern char KernelTextEnd[];
 
 /*
  * The name and version of the system, presented upon the console and emitted
@@ -740,9 +749,16 @@ static void KernelVerifyInterruptStubs(void)
      * The saved RIP must lie within the kernel text, being the address of the
      * instruction after INT3. A displaced frame would place something else here,
      * and a value outside the text is the clearest evidence of that.
+     *
+     * The bounds are the linker's own symbols for the text section. They were
+     * once the address of KernelMain and an arbitrary extent beyond the virtual
+     * base, which asserted something narrower than it appeared to: that the
+     * compiler had placed KernelMain before every function that might execute
+     * INT3. Adding a function above it in this file was enough to fail the test
+     * without anything being wrong.
      */
-    if (frame->rip < (uint64_t)(uintptr_t)&KernelMain ||
-        frame->rip >= (uint64_t)KERNEL_VIRTUAL_BASE + UINT64_C(0x40000000))
+    if ((frame->rip < (uint64_t)(uintptr_t)KernelTextStart) ||
+        (frame->rip >= (uint64_t)(uintptr_t)KernelTextEnd))
     {
         KernelWriteString("  The saved RIP does not lie within the kernel image.\n");
         succeeded = false;
@@ -3051,6 +3067,274 @@ static void KernelVerifyAta(void)
 }
 
 /*
+ * A block device backed by memory, existing only for the self-test below.
+ *
+ * The disk this kernel can reach is not a fit subject for a test of the layer
+ * above it: the machine that `make verify` runs upon has no ATA device at all,
+ * and a machine that does has data upon it that a self-test must not write to.
+ * A device of known contents, of a known size, whose every transfer succeeds,
+ * makes the layer testable everywhere and testable exactly — the assertions
+ * below can state what a read must return rather than merely that it returned.
+ */
+#define KERNEL_MEMORY_DEVICE_BLOCKS 32U
+
+static uint8_t KernelMemoryDeviceStore[KERNEL_MEMORY_DEVICE_BLOCKS * BLOCK_SIZE_DEFAULT];
+
+static bool KernelMemoryDeviceRead(void *context, uint64_t block, uint32_t count, void *buffer)
+{
+    uint8_t *const destination = (uint8_t *)buffer;
+    const size_t offset = (size_t)block * BLOCK_SIZE_DEFAULT;
+
+    (void)context;
+
+    for (size_t index = 0U; index < ((size_t)count * BLOCK_SIZE_DEFAULT); ++index)
+    {
+        destination[index] = KernelMemoryDeviceStore[offset + index];
+    }
+
+    return true;
+}
+
+static bool KernelMemoryDeviceWrite(void *context, uint64_t block, uint32_t count,
+                                    const void *buffer)
+{
+    const uint8_t *const source = (const uint8_t *)buffer;
+    const size_t offset = (size_t)block * BLOCK_SIZE_DEFAULT;
+
+    (void)context;
+
+    for (size_t index = 0U; index < ((size_t)count * BLOCK_SIZE_DEFAULT); ++index)
+    {
+        KernelMemoryDeviceStore[offset + index] = source[index];
+    }
+
+    return true;
+}
+
+static const BlockOperations KernelMemoryDeviceOperations = { KernelMemoryDeviceRead,
+                                                              KernelMemoryDeviceWrite };
+
+/* The same device without a writer, for the read-only assertions. */
+static const BlockOperations KernelMemoryDeviceReadOnlyOperations = { KernelMemoryDeviceRead,
+                                                                      NULL };
+
+/* Two blocks of working space for the transfers the self-tests perform. */
+static uint8_t KernelBlockBufferA[BLOCK_SIZE_DEFAULT * 2U];
+static uint8_t KernelBlockBufferB[BLOCK_SIZE_DEFAULT * 2U];
+
+/* Fills a region with a pattern that depends upon the seed, so that two regions
+ * filled from different seeds cannot be confused for one another. */
+static void KernelFillPattern(uint8_t *region, size_t length, uint8_t seed)
+{
+    for (size_t index = 0U; index < length; ++index)
+    {
+        region[index] = (uint8_t)((index * 31U) + seed);
+    }
+}
+
+/* True if a region holds the pattern that seed would have produced. */
+static bool KernelPatternMatches(const uint8_t *region, size_t length, uint8_t seed)
+{
+    for (size_t index = 0U; index < length; ++index)
+    {
+        if (region[index] != (uint8_t)((index * 31U) + seed))
+        {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+/*
+ * Asserts that the block layer validates what it is asked before it reaches a
+ * driver, and transfers what it was given when it does.
+ *
+ * The layer exists precisely so that the four tests every driver would otherwise
+ * repeat are written once, and the consequence of that is that a defect here is
+ * a defect in every device at once. The assertions are made against a device of
+ * known contents rather than against a disk, for the reason given where that
+ * device is defined.
+ */
+static void KernelVerifyBlock(void)
+{
+    BlockDevice *device;
+    BlockDevice *read_only;
+    const size_t already_registered = BlockDeviceCount();
+    bool succeeded = true;
+
+    device = BlockRegister("mem0", &KernelMemoryDeviceOperations, NULL, BLOCK_SIZE_DEFAULT,
+                           KERNEL_MEMORY_DEVICE_BLOCKS, false);
+
+    if (device == NULL)
+    {
+        KernelWriteString("  A device of memory could not be registered.\n");
+        KernelWriteString("Block self-test FAILED.\n");
+        return;
+    }
+
+    read_only = BlockRegister("mem1", &KernelMemoryDeviceReadOnlyOperations, NULL,
+                              BLOCK_SIZE_DEFAULT, KERNEL_MEMORY_DEVICE_BLOCKS, true);
+
+    if (read_only == NULL)
+    {
+        KernelWriteString("  A read-only device could not be registered.\n");
+        succeeded = false;
+    }
+
+    /* A name identifies a device, so a second device may not take one in use. */
+    if (BlockRegister("mem0", &KernelMemoryDeviceOperations, NULL, BLOCK_SIZE_DEFAULT, 1U,
+                      false) != NULL)
+    {
+        KernelWriteString("  A name already registered was accepted a second time.\n");
+        succeeded = false;
+    }
+
+    /*
+     * A writable device without a writer, and a read-only device with one, are
+     * both refused: either would be a device whose declared nature and whose
+     * behaviour disagree.
+     */
+    if ((BlockRegister("mem2", &KernelMemoryDeviceReadOnlyOperations, NULL, BLOCK_SIZE_DEFAULT,
+                       1U, false) != NULL) ||
+        (BlockRegister("mem3", &KernelMemoryDeviceOperations, NULL, BLOCK_SIZE_DEFAULT, 1U,
+                       true) != NULL))
+    {
+        KernelWriteString("  A device was registered whose nature and operations disagree.\n");
+        succeeded = false;
+    }
+
+    /* A degenerate geometry, and a name that cannot be held, are refused. */
+    if ((BlockRegister("mem4", &KernelMemoryDeviceOperations, NULL, 0U, 1U, false) != NULL) ||
+        (BlockRegister("mem5", &KernelMemoryDeviceOperations, NULL, BLOCK_SIZE_DEFAULT, 0U,
+                       false) != NULL) ||
+        (BlockRegister("a-name-far-too-long-to-hold", &KernelMemoryDeviceOperations, NULL,
+                       BLOCK_SIZE_DEFAULT, 1U, false) != NULL))
+    {
+        KernelWriteString("  A degenerate registration was accepted.\n");
+        succeeded = false;
+    }
+
+    if ((BlockFindByName("mem0") != device) || (BlockFindByName("mem") != NULL) ||
+        (BlockFindByName("mem00") != NULL))
+    {
+        KernelWriteString("  A device was found by a name that is not its own.\n");
+        succeeded = false;
+    }
+
+    if (BlockDeviceCount() != (already_registered + 2U))
+    {
+        KernelWriteString("  The registry holds a different number of devices than "
+                          "were registered.\n");
+        succeeded = false;
+    }
+
+    if (BlockDeviceAt(BlockDeviceCount()) != NULL)
+    {
+        KernelWriteString("  A device was reported beyond the end of the registry.\n");
+        succeeded = false;
+    }
+
+    /* What is written to a block must be what is read back from it. */
+    KernelFillPattern(KernelBlockBufferA, BLOCK_SIZE_DEFAULT, 0x11U);
+
+    if (!BlockWrite(device, 3U, 1U, KernelBlockBufferA) ||
+        !BlockRead(device, 3U, 1U, KernelBlockBufferB) ||
+        !KernelPatternMatches(KernelBlockBufferB, BLOCK_SIZE_DEFAULT, 0x11U))
+    {
+        KernelWriteString("  A block did not read back as it was written.\n");
+        succeeded = false;
+    }
+
+    /*
+     * A two-block transfer must carry both blocks and must not carry a third.
+     * The two halves are given different patterns so that a layer which passed
+     * the same block twice, or which lost the count, cannot pass this.
+     */
+    KernelFillPattern(KernelBlockBufferA, BLOCK_SIZE_DEFAULT, 0x22U);
+    KernelFillPattern(&KernelBlockBufferA[BLOCK_SIZE_DEFAULT], BLOCK_SIZE_DEFAULT, 0x33U);
+
+    if (!BlockWrite(device, 8U, 2U, KernelBlockBufferA) ||
+        !BlockRead(device, 8U, 2U, KernelBlockBufferB) ||
+        !KernelPatternMatches(KernelBlockBufferB, BLOCK_SIZE_DEFAULT, 0x22U) ||
+        !KernelPatternMatches(&KernelBlockBufferB[BLOCK_SIZE_DEFAULT], BLOCK_SIZE_DEFAULT,
+                              0x33U))
+    {
+        KernelWriteString("  A two-block transfer did not carry both blocks in order.\n");
+        succeeded = false;
+    }
+
+    if (!BlockRead(device, 9U, 1U, KernelBlockBufferB) ||
+        !KernelPatternMatches(KernelBlockBufferB, BLOCK_SIZE_DEFAULT, 0x33U))
+    {
+        KernelWriteString("  The second block of a two-block write is not the block "
+                          "that follows.\n");
+        succeeded = false;
+    }
+
+    /* A range outside the device is refused, and so is one that would wrap. */
+    if (BlockRead(device, KERNEL_MEMORY_DEVICE_BLOCKS, 1U, KernelBlockBufferB) ||
+        BlockRead(device, KERNEL_MEMORY_DEVICE_BLOCKS - 1U, 2U, KernelBlockBufferB) ||
+        BlockRead(device, UINT64_MAX, 2U, KernelBlockBufferB))
+    {
+        KernelWriteString("  A range outside the device was accepted.\n");
+        succeeded = false;
+    }
+
+    /* A request without a buffer is refused; one for no blocks is harmless. */
+    if (BlockRead(device, 0U, 1U, NULL) || BlockWrite(device, 0U, 1U, NULL) ||
+        !BlockRead(device, 0U, 0U, NULL))
+    {
+        KernelWriteString("  A degenerate request was mishandled.\n");
+        succeeded = false;
+    }
+
+    /* A read-only device refuses a write before the driver is reached. */
+    if (BlockWrite(read_only, 0U, 1U, KernelBlockBufferA))
+    {
+        KernelWriteString("  A read-only device accepted a write.\n");
+        succeeded = false;
+    }
+
+    if (!BlockRead(read_only, 3U, 1U, KernelBlockBufferB) ||
+        !KernelPatternMatches(KernelBlockBufferB, BLOCK_SIZE_DEFAULT, 0x11U))
+    {
+        KernelWriteString("  A read-only device did not read.\n");
+        succeeded = false;
+    }
+
+    /* The accounting must reflect the blocks that actually moved. */
+    if ((device->blocks_written != 3U) || (device->blocks_read != 4U))
+    {
+        KernelWriteString("  The accounting does not match the transfers performed.\n");
+        succeeded = false;
+    }
+
+    /* A device may be withdrawn, and is then neither found nor addressable. */
+    if (!BlockUnregister(read_only) || !BlockUnregister(device))
+    {
+        KernelWriteString("  A registered device could not be withdrawn.\n");
+        succeeded = false;
+    }
+
+    if (BlockUnregister(device) || (BlockFindByName("mem0") != NULL) ||
+        BlockRead(device, 0U, 1U, KernelBlockBufferB) ||
+        (BlockDeviceCount() != already_registered))
+    {
+        KernelWriteString("  A withdrawn device was still reachable.\n");
+        succeeded = false;
+    }
+
+    if (BlockTotalErrors() != 0U)
+    {
+        KernelWriteString("  A device reported an error where none was expected.\n");
+        succeeded = false;
+    }
+
+    KernelWriteString(succeeded ? "Block self-test passed.\n" : "Block self-test FAILED.\n");
+}
+
+/*
  * Moves the cursor of a serial terminal to a column of the current line, the
  * column being counted from one, by the sequence ECMA-48 calls CHA — Cursor
  * Character Absolute, CSI Pn G. The display driver crosses a row boundary upon a
@@ -3366,13 +3650,23 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
     KernelVerifyAta();
     AtaReport();
 
+    /*
+     * Every disk found presents itself through the generic layer, which is what
+     * everything above will address it by. The layer is asserted against a
+     * device of memory rather than against a disk: the machine this is verified
+     * upon has no disk, and one that has holds data a self-test must not write.
+     */
+    (void)AtaRegisterBlockDevices();
+    KernelVerifyBlock();
+    BlockReport();
+
     PicReport();
     InterruptReport();
     PagingReport();
     AddressSpaceReport();
 
     VgaSetColour(VGA_COLOUR_LIGHT_GREEN, VGA_COLOUR_BLACK);
-    KernelWriteString("Phase 4 initialisation complete to sub-task 4.4.\n");
+    KernelWriteString("Phase 4 initialisation complete to sub-task 4.5.\n");
 
     VgaSetColour(VGA_COLOUR_LIGHT_GREY, VGA_COLOUR_BLACK);
 
