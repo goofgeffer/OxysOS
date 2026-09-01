@@ -15,7 +15,7 @@ interface and never upon a driver's location.
 
 | Path | Device | Interface | Phase |
 | ---- | ------ | --------- | ----- |
-| `vga/vga.c` | The VGA colour text-mode display, mode 3. | `<oxys/vga.h>` | 1 |
+| `vga/vga.c` | The VGA text-mode display, mode 3. | `<oxys/vga.h>` | 1, 4.2 |
 | `serial/serial.c` | The 16550-compatible UART at COM1, interrupt-driven. | `<oxys/serial.h>` | 1, 4.1 |
 | `pic/pic.c` | The pair of cascaded 8259A interrupt controllers. | `<oxys/pic.h>` | 3 |
 | `pit/pit.c` | Counter 0 of the 8253 interval timer, the system tick. | `<oxys/pit.h>` | 3 |
@@ -35,24 +35,35 @@ interface and never upon a driver's location.
 
 ### `vga/` — the text-mode display
 
-Writes directly to the character frame buffer at physical `0x000B8000`, reached
-through the higher-half mapping. It maintains the cursor position, handles the
-line feed, carriage return, horizontal tabulation and backspace characters,
-scrolls the display when the final row is passed, and mirrors the cursor position
-into the CRT controller so that the hardware cursor is displayed correctly.
+Writes directly to the character frame buffer, reached through the higher-half
+mapping. It maintains the cursor position, handles the line feed, carriage
+return, horizontal tabulation and backspace characters, scrolls the display when
+the final row is passed, and mirrors the cursor position into the CRT controller
+so that the hardware cursor is displayed correctly.
 
-The backspace moves the cursor one column to the left and erases nothing, which
-is what ANSI X3.4-1986 defines it to be; a caller that means to erase writes
-`"\b \b"`. It does not wrap to the preceding row, because nothing here records
-whether a row ended by wrapping or by a line feed, and a wrap would therefore let
-a backspace destroy output the user never typed. That distinction belongs to the
-line discipline of Phase 8.
+Which registers the adapter answers upon is read rather than assumed: bit 0 of
+the Miscellaneous Output Register selects between the colour configuration, whose
+CRT controller is at `0x03D4` and whose frame buffer is at `0x000B8000`, and the
+monochrome one at `0x03B4` and `0x000B0000`. Blinking is disabled at
+initialisation, which makes bit 7 of the attribute select a bright background
+instead and yields all sixteen colours as backgrounds; the attribute controller
+is written through its shared address and data port and read back, that port
+being reached through a flip-flop whose state is not otherwise observable.
 
-The cursor movements are asserted at each boot by `KernelVerifyVga`, through the
-`VgaCursorPosition` accessor that exists for the purpose. The failure guarded
-against is silent: a control character the driver does not handle is written into
-the frame buffer as a glyph and the cursor advances rightward, which nothing in
-the machine can notice and only a person reading the screen can see.
+The backspace moves the cursor and erases nothing, which is what ANSI X3.4-1986
+defines it to be; a caller that means to erase writes `"\b \b"`. In the first
+column it crosses into the row above and stops upon the last character standing
+there, and it will not retreat past the **erase limit**, a position recorded by
+`VgaSetEraseLimit` before which no backspace may pass. The limit is what
+distinguishes a line of input from the boot log above it, the driver having no
+other way to tell them apart; whoever reads the input sets it. See
+[`../docs/DISPLAY.md`](../docs/DISPLAY.md), Section 6.
+
+The driver is asserted at each boot by `KernelVerifyVga`, which checks the cursor
+movements, the erase limit, the read-back of the hardware cursor position from
+the CRT controller, and that a scroll moves the display by exactly one row. Every
+failure this guards against is silent: the machine runs perfectly and only a
+person reading the screen can see that anything is wrong.
 
 The frame buffer pointer is declared `volatile`, because the memory is examined
 by the display hardware independently of the processor.

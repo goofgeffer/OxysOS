@@ -286,8 +286,11 @@ From sub-task 4.1 the loop drains the serial receive buffer as well, so the same
 demonstration is available for the serial adapter; `docs/SERIAL.md`, Section 8.2,
 records it.
 
-The backspace is echoed as the three-character sequence `"\b \b"` rather than as
-the character itself. The backspace moves the cursor and erases nothing, upon the
+The backspace is echoed by `KernelEchoBackspace`, which composes an erasure
+rather than sending the character itself, and which tells the serial terminal
+about a movement into the row above that the display driver made on its own; see
+[`DISPLAY.md`](DISPLAY.md), Section 6.1. The erasure is the three-character
+sequence `"\b \b"`. The backspace moves the cursor and erases nothing, upon the
 display and upon a serial terminal alike, so an echo that wrote it alone would
 leave the character the user meant to delete standing until something else was
 typed over it. The erasure is the echo's business rather than the display

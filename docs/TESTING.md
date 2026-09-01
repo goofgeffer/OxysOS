@@ -63,14 +63,28 @@ standard output stream of the invoking terminal.
 
 ## 3. Verification of the text-mode display
 
-The cursor movements of the display driver are asserted at each boot by
-`KernelVerifyVga`, which reads the cursor position back through
-`VgaCursorPosition` after writing each control character. That test guards a
-failure mode which is silent to the machine and visible only to a person reading
-the screen: a control character for which the driver has no case is written into
-the frame buffer as whatever glyph the adapter's font holds at that code point,
-and the cursor then advances rightward. The backspace was broken in exactly that
-way until 2026-08-31.
+The display driver is asserted at each boot by `KernelVerifyVga`. It guards a
+class of failure which is silent to the machine and visible only to a person
+reading the screen: a control character for which the driver has no case is
+written into the frame buffer as whatever glyph the adapter's font holds at that
+code point, and the cursor then advances rightward. The backspace was broken in
+exactly that way until 2026-08-31.
+
+From sub-task 4.2 the test covers the whole of the driver, and each property it
+asserts is chosen because its failure would otherwise be invisible: the adapter's
+register configuration, the disabling of blinking through the attribute
+controller, the cursor movements of every control character, the erase limit and
+the backspace that crosses into the row above, the agreement between the driver's
+cursor position and the one read back out of the CRT controller, the refusal of a
+position outside the display and of an impossible cursor shape, the hiding and
+restoration of the hardware cursor, and a scroll that moves the display by
+exactly one row. The table in `docs/DISPLAY.md`, Section 7.1, pairs each property
+with the failure it would catch.
+
+The scroll assertion reads the frame buffer back through `VgaCharacterAt` and
+costs one row of the boot log, which leaves the top of the display for the
+purpose. The record upon the serial line, which is what `make verify` reads, is
+unaffected.
 
 What the self-test cannot establish is that the frame buffer is rendered at all.
 The serial path and the display path are independent, and a defect in the VGA
@@ -107,7 +121,47 @@ controller, the handler and the receive buffer. The delay before the text is
 sent must exceed the time the self-tests take, since anything arriving earlier is
 discarded by `SerialFlushBuffers` at the close of the serial self-test.
 
-## 5. Execution under UEFI firmware
+## 5. Verification of the backspace across a row boundary
+
+A backspace in the first column carries the cursor into the row above, as far
+back as the erase limit and no further. The self-test asserts the movement upon
+the driver's own state; that the movement is produced by a real keystroke, and
+that the serial terminal is told of it, must be driven from outside.
+
+Both sources of characters were exercised for sub-task 4.2. Over the serial line:
+
+```sh
+( sleep 6; printf 'ab\ncd\b\b\b\b'; sleep 4 ) \
+  | qemu-system-x86_64 -machine q35 -cpu qemu64 -smp cores=2 \
+      -cdrom build/oxys.iso -display none -serial stdio
+```
+
+and by scan code, through the QEMU monitor:
+
+```sh
+( sleep 7; for k in a b ret c d backspace backspace backspace backspace; do \
+      echo "sendkey $k"; sleep 0.3; done; sleep 2; echo quit ) \
+  | qemu-system-x86_64 -machine q35 -cpu qemu64 -smp cores=2 \
+      -cdrom build/oxys.iso -display none -monitor stdio -serial file:kbd.log
+```
+
+Both produced the identical echo, shown here with the control characters made
+visible by `cat -v`:
+
+```
+ab
+cd^H ^H^H ^H^[[A^[[2G ^[[2G^H ^H
+```
+
+The first two backspaces erase `d` and `c` within the row. The third finds the
+cursor in the first column, so the display crosses into the row above and stops
+upon `b`, and the serial terminal is told to do the same by ECMA-48 CUU followed
+by CHA to column 2 — the columns being numbered from one — a space, and CHA
+again. The fourth erases `a` within that row. A fifth would do nothing at all,
+the cursor then standing at the erase limit, which the echo loop set below its
+own banner.
+
+## 6. Execution under UEFI firmware
 
 ```sh
 make run-uefi
@@ -118,7 +172,7 @@ present, because the ISO carries only the legacy BIOS boot path of GRUB. The
 target is provided in advance so that the UEFI work of Phase 12 has an
 established point of entry; sub-task 12.7 will render it functional.
 
-## 6. Execution under VirtualBox
+## 7. Execution under VirtualBox
 
 ```sh
 make run-vbox
@@ -137,7 +191,7 @@ in the WSL2 filesystem. The project owner performs this test upon the Windows
 host directly, and sub-task 1.11 of `PLAN.md` is recorded as passed upon that
 authority.
 
-## 7. Testing upon physical hardware
+## 8. Testing upon physical hardware
 
 The ISO produced by `grub-mkrescue` is a hybrid image and may be written
 directly to a USB medium:
@@ -154,7 +208,7 @@ support module, since the UEFI boot path is not implemented until Phase 12.
 Diagnostic output should be captured through a serial adapter where the machine
 provides one. Sub-task 1.12 remains open.
 
-## 8. Debugging with GDB
+## 9. Debugging with GDB
 
 QEMU provides a GDB stub. The kernel is compiled with `-g`, so the DWARF
 information in `build/oxys.elf` may be used directly:
@@ -169,7 +223,7 @@ Note that breakpoints upon higher-half symbols cannot be serviced until paging
 has been enabled. A breakpoint at `_start`, whose address is physical, is the
 correct point at which to begin an examination of the boot sequence.
 
-## 9. Test record
+## 10. Test record
 
 | Date | Test | Result |
 | ---- | ---- | ------ |
@@ -188,3 +242,6 @@ correct point at which to begin an examination of the boot sequence.
 | 2026-08-31 | QEMU `sendkey` — the backspace, end to end | Passed; `o x y s spc b a d` followed by three backspaces and `g o o d` produced `oxys bad` then the erasing sequence three times then `good` upon the serial port, a terminal rendering it `oxys good`. |
 | — | VirtualBox boot | Passed; performed by the project owner upon the Windows host, `VBoxManage` being unavailable in this environment. |
 | — | Physical hardware boot | Not performed. |
+| 2026-09-01 | `make verify` — sub-task 4.2, the display self-test | Passed; the adapter reports its colour configuration at `0x03D4`, blinking is disabled, every control character moves the cursor as ANSI X3.4-1986 defines it, the backspace crosses into the row above and stops at the erase limit, the CRT controller holds the position the driver believes it holds, an impossible cursor position and shape are refused, and a scroll moves the display by exactly one row. |
+| 2026-09-01 | QEMU `-serial stdio` — the backspace across a row boundary | Passed; `ab`, a line feed, `cd` and four backspaces erased both rows' characters in turn, the third backspace crossing into the row above and emitting the ECMA-48 correction to the terminal. |
+| 2026-09-01 | QEMU `sendkey` — the backspace across a row boundary | Passed; the same sequence delivered as scan codes produced an identical echo, so the keyboard path and the serial path share the behaviour. |

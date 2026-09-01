@@ -342,11 +342,39 @@ Used by: `drivers/keyboard/keyboard.c`, `kernel/include/oxys/keyboard.h`.
 ### IBM Video Graphics Array technical reference
 The colour text mode 3, presenting 80 columns by 25 rows, whose frame buffer
 begins at physical address `0x000B8000` and whose cells comprise a code-point
-byte followed by an attribute byte; and the CRT controller cursor location
-registers `0x0E` and `0x0F`, addressed through the index port `0x03D4` and the
-data port `0x03D5`.
+byte followed by an attribute byte.
 
-Used by: `drivers/vga/vga.c`, `boot/boot.asm`.
+Registers relied upon, each named as the reference prints it:
+
+- **Miscellaneous Output Register**, written at `0x03C2` and read at `0x03CC`.
+  Bit 0: "If set Color Emulation. Base Address=3Dxh else Mono Emulation. Base
+  Address=3Bxh". The CRT controller pair, the input status register and the frame
+  buffer all move with it, to `0x03B4`, `0x03BA` and `0x000B0000` respectively.
+- **CRT Controller Registers**, addressed through an index port and a data port.
+  **Cursor Start Register** (index `0x0A`): bits 0 to 4, the first scan line of
+  the cursor within the character cell; bit 5, which "Turns Cursor off if set".
+  **Cursor End Register** (index `0x0B`): bits 0 to 4, the last scan line; bits 5
+  and 6, the cursor skew, "Delay of cursor data in character clocks".
+  **Cursor Location High** and **Low Registers** (indices `0x0E` and `0x0F`):
+  the upper and lower eight bits of the cursor address.
+- **Attribute Controller Registers**. "The address register is read and written
+  via port 3C0h. The data register is written to port 3C0h and read from port
+  3C1h"; an internal flip-flop selects between the two and is returned to the
+  address by a read of the **Input Status #1 Register** (`0x03DA`, or `0x03BA` in
+  the monochrome configuration), "the data received is not important". Bit 7 of
+  the address register is the **Palette Address Source**, which "is set to 0 to
+  load color values to the registers in the internal palette. It is set to 1 for
+  normal operation". In the **Attribute Mode Control Register** (index `0x10`),
+  bit 3 set makes "Attribute bit 7 ... blinking", clear makes it "high
+  intensity", the latter yielding sixteen background colours rather than eight.
+
+The reference itself is not distributed in a form that can be quoted by page, and
+the register descriptions above were therefore taken from the FreeVGA reference
+and from the VGA register summary of the same lineage, and cross-verified against
+one another before being relied upon, as Section 6 of `PROJECT_GUIDELINES.md`
+requires.
+
+Used by: `drivers/vga/vga.c`, `kernel/include/oxys/vga.h`, `boot/boot.asm`.
 
 ### ANSI X3.4-1986, Coded Character Set — 7-Bit American National Standard Code for Information Interchange
 American National Standards Institute. Republished, with the same repertoire of
@@ -361,6 +389,18 @@ is why erasure upon the display and upon a terminal alike is expressed as the
 sequence `BS`, `SP`, `BS`.
 
 Used by: `drivers/vga/vga.c`, `kernel/include/oxys/vga.h`, `kernel/kernel.c`.
+
+### ECMA-48, Control Functions for Coded Character Sets
+European Computer Manufacturers Association, fifth edition.
+
+The two control sequences by which a serial terminal is told of a cursor movement
+that the backspace does not itself express: **CUU** — Cursor Up, `CSI Pn A`,
+which moves the active position up by Pn lines without erasing; and **CHA** —
+Cursor Character Absolute, `CSI Pn G`, which moves it to column Pn of the active
+line, the columns being numbered from one. They are used only by the echo loop,
+and only where the display driver has carried its own cursor into the row above.
+
+Used by: `kernel/kernel.c`.
 
 ### GNU GRUB Manual
 Free Software Foundation.

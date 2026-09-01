@@ -67,7 +67,7 @@ the following translation units.
 | `kernel/mm/pmm.c` | The physical frame allocator: a bitmap of every 4 KiB frame below the highest usable address. |
 | `kernel/multiboot2.c` | The Multiboot2 parser, reducing the boot loader's structure to the neutral `BootInformation` description. |
 | `kernel/kernel.c` | `KernelMain`, which validates the boot loader handover, initialises the early output devices, presents the identification banner and halts. `KernelPanic`, the unrecoverable-error path. |
-| `drivers/vga/vga.c` | The VGA colour text-mode output driver. |
+| `drivers/vga/vga.c` | The VGA text-mode display driver: the control characters, the scrolling, the colour attributes, the hardware cursor and the erase limit that bounds a backspace. |
 | `drivers/serial/serial.c` | The interrupt-driven COM1 serial driver used for diagnostics and input. |
 | `drivers/pic/pic.c` | The pair of cascaded 8259A interrupt controllers: their remapping, the masking of request lines, the routing of a request to the driver that claims it, and the end-of-interrupt protocol. |
 | `drivers/pit/pit.c` | Counter 0 of the 8253 interval timer: the system tick, the elapsed-time conversion and the bounded wait. |
@@ -147,3 +147,10 @@ That is not a fallback for hardware that fails: it is the ordinary path of a
 panic, which reports with interrupts disabled and must not be left holding its
 message in a buffer that nothing will drain. `docs/SERIAL.md`, Section 4, records
 the rule and the single place it is decided.
+
+From sub-task 4.2 the display path is a formal driver equally. It is not the path
+the tests read and not the path a panic can most be relied upon to reach; it is
+the path a person looking at the machine has, and the property it is built for is
+that the machine can verify what it displayed rather than merely that it wrote
+something. `docs/DISPLAY.md`, Section 7, records why a display is unusually hard
+to test and what is asserted at each boot in consequence.

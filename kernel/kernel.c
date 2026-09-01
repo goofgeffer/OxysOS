@@ -6,7 +6,7 @@
  *          boot-time self-test, and then either enters the keyboard echo loop,
  *          where a keyboard is present, or halts the processor where none is.
  * Key functions: KernelMain, KernelPanic, KernelHalt, KernelVerifyVga,
- *          KernelVerifySerial, KernelEchoLoop,
+ *          KernelVerifySerial, KernelEchoBackspace, KernelEchoLoop,
  *          KernelWriteString, KernelWriteHexadecimal, KernelWriteDecimal.
  * References:
  *   - Multiboot2 Specification 2.0, Section 3.3 ("I386 machine state"): EAX
@@ -2380,22 +2380,45 @@ static void KernelVerifySerial(void)
 
 /*
  * Asserts that the display driver moves the cursor as the control characters
- * require. The failure this guards against is a silent one: a control character
- * for which the driver has no case is written into the frame buffer as whatever
- * glyph the adapter's font holds at that code point, and the cursor then advances
- * to the right. The display is not corrupted in any way the machine can notice,
- * and the defect is visible only to somebody reading the screen. That is exactly
- * how the backspace came to be broken.
+ * require, that it reaches the CRT controller, and that the backspace stops
+ * where it is told to. The failure this guards against is a silent one: a
+ * control character for which the driver has no case is written into the frame
+ * buffer as whatever glyph the adapter's font holds at that code point, and the
+ * cursor then advances to the right. The display is not corrupted in any way the
+ * machine can notice, and the defect is visible only to somebody reading the
+ * screen. That is exactly how the backspace came to be broken.
+ *
+ * The properties asserted here are chosen upon the same principle throughout: a
+ * cursor written to the wrong CRT controller register, an attribute written
+ * while the controller's flip-flop stood at the data register, a scroll that
+ * moved the display by the wrong number of rows — each leaves a machine that
+ * runs perfectly and a display that is wrong to look at.
  *
  * The test writes upon the display, so it begins at the start of a row and
- * returns to it, leaving its own result to overwrite the characters used.
+ * leaves its own result to overwrite the characters used.
  */
 static void KernelVerifyVga(void)
 {
     size_t row;
     size_t column;
     size_t original_row;
+    size_t limit_row;
+    size_t limit_column;
+    uint64_t scroll_marker;
     bool succeeded = true;
+
+    /* The adapter's configuration governs every register access that follows. */
+    if (!VgaIsColourAdapter() || (VgaCrtcIndexPort() != 0x03D4U))
+    {
+        KernelWriteString("  The display adapter is not in its colour configuration.\n");
+        succeeded = false;
+    }
+
+    if (VgaBlinkEnabled())
+    {
+        KernelWriteString("  Blinking was not disabled; bright backgrounds will blink.\n");
+        succeeded = false;
+    }
 
     VgaPutCharacter('\n');
     VgaCursorPosition(&original_row, &column);
@@ -2406,13 +2429,27 @@ static void KernelVerifyVga(void)
         succeeded = false;
     }
 
-    /* A backspace in the first column must not move to the preceding row. */
+    /*
+     * The erase limit is placed here. Everything the test writes below stands
+     * after it, and the boot log above it is therefore beyond the reach of the
+     * backspaces the test performs, which is the property the limit exists for.
+     */
+    VgaSetEraseLimit();
+    VgaEraseLimit(&limit_row, &limit_column);
+
+    if ((limit_row != original_row) || (limit_column != 0U))
+    {
+        KernelWriteString("  The erase limit was not recorded at the cursor.\n");
+        succeeded = false;
+    }
+
+    /* A backspace at the limit must not move at all. */
     VgaPutCharacter('\b');
     VgaCursorPosition(&row, &column);
 
     if ((row != original_row) || (column != 0U))
     {
-        KernelWriteString("  A backspace in the first column moved the cursor.\n");
+        KernelWriteString("  A backspace at the erase limit moved the cursor.\n");
         succeeded = false;
     }
 
@@ -2430,14 +2467,15 @@ static void KernelVerifyVga(void)
 
     /*
      * The erasing sequence the callers use must leave the cursor where the
-     * erased character stood, so that the next character written replaces it.
+     * erased character stood, so that the next character written replaces it,
+     * and must have blanked the cell it passed over.
      */
     VgaWriteString("\b \b");
     VgaCursorPosition(&row, &column);
 
-    if ((row != original_row) || (column != 0U))
+    if ((row != original_row) || (column != 0U) || (VgaCharacterAt(row, 0U) != ' '))
     {
-        KernelWriteString("  The erasing sequence did not restore the cursor.\n");
+        KernelWriteString("  The erasing sequence did not erase and restore the cursor.\n");
         succeeded = false;
     }
 
@@ -2463,12 +2501,222 @@ static void KernelVerifyVga(void)
     }
 
     /*
+     * A backspace in the first column crosses into the row above and stops upon
+     * the last character standing there, which is where the erasing sequence
+     * needs it in order to erase that character. This is what allows a line of
+     * input to be corrected after it has wrapped or after a line feed.
+     */
+    scroll_marker = VgaScrollCount();
+    VgaWriteString("ab\n");
+
+    /*
+     * That line feed stood upon the final row if the boot log had filled the
+     * display, in which case everything above has moved up by one row and the
+     * row the test is reasoning about has moved with it.
+     */
+    if (VgaScrollCount() != scroll_marker)
+    {
+        --original_row;
+    }
+
+    VgaPutCharacter('\b');
+    VgaCursorPosition(&row, &column);
+
+    if ((row != original_row) || (column != 1U))
+    {
+        KernelWriteString("  A backspace did not cross into the row above.\n");
+        succeeded = false;
+    }
+
+    /* Erasing both characters returns the cursor to the limit, and no further. */
+    VgaWriteString(" \b");
+    VgaWriteString("\b \b");
+    VgaCursorPosition(&row, &column);
+
+    if ((row != original_row) || (column != 0U))
+    {
+        KernelWriteString("  Erasing across the row boundary left the cursor astray.\n");
+        succeeded = false;
+    }
+
+    VgaPutCharacter('\b');
+    VgaCursorPosition(&row, &column);
+
+    if ((row != original_row) || (column != 0U))
+    {
+        KernelWriteString("  A backspace passed the erase limit into the boot log.\n");
+        succeeded = false;
+    }
+
+    /* The controller must hold the position the driver believes it holds. */
+    VgaCursorPosition(&row, &column);
+
+    {
+        size_t hardware_row;
+        size_t hardware_column;
+        const bool visible = VgaHardwareCursorPosition(&hardware_row, &hardware_column);
+
+        if ((hardware_row != row) || (hardware_column != column))
+        {
+            KernelWriteString("  The hardware cursor is not where the driver believes.\n");
+            succeeded = false;
+        }
+
+        if (!visible)
+        {
+            KernelWriteString("  The hardware cursor was not displayed.\n");
+            succeeded = false;
+        }
+    }
+
+    /* A position outside the display is refused rather than wrapped. */
+    if (VgaSetCursorPosition(VGA_HEIGHT, 0U) || VgaSetCursorPosition(0U, VGA_WIDTH))
+    {
+        KernelWriteString("  A cursor position outside the display was accepted.\n");
+        succeeded = false;
+    }
+
+    /* Hiding the cursor must be observable in the controller, and reversible. */
+    VgaSetCursorVisible(false);
+
+    if (VgaCursorVisible())
+    {
+        KernelWriteString("  The cursor was not hidden when it was hidden.\n");
+        succeeded = false;
+    }
+
+    VgaSetCursorVisible(true);
+
+    if (!VgaCursorVisible())
+    {
+        KernelWriteString("  The cursor was not restored after being hidden.\n");
+        succeeded = false;
+    }
+
+    /* A shape whose first scan line is below its last would present no cursor. */
+    if (VgaSetCursorShape(4U, 2U) || VgaSetCursorShape(0U, 32U))
+    {
+        KernelWriteString("  An impossible cursor shape was accepted.\n");
+        succeeded = false;
+    }
+
+    /*
+     * The scroll is asserted upon the contents of the display itself, a scroll
+     * by the wrong number of rows being invisible to everything else. One row of
+     * the boot log leaves the display for the purpose; the record upon the
+     * serial line is unaffected.
+     */
+    if (original_row > 0U)
+    {
+        const uint64_t scrolls = VgaScrollCount();
+
+        VgaSetCursorPosition(original_row, 0U);
+        VgaPutCharacter('Z');
+        VgaScroll();
+
+        if ((VgaCharacterAt(original_row - 1U, 0U) != 'Z') ||
+            (VgaCharacterAt(VGA_HEIGHT - 1U, 0U) != ' ') || (VgaScrollCount() != scrolls + 1U))
+        {
+            KernelWriteString("  The display did not scroll by exactly one row.\n");
+            succeeded = false;
+        }
+
+        VgaSetCursorPosition(original_row, 0U);
+    }
+
+    /*
      * The characters written above stand upon this row still. The result is
      * written over them, and padded so that none survives to its right.
      */
     KernelWriteString(succeeded
                           ? "Display self-test passed.            \n"
                           : "Display self-test FAILED.            \n");
+}
+
+/*
+ * Moves the cursor of a serial terminal to a column of the current line, the
+ * column being counted from one, by the sequence ECMA-48 calls CHA — Cursor
+ * Character Absolute, CSI Pn G. The display driver crosses a row boundary upon a
+ * backspace by moving the cursor itself, which a terminal at the far end of a
+ * serial line will not do upon receiving a backspace; the movement must
+ * therefore be described to it.
+ *
+ * The two devices agree only so far as the terminal is eighty columns wide, the
+ * kernel having no way to ask it. A wider or narrower terminal will have wrapped
+ * the line elsewhere and the correction will land upon the wrong column of it.
+ * The proper remedy is a line discipline that knows the width of its terminal,
+ * which belongs to Phase 8.
+ */
+static void KernelSerialCursorToColumn(size_t column)
+{
+    /* Two digits suffice for a column of an eighty-column line. */
+    char sequence[8];
+    size_t index = 0U;
+    const size_t number = column + 1U;
+
+    sequence[index] = '\x1B';
+    ++index;
+    sequence[index] = '[';
+    ++index;
+
+    if (number >= 10U)
+    {
+        sequence[index] = (char)('0' + (unsigned char)(number / 10U));
+        ++index;
+    }
+
+    sequence[index] = (char)('0' + (unsigned char)(number % 10U));
+    ++index;
+    sequence[index] = 'G';
+    ++index;
+    sequence[index] = '\0';
+
+    SerialWriteString(sequence);
+}
+
+/*
+ * Echoes a backspace upon both devices as an erasure.
+ *
+ * A backspace moves the cursor without erasing, upon the display and upon a
+ * serial terminal alike, so an echo that wrote it alone would leave the
+ * character the user meant to delete upon the screen and then overwrite it with
+ * whatever was typed next. The erasure is the echo's business, not the driver's:
+ * the sequence steps back, writes a space over the character, and steps back
+ * again to stand where the character was.
+ *
+ * The display is driven first, and what it did then determines what is sent to
+ * the serial line: the driver may have refused to move, the cursor standing at
+ * the erase limit, or it may have crossed into the row above, which is a
+ * movement the serial terminal must be told about explicitly.
+ */
+static void KernelEchoBackspace(void)
+{
+    size_t row;
+    size_t column;
+    size_t resulting_row;
+    size_t resulting_column;
+
+    VgaCursorPosition(&row, &column);
+    VgaWriteString("\b \b");
+    VgaCursorPosition(&resulting_row, &resulting_column);
+
+    if ((resulting_row == row) && (resulting_column == column))
+    {
+        /* The cursor stood at the erase limit; there was nothing to erase. */
+        return;
+    }
+
+    if (resulting_row == row)
+    {
+        SerialWriteString("\b \b");
+        return;
+    }
+
+    /* CUU, CSI A, moves the terminal's cursor up one line without erasing. */
+    SerialWriteString("\x1B[A");
+    KernelSerialCursorToColumn(resulting_column);
+    SerialPutCharacter(' ');
+    KernelSerialCursorToColumn(resulting_column);
 }
 
 /*
@@ -2498,7 +2746,17 @@ static _Noreturn void KernelEchoLoop(void)
     VgaSetColour(VGA_COLOUR_LIGHT_CYAN, VGA_COLOUR_BLACK);
     KernelWriteString("\nEcho loop. Characters typed upon the console or sent "
                       "upon COM1 appear upon both.\n");
+    KernelWriteString("A backspace erases, and crosses to the line above.\n");
     VgaSetColour(VGA_COLOUR_LIGHT_GREY, VGA_COLOUR_BLACK);
+
+    /*
+     * Everything printed up to this point is the kernel's, and everything after
+     * it is the user's. The erase limit records the boundary, which is what
+     * permits the backspace to cross from one row to the row above: the driver
+     * cannot tell the boot log from a line of input, and would otherwise consume
+     * the log a character at a time.
+     */
+    VgaSetEraseLimit();
 
     for (;;)
     {
@@ -2516,7 +2774,14 @@ static _Noreturn void KernelEchoLoop(void)
         {
             const char text[2] = { character, '\0' };
 
-            KernelWriteString((character == '\b') ? "\b \b" : text);
+            if (character == '\b')
+            {
+                KernelEchoBackspace();
+            }
+            else
+            {
+                KernelWriteString(text);
+            }
         }
 
         while (KeyboardReadCharacter(&character))
@@ -2524,16 +2789,14 @@ static _Noreturn void KernelEchoLoop(void)
             /* A one-character string, the output routines taking no other form. */
             const char text[2] = { character, '\0' };
 
-            /*
-             * A backspace moves the cursor without erasing, upon the display and
-             * upon a serial terminal alike, so an echo that wrote it alone would
-             * leave the character the user meant to delete upon the screen and
-             * then overwrite it with whatever was typed next. The erasure is the
-             * echo's business, not the driver's: the sequence steps back, writes
-             * a space over the character, and steps back again to stand where the
-             * character was.
-             */
-            KernelWriteString((character == '\b') ? "\b \b" : text);
+            if (character == '\b')
+            {
+                KernelEchoBackspace();
+            }
+            else
+            {
+                KernelWriteString(text);
+            }
         }
     }
 }
@@ -2664,6 +2927,7 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
     SerialActivateInterrupts();
     KernelVerifySerial();
     SerialReport();
+    VgaReport();
 
     PicReport();
     InterruptReport();
@@ -2671,7 +2935,7 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
     AddressSpaceReport();
 
     VgaSetColour(VGA_COLOUR_LIGHT_GREEN, VGA_COLOUR_BLACK);
-    KernelWriteString("Phase 4 initialisation complete to sub-task 4.1.\n");
+    KernelWriteString("Phase 4 initialisation complete to sub-task 4.2.\n");
 
     VgaSetColour(VGA_COLOUR_LIGHT_GREY, VGA_COLOUR_BLACK);
 
