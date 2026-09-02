@@ -95,6 +95,12 @@ static uint64_t Ext2PathsRefusedCount;
 static uint64_t Ext2FilesReadCount;
 static uint64_t Ext2BytesReadCount;
 static uint64_t Ext2ReadsRefusedCount;
+static uint64_t Ext2BlocksAllocatedCount;
+static uint64_t Ext2BlocksFreedCount;
+static uint64_t Ext2InodesAllocatedCount;
+static uint64_t Ext2InodesFreedCount;
+static uint64_t Ext2BytesWrittenCount;
+static uint64_t Ext2WritesRefusedCount;
 
 /* Records a refusal, so that a report may say why and not merely that. */
 static bool Ext2Refuse(const char *reason)
@@ -156,6 +162,20 @@ static bool Ext2ReadRefuse(const char *reason)
 {
     Ext2Error = reason;
     ++Ext2ReadsRefusedCount;
+    return false;
+}
+
+/*
+ * The same for anything that would alter a volume.
+ *
+ * Counted apart from every other refusal because it is the only one that
+ * describes something not done to somebody's data. A rising count of these is
+ * the sign of a volume being written by a kernel that should not be writing it.
+ */
+static bool Ext2WriteRefuse(const char *reason)
+{
+    Ext2Error = reason;
+    ++Ext2WritesRefusedCount;
     return false;
 }
 
@@ -2107,6 +2127,1208 @@ void Ext2ReportDirectory(BlockDevice *device, const Ext2Superblock *superblock,
     KernelWriteString(" holds ");
     KernelWriteDecimal(counted);
     KernelWriteString(" entries.\n");
+}
+
+/*
+ * Writing.
+ *
+ * The disciplines this whole section is held to are stated at the head of the
+ * writing declarations in oxys/ext2.h and are not repeated here. What follows is
+ * their machinery.
+ */
+
+/* The encoders, the exact inverses of Ext2ReadHalf and Ext2ReadWord. */
+static void Ext2WriteHalf(uint8_t *raw, size_t offset, uint16_t value)
+{
+    raw[offset] = (uint8_t)(value & 0xFFU);
+    raw[offset + 1U] = (uint8_t)((value >> 8) & 0xFFU);
+}
+
+static void Ext2WriteWord(uint8_t *raw, size_t offset, uint32_t value)
+{
+    raw[offset] = (uint8_t)(value & 0xFFU);
+    raw[offset + 1U] = (uint8_t)((value >> 8) & 0xFFU);
+    raw[offset + 2U] = (uint8_t)((value >> 16) & 0xFFU);
+    raw[offset + 3U] = (uint8_t)((value >> 24) & 0xFFU);
+}
+
+/*
+ * Whether a volume may be altered at all.
+ *
+ * Asked before anything else by every function that writes, so that a volume
+ * this kernel judged unsafe to write is refused once, in one place, rather than
+ * by each caller remembering to ask.
+ */
+static bool Ext2Writable(const Ext2Superblock *superblock)
+{
+    if (superblock->read_only)
+    {
+        return Ext2WriteRefuse("the volume is read-only and may not be altered");
+    }
+
+    return true;
+}
+
+/*
+ * Writes a run of bytes into one block of the volume, through the buffer cache,
+ * and marks the buffer dirty.
+ *
+ * The mirror of Ext2ReadBytes, and bounded by the same two tests. It writes only
+ * the bytes it is given: the rest of the block is whatever it held, which is
+ * what allows a structure to be altered without destroying the fields around it
+ * that this kernel does not parse.
+ */
+static bool Ext2WriteBytes(BlockDevice *device, const Ext2Superblock *superblock,
+                           uint32_t block, uint32_t offset, uint32_t length,
+                           const uint8_t *source)
+{
+    uint64_t position;
+
+    if (block >= superblock->block_count)
+    {
+        return Ext2WriteRefuse("a write was attempted beyond the end of the volume");
+    }
+
+    if ((offset > superblock->block_size) || (length > (superblock->block_size - offset)))
+    {
+        return Ext2WriteRefuse("a write was attempted beyond the end of a block");
+    }
+
+    position = ((uint64_t)block * superblock->block_size) + offset;
+
+    while (length > 0U)
+    {
+        const uint64_t device_block = position / device->block_size;
+        const uint32_t within = (uint32_t)(position % device->block_size);
+        uint32_t put = device->block_size - within;
+        Buffer *buffer;
+
+        if (put > length)
+        {
+            put = length;
+        }
+
+        buffer = BufferGet(device, device_block);
+
+        if (buffer == NULL)
+        {
+            return Ext2WriteRefuse("a block of the volume could not be read to be written");
+        }
+
+        for (uint32_t index = 0U; index < put; ++index)
+        {
+            buffer->data[within + index] = source[index];
+        }
+
+        BufferMarkDirty(buffer);
+        BufferRelease(buffer);
+
+        source += put;
+        position += put;
+        length -= put;
+    }
+
+    return true;
+}
+
+/* Fills a whole block of the volume with zeroes, a block being handed out with
+ * whatever it last held otherwise. */
+static bool Ext2ZeroBlock(BlockDevice *device, const Ext2Superblock *superblock,
+                          uint32_t block)
+{
+    uint8_t zeroes[EXT2_MAXIMUM_BLOCK_SIZE];
+
+    Ext2FillZero(zeroes, superblock->block_size);
+
+    return Ext2WriteBytes(device, superblock, block, 0U, superblock->block_size, zeroes);
+}
+
+bool Ext2WriteSuperblock(BlockDevice *device, const Ext2Superblock *superblock)
+{
+    uint8_t raw[EXT2_SUPERBLOCK_SIZE];
+
+    if ((device == NULL) || (superblock == NULL))
+    {
+        return Ext2WriteRefuse("no device or no volume to write");
+    }
+
+    if (!Ext2Writable(superblock))
+    {
+        return false;
+    }
+
+    /*
+     * The superblock is read before it is written, and only the fields this
+     * kernel maintains are altered within it. Composing 1024 bytes from the
+     * parsed structure would write zeroes over every field this kernel does not
+     * parse — the journal identifiers, the hash seed, the mount options — and
+     * would present the volume to the system that made it as though those fields
+     * had never been set.
+     */
+    if (!Ext2ReadSuperblockBytes(device, raw))
+    {
+        return false;
+    }
+
+    Ext2WriteWord(raw, EXT2_OFFSET_FREE_BLOCKS, superblock->free_block_count);
+    Ext2WriteWord(raw, EXT2_OFFSET_FREE_INODES, superblock->free_inode_count);
+    Ext2WriteHalf(raw, EXT2_OFFSET_STATE, superblock->state);
+    Ext2WriteWord(raw, EXT2_OFFSET_WRITE_TIME, superblock->write_time);
+
+    return Ext2WriteBytes(device, superblock,
+                          EXT2_SUPERBLOCK_OFFSET / superblock->block_size,
+                          EXT2_SUPERBLOCK_OFFSET % superblock->block_size,
+                          EXT2_SUPERBLOCK_SIZE, raw);
+}
+
+bool Ext2WriteGroupDescriptor(BlockDevice *device, const Ext2Superblock *superblock,
+                              const Ext2GroupDescriptor *descriptor)
+{
+    uint8_t raw[EXT2_GROUP_DESCRIPTOR_SIZE];
+    uint32_t position;
+
+    if ((device == NULL) || (superblock == NULL) || (descriptor == NULL))
+    {
+        return Ext2WriteRefuse("no device, no volume, or no descriptor to write");
+    }
+
+    if (!Ext2Writable(superblock))
+    {
+        return false;
+    }
+
+    if (descriptor->group >= superblock->group_count)
+    {
+        return Ext2WriteRefuse("the volume holds no group of that number");
+    }
+
+    position = descriptor->group * EXT2_GROUP_DESCRIPTOR_SIZE;
+
+    /* Read first, for the reason the superblock is: bg_pad and bg_reserved are
+     * not this kernel's to overwrite. */
+    if (!Ext2ReadBytes(device, superblock,
+                       Ext2GroupDescriptorBlock(superblock) +
+                           (position / superblock->block_size),
+                       position % superblock->block_size, EXT2_GROUP_DESCRIPTOR_SIZE, raw))
+    {
+        return false;
+    }
+
+    Ext2WriteWord(raw, EXT2_OFFSET_BG_BLOCK_BITMAP, descriptor->block_bitmap);
+    Ext2WriteWord(raw, EXT2_OFFSET_BG_INODE_BITMAP, descriptor->inode_bitmap);
+    Ext2WriteWord(raw, EXT2_OFFSET_BG_INODE_TABLE, descriptor->inode_table);
+    Ext2WriteHalf(raw, EXT2_OFFSET_BG_FREE_BLOCKS, descriptor->free_block_count);
+    Ext2WriteHalf(raw, EXT2_OFFSET_BG_FREE_INODES, descriptor->free_inode_count);
+    Ext2WriteHalf(raw, EXT2_OFFSET_BG_USED_DIRECTORIES, descriptor->used_directory_count);
+
+    return Ext2WriteBytes(device, superblock,
+                          Ext2GroupDescriptorBlock(superblock) +
+                              (position / superblock->block_size),
+                          position % superblock->block_size, EXT2_GROUP_DESCRIPTOR_SIZE, raw);
+}
+
+bool Ext2WriteInode(BlockDevice *device, const Ext2Superblock *superblock,
+                    const Ext2Inode *inode)
+{
+    uint8_t raw[EXT2_GOOD_OLD_INODE_SIZE];
+    Ext2GroupDescriptor descriptor;
+    uint32_t group;
+    uint32_t index;
+    uint32_t position;
+
+    if ((device == NULL) || (superblock == NULL) || (inode == NULL))
+    {
+        return Ext2WriteRefuse("no device, no volume, or no inode to write");
+    }
+
+    if (!Ext2Writable(superblock))
+    {
+        return false;
+    }
+
+    if ((inode->number == 0U) || (inode->number > superblock->inode_count))
+    {
+        return Ext2WriteRefuse("the volume holds no inode of that number");
+    }
+
+    group = (inode->number - 1U) / superblock->inodes_per_group;
+    index = (inode->number - 1U) % superblock->inodes_per_group;
+
+    if (!Ext2ReadGroupDescriptor(device, superblock, group, &descriptor))
+    {
+        return false;
+    }
+
+    position = index * superblock->inode_size;
+
+    /* Read first: an inode of 256 bytes carries extensions beyond the 128 this
+     * kernel parses, and they are not this kernel's to discard. */
+    if (!Ext2ReadBytes(device, superblock,
+                       descriptor.inode_table + (position / superblock->block_size),
+                       position % superblock->block_size, EXT2_GOOD_OLD_INODE_SIZE, raw))
+    {
+        return false;
+    }
+
+    Ext2WriteHalf(raw, EXT2_OFFSET_I_MODE, inode->mode);
+    Ext2WriteHalf(raw, EXT2_OFFSET_I_UID, inode->uid);
+    Ext2WriteHalf(raw, EXT2_OFFSET_I_GID, inode->gid);
+    Ext2WriteWord(raw, EXT2_OFFSET_I_SIZE, (uint32_t)(inode->size & 0xFFFFFFFFU));
+    Ext2WriteWord(raw, EXT2_OFFSET_I_ATIME, inode->access_time);
+    Ext2WriteWord(raw, EXT2_OFFSET_I_CTIME, inode->change_time);
+    Ext2WriteWord(raw, EXT2_OFFSET_I_MTIME, inode->modify_time);
+    Ext2WriteWord(raw, EXT2_OFFSET_I_DTIME, inode->delete_time);
+    Ext2WriteHalf(raw, EXT2_OFFSET_I_LINKS_COUNT, inode->link_count);
+    Ext2WriteWord(raw, EXT2_OFFSET_I_BLOCKS, inode->sector_count);
+    Ext2WriteWord(raw, EXT2_OFFSET_I_FLAGS, inode->flags);
+    Ext2WriteWord(raw, EXT2_OFFSET_I_GENERATION, inode->generation);
+    Ext2WriteWord(raw, EXT2_OFFSET_I_FILE_ACL, inode->file_acl);
+
+    /*
+     * The high half of the size is written only for a regular file upon a
+     * revision 1 volume. Upon a directory those same bytes are i_dir_acl and
+     * mean something else entirely, exactly as when they are read.
+     */
+    if ((superblock->revision >= EXT2_DYNAMIC_REV) && ((inode->mode & EXT2_S_IFMT) == EXT2_S_IFREG))
+    {
+        Ext2WriteWord(raw, EXT2_OFFSET_I_DIR_ACL, (uint32_t)(inode->size >> 32));
+    }
+
+    for (uint32_t entry = 0U; entry < EXT2_BLOCK_POINTER_COUNT; ++entry)
+    {
+        Ext2WriteWord(raw, EXT2_OFFSET_I_BLOCK + (entry * EXT2_BLOCK_POINTER_SIZE),
+                      inode->block[entry]);
+    }
+
+    return Ext2WriteBytes(device, superblock,
+                          descriptor.inode_table + (position / superblock->block_size),
+                          position % superblock->block_size, EXT2_GOOD_OLD_INODE_SIZE, raw);
+}
+
+/*
+ * The bitmaps.
+ *
+ * One bit stands for each block of a group and each inode of it, 1 meaning used
+ * and 0 free. The first of the group is bit 0 of byte 0 and the ninth is bit 0
+ * of byte 1: least significant bit first within a byte, which is not what a
+ * diagram of a byte suggests and is what the format states.
+ *
+ * The bitmaps are the first structure of the volume this kernel reads that it
+ * did not need in order to read a file. Nothing before now had to know which
+ * blocks were in use, because nothing allocated one; the free counts were read
+ * and believed. That ends here.
+ */
+#define EXT2_BITS_PER_BYTE 8U
+
+/* Reads one bit of a bitmap block, the index counting from the first of the group. */
+static bool Ext2BitmapTest(BlockDevice *device, const Ext2Superblock *superblock,
+                           uint32_t bitmap, uint32_t index, bool *used)
+{
+    uint8_t byte;
+
+    if (!Ext2ReadBytes(device, superblock, bitmap, index / EXT2_BITS_PER_BYTE, 1U, &byte))
+    {
+        return false;
+    }
+
+    *used = (byte & (uint8_t)(1U << (index % EXT2_BITS_PER_BYTE))) != 0U;
+    return true;
+}
+
+/*
+ * Sets or clears one bit, refusing to do what has already been done.
+ *
+ * Setting a bit already set means two owners believe they hold the same block;
+ * clearing one already clear means a block is about to be freed twice, and the
+ * second free is what lets it be allocated to two files at once. Both are
+ * refused rather than performed, because both are corruption that spreads and
+ * neither announces itself at the moment it occurs.
+ */
+static bool Ext2BitmapSet(BlockDevice *device, const Ext2Superblock *superblock,
+                          uint32_t bitmap, uint32_t index, bool used, const char *what)
+{
+    const uint8_t mask = (uint8_t)(1U << (index % EXT2_BITS_PER_BYTE));
+    const uint32_t offset = index / EXT2_BITS_PER_BYTE;
+    uint8_t byte;
+
+    if (!Ext2ReadBytes(device, superblock, bitmap, offset, 1U, &byte))
+    {
+        return false;
+    }
+
+    if (((byte & mask) != 0U) == used)
+    {
+        return Ext2WriteRefuse(what);
+    }
+
+    byte = used ? (uint8_t)(byte | mask) : (uint8_t)(byte & (uint8_t)~mask);
+
+    return Ext2WriteBytes(device, superblock, bitmap, offset, 1U, &byte);
+}
+
+/* The group a block belongs to, and its index within that group's bitmap. */
+static bool Ext2BlockPosition(const Ext2Superblock *superblock, uint32_t block,
+                              uint32_t *group, uint32_t *index)
+{
+    if (!Ext2BlockExists(superblock, block))
+    {
+        return Ext2WriteRefuse("the block lies outside the volume");
+    }
+
+    *group = (block - superblock->first_data_block) / superblock->blocks_per_group;
+    *index = (block - superblock->first_data_block) % superblock->blocks_per_group;
+    return true;
+}
+
+bool Ext2BlockInUse(BlockDevice *device, const Ext2Superblock *superblock, uint32_t block,
+                    bool *used)
+{
+    Ext2GroupDescriptor descriptor;
+    uint32_t group;
+    uint32_t index;
+
+    if ((device == NULL) || (superblock == NULL) || (used == NULL))
+    {
+        return Ext2WriteRefuse("no device, no volume, or nowhere to put the answer");
+    }
+
+    if (!Ext2BlockPosition(superblock, block, &group, &index) ||
+        !Ext2ReadGroupDescriptor(device, superblock, group, &descriptor))
+    {
+        return false;
+    }
+
+    return Ext2BitmapTest(device, superblock, descriptor.block_bitmap, index, used);
+}
+
+bool Ext2InodeInUse(BlockDevice *device, const Ext2Superblock *superblock, uint32_t number,
+                    bool *used)
+{
+    Ext2GroupDescriptor descriptor;
+    uint32_t group;
+    uint32_t index;
+
+    if ((device == NULL) || (superblock == NULL) || (used == NULL))
+    {
+        return Ext2WriteRefuse("no device, no volume, or nowhere to put the answer");
+    }
+
+    if ((number == 0U) || (number > superblock->inode_count))
+    {
+        return Ext2WriteRefuse("the volume holds no inode of that number");
+    }
+
+    /* Inode numbers begin at one and the bits at zero, exactly as when an inode
+     * is located within its table. */
+    group = (number - 1U) / superblock->inodes_per_group;
+    index = (number - 1U) % superblock->inodes_per_group;
+
+    if (!Ext2ReadGroupDescriptor(device, superblock, group, &descriptor))
+    {
+        return false;
+    }
+
+    return Ext2BitmapTest(device, superblock, descriptor.inode_bitmap, index, used);
+}
+
+/*
+ * Finds the first free bit of a group's bitmap, searching only the bits that
+ * stand for something.
+ *
+ * The last group is short whenever the volume is not an exact multiple of the
+ * group size, and the bits beyond its blocks are set by whatever made the
+ * volume. Bounding the search by the group's true extent rather than trusting
+ * those bits is what keeps this from issuing a block the volume does not hold
+ * upon a volume that left them clear.
+ */
+static bool Ext2BitmapFindFree(BlockDevice *device, const Ext2Superblock *superblock,
+                               uint32_t bitmap, uint32_t count, uint32_t *index, bool *found)
+{
+    *found = false;
+
+    for (uint32_t position = 0U; position < count; ++position)
+    {
+        bool used;
+
+        if (!Ext2BitmapTest(device, superblock, bitmap, position, &used))
+        {
+            return false;
+        }
+
+        if (!used)
+        {
+            *index = position;
+            *found = true;
+            return true;
+        }
+    }
+
+    return true;
+}
+
+bool Ext2AllocateBlock(BlockDevice *device, Ext2Superblock *superblock, uint32_t near,
+                       uint32_t *block)
+{
+    uint32_t first_group = 0U;
+
+    if ((device == NULL) || (superblock == NULL) || (block == NULL))
+    {
+        return Ext2WriteRefuse("no device, no volume, or nowhere to put the block");
+    }
+
+    if (!Ext2Writable(superblock))
+    {
+        return false;
+    }
+
+    if (superblock->free_block_count == 0U)
+    {
+        return Ext2WriteRefuse("the volume holds no free block");
+    }
+
+    /*
+     * The hint names a block the caller would like to be near — ordinarily the
+     * previous block of the same file. Beginning the search in that block's group
+     * is the whole of this kernel's allocation policy: it keeps a file's blocks
+     * together, which is what makes reading it sequential, and it costs one
+     * division.
+     */
+    if ((near != 0U) && Ext2BlockExists(superblock, near))
+    {
+        uint32_t index;
+
+        if (!Ext2BlockPosition(superblock, near, &first_group, &index))
+        {
+            return false;
+        }
+    }
+
+    for (uint32_t attempt = 0U; attempt < superblock->group_count; ++attempt)
+    {
+        const uint32_t group = (first_group + attempt) % superblock->group_count;
+        Ext2GroupDescriptor descriptor;
+        uint32_t index;
+        bool found;
+
+        if (!Ext2ReadGroupDescriptor(device, superblock, group, &descriptor))
+        {
+            return false;
+        }
+
+        if (descriptor.free_block_count == 0U)
+        {
+            continue;
+        }
+
+        if (!Ext2BitmapFindFree(device, superblock, descriptor.block_bitmap,
+                                Ext2GroupBlockCount(superblock, group), &index, &found))
+        {
+            return false;
+        }
+
+        if (!found)
+        {
+            /*
+             * The descriptor claimed free blocks and the bitmap holds none. The
+             * volume contradicts itself, and allocating from another group would
+             * leave the contradiction in place for the next caller to meet.
+             */
+            return Ext2WriteRefuse("a group's free count disagrees with its block bitmap");
+        }
+
+        /* The bitmap first, then the accounting; see the discipline in ext2.h. */
+        if (!Ext2BitmapSet(device, superblock, descriptor.block_bitmap, index, true,
+                           "a block already in use was allocated"))
+        {
+            return false;
+        }
+
+        descriptor.free_block_count--;
+        superblock->free_block_count--;
+
+        if (!Ext2WriteGroupDescriptor(device, superblock, &descriptor) ||
+            !Ext2WriteSuperblock(device, superblock))
+        {
+            return false;
+        }
+
+        *block = Ext2GroupFirstBlock(superblock, group) + index;
+        ++Ext2BlocksAllocatedCount;
+        return true;
+    }
+
+    return Ext2WriteRefuse("no group of the volume holds a free block");
+}
+
+bool Ext2FreeBlock(BlockDevice *device, Ext2Superblock *superblock, uint32_t block)
+{
+    Ext2GroupDescriptor descriptor;
+    uint32_t group;
+    uint32_t index;
+
+    if ((device == NULL) || (superblock == NULL))
+    {
+        return Ext2WriteRefuse("no device or no volume");
+    }
+
+    if (!Ext2Writable(superblock) || !Ext2BlockPosition(superblock, block, &group, &index) ||
+        !Ext2ReadGroupDescriptor(device, superblock, group, &descriptor))
+    {
+        return false;
+    }
+
+    if (!Ext2BitmapSet(device, superblock, descriptor.block_bitmap, index, false,
+                       "a block that was already free was freed"))
+    {
+        return false;
+    }
+
+    descriptor.free_block_count++;
+    superblock->free_block_count++;
+
+    if (!Ext2WriteGroupDescriptor(device, superblock, &descriptor) ||
+        !Ext2WriteSuperblock(device, superblock))
+    {
+        return false;
+    }
+
+    ++Ext2BlocksFreedCount;
+    return true;
+}
+
+bool Ext2AllocateInode(BlockDevice *device, Ext2Superblock *superblock, bool directory,
+                       uint32_t *number)
+{
+    if ((device == NULL) || (superblock == NULL) || (number == NULL))
+    {
+        return Ext2WriteRefuse("no device, no volume, or nowhere to put the inode");
+    }
+
+    if (!Ext2Writable(superblock))
+    {
+        return false;
+    }
+
+    if (superblock->free_inode_count == 0U)
+    {
+        return Ext2WriteRefuse("the volume holds no free inode");
+    }
+
+    for (uint32_t group = 0U; group < superblock->group_count; ++group)
+    {
+        Ext2GroupDescriptor descriptor;
+        uint32_t index;
+        uint32_t candidate;
+        bool found;
+
+        if (!Ext2ReadGroupDescriptor(device, superblock, group, &descriptor))
+        {
+            return false;
+        }
+
+        if (descriptor.free_inode_count == 0U)
+        {
+            continue;
+        }
+
+        if (!Ext2BitmapFindFree(device, superblock, descriptor.inode_bitmap,
+                                superblock->inodes_per_group, &index, &found))
+        {
+            return false;
+        }
+
+        if (!found)
+        {
+            return Ext2WriteRefuse("a group's free count disagrees with its inode bitmap");
+        }
+
+        candidate = (group * superblock->inodes_per_group) + index + 1U;
+
+        /*
+         * An inode below s_first_ino belongs to the filesystem. Such an inode is
+         * ordinarily marked used in the bitmap already, so this is a second line
+         * and not the first; a volume that left one clear would otherwise have
+         * its root directory issued to a file.
+         */
+        if (candidate < superblock->first_inode)
+        {
+            continue;
+        }
+
+        if (!Ext2BitmapSet(device, superblock, descriptor.inode_bitmap, index, true,
+                           "an inode already in use was allocated"))
+        {
+            return false;
+        }
+
+        descriptor.free_inode_count--;
+        superblock->free_inode_count--;
+
+        if (directory)
+        {
+            descriptor.used_directory_count++;
+        }
+
+        if (!Ext2WriteGroupDescriptor(device, superblock, &descriptor) ||
+            !Ext2WriteSuperblock(device, superblock))
+        {
+            return false;
+        }
+
+        *number = candidate;
+        ++Ext2InodesAllocatedCount;
+        return true;
+    }
+
+    return Ext2WriteRefuse("no group of the volume holds a free inode");
+}
+
+bool Ext2FreeInode(BlockDevice *device, Ext2Superblock *superblock, uint32_t number,
+                   bool directory)
+{
+    Ext2GroupDescriptor descriptor;
+    uint32_t group;
+    uint32_t index;
+
+    if ((device == NULL) || (superblock == NULL))
+    {
+        return Ext2WriteRefuse("no device or no volume");
+    }
+
+    if (!Ext2Writable(superblock))
+    {
+        return false;
+    }
+
+    if ((number == 0U) || (number > superblock->inode_count))
+    {
+        return Ext2WriteRefuse("the volume holds no inode of that number");
+    }
+
+    if (number < superblock->first_inode)
+    {
+        return Ext2WriteRefuse("an inode belonging to the filesystem was freed");
+    }
+
+    group = (number - 1U) / superblock->inodes_per_group;
+    index = (number - 1U) % superblock->inodes_per_group;
+
+    if (!Ext2ReadGroupDescriptor(device, superblock, group, &descriptor))
+    {
+        return false;
+    }
+
+    if (!Ext2BitmapSet(device, superblock, descriptor.inode_bitmap, index, false,
+                       "an inode that was already free was freed"))
+    {
+        return false;
+    }
+
+    descriptor.free_inode_count++;
+    superblock->free_inode_count++;
+
+    if (directory && (descriptor.used_directory_count > 0U))
+    {
+        descriptor.used_directory_count--;
+    }
+
+    if (!Ext2WriteGroupDescriptor(device, superblock, &descriptor) ||
+        !Ext2WriteSuperblock(device, superblock))
+    {
+        return false;
+    }
+
+    ++Ext2InodesFreedCount;
+    return true;
+}
+
+/*
+ * Growing a file.
+ *
+ * The decomposition of a block index into levels of indirection is the one
+ * Ext2InodeBlock performs, and it is performed a second time here rather than
+ * shared, because the two walks differ at every step: one reads a pointer and
+ * accepts zero as a hole, and the other must allocate a block where it finds
+ * zero, zero that block if it is a block of pointers, and write the pointer back
+ * into whatever holds it.
+ */
+
+/* How many 512-byte sectors one block of the volume occupies, i_blocks being
+ * counted in sectors and not in blocks. */
+static uint32_t Ext2SectorsPerBlock(const Ext2Superblock *superblock)
+{
+    return superblock->block_size / 512U;
+}
+
+/*
+ * Reads one entry of a block of pointers, allocating the entry's block where it
+ * is zero and writing the pointer back.
+ *
+ * `zero` says whether the newly allocated block is itself a block of pointers,
+ * which must be zeroed: an unzeroed one is read as pointers to whatever the
+ * block last held, and those are real blocks belonging to other files.
+ */
+static bool Ext2PointerAllocate(BlockDevice *device, Ext2Superblock *superblock,
+                                Ext2Inode *inode, uint32_t table, uint64_t entry, bool zero,
+                                uint32_t *block, bool *allocated)
+{
+    uint8_t raw[EXT2_BLOCK_POINTER_SIZE];
+    const uint32_t offset = (uint32_t)(entry * EXT2_BLOCK_POINTER_SIZE);
+
+    if (!Ext2ReadBytes(device, superblock, table, offset, EXT2_BLOCK_POINTER_SIZE, raw))
+    {
+        return false;
+    }
+
+    *block = Ext2ReadWord(raw, 0U);
+
+    if (*block != 0U)
+    {
+        if (!Ext2BlockExists(superblock, *block))
+        {
+            return Ext2WriteRefuse("a block pointer addresses a block the volume does not hold");
+        }
+
+        return true;
+    }
+
+    if (!Ext2AllocateBlock(device, superblock, table, block))
+    {
+        return false;
+    }
+
+    if (zero && !Ext2ZeroBlock(device, superblock, *block))
+    {
+        return false;
+    }
+
+    inode->sector_count += Ext2SectorsPerBlock(superblock);
+    *allocated = true;
+
+    Ext2WriteWord(raw, 0U, *block);
+
+    return Ext2WriteBytes(device, superblock, table, offset, EXT2_BLOCK_POINTER_SIZE, raw);
+}
+
+/* The same for one of the fifteen entries of i_block, which is held in memory
+ * rather than upon the volume and so is assigned rather than written. */
+static bool Ext2InodePointerAllocate(BlockDevice *device, Ext2Superblock *superblock,
+                                     Ext2Inode *inode, uint32_t entry, bool zero,
+                                     uint32_t *block, bool *allocated)
+{
+    if (inode->block[entry] != 0U)
+    {
+        *block = inode->block[entry];
+        return true;
+    }
+
+    if (!Ext2AllocateBlock(device, superblock, inode->block[0], block))
+    {
+        return false;
+    }
+
+    if (zero && !Ext2ZeroBlock(device, superblock, *block))
+    {
+        return false;
+    }
+
+    inode->sector_count += Ext2SectorsPerBlock(superblock);
+    inode->block[entry] = *block;
+    *allocated = true;
+    return true;
+}
+
+bool Ext2InodeBlockAllocate(BlockDevice *device, Ext2Superblock *superblock, Ext2Inode *inode,
+                            uint64_t index, uint32_t *block, bool *allocated)
+{
+    uint64_t per_block;
+    uint64_t remaining;
+    uint32_t level;
+    uint32_t table;
+
+    if ((device == NULL) || (superblock == NULL) || (inode == NULL) || (block == NULL) ||
+        (allocated == NULL))
+    {
+        return Ext2WriteRefuse("no device, no volume, no inode, or nowhere to put the block");
+    }
+
+    if (!Ext2Writable(superblock))
+    {
+        return false;
+    }
+
+    *allocated = false;
+
+    if (index < EXT2_DIRECT_BLOCK_COUNT)
+    {
+        return Ext2InodePointerAllocate(device, superblock, inode, (uint32_t)index, false,
+                                        block, allocated);
+    }
+
+    per_block = (uint64_t)Ext2PointersPerBlock(superblock);
+    remaining = index - EXT2_DIRECT_BLOCK_COUNT;
+
+    if (remaining < per_block)
+    {
+        level = 1U;
+    }
+    else
+    {
+        remaining -= per_block;
+
+        if (remaining < (per_block * per_block))
+        {
+            level = 2U;
+        }
+        else
+        {
+            remaining -= per_block * per_block;
+
+            if (remaining < (per_block * per_block * per_block))
+            {
+                level = 3U;
+            }
+            else
+            {
+                return Ext2WriteRefuse("the index is beyond what fifteen pointers can address");
+            }
+        }
+    }
+
+    /*
+     * The block of pointers named by i_block for this level, allocated and zeroed
+     * where the file has not reached this far before.
+     */
+    if (!Ext2InodePointerAllocate(device, superblock, inode,
+                                  EXT2_INDIRECT_INDEX + (level - 1U), true, &table, allocated))
+    {
+        return false;
+    }
+
+    while (level > 0U)
+    {
+        uint64_t span = 1U;
+
+        for (uint32_t power = 1U; power < level; ++power)
+        {
+            span *= per_block;
+        }
+
+        /* Every block of this walk is a block of pointers save the last, which is
+         * the file's own data and is not zeroed: the caller is about to write it,
+         * and a caller writing only part of it zeroes the rest itself. */
+        if (!Ext2PointerAllocate(device, superblock, inode, table, remaining / span,
+                                 level > 1U, &table, allocated))
+        {
+            return false;
+        }
+
+        remaining %= span;
+        --level;
+    }
+
+    *block = table;
+    return true;
+}
+
+bool Ext2WriteFile(BlockDevice *device, Ext2Superblock *superblock, Ext2Inode *inode,
+                   uint64_t offset, const void *buffer, uint64_t length, uint64_t *written)
+{
+    const uint8_t *source = (const uint8_t *)buffer;
+    uint64_t remaining = length;
+    uint64_t put = 0U;
+    bool allocated = false;
+    bool grew = false;
+
+    if ((device == NULL) || (superblock == NULL) || (inode == NULL) || (written == NULL) ||
+        ((buffer == NULL) && (length != 0U)))
+    {
+        return Ext2WriteRefuse("no device, no volume, no inode, nothing to write, or "
+                               "nowhere to put the count");
+    }
+
+    *written = 0U;
+
+    if (!Ext2Writable(superblock))
+    {
+        return false;
+    }
+
+    if (Ext2InodeIsDirectory(inode))
+    {
+        return Ext2WriteRefuse("a directory's entries are not written as a stream of bytes");
+    }
+
+    while (remaining > 0U)
+    {
+        const uint64_t index = offset / (uint64_t)superblock->block_size;
+        const uint32_t within = (uint32_t)(offset % (uint64_t)superblock->block_size);
+        uint32_t take = superblock->block_size - within;
+        uint32_t block;
+
+        if ((uint64_t)take > remaining)
+        {
+            take = (uint32_t)remaining;
+        }
+
+        if (!Ext2InodeBlockAllocate(device, superblock, inode, index, &block, &allocated))
+        {
+            break;
+        }
+
+        /*
+         * A block newly allocated holds whatever its previous owner left in it.
+         * Where this write covers the whole of it that does not matter, every
+         * byte being about to be replaced; where it does not, the remainder would
+         * become another file's data appearing as this one's contents. It is
+         * zeroed in that case and only that case, which is why the allocation
+         * reports whether it allocated rather than the caller inferring it from
+         * the offsets.
+         */
+        if (allocated && (take != superblock->block_size) &&
+            !Ext2ZeroBlock(device, superblock, block))
+        {
+            break;
+        }
+
+        if (!Ext2WriteBytes(device, superblock, block, within, take, source))
+        {
+            break;
+        }
+
+        source += take;
+        offset += take;
+        remaining -= take;
+        put += take;
+
+        if (offset > inode->size)
+        {
+            inode->size = offset;
+            grew = true;
+        }
+    }
+
+    *written = put;
+    Ext2BytesWrittenCount += put;
+
+    /*
+     * The inode is written back whether or not every byte was written. The blocks
+     * that were allocated are allocated and the bytes that were written are upon
+     * the volume; an inode left unwritten would describe a file shorter than its
+     * contents and would leak every block beyond it.
+     */
+    if ((put > 0U) || grew)
+    {
+        if (!Ext2WriteInode(device, superblock, inode))
+        {
+            return false;
+        }
+    }
+
+    return remaining == 0U;
+}
+
+/*
+ * Frees the blocks of one pointer subtree at or beyond a file block index.
+ *
+ * `base` is the file block index the subtree's first entry stands for, and
+ * `span` the indices one entry covers. The table itself is freed, and the
+ * caller's pointer to it cleared, only when nothing is left in it — which is
+ * what makes a truncation to zero return every block of the file and a
+ * truncation to the middle of an indirect range keep the table that still holds
+ * the earlier half.
+ */
+static bool Ext2TruncateSubtree(BlockDevice *device, Ext2Superblock *superblock,
+                                Ext2Inode *inode, uint32_t *table, uint32_t level,
+                                uint64_t base, uint64_t span, uint64_t first)
+{
+    const uint64_t per_block = (uint64_t)Ext2PointersPerBlock(superblock);
+    const uint64_t entry_span = span / per_block;
+    bool occupied = false;
+
+    if (*table == 0U)
+    {
+        return true;
+    }
+
+    /*
+     * A subtree lying wholly below the new size is retained entire, and is not
+     * walked. Without this a truncation of one block from a large file would read
+     * every pointer block the file has, which is the whole of its indirection for
+     * the sake of one block.
+     */
+    if ((base + span) <= first)
+    {
+        return true;
+    }
+
+    for (uint64_t entry = 0U; entry < per_block; ++entry)
+    {
+        const uint64_t entry_base = base + (entry * entry_span);
+        uint8_t raw[EXT2_BLOCK_POINTER_SIZE];
+        uint32_t child;
+
+        if (!Ext2ReadBytes(device, superblock, *table,
+                           (uint32_t)(entry * EXT2_BLOCK_POINTER_SIZE),
+                           EXT2_BLOCK_POINTER_SIZE, raw))
+        {
+            return false;
+        }
+
+        child = Ext2ReadWord(raw, 0U);
+
+        if (child == 0U)
+        {
+            continue;
+        }
+
+        if (level > 1U)
+        {
+            if (!Ext2TruncateSubtree(device, superblock, inode, &child, level - 1U, entry_base,
+                                     entry_span, first))
+            {
+                return false;
+            }
+        }
+        else if (entry_base >= first)
+        {
+            if (!Ext2FreeBlock(device, superblock, child))
+            {
+                return false;
+            }
+
+            inode->sector_count -= Ext2SectorsPerBlock(superblock);
+            child = 0U;
+        }
+
+        if (child == 0U)
+        {
+            Ext2WriteWord(raw, 0U, 0U);
+
+            if (!Ext2WriteBytes(device, superblock, *table,
+                                (uint32_t)(entry * EXT2_BLOCK_POINTER_SIZE),
+                                EXT2_BLOCK_POINTER_SIZE, raw))
+            {
+                return false;
+            }
+        }
+        else
+        {
+            occupied = true;
+        }
+    }
+
+    if (!occupied)
+    {
+        if (!Ext2FreeBlock(device, superblock, *table))
+        {
+            return false;
+        }
+
+        inode->sector_count -= Ext2SectorsPerBlock(superblock);
+        *table = 0U;
+    }
+
+    return true;
+}
+
+bool Ext2TruncateFile(BlockDevice *device, Ext2Superblock *superblock, Ext2Inode *inode,
+                      uint64_t size)
+{
+    const uint64_t per_block = (uint64_t)Ext2PointersPerBlock(superblock);
+    uint64_t first;
+
+    if ((device == NULL) || (superblock == NULL) || (inode == NULL))
+    {
+        return Ext2WriteRefuse("no device, no volume, or no inode to truncate");
+    }
+
+    if (!Ext2Writable(superblock))
+    {
+        return false;
+    }
+
+    if (Ext2InodeIsDirectory(inode))
+    {
+        return Ext2WriteRefuse("a directory is not truncated as a file is");
+    }
+
+    /*
+     * A size above the present one extends the file with a hole rather than with
+     * allocated blocks. That is what every Unix does, and it is why truncation is
+     * the cheap way to make a large sparse file: nothing is allocated and nothing
+     * is written but the size.
+     */
+    if (size >= inode->size)
+    {
+        inode->size = size;
+        return Ext2WriteInode(device, superblock, inode);
+    }
+
+    /* The first block index the file no longer needs. A size that ends within a
+     * block keeps that block, the bytes before the new end still being in it. */
+    first = (size + (uint64_t)superblock->block_size - 1U) / (uint64_t)superblock->block_size;
+
+    for (uint32_t entry = 0U; entry < EXT2_DIRECT_BLOCK_COUNT; ++entry)
+    {
+        if ((entry >= first) && (inode->block[entry] != 0U))
+        {
+            if (!Ext2FreeBlock(device, superblock, inode->block[entry]))
+            {
+                return false;
+            }
+
+            inode->sector_count -= Ext2SectorsPerBlock(superblock);
+            inode->block[entry] = 0U;
+        }
+    }
+
+    if (!Ext2TruncateSubtree(device, superblock, inode, &inode->block[EXT2_INDIRECT_INDEX], 1U,
+                             EXT2_DIRECT_BLOCK_COUNT, per_block, first) ||
+        !Ext2TruncateSubtree(device, superblock, inode,
+                             &inode->block[EXT2_DOUBLE_INDIRECT_INDEX], 2U,
+                             EXT2_DIRECT_BLOCK_COUNT + per_block, per_block * per_block,
+                             first) ||
+        !Ext2TruncateSubtree(device, superblock, inode,
+                             &inode->block[EXT2_TRIPLE_INDIRECT_INDEX], 3U,
+                             EXT2_DIRECT_BLOCK_COUNT + per_block + (per_block * per_block),
+                             per_block * per_block * per_block, first))
+    {
+        return false;
+    }
+
+    inode->size = size;
+    return Ext2WriteInode(device, superblock, inode);
+}
+
+uint64_t Ext2BlocksAllocated(void)
+{
+    return Ext2BlocksAllocatedCount;
+}
+
+uint64_t Ext2BlocksFreed(void)
+{
+    return Ext2BlocksFreedCount;
+}
+
+uint64_t Ext2InodesAllocated(void)
+{
+    return Ext2InodesAllocatedCount;
+}
+
+uint64_t Ext2InodesFreed(void)
+{
+    return Ext2InodesFreedCount;
+}
+
+uint64_t Ext2BytesWritten(void)
+{
+    return Ext2BytesWrittenCount;
+}
+
+uint64_t Ext2WritesRefused(void)
+{
+    return Ext2WritesRefusedCount;
 }
 
 const char *Ext2LastError(void)

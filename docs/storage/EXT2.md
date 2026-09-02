@@ -1,6 +1,6 @@
 # The EXT2 Volume
 
-**Phase**: 5, sub-tasks 5.1 to 5.5, of [`../project/PLAN.md`](../project/PLAN.md).
+**Phase**: 5, sub-tasks 5.1 to 5.6, of [`../project/PLAN.md`](../project/PLAN.md).
 
 **Authority**: `PROJECT_GUIDELINES.md`, Sections 2, 3 and 6. Every assertion about
 the format carries a citation, and the specifications are registered in
@@ -403,7 +403,7 @@ fit in a record of twelve bytes. Read the other way about, every entry of a
 volume that states no file type acquires a type equal to the high byte of its
 name length, which is zero, so every file is declared to be of no type.
 
-This kernel decides from the flag alone, and the self-test of Section 12.5
+This kernel decides from the flag alone, and the self-test of Section 13.5
 asserts that it does so by presenting the same bytes under both readings.
 
 ### 10.3 The file type, and the format it must agree with
@@ -439,7 +439,7 @@ produced:
    read its name rather than its inode number would report a file that was
    deleted. It is also how the interior nodes of an indexed directory are
    disguised, which is why a linear traversal reads such a directory correctly;
-   see Section 13, limitation 14.
+   see Section 14, limitation 14.
 2. **A block the directory never had allocated.** Reading a hole yields zeroes,
    and a record length of zero cannot be advanced past; passing over the block is
    both the correct reading of a hole and the only one that terminates.
@@ -622,7 +622,7 @@ mode, the sector count and the extended attribute block, all of which are parsed
 before the words are examined. The words are decoded either way; only their
 interpretation differs.
 
-This was found by the self-test of Section 12.5 failing on the first volume that
+This was found by the self-test of Section 13.5 failing on the first volume that
 carried a fast symbolic link. It is worth recording because it is the
 characteristic shape of a defect in this chapter: the code was correct for every
 case it had been given, and wrong for a case the format permits and every real
@@ -639,9 +639,163 @@ volume contains.
 | A target holding a null byte. | It would be a path shorter than the file says it is, and everything above treats it as terminated. |
 | A fast link whose size exceeds sixty bytes. | It declares no blocks and has no room for the target it claims. |
 
-## 12. Verification
+## 12. Writing
 
-### 12.1 The self-test of the superblock
+Everything before this reads. What follows alters a volume, and the difference is
+not one of degree. A read that goes wrong returns the wrong bytes to one caller,
+and can be retried. A write that goes wrong destroys somebody's data, cannot be
+undone, and is ordinarily **silent**: a block allocated to two files reads
+correctly for both of them until one of them writes, at which point the damage
+appears in a file that was never touched.
+
+Three disciplines follow, and they govern every function in this section.
+
+### 12.1 The three disciplines
+
+**A volume that may not be written is not written.** Section 6 marks a volume
+read-only where it declares a read-only compatible feature this kernel lacks, or
+where it was not cleanly unmounted. Every function here asks before doing
+anything at all, so the judgement is made in one place rather than by each caller
+remembering it.
+
+**A resource is marked used before it is referred to.** Allocation writes the
+bitmap first and links the block or inode into its owner afterwards. The order
+matters at exactly one moment — a machine that stops between the two — and the
+two orders fail differently:
+
+| Order | If the machine stops between | Consequence |
+| ----- | ---------------------------- | ----------- |
+| Bitmap first (this one) | The block is marked used and nothing refers to it | A **leak**: space is lost until a check reclaims it |
+| Reference first | Something refers to a block the bitmap calls free | **Sharing**: the block is allocated again, to a second file |
+
+A leak is a cost. Sharing is a fault that spreads, and it is the failure that
+does not announce itself. The cheaper-looking order is the wrong one.
+
+**Nothing reaches the medium until the cache writes it back.** Every write here
+is made into a buffer which is then marked dirty, so a caller that needs the
+volume consistent upon the medium must call `BufferSync`.
+
+### 12.2 The bitmaps
+
+One bit stands for each block of a group and each inode of it, **1 meaning used**
+and 0 free. The first of the group is bit 0 of byte 0 and the ninth is bit 0 of
+byte 1 — least significant bit first within a byte, which is not the order a
+diagram of a byte suggests and is the order the format states. The inode bitmap
+begins at inode 1, numbers beginning at one and bits at zero, exactly as when an
+inode is located within its table.
+
+These are the first structures of the volume this kernel reads that it did not
+need in order to read a file. Until now nothing had to know which blocks were in
+use, because nothing allocated one; the free counts were read and believed. That
+ends here, and the counts must now agree with the bitmaps or the volume describes
+nothing.
+
+Setting a bit already set, or clearing one already clear, is **refused rather
+than performed**. Setting one already set means two owners believe they hold the
+same block. Clearing one already clear means a block is being freed twice, and
+the second free is precisely what allows it to be allocated to two files at once.
+Neither announces itself at the moment it occurs, which is why both are stopped
+at the moment they occur.
+
+### 12.3 Allocation
+
+A block is allocated by finding a free bit, setting it, decrementing the free
+counts of the group and of the superblock, and writing both back.
+
+The search is bounded by the group's **true extent** and not by the size of the
+bitmap. The last group is short whenever the volume is not an exact multiple of
+the group size (Section 8.4), and the bits beyond its blocks are set by whatever
+made the volume; a search that trusted those bits would issue a block the volume
+does not hold upon a volume that happened to leave them clear.
+
+A hint names a block the caller would like to be near — ordinarily the previous
+block of the same file. Beginning the search in that block's group is the whole
+of this kernel's allocation policy. It keeps a file's blocks together, which is
+what makes reading it sequential, and it costs one division.
+
+Where a group's descriptor claims free blocks and its bitmap holds none, the
+allocation is **refused rather than continued in another group**. The volume
+contradicts itself; moving on would leave the contradiction in place for the next
+caller to meet, and would turn a detectable fault into a slow one.
+
+An inode below `s_first_ino` belongs to the filesystem and is never issued. Such
+an inode is ordinarily marked used already, so this is a second line and not the
+first — but a volume that left one clear would otherwise have its root directory
+handed out to a file.
+
+### 12.4 Growing a file
+
+`Ext2InodeBlockAllocate` is `Ext2InodeBlock` (Section 9.3) with the holes filled
+in. The decomposition of an index into levels is performed a second time rather
+than shared, because the two walks differ at every step: one reads a pointer and
+accepts zero as a hole, the other must allocate where it finds zero, zero the
+block if it is a block of pointers, and write the pointer back into whatever
+holds it.
+
+Two things are zeroed, for two different reasons:
+
+1. **A newly allocated block of pointers**, always. An unzeroed one is read as
+   pointers to whatever the block last held — and those are real blocks belonging
+   to real files.
+2. **A newly allocated data block that the write does not wholly cover.** The
+   part not written would otherwise become the previous owner's data appearing as
+   this file's contents. Where the write covers the whole block this is skipped,
+   every byte being about to be replaced.
+
+The allocation therefore **reports whether it allocated**, rather than leaving the
+caller to infer it from the offsets. Inferring it is how a caller gets it wrong,
+and the cost of getting it wrong is disclosing another file's contents.
+
+A write beginning beyond the end of the file leaves a hole between the two, which
+is how a sparse file is made and costs nothing.
+
+### 12.5 Truncation
+
+Truncation downward frees every block beyond the new size and every block of
+pointers left holding nothing. The subtree walk frees a table only when nothing
+remains in it, which is what makes a truncation to zero return every block while
+a truncation into the middle of an indirect range keeps the table still holding
+the earlier half.
+
+A subtree lying **wholly below** the new size is retained entire and is not
+walked. Without that, truncating one block from a large file would read every
+pointer block the file has, which is the whole of its indirection for the sake of
+one block.
+
+Truncation **upward allocates nothing**. The file grows by a hole, which is what
+every Unix does and is why truncation is the cheap way to create a large sparse
+file: nothing is allocated and nothing written but the size.
+
+### 12.6 What is not promised: crash consistency
+
+Allocating one block touches the bitmap, the group descriptor, the superblock and
+the inode — four writes that must all happen or none. **This kernel cannot make
+them atomic, and does not pretend to.** A machine that stops partway through
+leaves a volume that is internally inconsistent in one of the ways Section 12.1
+describes, and the recovery is `e2fsck`.
+
+This is not an oversight to be corrected later within EXT2. It is what a journal
+exists to provide and what EXT2, having none, does not have; ext3 is precisely
+ext2 with one added. The ordering discipline of Section 12.1 does not remove the
+window — it chooses which side of it the damage falls on, and chooses the side
+that leaks rather than the side that corrupts.
+
+### 12.7 What is refused
+
+| Refused | Why it matters |
+| ------- | -------------- |
+| Any write to a read-only volume. | The judgement was made once, when the superblock was read, and is enforced in one place. |
+| Setting a bitmap bit already set, or clearing one already clear. | Two owners of one block, or the second free that permits two owners. |
+| Freeing a block outside the volume, or an inode the volume does not hold. | Arithmetic that has strayed, marking a bit that stands for something else. |
+| Freeing an inode below `s_first_ino`. | It belongs to the filesystem; inode 2 is the root directory. |
+| Allocating when a group's free count disagrees with its bitmap. | The volume contradicts itself, and another group would leave that in place. |
+| Allocating when the volume reports no free block or inode. | Refused before the search rather than after it. |
+| Writing or truncating a directory as a stream of bytes. | Its entries are a structure; sub-task 5.7 alters them properly. |
+| A block index beyond what fifteen pointers can address. | Arithmetic past the end of the decomposition. |
+
+## 13. Verification
+
+### 13.1 The self-test of the superblock
 
 `KernelVerifyExt2` composes a superblock in the memory-backed block device of
 [`BLOCK.md`](BLOCK.md), Section 5, using the offset names from the header, and
@@ -664,7 +818,7 @@ device's storage directly, beneath both the block layer and the cache, so a cach
 holding the previous contents would answer the next read with them, and the
 assertion would be made against a volume that no longer exists.
 
-### 12.2 The self-test of the descriptor table
+### 13.2 The self-test of the descriptor table
 
 `KernelVerifyGroups` runs against the same composed volume, whose group
 descriptor is written from the offset names of the header. It is asserted here
@@ -683,7 +837,7 @@ through a superblock, and this is where a valid one exists.
 | Free counts and a directory count beyond what the group holds are refused. | A descriptor that contradicts itself. |
 | A descriptor that every other rule accepts, whose free count disagrees with the superblock's, is refused by the whole-table check. | A table read at the wrong offset or one descriptor short — the failure no individually plausible descriptor can reveal. |
 
-### 12.3 The self-test of the inodes
+### 13.3 The self-test of the inodes
 
 The composed volume carries an inode table of its own. Inode 2 is the root
 directory, as the format reserves it, with a single direct block. Inode 11 is a
@@ -707,7 +861,7 @@ block it names lies within the 128 blocks the volume holds.
 | An inode of the table that was never filled is refused. | The zeroes past the table read as a file. |
 | A direct pointer outside the volume is refused when the inode is read; a pointer within an indirect block outside the volume is refused when it is fetched. | Two checks that must both exist, since neither can be performed where the other is. |
 
-### 12.4 The self-test of the directories
+### 13.4 The self-test of the directories
 
 `KernelVerifyDirectories` composes a root directory and one subdirectory within
 the same device of memory, laid out as Table 4.3 lays out its sample: entries
@@ -733,10 +887,10 @@ yields fragments of real names rather than an error.
 | The same bytes are refused under the sixteen-bit reading and accepted under the eight-bit one, according to the feature flag alone. | The one place in the format where the wrong reading produces no diagnostic of its own. See Section 10.2. |
 
 The cache is invalidated on both sides of every alteration, for the reason
-Section 12.1 gives: the bytes are written beneath both the block layer and the
+Section 13.1 gives: the bytes are written beneath both the block layer and the
 cache, and a cache holding the previous contents would answer with them.
 
-### 12.5 The self-test of file reading
+### 13.5 The self-test of file reading
 
 `KernelVerifyFiles` reads the composed file, the composed sparse file, and both
 forms of symbolic link.
@@ -764,7 +918,7 @@ hide.
 | `Ext2ResolvePathNoFollow` returns the link, follows a link within the path, and is overridden by a trailing separator. | The distinction between acting upon a file and upon its name collapsing in either direction. |
 | A link altered to name itself is refused. | A resolution that recurs until the stack is gone. |
 
-### 12.6 A volume the kernel did not compose
+### 13.6 A volume the kernel did not compose
 
 A self-test that builds its own volume proves the parser consistent with itself.
 The corroboration must come from a volume built by something else, so three were
@@ -847,7 +1001,7 @@ the block at index 268 — which was reached by following the doubly indirect bl
 at 1054 to the indirect block at 1055 and taking its first entry.
 
 
-### 12.7 Directories the kernel did not compose
+### 13.7 Directories the kernel did not compose
 
 The root directory is now listed at every boot, upon every device the machine
 carries, and one path is resolved upon it. The names in that listing were written
@@ -915,7 +1069,7 @@ EXT2 directory 2 holds 9003 entries.
 boundary at index 12 and the indirect-to-doubly-indirect boundary at index 268
 without losing or repeating a single record, which is the integration of
 Section 10.4 with the pointer resolution of Section 9.3.
-### 12.8 Files the kernel did not compose
+### 13.8 Files the kernel did not compose
 
 The root directory of every volume is listed at each boot, one path is resolved
 upon it, and what that path names is now read: the target of a symbolic link, or
@@ -961,23 +1115,116 @@ bytes, and the bytes are `buried\n`. The link was resolved mid-path, its relativ
 target `deep` taken against the root that holds it, and two further components
 walked from there.
 
-## 13. Limitations
+
+### 13.9 The self-test of writing
+
+`KernelVerifyWrites` is the first self-test in this project that alters a
+filesystem, and the standard it is held to differs from every one before it. Two
+things follow.
+
+**The assertions are made about the volume and not only about the operation.**
+After each sequence, the free counts of the group and of the superblock must
+agree with one another and with what was actually taken — and they are read back
+*from the volume*, not from the structure in memory. An allocator that
+decremented its own copy and never wrote it back would satisfy every assertion
+made against memory while leaving the volume claiming a block it had given away.
+
+**Every write is made to the device of memory.** The volumes upon a real disk
+belong to whoever booted this kernel; see Section 13.10 for what is done there,
+and upon whose instruction.
+
+| Property asserted | The silent failure it would catch |
+| ----------------- | --------------------------------- |
+| Both bitmaps report the volume as it was composed, including the one inode deliberately left free. | A bit index off by one, which reports the state of the block or inode beside the one asked about. |
+| A block allocated is in use, the counts fall by one in memory **and upon the volume**, and freeing it restores all three. | Accounting kept in memory and never written back. |
+| Freeing something already free is refused, for a block and for an inode. | The second free, which is what permits two owners of one block. |
+| The one free inode is allocated, a second allocation is refused, and freeing it restores the volume. | Exhaustion mistaken for success; a free count that drifts from the bitmap. |
+| Freeing a reserved inode is refused. | The root directory handed out to a file. |
+| A write within a file reaches the volume, and the bytes on either side of it are untouched. | A write that covers more than it was given. |
+| Truncation to nothing returns exactly the blocks the file held, and rewriting it takes exactly them back. | This is the conservation check, and it is the strongest assertion here: what a file gives up it must take back, and any leak or double-count appears as a free count that fails to return to where it started. |
+| A write beyond the end extends the file and leaves a hole that reads as zeroes. | An extension that allocates the intervening blocks, or one that reports the wrong size. |
+| Truncation upward allocates nothing. | A sparse extension that is not sparse. |
+| A write into an unoccupied entry of the doubly indirect block allocates **two** blocks. | A level of the walk silently skipped: the difference between one block and two is the whole of whether the indirect block was allocated. |
+| `Ext2VerifyGroupDescriptors` still passes after all of it. | The volume no longer accounting for itself, which is what `e2fsck` would report and what nothing else here would. |
+| A read-only volume refuses allocation, freeing, and every write of a structure, an inode or a file. | The one judgement that stands between this code and somebody else's data. |
+
+The volume is restored between sequences by emptying the cache **first** and
+composing afterwards. That is the opposite of the order every earlier self-test
+uses, and the difference matters: `BufferInvalidateDevice` writes dirty buffers
+back before discarding them, so composing first would flush the writes of the
+test just finished onto the volume just composed, restoring nothing. No self-test
+before this one had ever left a dirty buffer behind.
+
+### 13.10 Writing a volume the kernel did not compose
+
+The strongest evidence available for this sub-task is not a self-test at all. It
+is `e2fsck`'s opinion of a volume this kernel has written.
+
+A volume upon a disk belongs to whoever booted this kernel, so the writing is
+performed only upon the operator's instruction, given at the GRUB menu, and even
+then it is bounded twice: it writes only to a regular file named
+`/oxys-write-test`, and it **does not create one**. A volume that does not
+already hold that file is left untouched.
+
+An image was made holding that file and one other, and booted from the
+`Oxys-OS (EXT2 write self-test)` entry:
+
+```sh
+mke2fs -q -F -b 1024 -I 128 -r 1 -d tree/ fs6.img 8192
+e2fsck -fn fs6.img      # 13/2048 files, 308/8192 blocks
+```
+
+The kernel emptied the file and wrote 8192 bytes into it, each byte derived from
+its own offset:
+
+```
+EXT2 write test: the command line permits writing to ata0.
+EXT2 write test: wrote 8192 bytes to /oxys-write-test (inode 13, 16 sectors); volume now reports 7877 free blocks and 2035 free inodes.
+```
+
+Afterwards, upon the host:
+
+```
+$ e2fsck -fn fs6.img
+Pass 1: Checking inodes, blocks, and sizes
+Pass 2: Checking directory structure
+Pass 3: Checking directory connectivity
+Pass 4: Checking reference counts
+Pass 5: Checking group summary information
+fs6.img: 13/2048 files (0.0% non-contiguous), 315/8192 blocks
+```
+
+**No errors.** Five passes, and in particular Pass 5, which checks the group
+summary information — the free block and free inode counts this kernel maintained
+and wrote back. That is an independent judgement of the whole allocation path by
+the tool whose business it is, and it is worth more than any assertion this
+kernel can make about itself.
+
+The block count rose from 308 to 315: the file held one block of twelve bytes and
+now holds eight of 1024, which is seven more. The 8192 bytes extracted with
+`debugfs dump` match the expected pattern byte for byte over their whole length,
+and the other file in the image reads exactly as it did before.
+
+## 14. Limitations
 
 1. **Nothing is mounted.** The superblock is read, validated and reported; no
    volume is retained and nothing is opened. Sub-task 5.8 introduces the mount.
 2. **The backup superblocks are not consulted.** A volume whose primary
    superblock is damaged is refused, though a copy of it — and of the descriptor
    table — stands in several block groups. Nothing yet falls back upon them.
-3. **Nothing is written.** The mount count and the state are read and not
-   updated; a volume this kernel reads does not know it was read.
+3. **A volume is not marked as mounted.** The mount count and the mount time are
+   read and never updated, and the state is not set to record that the volume is
+   in use. A volume this kernel writes therefore does not record that this kernel
+   had it open, so a machine that stopped while writing would leave a volume that
+   `e2fsck` believes was cleanly unmounted. That belongs with the mount of
+   sub-task 5.8, there being nothing yet that mounts.
 4. **Block sizes above 4096 bytes are refused**, and fragments are not
    implemented at all — no EXT2 implementation has ever used them.
 5. **One volume per device.** Partition tables are not read, so a volume must
    begin at the start of its device.
-6. **Nothing is opened, and nothing is written.** A file's contents may be read
-   by naming it, but there is no descriptor, no position that advances, and no
-   means of altering anything. Writing is sub-task 5.6 and the descriptor
-   belongs to the virtual filesystem layer of sub-task 5.8.
+6. **Nothing is opened.** A file's contents may be read and written by naming it,
+   but there is no descriptor and no position that advances; both belong to the
+   virtual filesystem layer of sub-task 5.8.
 7. **The extended fields of a large inode are not read.** Only the first 128
    bytes of an inode are decoded, whatever `s_inode_size` states. The
    nanosecond times and the extended attributes that a 256-byte inode carries
@@ -997,9 +1244,18 @@ walked from there.
    filesystem upon a 4096-byte device is a rearrangement this kernel does not
    perform.
 12. **No directory is written.** Names may be looked up and none may be created
-   or removed, which is sub-task 5.7. An entry remembers the block and the
-   offset it was read from against that work, since inserting or removing a name
-   means altering the record before it.
+   or removed, which is sub-task 5.7 — so a file may be written but not yet
+   given a name, and an inode may be allocated but not yet linked to anything.
+   An entry remembers the block and the offset it was read from against that
+   work, since inserting or removing a name means altering the record before it.
+18. **A sequence of writes is not atomic.** Allocating one block touches four
+   structures, and a machine that stops partway leaves the volume inconsistent;
+   see Section 12.6. This is what a journal provides and what EXT2 does not have.
+   The recovery is `e2fsck`.
+19. **Allocation does not preallocate.** A file written a block at a time takes
+   one block at a time, where `s_prealloc_blocks` exists precisely so that an
+   implementation may take several and reduce fragmentation. The field is read
+   and ignored.
 13. **A symbolic link's target may not exceed 255 bytes**, and at most eight are
    followed in resolving one path. Neither bound is a property of the format,
    which limits a target only by the size of the file holding it and says

@@ -3776,6 +3776,33 @@ static void KernelVerifyBuffer(void)
  * squared can each be reached only by following one, two or three blocks of
  * pointers, and each can be compared against what made the volume.
  */
+/* The regular file within the subdirectory: two blocks, the second partly
+ * filled, so that a read crossing a block boundary and a read ending within a
+ * block are both exercised. */
+#define KERNEL_VOLUME_INNER_SIZE 1500U
+
+/*
+ * The byte a composed file holds at an offset within itself.
+ *
+ * The value depends upon the offset, so a read that returned the right number of
+ * bytes from the wrong place fails: a constant fill, or a pattern repeating
+ * every block, would be returned identically by a reader that resolved the wrong
+ * block, and the test would pass upon a defect it exists to catch.
+ */
+static uint8_t KernelFileByteAt(uint64_t offset)
+{
+    return (uint8_t)(((offset * 31U) + 7U) & 0xFFU);
+}
+
+/*
+ * The buffer a file is read into or written from.
+ *
+ * It is static rather than automatic because it is larger than a page and the
+ * kernel stack, though 64 KiB, is shared with every interrupt taken while this
+ * runs. Nothing here is concurrent, so one buffer suffices.
+ */
+static uint8_t KernelFileBuffer[KERNEL_VOLUME_INNER_SIZE + 64U];
+
 #define KERNEL_REPORTED_BLOCKS 13U
 
 /* The path resolved upon every volume the machine carries, as a demonstration
@@ -3947,6 +3974,123 @@ static void KernelReportRootInode(BlockDevice *device, const Ext2Superblock *sup
 }
 
 /*
+ * Writes to a volume the machine actually carries, and only when the operator
+ * has asked for it at the boot menu.
+ *
+ * Every other exercise of the writing of sub-task 5.6 is performed upon the
+ * device of memory, whose contents this kernel composed and owns. A volume upon
+ * a disk belongs to whoever booted this kernel, and a self-test that altered one
+ * unbidden would destroy their data to prove a point about its own correctness.
+ *
+ * Two further precautions bound what this can damage even when it is asked for.
+ * It writes only to a file named KERNEL_WRITE_PROBE_PATH, which nothing but a
+ * deliberate preparation for this test would have created, and it refuses to
+ * proceed unless that file is a regular file the volume already holds — it
+ * creates nothing, and it touches nothing it was not pointed at. The file is
+ * left holding what this writes, so the operator may compare it from outside.
+ */
+#define KERNEL_WRITE_PROBE_PATH "/oxys-write-test"
+#define KERNEL_WRITE_PROBE_SIZE 8192U
+
+static void KernelWriteProbeVolume(BlockDevice *device, Ext2Superblock *superblock)
+{
+    Ext2Inode probe;
+    uint64_t moved = 0U;
+    uint64_t index;
+
+    if (!KernelCommandLineHasOption("ext2-write-test"))
+    {
+        return;
+    }
+
+    KernelWriteString("EXT2 write test: the command line permits writing to ");
+    KernelWriteString(device->name);
+    KernelWriteString(".\n");
+
+    if (superblock->read_only)
+    {
+        KernelWriteString("EXT2 write test: the volume is read-only; nothing written.\n");
+        return;
+    }
+
+    if (!Ext2ResolvePath(device, superblock, KERNEL_WRITE_PROBE_PATH, &probe))
+    {
+        KernelWriteString("EXT2 write test: " KERNEL_WRITE_PROBE_PATH " is not present; "
+                          "nothing written.\n");
+        return;
+    }
+
+    if (!Ext2InodeIsRegular(&probe))
+    {
+        KernelWriteString("EXT2 write test: " KERNEL_WRITE_PROBE_PATH " is not a regular "
+                          "file; nothing written.\n");
+        return;
+    }
+
+    /*
+     * The file is emptied and then written afresh, so that the allocation, the
+     * freeing and the extension are all exercised upon a real volume. The
+     * contents are derived from the offset, so that a file written from the
+     * wrong place is distinguishable from one written correctly when it is
+     * examined from outside.
+     */
+    if (!Ext2TruncateFile(device, superblock, &probe, 0U))
+    {
+        KernelWriteString("EXT2 write test: the file could not be emptied: ");
+        KernelWriteString(Ext2LastError());
+        KernelWriteString("\n");
+        return;
+    }
+
+    for (index = 0U; index < KERNEL_WRITE_PROBE_SIZE; index += sizeof KernelFileBuffer)
+    {
+        uint64_t run = KERNEL_WRITE_PROBE_SIZE - index;
+
+        if (run > sizeof KernelFileBuffer)
+        {
+            run = sizeof KernelFileBuffer;
+        }
+
+        for (uint64_t offset = 0U; offset < run; ++offset)
+        {
+            KernelFileBuffer[offset] = KernelFileByteAt(index + offset);
+        }
+
+        if (!Ext2WriteFile(device, superblock, &probe, index, KernelFileBuffer, run, &moved) ||
+            (moved != run))
+        {
+            KernelWriteString("EXT2 write test: the file could not be written: ");
+            KernelWriteString(Ext2LastError());
+            KernelWriteString("\n");
+            return;
+        }
+    }
+
+    /*
+     * The cache is written back before anything is reported. Until it is, the
+     * volume upon the disk holds none of this, and a report of success would
+     * describe memory rather than the medium.
+     */
+    if (!BufferSync())
+    {
+        KernelWriteString("EXT2 write test: the cache could not be written back.\n");
+        return;
+    }
+
+    KernelWriteString("EXT2 write test: wrote ");
+    KernelWriteDecimal(probe.size);
+    KernelWriteString(" bytes to " KERNEL_WRITE_PROBE_PATH " (inode ");
+    KernelWriteDecimal((uint64_t)probe.number);
+    KernelWriteString(", ");
+    KernelWriteDecimal((uint64_t)probe.sector_count);
+    KernelWriteString(" sectors); volume now reports ");
+    KernelWriteDecimal((uint64_t)superblock->free_block_count);
+    KernelWriteString(" free blocks and ");
+    KernelWriteDecimal((uint64_t)superblock->free_inode_count);
+    KernelWriteString(" free inodes.\n");
+}
+
+/*
  * Reads and reports the superblock of every block device the machine carries.
  *
  * Nothing is mounted and nothing is retained. The purpose is that a volume the
@@ -4000,6 +4144,7 @@ static void KernelReportVolumes(void)
             }
 
             KernelReportRootInode(device, &superblock);
+            KernelWriteProbeVolume(device, &superblock);
         }
         else
         {
@@ -4064,8 +4209,22 @@ static void KernelSetVolumeWord(size_t offset, uint32_t value)
 #define KERNEL_VOLUME_BLOCK_BITMAP     3U
 #define KERNEL_VOLUME_INODE_BITMAP     4U
 #define KERNEL_VOLUME_INODE_TABLE      5U
-#define KERNEL_VOLUME_FREE_BLOCKS      100U
-#define KERNEL_VOLUME_FREE_INODES      5U
+/*
+ * The free counts, which must agree with the bitmaps composed below and with one
+ * another. Until sub-task 5.6 the bitmaps were zeroes and the counts were
+ * whatever the composition said, nothing having read a bitmap; an allocator
+ * reads them, so they now describe the same volume or they describe none.
+ *
+ * The group holds 127 blocks — 128 less the boot block, the volume's first data
+ * block being 1 — of which blocks 1 to 33 are the metadata and the composed
+ * files. Sixteen inodes, of which every one but 14 is in use; 14 is the inode
+ * the self-test of sub-task 5.3 requires to be empty, and is now also the only
+ * one an allocation can be given.
+ */
+#define KERNEL_VOLUME_GROUP_BLOCKS     127U
+#define KERNEL_VOLUME_USED_BLOCKS      (KERNEL_VOLUME_LAST_BLOCK - 1U)
+#define KERNEL_VOLUME_FREE_BLOCKS      (KERNEL_VOLUME_GROUP_BLOCKS - KERNEL_VOLUME_USED_BLOCKS)
+#define KERNEL_VOLUME_FREE_INODES      1U
 #define KERNEL_VOLUME_DIRECTORIES      2U
 
 /* The byte at which a block of the composed volume begins. */
@@ -4140,10 +4299,6 @@ static size_t KernelDescriptorField(size_t offset)
 #define KERNEL_VOLUME_SLOW_LINK_TARGET \
     "/sub/../sub/../sub/../sub/../sub/../sub/../sub/../sub/../sub/inner"
 
-/* The regular file within the subdirectory: two blocks, the second partly
- * filled, so that a read crossing a block boundary and a read ending within a
- * block are both exercised. */
-#define KERNEL_VOLUME_INNER_SIZE 1500U
 
 /* How many pointers a block of the composed volume holds: 1024 / 4. */
 #define KERNEL_VOLUME_POINTERS 256U
@@ -4283,19 +4438,6 @@ static void KernelComposeInodes(void)
                     KERNEL_VOLUME_TRIPLE_INDIRECT);
     KernelStoreWord(KernelPointerField(KERNEL_VOLUME_TRIPLE_INDIRECT, 3U),
                     KERNEL_VOLUME_TRIPLE_DATA);
-}
-
-/*
- * The byte a composed file holds at an offset within itself.
- *
- * The value depends upon the offset, so a read that returned the right number of
- * bytes from the wrong place fails: a constant fill, or a pattern repeating
- * every block, would be returned identically by a reader that resolved the wrong
- * block, and the test would pass upon a defect it exists to catch.
- */
-static uint8_t KernelFileByteAt(uint64_t offset)
-{
-    return (uint8_t)(((offset * 31U) + 7U) & 0xFFU);
 }
 
 /* Writes a terminated string into the device's storage, without its terminator,
@@ -4442,6 +4584,53 @@ static void KernelComposeDirectories(void)
 }
 
 /*
+ * Composes the two bitmaps.
+ *
+ * One bit stands for each block of the group and each inode of it, 1 meaning
+ * used, the first of the group being bit 0 of byte 0 and the ninth bit 0 of
+ * byte 1. The order is written out here as the parser writes it out, and for the
+ * same reason: it is the format's and not the composer's opinion of it.
+ *
+ * Every block from the first data block to the last the composition uses is
+ * marked, and every inode but 14. The counts stated in the superblock and the
+ * descriptor are derived from the same constants, so a bitmap and a count that
+ * disagreed would be a mistake in one place rather than a difference between two.
+ */
+static void KernelSetBitmapBit(uint32_t block, uint32_t index)
+{
+    KernelMemoryDeviceStore[KernelVolumeBlock(block) + (index / 8U)] |=
+        (uint8_t)(1U << (index % 8U));
+}
+
+static void KernelComposeBitmaps(void)
+{
+    for (uint32_t offset = 0U; offset < KERNEL_VOLUME_BLOCK_SIZE; ++offset)
+    {
+        KernelMemoryDeviceStore[KernelVolumeBlock(KERNEL_VOLUME_BLOCK_BITMAP) + offset] = 0U;
+        KernelMemoryDeviceStore[KernelVolumeBlock(KERNEL_VOLUME_INODE_BITMAP) + offset] = 0U;
+    }
+
+    /*
+     * The blocks in use. Block 1 is the first data block, so it is bit 0; the
+     * subtraction is the same one the allocator performs, and getting it wrong
+     * in either place marks a block that is not the one meant.
+     */
+    for (uint32_t block = 1U; block < KERNEL_VOLUME_LAST_BLOCK; ++block)
+    {
+        KernelSetBitmapBit(KERNEL_VOLUME_BLOCK_BITMAP, block - 1U);
+    }
+
+    /* The inodes in use: every one but 14, which is left free deliberately. */
+    for (uint32_t number = 1U; number <= 16U; ++number)
+    {
+        if (number != KERNEL_VOLUME_UNUSED_INODE)
+        {
+            KernelSetBitmapBit(KERNEL_VOLUME_INODE_BITMAP, number - 1U);
+        }
+    }
+}
+
+/*
  * Composes the descriptor of the volume's single group.
  *
  * The free counts must agree with the superblock's, there being one group to
@@ -4486,8 +4675,8 @@ static void KernelComposeVolume(void)
     KernelSetVolumeWord(EXT2_OFFSET_INODE_COUNT, 16U);
     KernelSetVolumeWord(EXT2_OFFSET_BLOCK_COUNT, 128U);
     KernelSetVolumeWord(EXT2_OFFSET_RESERVED_BLOCKS, 6U);
-    KernelSetVolumeWord(EXT2_OFFSET_FREE_BLOCKS, 100U);
-    KernelSetVolumeWord(EXT2_OFFSET_FREE_INODES, 5U);
+    KernelSetVolumeWord(EXT2_OFFSET_FREE_BLOCKS, KERNEL_VOLUME_FREE_BLOCKS);
+    KernelSetVolumeWord(EXT2_OFFSET_FREE_INODES, KERNEL_VOLUME_FREE_INODES);
     KernelSetVolumeWord(EXT2_OFFSET_FIRST_DATA_BLOCK, 1U);
     KernelSetVolumeWord(EXT2_OFFSET_LOG_BLOCK_SIZE, 0U);
     KernelSetVolumeWord(EXT2_OFFSET_LOG_FRAGMENT_SIZE, 0U);
@@ -4510,6 +4699,7 @@ static void KernelComposeVolume(void)
     }
 
     KernelComposeGroupDescriptor();
+    KernelComposeBitmaps();
     KernelComposeInodes();
     KernelComposeDirectories();
     KernelComposeFiles();
@@ -4677,13 +4867,16 @@ static bool KernelVerifyGroups(BlockDevice *device, const Ext2Superblock *superb
         succeeded = false;
     }
 
-    /* Counts beyond what the group holds. */
+    /* Counts beyond what the group holds. The count of directories is derived
+     * from the volume rather than stated, the bound it must exceed being the
+     * inodes in use, which changes whenever the composition does. */
     if (!KernelDescriptorRefusedWith(device, superblock, EXT2_OFFSET_BG_FREE_BLOCKS, 200U,
                                      true, false) ||
         !KernelDescriptorRefusedWith(device, superblock, EXT2_OFFSET_BG_FREE_INODES, 17U, true,
                                      false) ||
-        !KernelDescriptorRefusedWith(device, superblock, EXT2_OFFSET_BG_USED_DIRECTORIES, 12U,
-                                     true, false))
+        !KernelDescriptorRefusedWith(
+            device, superblock, EXT2_OFFSET_BG_USED_DIRECTORIES,
+            (superblock->inodes_per_group - superblock->free_inode_count) + 1U, true, false))
     {
         KernelWriteString("  A group reporting more than it holds was accepted.\n");
         succeeded = false;
@@ -5139,15 +5332,6 @@ static bool KernelVerifyEntryReadings(BlockDevice *device)
     return succeeded;
 }
 
-/*
- * The buffer a file is read into by the self-test.
- *
- * It is static rather than automatic because it is larger than a page and the
- * kernel stack, though 64 KiB, is shared with every interrupt taken while the
- * test runs. Nothing is concurrent here, so one buffer suffices.
- */
-static uint8_t KernelFileBuffer[KERNEL_VOLUME_INNER_SIZE + 64U];
-
 /* Whether a run of the buffer holds the bytes the composed file holds at an
  * offset within itself. */
 static bool KernelFileBufferMatches(uint64_t offset, uint64_t length)
@@ -5422,6 +5606,356 @@ static bool KernelVerifyFiles(BlockDevice *device, const Ext2Superblock *superbl
     if (succeeded)
     {
         KernelWriteString("EXT2 files: reading, holes and symbolic links are sound.\n");
+    }
+
+    return succeeded;
+}
+
+/*
+ * Restores the composed volume after something has written to it.
+ *
+ * The order matters and is not the order used everywhere else in this file.
+ * BufferInvalidateDevice writes dirty buffers back before it discards them, so
+ * composing first and invalidating afterwards would flush the writes of the test
+ * just finished onto the volume just composed — restoring nothing and leaving a
+ * volume that is neither what was written nor what was composed. The cache is
+ * therefore emptied first, and the composition follows it.
+ *
+ * Every self-test before sub-task 5.6 could use the other order safely, none of
+ * them having left a dirty buffer behind.
+ */
+static void KernelRestoreVolume(BlockDevice *device)
+{
+    (void)BufferInvalidateDevice(device);
+    KernelComposeVolume();
+    (void)BufferInvalidateDevice(device);
+}
+
+/*
+ * Asserts that a volume may be altered, and that it still describes itself
+ * afterwards.
+ *
+ * This is the first self-test in the project that writes to a filesystem, and
+ * the standard it is held to differs from every one before it. A read that goes
+ * wrong returns the wrong bytes to one caller; a write that goes wrong destroys
+ * data and cannot be undone, and the destruction is ordinarily silent — a block
+ * allocated to two files reads correctly for both of them until one of them
+ * writes.
+ *
+ * Two things follow. The assertions are made about the volume as a whole and not
+ * only about the operation performed: after every sequence below, the free counts
+ * of the group and of the superblock must agree with one another and with what
+ * was actually taken, which is the statement a corrupted allocator cannot
+ * satisfy. And every write here is made to the device of memory, never to a disk
+ * the machine carries: the volumes upon those belong to whoever booted this
+ * kernel.
+ */
+static bool KernelVerifyWrites(BlockDevice *device, Ext2Superblock *superblock)
+{
+    const uint64_t indirect_base = EXT2_DIRECT_BLOCK_COUNT + KERNEL_VOLUME_POINTERS;
+    const uint64_t double_base = indirect_base + (KERNEL_VOLUME_POINTERS *
+                                                  KERNEL_VOLUME_POINTERS);
+    Ext2Superblock reread;
+    Ext2GroupDescriptor descriptor;
+    Ext2Inode inode;
+    uint32_t free_blocks;
+    uint32_t block = 0U;
+    uint32_t number = 0U;
+    uint64_t moved = 0U;
+    bool used = false;
+    bool succeeded = true;
+
+    KernelWriteString("EXT2 writes: asserting allocation, writing and truncation.\n");
+
+    /* --- The bitmaps, read against the composition. --- */
+
+    if (!Ext2BlockInUse(device, superblock, KERNEL_VOLUME_INODE_TABLE, &used) || !used ||
+        !Ext2BlockInUse(device, superblock, KERNEL_VOLUME_LAST_BLOCK, &used) || used ||
+        !Ext2InodeInUse(device, superblock, EXT2_ROOT_INODE, &used) || !used ||
+        !Ext2InodeInUse(device, superblock, KERNEL_VOLUME_UNUSED_INODE, &used) || used ||
+        !Ext2InodeInUse(device, superblock, KERNEL_VOLUME_SLOW_LINK_INODE, &used) || !used)
+    {
+        KernelWriteString("  A bitmap did not report the volume as it was composed.\n");
+        succeeded = false;
+    }
+
+    /* --- One block, allocated and returned. --- */
+
+    free_blocks = superblock->free_block_count;
+
+    if (!Ext2AllocateBlock(device, superblock, 0U, &block) ||
+        !Ext2BlockInUse(device, superblock, block, &used) || !used ||
+        (superblock->free_block_count != (free_blocks - 1U)))
+    {
+        KernelWriteString("  A block was not allocated, or was not then in use.\n");
+        succeeded = false;
+    }
+    else
+    {
+        /*
+         * The superblock upon the volume, and not the copy in memory. An
+         * allocator that decremented its own structure and did not write it back
+         * would satisfy every assertion made against memory and would leave the
+         * volume claiming a block it had given away.
+         */
+        if (!Ext2ReadSuperblock(device, &reread) ||
+            (reread.free_block_count != superblock->free_block_count) ||
+            !Ext2ReadGroupDescriptor(device, superblock, 0U, &descriptor) ||
+            (descriptor.free_block_count != superblock->free_block_count))
+        {
+            KernelWriteString("  An allocation was not written back to the volume.\n");
+            succeeded = false;
+        }
+
+        if (!Ext2FreeBlock(device, superblock, block) ||
+            !Ext2BlockInUse(device, superblock, block, &used) || used ||
+            (superblock->free_block_count != free_blocks))
+        {
+            KernelWriteString("  A block was not returned to the volume.\n");
+            succeeded = false;
+        }
+    }
+
+    /* Freeing what is already free is refused: the second free is what allows a
+     * block to be given to two files at once. */
+    if (Ext2FreeBlock(device, superblock, block) ||
+        Ext2FreeInode(device, superblock, KERNEL_VOLUME_UNUSED_INODE, false))
+    {
+        KernelWriteString("  Something already free was freed a second time.\n");
+        succeeded = false;
+    }
+
+    /* --- The one free inode, and the exhaustion after it. --- */
+
+    if (!Ext2AllocateInode(device, superblock, false, &number) ||
+        (number != KERNEL_VOLUME_UNUSED_INODE) ||
+        !Ext2InodeInUse(device, superblock, number, &used) || !used)
+    {
+        KernelWriteString("  The one free inode was not allocated.\n");
+        succeeded = false;
+    }
+    else if (Ext2AllocateInode(device, superblock, false, &number))
+    {
+        KernelWriteString("  An inode was allocated from a volume holding none.\n");
+        succeeded = false;
+    }
+    else if (!Ext2FreeInode(device, superblock, KERNEL_VOLUME_UNUSED_INODE, false) ||
+             !Ext2InodeInUse(device, superblock, KERNEL_VOLUME_UNUSED_INODE, &used) || used)
+    {
+        KernelWriteString("  An inode was not returned to the volume.\n");
+        succeeded = false;
+    }
+
+    /* An inode belonging to the filesystem is never issued and never freed. */
+    if (Ext2FreeInode(device, superblock, EXT2_ROOT_INODE, true))
+    {
+        KernelWriteString("  A reserved inode was freed.\n");
+        succeeded = false;
+    }
+
+    /* --- Writing within a file that already has the blocks. --- */
+
+    if (!Ext2ResolvePath(device, superblock, "/sub/inner", &inode))
+    {
+        KernelWriteString("  The composed file was not found.\n");
+        return false;
+    }
+
+    for (uint32_t index = 0U; index < 128U; ++index)
+    {
+        KernelFileBuffer[index] = (uint8_t)(0xA0U + (index & 0x0FU));
+    }
+
+    if (!Ext2WriteFile(device, superblock, &inode, 100U, KernelFileBuffer, 128U, &moved) ||
+        (moved != 128U) || (inode.size != KERNEL_VOLUME_INNER_SIZE))
+    {
+        KernelWriteString("  A write within a file did not write what it was given.\n");
+        succeeded = false;
+    }
+
+    if (!Ext2ReadFile(device, superblock, &inode, 100U, KernelFileBuffer, 128U, &moved) ||
+        (moved != 128U))
+    {
+        KernelWriteString("  A file could not be read after being written.\n");
+        succeeded = false;
+    }
+    else
+    {
+        for (uint32_t index = 0U; index < 128U; ++index)
+        {
+            if (KernelFileBuffer[index] != (uint8_t)(0xA0U + (index & 0x0FU)))
+            {
+                KernelWriteString("  A write did not reach the volume.\n");
+                succeeded = false;
+                break;
+            }
+        }
+    }
+
+    /* The bytes on either side of the write are untouched. */
+    if (!Ext2ReadFile(device, superblock, &inode, 0U, KernelFileBuffer, 100U, &moved) ||
+        !KernelFileBufferMatches(0U, moved) ||
+        !Ext2ReadFile(device, superblock, &inode, 228U, KernelFileBuffer, 100U, &moved) ||
+        !KernelFileBufferMatches(228U, moved))
+    {
+        KernelWriteString("  A write altered bytes beyond the range it was given.\n");
+        succeeded = false;
+    }
+
+    /* --- Conservation: what a file gives up, it takes back. --- */
+
+    free_blocks = superblock->free_block_count;
+
+    if (!Ext2TruncateFile(device, superblock, &inode, 0U) || (inode.size != 0U) ||
+        (inode.sector_count != 0U) || (superblock->free_block_count != (free_blocks + 2U)))
+    {
+        KernelWriteString("  Truncation to nothing did not return the file's blocks.\n");
+        succeeded = false;
+    }
+
+    for (uint64_t index = 0U; index < KERNEL_VOLUME_INNER_SIZE; ++index)
+    {
+        KernelFileBuffer[index] = KernelFileByteAt(index);
+    }
+
+    if (!Ext2WriteFile(device, superblock, &inode, 0U, KernelFileBuffer,
+                       KERNEL_VOLUME_INNER_SIZE, &moved) ||
+        (moved != KERNEL_VOLUME_INNER_SIZE) || (inode.size != KERNEL_VOLUME_INNER_SIZE) ||
+        (superblock->free_block_count != free_blocks))
+    {
+        KernelWriteString("  Rewriting a truncated file did not restore the volume.\n");
+        succeeded = false;
+    }
+
+    if (!Ext2ReadFile(device, superblock, &inode, 0U, KernelFileBuffer,
+                      KERNEL_VOLUME_INNER_SIZE, &moved) ||
+        (moved != KERNEL_VOLUME_INNER_SIZE) || !KernelFileBufferMatches(0U, moved))
+    {
+        KernelWriteString("  A file rewritten after truncation did not read back.\n");
+        succeeded = false;
+    }
+
+    /* --- Extension, and the hole a write beyond the end leaves. --- */
+
+    if (!Ext2WriteFile(device, superblock, &inode, 4096U, KernelFileBuffer, 16U, &moved) ||
+        (moved != 16U) || (inode.size != (4096U + 16U)))
+    {
+        KernelWriteString("  A write beyond the end did not extend the file.\n");
+        succeeded = false;
+    }
+
+    if (!Ext2ReadFile(device, superblock, &inode, 2048U, KernelFileBuffer, 512U, &moved) ||
+        (moved != 512U) || !KernelFileBufferIsZero(moved))
+    {
+        KernelWriteString("  The hole left by an extending write did not read as zeroes.\n");
+        succeeded = false;
+    }
+
+    /* Truncation upward allocates nothing: the file grows by a hole. */
+    free_blocks = superblock->free_block_count;
+
+    if (!Ext2TruncateFile(device, superblock, &inode, 1U << 20) ||
+        (inode.size != (1U << 20)) || (superblock->free_block_count != free_blocks))
+    {
+        KernelWriteString("  Truncation upward allocated blocks it need not have.\n");
+        succeeded = false;
+    }
+
+    /* --- Allocation through the indirection. --- */
+
+    if (!Ext2ResolvePath(device, superblock, "/file", &inode))
+    {
+        KernelWriteString("  The composed sparse file was not found.\n");
+        succeeded = false;
+    }
+    else
+    {
+        /*
+         * An entry of the doubly indirect block that holds nothing, so that both
+         * an indirect block and a data block must be allocated to reach it. Two
+         * blocks, and the difference between one and two is the whole of whether
+         * a level of the walk was allocated or silently skipped.
+         */
+        const uint64_t offset = (double_base + KERNEL_VOLUME_POINTERS) *
+                                (uint64_t)KERNEL_VOLUME_BLOCK_SIZE;
+
+        free_blocks = superblock->free_block_count;
+        KernelFileBuffer[0] = 0x5AU;
+
+        if (!Ext2WriteFile(device, superblock, &inode, offset, KernelFileBuffer, 1U, &moved) ||
+            (moved != 1U) || (superblock->free_block_count != (free_blocks - 2U)))
+        {
+            KernelWriteString("  A write through the indirection did not allocate a chain.\n");
+            succeeded = false;
+        }
+
+        KernelFileBuffer[0] = 0U;
+
+        if (!Ext2ReadFile(device, superblock, &inode, offset, KernelFileBuffer, 1U, &moved) ||
+            (moved != 1U) || (KernelFileBuffer[0] != 0x5AU))
+        {
+            KernelWriteString("  A byte written through the indirection did not read back.\n");
+            succeeded = false;
+        }
+    }
+
+    /* --- The volume still describes itself. --- */
+
+    if (!Ext2VerifyGroupDescriptors(device, superblock))
+    {
+        KernelWriteString("  The volume no longer accounts for itself: ");
+        KernelWriteString(Ext2LastError());
+        KernelWriteString("\n");
+        succeeded = false;
+    }
+
+    /* --- A volume that may not be written is not written. --- */
+
+    KernelRestoreVolume(device);
+    KernelSetVolumeHalf(EXT2_OFFSET_STATE, (uint16_t)EXT2_ERROR_FS);
+    (void)BufferInvalidateDevice(device);
+
+    if (Ext2ReadSuperblock(device, &reread) && reread.read_only)
+    {
+        Ext2Inode victim;
+
+        if (Ext2AllocateBlock(device, &reread, 0U, &block) ||
+            Ext2AllocateInode(device, &reread, false, &number) ||
+            Ext2FreeBlock(device, &reread, KERNEL_VOLUME_LAST_BLOCK) ||
+            Ext2WriteSuperblock(device, &reread) ||
+            (Ext2ReadInode(device, &reread, KERNEL_VOLUME_INNER_INODE, &victim) &&
+             (Ext2WriteInode(device, &reread, &victim) ||
+              Ext2WriteFile(device, &reread, &victim, 0U, KernelFileBuffer, 16U, &moved) ||
+              Ext2TruncateFile(device, &reread, &victim, 0U))))
+        {
+            KernelWriteString("  A read-only volume was altered.\n");
+            succeeded = false;
+        }
+    }
+    else
+    {
+        KernelWriteString("  A volume not cleanly unmounted was not made read-only.\n");
+        succeeded = false;
+    }
+
+    KernelRestoreVolume(device);
+
+    /* Nothing may be asked of a null argument. */
+    if (Ext2AllocateBlock(NULL, superblock, 0U, &block) ||
+        Ext2AllocateBlock(device, superblock, 0U, NULL) ||
+        Ext2AllocateInode(device, NULL, false, &number) ||
+        Ext2WriteInode(device, superblock, NULL) ||
+        Ext2WriteFile(device, superblock, NULL, 0U, KernelFileBuffer, 16U, &moved) ||
+        Ext2TruncateFile(device, superblock, NULL, 0U) ||
+        Ext2BlockInUse(device, superblock, KERNEL_VOLUME_LAST_BLOCK, NULL))
+    {
+        KernelWriteString("  A write accepted a null argument.\n");
+        succeeded = false;
+    }
+
+    if (succeeded)
+    {
+        KernelWriteString("EXT2 writes: allocation, writing and truncation are sound.\n");
     }
 
     return succeeded;
@@ -5751,8 +6285,10 @@ static void KernelVerifyExt2(void)
      */
     if ((superblock.magic != EXT2_SUPER_MAGIC) || (superblock.revision != EXT2_DYNAMIC_REV) ||
         (superblock.inode_count != 16U) || (superblock.block_count != 128U) ||
-        (superblock.reserved_block_count != 6U) || (superblock.free_block_count != 100U) ||
-        (superblock.free_inode_count != 5U) || (superblock.first_data_block != 1U) ||
+        (superblock.reserved_block_count != 6U) ||
+        (superblock.free_block_count != KERNEL_VOLUME_FREE_BLOCKS) ||
+        (superblock.free_inode_count != KERNEL_VOLUME_FREE_INODES) ||
+        (superblock.first_data_block != 1U) ||
         (superblock.blocks_per_group != 8192U) || (superblock.inodes_per_group != 16U) ||
         (superblock.state != EXT2_VALID_FS))
     {
@@ -5942,8 +6478,16 @@ static void KernelVerifyExt2(void)
         succeeded = false;
     }
 
+    /* The alteration of a volume, upon the device of memory alone. */
     KernelComposeVolume();
     (void)BufferInvalidateDevice(device);
+
+    if (!Ext2ReadSuperblock(device, &superblock) || !KernelVerifyWrites(device, &superblock))
+    {
+        succeeded = false;
+    }
+
+    KernelRestoreVolume(device);
 
     /* A device with nowhere to put a superblock, and requests without one. */
     if (Ext2ReadSuperblock(NULL, &superblock) || Ext2ReadSuperblock(device, NULL))
@@ -6322,7 +6866,7 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
     AddressSpaceReport();
 
     VgaSetColour(VGA_COLOUR_LIGHT_GREEN, VGA_COLOUR_BLACK);
-    KernelWriteString("Phase 4 initialisation complete; Phase 5 begun to sub-task 5.5.\n");
+    KernelWriteString("Phase 4 initialisation complete; Phase 5 begun to sub-task 5.6.\n");
 
     VgaSetColour(VGA_COLOUR_LIGHT_GREY, VGA_COLOUR_BLACK);
 

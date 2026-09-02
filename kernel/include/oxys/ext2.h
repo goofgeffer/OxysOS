@@ -779,4 +779,155 @@ void Ext2ReportDirectoryEntry(const Ext2DirectoryEntry *entry);
 void Ext2ReportDirectory(BlockDevice *device, const Ext2Superblock *superblock,
                          const Ext2Inode *directory);
 
+/*
+ * ---------------------------------------------------------------------------
+ * Writing.
+ *
+ * Everything above reads. What follows alters a volume, and the difference is
+ * not one of degree: a read that goes wrong returns the wrong bytes to one
+ * caller, and a write that goes wrong destroys somebody's data and cannot be
+ * undone. Three disciplines follow from that and are stated here because they
+ * govern every function below.
+ *
+ * A volume that may not be written is not written. Ext2ReadSuperblock marks a
+ * volume read-only where it declares a read-only compatible feature this kernel
+ * lacks, or where it was not cleanly unmounted; every function here refuses such
+ * a volume before doing anything at all.
+ *
+ * A resource is marked used before it is referred to. Allocation writes the
+ * bitmap first and links the block or the inode into its owner afterwards. The
+ * order matters at exactly one moment — a machine that stops between the two —
+ * and the two orders fail differently: this one leaks a block, which wastes
+ * space until a check reclaims it, and the reverse shares a block between two
+ * files, which is corruption that spreads. A leak is a cost; sharing is a fault.
+ *
+ * Nothing reaches the medium until the cache writes it back. Every write here is
+ * made into a buffer and the buffer marked dirty, so a caller that requires the
+ * volume to be consistent upon the medium must call BufferSync. Without a
+ * journal there is no way to make a sequence of such writes atomic, and this
+ * kernel does not pretend otherwise; see docs/storage/EXT2.md, Section 12.6.
+ * ---------------------------------------------------------------------------
+ */
+
+/*
+ * Writes a structure back to the volume, in the volume's own byte order.
+ *
+ * These are the inverses of the parsers above and are held to the same rule: the
+ * encoding is written out rather than obtained by laying a structure over the
+ * bytes, so that the format's order is a stated fact and not a property of the
+ * processor this was compiled for.
+ *
+ * Only the fields this kernel parses are written; every other byte of the
+ * structure is left exactly as it was found, since a field this kernel does not
+ * understand is one it must not destroy.
+ */
+bool Ext2WriteSuperblock(BlockDevice *device, const Ext2Superblock *superblock);
+bool Ext2WriteGroupDescriptor(BlockDevice *device, const Ext2Superblock *superblock,
+                              const Ext2GroupDescriptor *descriptor);
+bool Ext2WriteInode(BlockDevice *device, const Ext2Superblock *superblock,
+                    const Ext2Inode *inode);
+
+/*
+ * Whether a block or an inode is marked used in its group's bitmap.
+ *
+ * One bit stands for each, 1 meaning used and 0 free, the first of the group
+ * being bit 0 of byte 0 and the ninth being bit 0 of byte 1 — least significant
+ * bit first within a byte, which is not the order a diagram of a byte suggests
+ * and is the order the format states.
+ */
+bool Ext2BlockInUse(BlockDevice *device, const Ext2Superblock *superblock, uint32_t block,
+                    bool *used);
+bool Ext2InodeInUse(BlockDevice *device, const Ext2Superblock *superblock, uint32_t number,
+                    bool *used);
+
+/*
+ * Allocates a block, preferring one near the block given so that a file's blocks
+ * are close to one another, and marks it used in the bitmap.
+ *
+ * The free counts of the group and of the volume are decremented and both
+ * written back, so that a volume left by this kernel accounts for itself. A
+ * hint of zero means no preference, and the search begins at the first group.
+ *
+ * The block is not zeroed. A caller that will not write the whole of it must
+ * zero it, and every caller here does; a block handed out with another file's
+ * contents still in it is how a filesystem discloses what it should not.
+ */
+bool Ext2AllocateBlock(BlockDevice *device, Ext2Superblock *superblock, uint32_t near,
+                       uint32_t *block);
+
+/*
+ * Returns a block to its group. The block must be marked used: freeing one twice
+ * is refused rather than performed, the second free being what allows the block
+ * to be allocated to two files at once.
+ */
+bool Ext2FreeBlock(BlockDevice *device, Ext2Superblock *superblock, uint32_t block);
+
+/*
+ * Allocates an inode and marks it used. Where it will describe a directory the
+ * group's count of directories is increased with it, that count being what the
+ * allocator uses to spread directories across the groups.
+ *
+ * An inode below s_first_ino belongs to the filesystem and is never issued.
+ */
+bool Ext2AllocateInode(BlockDevice *device, Ext2Superblock *superblock, bool directory,
+                       uint32_t *number);
+
+/* Returns an inode to its group, undoing the above. */
+bool Ext2FreeInode(BlockDevice *device, Ext2Superblock *superblock, uint32_t number,
+                   bool directory);
+
+/*
+ * Resolves the index of a block within a file to the block of the volume holding
+ * it, allocating that block, and any block of pointers needed to reach it, where
+ * it does not yet exist.
+ *
+ * This is Ext2InodeBlock with the holes filled in. A block of pointers is zeroed
+ * as it is allocated, an unzeroed one being read as pointers to whatever the
+ * block last held. The inode is altered but not written back: a caller
+ * allocating several blocks writes it once, and the caller is the one that knows
+ * when it has finished.
+ *
+ * `allocated` reports whether anything was allocated to satisfy the request. A
+ * caller that will not write the whole of a block must zero one that was, its
+ * previous owner's data being still in it, and inferring that from the offsets
+ * rather than being told is how such a caller gets it wrong.
+ */
+bool Ext2InodeBlockAllocate(BlockDevice *device, Ext2Superblock *superblock, Ext2Inode *inode,
+                            uint64_t index, uint32_t *block, bool *allocated);
+
+/*
+ * Writes bytes into a file at an offset, allocating blocks where the file does
+ * not yet have them, and extending it where the write passes its end.
+ *
+ * A write beginning beyond the end of the file leaves a hole between the two,
+ * which is how a sparse file is made and costs nothing. The inode is written
+ * back before this returns, so the size and the block pointers upon the volume
+ * agree with what was written.
+ *
+ * Upon failure the count reports the bytes written before it. Those bytes are
+ * upon the volume and the file's size accounts for them: a partial write is a
+ * partial write, not a write that did not happen.
+ */
+bool Ext2WriteFile(BlockDevice *device, Ext2Superblock *superblock, Ext2Inode *inode,
+                   uint64_t offset, const void *buffer, uint64_t length, uint64_t *written);
+
+/*
+ * Sets the size of a file, freeing every block beyond the new size and every
+ * block of pointers left holding nothing.
+ *
+ * A size above the present one extends the file with a hole rather than with
+ * allocated blocks, which is what every Unix does and what makes truncation the
+ * cheap way to create a large sparse file.
+ */
+bool Ext2TruncateFile(BlockDevice *device, Ext2Superblock *superblock, Ext2Inode *inode,
+                      uint64_t size);
+
+/* The accounting of everything that alters a volume. */
+uint64_t Ext2BlocksAllocated(void);
+uint64_t Ext2BlocksFreed(void);
+uint64_t Ext2InodesAllocated(void);
+uint64_t Ext2InodesFreed(void);
+uint64_t Ext2BytesWritten(void);
+uint64_t Ext2WritesRefused(void);
+
 #endif /* OXYS_EXT2_H */

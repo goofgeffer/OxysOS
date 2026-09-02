@@ -585,6 +585,14 @@ Sections relied upon:
 - **Indexed Directory Format**: the hash index is made backward compatible by
   disguising its interior nodes as records that are not in use, so a linear
   traversal reads an indexed directory correctly.
+- **Block Bitmap** and **Inode Bitmap**: each bit represents the state of one
+  block or inode of the group, 1 meaning used and 0 free; "the first block of
+  this block group is represented by bit 0 of byte 0, the second by bit 1 of
+  byte 0. The 8th block is represented by bit 7 (most significant bit) of byte 0
+  while the 9th block is represented by bit 0 (least significant bit) of byte 1".
+  The inode bitmap works the same way, and since inode numbers begin at one, the
+  first bit of the first group's inode bitmap represents inode 1. When the inode
+  table is created every reserved inode is marked as used.
 - **Symbolic Links**: a symbolic link is a file holding a text string
   interpreted as a path to another file, absolute or relative, which affects
   pathname resolution; it is a file in its own right and exists independently of
