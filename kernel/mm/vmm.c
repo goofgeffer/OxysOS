@@ -14,10 +14,13 @@
  * Design note upon page counts. Every bound in this file is computed as
  * page_count * PAGE_SIZE, a 64-bit unsigned product that a large enough count
  * wraps: 2^52 pages multiply to zero and 2^38 pages carry the bump pointer past
- * the top of the address space. Each entry point therefore refuses a count above
- * ARENA_PAGE_CAPACITY before performing any arithmetic upon it, which makes every
- * multiplication and addition below safe by construction rather than by a test
- * repeated at each site.
+ * the top of the address space. Each entry point therefore bounds the count
+ * before performing any arithmetic upon it, which makes every multiplication and
+ * addition below safe by construction rather than by a test repeated at each
+ * site. KernelPagesAllocate, having no base to measure from, bounds it by
+ * ARENA_PAGE_CAPACITY; KernelPagesFree, which has one, bounds it by the pages
+ * remaining from that base to the end of the arena, which is the stronger test
+ * and also establishes that the whole range released lies within the arena.
  *
  * Design note. Address space is allocated by a bump pointer with a free list of
  * released ranges searched first. The free list is a fixed-capacity array rather
@@ -60,9 +63,9 @@ static VirtualAddress ArenaBumpPointer;
 
 /*
  * The greatest number of pages the arena could hold were it wholly empty, and
- * therefore the greatest count any request may name. Every page count entering
- * this file is bounded by it before it is multiplied by anything; see
- * KernelPagesAllocate.
+ * therefore the greatest count any request may name. It is the bound applied to
+ * an allocation, which has no base to measure from; a release is held to the
+ * stronger bound of the pages remaining from its base. See KernelPagesAllocate.
  */
 #define ARENA_PAGE_CAPACITY (KERNEL_ARENA_SIZE / PAGE_SIZE)
 
@@ -292,16 +295,30 @@ void KernelPagesFree(void *address, size_t page_count)
     }
 
     /*
-     * A count the arena could not hold. No such range was ever issued, so this
-     * is a programming error in the caller and is treated as the other two are.
-     * It is checked for the reason KernelPagesAllocate gives: the accounting
-     * below subtracts the count, and ArenaFreeListInsert multiplies it, and a
-     * count that wrapped either would corrupt the free list with a range that
-     * outlives this call and is handed to somebody else.
+     * The whole range, and not merely its first page, must lie within the arena.
+     *
+     * The base having been established to lie within the arena, the pages
+     * remaining from it to the arena's end is the greatest count that can be
+     * released from there. Expressing the test as that subtraction rather than as
+     * base + page_count * PAGE_SIZE is what makes it trustworthy: the difference
+     * lies in (0, KERNEL_ARENA_SIZE] and cannot wrap, and no multiplication is
+     * performed at all. It subsumes the bound KernelPagesAllocate applies, which
+     * is this same test for a base at the arena's first page.
+     *
+     * Something did already stop an over-long range: the loop below meets an
+     * unmapped page above the arena and panics. That is an incidental protection
+     * and not a stated one, and it is unsatisfactory in three ways. It names the
+     * wrong error, reporting an unmapped page at some point within the range
+     * rather than the range being wrong. It performs part of the work before
+     * refusing. And it holds only for as long as nothing is mapped above the
+     * arena — the upper half beyond it is presently unassigned but reserved, and
+     * on the day something is placed there this function would quietly unmap and
+     * free pages belonging to somebody else, and then insert the range into the
+     * free list. The check is here so that the day cannot arrive unnoticed.
      */
-    if (page_count > ARENA_PAGE_CAPACITY)
+    if (page_count > ((KERNEL_ARENA_BASE + KERNEL_ARENA_SIZE - base) / PAGE_SIZE))
     {
-        KernelPanic("A page count larger than the kernel arena was passed to KernelPagesFree.");
+        KernelPanic("A range extending beyond the kernel arena was passed to KernelPagesFree.");
     }
 
     if (!IsPageAligned(base))

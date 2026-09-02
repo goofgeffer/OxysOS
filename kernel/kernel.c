@@ -400,9 +400,23 @@ static void KernelVerifyAllocators(void)
     void *large;
     void *zeroed;
     void *after;
+    size_t arena_before;
     size_t live_before;
 
     /* --- The page allocator. --- */
+
+    /*
+     * The impossible arguments to KernelPagesFree — an address outside the
+     * arena, a misaligned one, an unmapped page, and a range extending beyond
+     * the arena — are not asserted here and cannot be. Each is a programming
+     * error in the caller and each panics, which halts the machine; asserting
+     * one would require a means of surviving a panic, and there is none before
+     * the test harness of Phase 7. What is asserted below is the other
+     * direction: that a legitimate multi-page range is released without being
+     * refused, and that the arena is exactly as it was afterwards. An inverted
+     * or off-by-one bound would panic here rather than pass silently.
+     */
+    arena_before = KernelVirtualPagesInUse();
 
     pages = (uint8_t *)KernelPagesAllocate(probe_page_count);
 
@@ -455,6 +469,18 @@ static void KernelVerifyAllocators(void)
         if (pages_again != NULL)
         {
             KernelPagesFree(pages_again, probe_page_count);
+        }
+
+        /*
+         * The arena returns to exactly what it was. This is what shows the
+         * accounting of a release to be sound: KernelPagesFree subtracts the
+         * count it was given, and a count admitted wrongly, or subtracted
+         * wrongly, leaves the figure adrift with nothing else to report it.
+         */
+        if (KernelVirtualPagesInUse() != arena_before)
+        {
+            KernelWriteString("  A released range left the arena's accounting adrift.\n");
+            succeeded = false;
         }
     }
 

@@ -501,10 +501,11 @@ ARENA_PAGE_CAPACITY = KERNEL_ARENA_SIZE / PAGE_SIZE = 32 TiB / 4 KiB = 2³³
 A count so bounded gives a product of at most `KERNEL_ARENA_SIZE`, and the arena
 ends at `0xFFFFE00000000000`, far enough below the top of the address space that
 no sum of the two can wrap. Every later multiplication and addition is then safe
-**by construction** rather than by a check repeated wherever one occurs. The
-allocator returns NULL; `KernelPagesFree` panics, no such range having ever been
-issued, which is the treatment its other two impossible arguments already
-receive.
+**by construction** rather than by a check repeated wherever one occurs.
+
+`KernelPagesAllocate` applies exactly this bound, having no base to measure from
+at the point it must decide. `KernelPagesFree` has one, and is therefore held to
+a stronger test; see Section 10.5.
 
 The damage the check prevents is not the refusal itself — the mapping loop is
 bounded by physical memory and unwinds when a frame cannot be obtained, so an
@@ -522,6 +523,50 @@ the wrapped arithmetic left behind:
 
 Both persist after the failed call and surface far from it, which is what makes
 the defect worth refusing at the door rather than diagnosing later.
+
+
+### 10.5 The whole range released must lie within the arena
+
+`KernelPagesFree` validates the base address, the alignment and the mapping of
+every page it releases. None of that establishes that the **range** lies within
+the arena: a base at the arena's last page with a count of 2³³ satisfies both the
+base test and the capacity bound of Section 10.4 while describing a range that
+sweeps the 32 TiB above the arena.
+
+Because the base is known to lie within the arena, the test is a subtraction:
+
+```c
+page_count > ((KERNEL_ARENA_BASE + KERNEL_ARENA_SIZE - base) / PAGE_SIZE)
+```
+
+The difference lies in `(0, KERNEL_ARENA_SIZE]` and so cannot wrap, and no
+multiplication is performed at all. This subsumes the bound of Section 10.4,
+which is this same test for a base at the arena's first page, so the release path
+applies this one alone.
+
+**Something already stopped such a range**, and it is worth being exact about
+what. The release loop calls `PagingTranslate` upon each page and panics upon an
+unmapped one; the space above the arena is unassigned, so the walk met an
+unmapped page almost at once and halted, and neither the accounting nor the free
+list was reached. There was no silent corruption. The check is nonetheless worth
+stating, for three reasons:
+
+1. **It named the wrong error.** A caller passing an over-long range was told
+   that an unmapped page had been passed to it — a symptom observed partway
+   through the range, pointing away from the argument that was actually wrong.
+2. **It refused after acting.** Pages were unmapped and frames returned before
+   the diagnosis. That the panic makes this moot is luck rather than design, and
+   it is the opposite of the discipline the base and alignment tests follow.
+3. **It held only while nothing was mapped above the arena.** Section 2 reserves
+   that space for later use. On the day something is placed there the loop stops
+   panicking: it unmaps and frees pages belonging to whatever now lives there,
+   completes, and inserts the range into the free list. The protection would
+   become a corruption path with nothing in the file to warn whoever introduced
+   it.
+
+The third is the reason the check is worth its two lines. An incidental
+protection that depends upon a region being empty is not a protection; it is a
+coincidence with an expiry date.
 
 ## 11. The kernel heap
 
@@ -639,6 +684,17 @@ the lower half and reported as a success.
 The heap's refusals need no such corroboration: before the check existed
 `KernelAllocate(SIZE_MAX)` returned a non-null pointer, so asserting NULL
 distinguishes the two states directly.
+
+**What is not asserted, and cannot be.** The impossible arguments to
+`KernelPagesFree` — an address outside the arena, a misaligned address, an
+unmapped page, and the range test of Section 10.5 — each panic, which halts the
+machine. Asserting one would require a means of surviving a panic, and there is
+none before the test harness of Phase 7. The self-test therefore exercises the
+other direction: a legitimate multi-page range is allocated, written, read back,
+released, reissued from the free list and released again, and the arena's count
+of pages in use is required to return to exactly what it was. A bound that was
+inverted or off by one would panic upon that legitimate range rather than pass
+silently, so the admit direction is covered even though the refusal is not.
 ## 12. Per-frame reference counting
 
 Sub-task 2.6 gives every frame a reference count, which is the substrate upon
