@@ -3661,6 +3661,10 @@ static void KernelVerifyBuffer(void)
  */
 #define KERNEL_REPORTED_BLOCKS 13U
 
+/* The path resolved upon every volume the machine carries, as a demonstration
+ * that resolution works upon a volume this kernel did not compose. */
+#define KERNEL_PROBE_PATH "/lost+found"
+
 static void KernelReportBlockAt(BlockDevice *device, const Ext2Superblock *superblock,
                                 const Ext2Inode *inode, uint64_t index)
 {
@@ -3686,6 +3690,7 @@ static void KernelReportRootInode(BlockDevice *device, const Ext2Superblock *sup
     const uint64_t doubly = indirect + pointers;
     const uint64_t triply = doubly + (pointers * pointers);
     Ext2Inode root;
+    Ext2Inode probe;
     uint64_t count;
 
     if (!Ext2ReadInode(device, superblock, EXT2_ROOT_INODE, &root))
@@ -3734,6 +3739,38 @@ static void KernelReportRootInode(BlockDevice *device, const Ext2Superblock *sup
     }
 
     KernelWriteString("\n");
+
+    /*
+     * The root directory of the volume, listed. This is the first report the
+     * kernel makes that names anything a person would recognise, and it is the
+     * only assertion available upon a real volume: the self-test's composed
+     * directory is by construction the directory the traversal expects, whereas
+     * the names below were written by mke2fs and by whoever used the disk.
+     */
+    Ext2ReportDirectory(device, superblock, &root);
+
+    /*
+     * One path of the volume, resolved. Every volume `mke2fs` creates holds a
+     * lost+found directory in its root, so the probe is a name this kernel may
+     * look for upon a volume it knows nothing else about; a volume that does not
+     * hold it reports the refusal, which is itself the correct answer.
+     */
+    if (Ext2ResolvePath(device, superblock, KERNEL_PROBE_PATH, &probe))
+    {
+        KernelWriteString("EXT2 path " KERNEL_PROBE_PATH " resolves to inode ");
+        KernelWriteDecimal((uint64_t)probe.number);
+        KernelWriteString(", ");
+        KernelWriteString(Ext2FileTypeName(Ext2FileTypeOfMode(probe.mode)));
+        KernelWriteString(" of ");
+        KernelWriteDecimal(probe.size);
+        KernelWriteString(" bytes.\n");
+    }
+    else
+    {
+        KernelWriteString("EXT2 path " KERNEL_PROBE_PATH " does not resolve: ");
+        KernelWriteString(Ext2LastError());
+        KernelWriteString("\n");
+    }
 }
 
 /*
@@ -3889,7 +3926,27 @@ static size_t KernelDescriptorField(size_t offset)
 #define KERNEL_VOLUME_TRIPLE_INDIRECT 27U
 #define KERNEL_VOLUME_TRIPLE_DATA     28U
 #define KERNEL_VOLUME_ROOT_DATA       29U
-#define KERNEL_VOLUME_LAST_BLOCK      30U
+#define KERNEL_VOLUME_SUB_DATA        30U
+#define KERNEL_VOLUME_INNER_DATA      31U
+#define KERNEL_VOLUME_LAST_BLOCK      32U
+
+/*
+ * The two inodes the directories lead to besides the file: a subdirectory of the
+ * root, and a regular file within it. They exist so that a path of more than one
+ * component may be resolved, which is the whole of what distinguishes resolution
+ * from a single lookup.
+ */
+#define KERNEL_VOLUME_SUB_INODE   12U
+#define KERNEL_VOLUME_INNER_INODE 13U
+
+/*
+ * An inode of the table that is deliberately left empty, so that a self-test may
+ * assert that an entry never filled is refused. It is named rather than reached
+ * by arithmetic upon the inode before it: the inodes in use grow as the composed
+ * volume acquires structure, and a test that took the next number after some
+ * other inode would begin asserting the wrong thing without saying so.
+ */
+#define KERNEL_VOLUME_UNUSED_INODE 14U
 
 /* How many pointers a block of the composed volume holds: 1024 / 4. */
 #define KERNEL_VOLUME_POINTERS 256U
@@ -3936,8 +3993,8 @@ static void KernelComposeInodes(void)
         KernelMemoryDeviceStore[index] = 0U;
     }
 
-    /* The root directory: one block, three links — itself, its own entry, and
-     * the parent entry of a subdirectory. */
+    /* The root directory: one block, three links — its own entry, the entry it
+     * holds for itself, and the parent entry of the one subdirectory. */
     KernelStoreHalf(KernelInodeField(EXT2_ROOT_INODE, EXT2_OFFSET_I_MODE),
                     (uint16_t)(EXT2_S_IFDIR | 0x01EDU));
     KernelStoreWord(KernelInodeField(EXT2_ROOT_INODE, EXT2_OFFSET_I_SIZE),
@@ -3945,6 +4002,25 @@ static void KernelComposeInodes(void)
     KernelStoreHalf(KernelInodeField(EXT2_ROOT_INODE, EXT2_OFFSET_I_LINKS_COUNT), 3U);
     KernelStoreWord(KernelInodeField(EXT2_ROOT_INODE, EXT2_OFFSET_I_BLOCKS), 2U);
     KernelStoreWord(KernelInodeBlockField(EXT2_ROOT_INODE, 0U), KERNEL_VOLUME_ROOT_DATA);
+
+    /* The subdirectory: one block, two links — its own entry and the root's. */
+    KernelStoreHalf(KernelInodeField(KERNEL_VOLUME_SUB_INODE, EXT2_OFFSET_I_MODE),
+                    (uint16_t)(EXT2_S_IFDIR | 0x01EDU));
+    KernelStoreWord(KernelInodeField(KERNEL_VOLUME_SUB_INODE, EXT2_OFFSET_I_SIZE),
+                    KERNEL_VOLUME_BLOCK_SIZE);
+    KernelStoreHalf(KernelInodeField(KERNEL_VOLUME_SUB_INODE, EXT2_OFFSET_I_LINKS_COUNT), 2U);
+    KernelStoreWord(KernelInodeField(KERNEL_VOLUME_SUB_INODE, EXT2_OFFSET_I_BLOCKS), 2U);
+    KernelStoreWord(KernelInodeBlockField(KERNEL_VOLUME_SUB_INODE, 0U), KERNEL_VOLUME_SUB_DATA);
+
+    /* The regular file within the subdirectory. */
+    KernelStoreHalf(KernelInodeField(KERNEL_VOLUME_INNER_INODE, EXT2_OFFSET_I_MODE),
+                    (uint16_t)(EXT2_S_IFREG | 0x01A4U));
+    KernelStoreWord(KernelInodeField(KERNEL_VOLUME_INNER_INODE, EXT2_OFFSET_I_SIZE),
+                    KERNEL_VOLUME_BLOCK_SIZE);
+    KernelStoreHalf(KernelInodeField(KERNEL_VOLUME_INNER_INODE, EXT2_OFFSET_I_LINKS_COUNT), 1U);
+    KernelStoreWord(KernelInodeField(KERNEL_VOLUME_INNER_INODE, EXT2_OFFSET_I_BLOCKS), 2U);
+    KernelStoreWord(KernelInodeBlockField(KERNEL_VOLUME_INNER_INODE, 0U),
+                    KERNEL_VOLUME_INNER_DATA);
 
     /* The file. */
     KernelStoreHalf(KernelInodeField(KERNEL_VOLUME_FILE_INODE, EXT2_OFFSET_I_MODE),
@@ -3985,6 +4061,88 @@ static void KernelComposeInodes(void)
                     KERNEL_VOLUME_TRIPLE_INDIRECT);
     KernelStoreWord(KernelPointerField(KERNEL_VOLUME_TRIPLE_INDIRECT, 3U),
                     KERNEL_VOLUME_TRIPLE_DATA);
+}
+
+/*
+ * Composes the directory data of the volume: the root directory and the one
+ * subdirectory beneath it.
+ *
+ * The entries are written from the same offset names the parser reads, for the
+ * reason the superblock's fields are, and the block is laid out as Table 4.3 of
+ * the specification lays out its sample: entries aligned upon four bytes, an
+ * unused record left where a name was removed, and a final record whose length
+ * runs to the end of the block rather than stopping after its name.
+ *
+ * Both of those last two are deliberate and neither is a curiosity. A traversal
+ * that mistook the unused record for a name would report a file that does not
+ * exist; one that stopped at the end of the last name rather than at the end of
+ * the block would read the padding as a further entry.
+ */
+static size_t KernelComposeEntry(size_t position, uint32_t inode, uint16_t record_length,
+                                 uint8_t file_type, const char *name)
+{
+    size_t length = 0U;
+
+    while (name[length] != '\0')
+    {
+        ++length;
+    }
+
+    KernelStoreWord(position + EXT2_OFFSET_DE_INODE, inode);
+    KernelStoreHalf(position + EXT2_OFFSET_DE_RECORD_LENGTH, record_length);
+    KernelMemoryDeviceStore[position + EXT2_OFFSET_DE_NAME_LENGTH] = (uint8_t)length;
+    KernelMemoryDeviceStore[position + EXT2_OFFSET_DE_FILE_TYPE] = file_type;
+
+    for (size_t index = 0U; index < length; ++index)
+    {
+        KernelMemoryDeviceStore[position + EXT2_OFFSET_DE_NAME + index] = (uint8_t)name[index];
+    }
+
+    return position + record_length;
+}
+
+static void KernelComposeDirectories(void)
+{
+    const size_t root = KernelVolumeBlock(KERNEL_VOLUME_ROOT_DATA);
+    const size_t sub = KernelVolumeBlock(KERNEL_VOLUME_SUB_DATA);
+    size_t position;
+
+    /*
+     * The root directory. Its entries "." and ".." are ordinary entries upon the
+     * volume and are composed as such: the resolver is meant to find them by
+     * looking, not by knowing what they mean, and the ".." of the root names the
+     * root itself because the root has no parent.
+     */
+    position = KernelComposeEntry(root, EXT2_ROOT_INODE, 12U, (uint8_t)EXT2_FT_DIR, ".");
+    position = KernelComposeEntry(position, EXT2_ROOT_INODE, 12U, (uint8_t)EXT2_FT_DIR, "..");
+    position = KernelComposeEntry(position, KERNEL_VOLUME_FILE_INODE, 16U,
+                                  (uint8_t)EXT2_FT_REG_FILE, "file");
+
+    /*
+     * The record of a name that was removed. It retains the bytes of the name it
+     * held, which is what a volume looks like when the first entry of a block is
+     * removed: the record is marked unused by having its inode number set to
+     * zero and nothing else about it is touched. A traversal that read the name
+     * rather than the inode number would report a file that was deleted.
+     */
+    position = KernelComposeEntry(position, 0U, 16U, (uint8_t)EXT2_FT_UNKNOWN, "removed");
+
+    position = KernelComposeEntry(position, KERNEL_VOLUME_SUB_INODE, 12U,
+                                  (uint8_t)EXT2_FT_DIR, "sub");
+
+    /* The last record of the block runs to the end of it. */
+    (void)KernelComposeEntry(position, 0U,
+                             (uint16_t)((root + KERNEL_VOLUME_BLOCK_SIZE) - position),
+                             (uint8_t)EXT2_FT_UNKNOWN, "");
+
+    /* The subdirectory, whose ".." names the root. */
+    position = KernelComposeEntry(sub, KERNEL_VOLUME_SUB_INODE, 12U, (uint8_t)EXT2_FT_DIR, ".");
+    position = KernelComposeEntry(position, EXT2_ROOT_INODE, 12U, (uint8_t)EXT2_FT_DIR, "..");
+    position = KernelComposeEntry(position, KERNEL_VOLUME_INNER_INODE, 16U,
+                                  (uint8_t)EXT2_FT_REG_FILE, "inner");
+    (void)KernelComposeEntry(position, 0U,
+                             (uint16_t)((sub + KERNEL_VOLUME_BLOCK_SIZE) - position),
+                             (uint8_t)EXT2_FT_UNKNOWN, "");
 }
 
 /*
@@ -4057,6 +4215,7 @@ static void KernelComposeVolume(void)
 
     KernelComposeGroupDescriptor();
     KernelComposeInodes();
+    KernelComposeDirectories();
 }
 
 /*
@@ -4461,7 +4620,7 @@ static bool KernelVerifyInodes(BlockDevice *device, const Ext2Superblock *superb
      * are a valid encoding of nothing, so accepting them would let arithmetic
      * that had strayed beyond the table report a file rather than a mistake.
      */
-    if (Ext2ReadInode(device, superblock, KERNEL_VOLUME_FILE_INODE + 1U, &file))
+    if (Ext2ReadInode(device, superblock, KERNEL_VOLUME_UNUSED_INODE, &file))
     {
         KernelWriteString("  An inode not in use was read as a file.\n");
         succeeded = false;
@@ -4501,6 +4660,456 @@ static bool KernelVerifyInodes(BlockDevice *device, const Ext2Superblock *superb
     {
         KernelWriteString("  A degenerate inode request was accepted.\n");
         succeeded = false;
+    }
+
+    return succeeded;
+}
+
+/*
+ * Whether two terminated strings hold the same characters. There is no C library
+ * until Phase 7, and this is the only place in the self-test that needs one.
+ */
+static bool KernelSameString(const char *left, const char *right)
+{
+    size_t index = 0U;
+
+    while ((left[index] != '\0') && (left[index] == right[index]))
+    {
+        ++index;
+    }
+
+    return left[index] == right[index];
+}
+
+/*
+ * Alters one field of the composed volume and reports whether a traversal of the
+ * root directory refused the result, restoring the volume afterwards.
+ *
+ * The offset is a byte of the device's storage rather than of a block, because
+ * the rules a directory is held to are stated partly by its entries and partly
+ * by the inode that owns them, and both must be reachable from one helper.
+ *
+ * The cache is invalidated on both sides of the alteration for the reason
+ * KernelVolumeRefusedWith gives.
+ */
+static bool KernelDirectoryRefusedWith(BlockDevice *device, const Ext2Superblock *superblock,
+                                       size_t offset, uint32_t value, uint32_t width)
+{
+    Ext2DirectoryCursor cursor;
+    Ext2DirectoryEntry entry;
+    Ext2Inode root;
+    bool refused = true;
+
+    if (width == 1U)
+    {
+        KernelMemoryDeviceStore[offset] = (uint8_t)value;
+    }
+    else if (width == 2U)
+    {
+        KernelStoreHalf(offset, (uint16_t)value);
+    }
+    else
+    {
+        KernelStoreWord(offset, value);
+    }
+
+    (void)BufferInvalidateDevice(device);
+
+    if (Ext2ReadInode(device, superblock, EXT2_ROOT_INODE, &root))
+    {
+        Ext2DirectoryOpen(&cursor, &root);
+        refused = false;
+
+        for (;;)
+        {
+            const Ext2DirectoryStep step =
+                Ext2DirectoryNext(device, superblock, &cursor, &entry);
+
+            if (step == EXT2_DIRECTORY_FAILED)
+            {
+                refused = true;
+                break;
+            }
+
+            if (step == EXT2_DIRECTORY_END)
+            {
+                break;
+            }
+        }
+    }
+
+    KernelComposeVolume();
+    (void)BufferInvalidateDevice(device);
+    return refused;
+}
+
+/*
+ * The same for one byte and a path, for the rules that are not visible until an
+ * entry and the inode it names are compared with one another.
+ */
+static bool KernelPathRefusedWith(BlockDevice *device, const Ext2Superblock *superblock,
+                                  size_t offset, uint8_t value, const char *path)
+{
+    Ext2Inode inode;
+    bool refused;
+
+    KernelMemoryDeviceStore[offset] = value;
+    (void)BufferInvalidateDevice(device);
+
+    refused = !Ext2ResolvePath(device, superblock, path, &inode);
+
+    KernelComposeVolume();
+    (void)BufferInvalidateDevice(device);
+    return refused;
+}
+
+/* Whether a path resolves to the inode expected of it. */
+static bool KernelPathIs(BlockDevice *device, const Ext2Superblock *superblock,
+                         const char *path, uint32_t expected)
+{
+    Ext2Inode inode;
+
+    return Ext2ResolvePath(device, superblock, path, &inode) && (inode.number == expected);
+}
+
+/* Whether a path is refused, which a path naming nothing must be. */
+static bool KernelPathRefused(BlockDevice *device, const Ext2Superblock *superblock,
+                              const char *path)
+{
+    Ext2Inode inode;
+
+    return !Ext2ResolvePath(device, superblock, path, &inode);
+}
+
+/*
+ * Asserts that the two readings of the two bytes at offset 6 of an entry are
+ * distinguished by the incompatible feature flag and not by anything else.
+ *
+ * This is the one property of the format where the same bytes have two lawful
+ * meanings, and where reading the wrong one produces no diagnostic of its own.
+ * The entry "." bears a name length of 1 and a file type of EXT2_FT_DIR; read as
+ * one sixteen-bit quantity those two bytes are 1 + 256 * 2 = 513, a name that
+ * cannot fit within a record of twelve bytes. So the volume that states no file
+ * type must refuse the entry the volume that states one accepts, and with the
+ * file type byte cleared the same entry must read correctly with no type stated.
+ */
+static bool KernelVerifyEntryReadings(BlockDevice *device)
+{
+    Ext2DirectoryCursor cursor;
+    Ext2DirectoryEntry entry;
+    Ext2Superblock plain;
+    Ext2Inode root;
+    bool succeeded = true;
+
+    KernelSetVolumeWord(EXT2_OFFSET_FEATURE_INCOMPAT, 0U);
+    (void)BufferInvalidateDevice(device);
+
+    if (Ext2ReadSuperblock(device, &plain) &&
+        Ext2ReadInode(device, &plain, EXT2_ROOT_INODE, &root))
+    {
+        Ext2DirectoryOpen(&cursor, &root);
+
+        if (Ext2DirectoryNext(device, &plain, &cursor, &entry) != EXT2_DIRECTORY_FAILED)
+        {
+            KernelWriteString("  A name length was read as eight bits upon a volume that "
+                              "states no file type.\n");
+            succeeded = false;
+        }
+
+        KernelMemoryDeviceStore[KernelVolumeBlock(KERNEL_VOLUME_ROOT_DATA) +
+                                EXT2_OFFSET_DE_FILE_TYPE] = 0U;
+        (void)BufferInvalidateDevice(device);
+
+        if (!Ext2DirectoryFind(device, &plain, &root, ".", 1U, &entry) ||
+            (entry.inode != EXT2_ROOT_INODE) ||
+            (entry.file_type != (uint8_t)EXT2_FT_UNKNOWN))
+        {
+            KernelWriteString("  An entry of a volume that states no file type was not "
+                              "read.\n");
+            succeeded = false;
+        }
+    }
+    else
+    {
+        KernelWriteString("  A volume stating no file type was refused: ");
+        KernelWriteString(Ext2LastError());
+        KernelWriteString("\n");
+        succeeded = false;
+    }
+
+    KernelComposeVolume();
+    (void)BufferInvalidateDevice(device);
+    return succeeded;
+}
+
+/*
+ * Asserts that a directory is traversed as the format lays it out, and that a
+ * path is resolved to the inode it names.
+ *
+ * A directory is the first structure of the volume whose contents are variable
+ * rather than fixed: a superblock lies at a known offset, a descriptor is 32
+ * bytes and an inode is 128, but an entry is as long as its record length says
+ * and the next one begins wherever that lands. Every mistake in reading it is
+ * therefore self-propagating — one record length taken from the wrong offset, or
+ * one entry advanced by the length of its name rather than by its record length,
+ * and every entry after it in the block is read from the middle of something
+ * else. The names that come out of that are not obviously wrong; they are
+ * fragments of real names, and a lookup that fails to find a file that is there
+ * is indistinguishable from a file that is not.
+ *
+ * The traversal is therefore asserted entry by entry against the layout the
+ * volume was composed with, and not merely counted.
+ */
+static bool KernelVerifyDirectories(BlockDevice *device, const Ext2Superblock *superblock)
+{
+    static const char *const expected_names[] = {".", "..", "file", "sub"};
+    static const uint32_t expected_inodes[] = {EXT2_ROOT_INODE, EXT2_ROOT_INODE,
+                                               KERNEL_VOLUME_FILE_INODE,
+                                               KERNEL_VOLUME_SUB_INODE};
+    static const uint8_t expected_types[] = {(uint8_t)EXT2_FT_DIR, (uint8_t)EXT2_FT_DIR,
+                                             (uint8_t)EXT2_FT_REG_FILE, (uint8_t)EXT2_FT_DIR};
+    const size_t expected_count = sizeof(expected_names) / sizeof(expected_names[0]);
+    const size_t root_block = KernelVolumeBlock(KERNEL_VOLUME_ROOT_DATA);
+    Ext2DirectoryCursor cursor;
+    Ext2DirectoryEntry entry;
+    Ext2Inode root;
+    Ext2Inode subdirectory;
+    size_t counted = 0U;
+    bool succeeded = true;
+
+    KernelWriteString("EXT2 directories: asserting traversal and path resolution.\n");
+
+    if (!Ext2ReadInode(device, superblock, EXT2_ROOT_INODE, &root))
+    {
+        KernelWriteString("  The root inode was refused: ");
+        KernelWriteString(Ext2LastError());
+        KernelWriteString("\n");
+        return false;
+    }
+
+    /*
+     * The root, entry by entry. The unused record standing between "file" and
+     * "sub" must be passed over, and the final record, whose length runs to the
+     * end of the block, must end the traversal rather than yield an entry.
+     */
+    Ext2DirectoryOpen(&cursor, &root);
+
+    for (;;)
+    {
+        const Ext2DirectoryStep step = Ext2DirectoryNext(device, superblock, &cursor, &entry);
+
+        if (step == EXT2_DIRECTORY_FAILED)
+        {
+            KernelWriteString("  The root directory could not be traversed: ");
+            KernelWriteString(Ext2LastError());
+            KernelWriteString("\n");
+            return false;
+        }
+
+        if (step == EXT2_DIRECTORY_END)
+        {
+            break;
+        }
+
+        if (counted >= expected_count)
+        {
+            KernelWriteString("  The root directory yielded more entries than it holds.\n");
+            succeeded = false;
+            break;
+        }
+
+        if (!KernelSameString(entry.name, expected_names[counted]) ||
+            (entry.inode != expected_inodes[counted]) ||
+            (entry.file_type != expected_types[counted]))
+        {
+            KernelWriteString("  An entry of the root directory was read wrongly: ");
+            KernelWriteString(entry.name);
+            KernelWriteString("\n");
+            succeeded = false;
+        }
+
+        ++counted;
+    }
+
+    if (counted != expected_count)
+    {
+        KernelWriteString("  The root directory did not yield the entries it holds.\n");
+        succeeded = false;
+    }
+
+    /* A name the directory holds is found by looking for it. */
+    if (!Ext2DirectoryFind(device, superblock, &root, "file", 4U, &entry) ||
+        (entry.inode != KERNEL_VOLUME_FILE_INODE) || (entry.record_length != 16U) ||
+        (entry.block != KERNEL_VOLUME_ROOT_DATA) || (entry.offset != 24U))
+    {
+        KernelWriteString("  A name the root directory holds was not found where it "
+                          "stands.\n");
+        succeeded = false;
+    }
+
+    /*
+     * A name is matched by its whole length and not by a prefix of it. The
+     * comparison is given a length rather than a terminator, and one that
+     * stopped at the shorter of the two would match "fil" against "file".
+     */
+    if (Ext2DirectoryFind(device, superblock, &root, "fil", 3U, &entry) ||
+        Ext2DirectoryFind(device, superblock, &root, "files", 5U, &entry) ||
+        Ext2DirectoryFind(device, superblock, &root, "file", 3U, &entry))
+    {
+        KernelWriteString("  A name was matched against a prefix of another.\n");
+        succeeded = false;
+    }
+
+    /* The name standing upon the unused record is not a name. */
+    if (Ext2DirectoryFind(device, superblock, &root, "removed", 7U, &entry))
+    {
+        KernelWriteString("  The name upon an unused record was found.\n");
+        succeeded = false;
+    }
+
+    /*
+     * Path resolution. The root is named by the separator alone; repeated
+     * separators are one; "." and ".." are resolved as the ordinary entries they
+     * are, the ".." of the root naming the root itself; and a path of two
+     * components reaches the file within the subdirectory.
+     */
+    if (!KernelPathIs(device, superblock, "/", EXT2_ROOT_INODE) ||
+        !KernelPathIs(device, superblock, "///", EXT2_ROOT_INODE) ||
+        !KernelPathIs(device, superblock, "/.", EXT2_ROOT_INODE) ||
+        !KernelPathIs(device, superblock, "/..", EXT2_ROOT_INODE) ||
+        !KernelPathIs(device, superblock, "/file", KERNEL_VOLUME_FILE_INODE) ||
+        !KernelPathIs(device, superblock, "/sub", KERNEL_VOLUME_SUB_INODE) ||
+        !KernelPathIs(device, superblock, "/sub/", KERNEL_VOLUME_SUB_INODE) ||
+        !KernelPathIs(device, superblock, "/sub/.", KERNEL_VOLUME_SUB_INODE) ||
+        !KernelPathIs(device, superblock, "/sub/..", EXT2_ROOT_INODE) ||
+        !KernelPathIs(device, superblock, "/sub/../file", KERNEL_VOLUME_FILE_INODE) ||
+        !KernelPathIs(device, superblock, "/sub/inner", KERNEL_VOLUME_INNER_INODE) ||
+        !KernelPathIs(device, superblock, "//sub///inner", KERNEL_VOLUME_INNER_INODE))
+    {
+        KernelWriteString("  A path did not resolve to the inode it names.\n");
+        succeeded = false;
+    }
+
+    /*
+     * The refusals. A relative path has nothing to be resolved against; a
+     * component that does not exist cannot be traversed; and a component that is
+     * not a directory holds no names, whether it stands within the path or is
+     * asserted to be a directory by a separator at the end of it.
+     */
+    if (!KernelPathRefused(device, superblock, "file") ||
+        !KernelPathRefused(device, superblock, "") ||
+        !KernelPathRefused(device, superblock, "/missing") ||
+        !KernelPathRefused(device, superblock, "/sub/missing") ||
+        !KernelPathRefused(device, superblock, "/removed") ||
+        !KernelPathRefused(device, superblock, "/file/") ||
+        !KernelPathRefused(device, superblock, "/file/inner") ||
+        !KernelPathRefused(device, superblock, "/sub/inner/"))
+    {
+        KernelWriteString("  A path that names nothing was resolved.\n");
+        succeeded = false;
+    }
+
+    /* The subdirectory is a directory, and holds what was composed within it. */
+    if (!Ext2ResolvePath(device, superblock, "/sub", &subdirectory) ||
+        !Ext2InodeIsDirectory(&subdirectory) ||
+        !Ext2DirectoryFind(device, superblock, &subdirectory, "inner", 5U, &entry) ||
+        (entry.inode != KERNEL_VOLUME_INNER_INODE) ||
+        (entry.file_type != (uint8_t)EXT2_FT_REG_FILE))
+    {
+        KernelWriteString("  The subdirectory did not hold what was composed within it.\n");
+        succeeded = false;
+    }
+
+    /* A file is not a directory, and holds no entries whatever its data is. */
+    if (Ext2ReadInode(device, superblock, KERNEL_VOLUME_FILE_INODE, &subdirectory))
+    {
+        Ext2DirectoryOpen(&cursor, &subdirectory);
+
+        if (Ext2DirectoryNext(device, superblock, &cursor, &entry) != EXT2_DIRECTORY_FAILED)
+        {
+            KernelWriteString("  A regular file was traversed as a directory.\n");
+            succeeded = false;
+        }
+    }
+
+    /*
+     * A record contradicting the format is refused. Each of these is a rule the
+     * traversal depends upon to terminate or to stay within its block: a record
+     * length below the header cannot be advanced past; one that is not a multiple
+     * of four leaves the next entry unaligned; one reaching beyond the block
+     * contradicts the rule that no entry spans two; a name longer than its record
+     * would be read out of the entry that follows; an inode number beyond the
+     * volume names nothing; and a name holding the separator is reachable by no
+     * path.
+     */
+    if (!KernelDirectoryRefusedWith(device, superblock,
+                                    root_block + EXT2_OFFSET_DE_RECORD_LENGTH, 0U, 2U) ||
+        !KernelDirectoryRefusedWith(device, superblock,
+                                    root_block + EXT2_OFFSET_DE_RECORD_LENGTH, 14U, 2U) ||
+        !KernelDirectoryRefusedWith(device, superblock,
+                                    root_block + EXT2_OFFSET_DE_RECORD_LENGTH,
+                                    KERNEL_VOLUME_BLOCK_SIZE + 4U, 2U) ||
+        !KernelDirectoryRefusedWith(device, superblock,
+                                    root_block + EXT2_OFFSET_DE_NAME_LENGTH, 200U, 1U) ||
+        !KernelDirectoryRefusedWith(device, superblock, root_block + EXT2_OFFSET_DE_INODE,
+                                    superblock->inode_count + 1U, 4U) ||
+        !KernelDirectoryRefusedWith(device, superblock, root_block + EXT2_OFFSET_DE_NAME,
+                                    (uint32_t)EXT2_PATH_SEPARATOR, 1U))
+    {
+        KernelWriteString("  A directory entry contradicting the format was accepted.\n");
+        succeeded = false;
+    }
+
+    /*
+     * A directory occupies whole blocks, and holds at least its own entry. A
+     * size that is not a multiple of the block size describes a final block
+     * ending in the middle of a record.
+     */
+    if (!KernelDirectoryRefusedWith(device, superblock,
+                                    KernelInodeField(EXT2_ROOT_INODE, EXT2_OFFSET_I_SIZE),
+                                    KERNEL_VOLUME_BLOCK_SIZE - 24U, 4U) ||
+        !KernelDirectoryRefusedWith(device, superblock,
+                                    KernelInodeField(EXT2_ROOT_INODE, EXT2_OFFSET_I_SIZE), 0U,
+                                    4U))
+    {
+        KernelWriteString("  A directory whose size cannot be traversed was accepted.\n");
+        succeeded = false;
+    }
+
+    /*
+     * The file type an entry declares must agree with the format of the inode it
+     * names. The entry for "file" is made to declare a directory; the inode it
+     * names is a regular file, and the path must be refused rather than resolved
+     * to a file the caller will then treat as a directory.
+     */
+    if (!KernelPathRefusedWith(device, superblock, root_block + 24U + EXT2_OFFSET_DE_FILE_TYPE,
+                               (uint8_t)EXT2_FT_DIR, "/file"))
+    {
+        KernelWriteString("  An entry contradicting the inode it names was accepted.\n");
+        succeeded = false;
+    }
+
+    if (!KernelVerifyEntryReadings(device))
+    {
+        succeeded = false;
+    }
+
+    /* Nothing may be asked of a null argument. */
+    if (Ext2ResolvePath(NULL, superblock, "/", &root) ||
+        Ext2ResolvePath(device, superblock, NULL, &root) ||
+        Ext2ResolvePath(device, superblock, "/", NULL) ||
+        Ext2DirectoryFind(device, superblock, NULL, "file", 4U, &entry) ||
+        Ext2DirectoryFind(device, superblock, &root, NULL, 4U, &entry) ||
+        Ext2DirectoryFind(device, superblock, &root, "file", 0U, &entry) ||
+        (Ext2DirectoryNext(device, superblock, NULL, &entry) != EXT2_DIRECTORY_FAILED))
+    {
+        KernelWriteString("  A directory operation accepted a null argument.\n");
+        succeeded = false;
+    }
+
+    if (succeeded)
+    {
+        KernelWriteString("EXT2 directories: traversal and path resolution are sound.\n");
     }
 
     return succeeded;
@@ -4723,6 +5332,16 @@ static void KernelVerifyExt2(void)
     (void)BufferInvalidateDevice(device);
 
     if (!Ext2ReadSuperblock(device, &superblock) || !KernelVerifyInodes(device, &superblock))
+    {
+        succeeded = false;
+    }
+
+    /* The directories, traversed through the inodes just asserted. */
+    KernelComposeVolume();
+    (void)BufferInvalidateDevice(device);
+
+    if (!Ext2ReadSuperblock(device, &superblock) ||
+        !KernelVerifyDirectories(device, &superblock))
     {
         succeeded = false;
     }

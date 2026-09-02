@@ -7,7 +7,9 @@
  *          addressed at all.
  * Key functions: Ext2ReadSuperblock, Ext2GroupCount, Ext2ReadGroupDescriptor,
  *          Ext2VerifyGroupDescriptors, Ext2ReadInode, Ext2InodeBlock,
- *          Ext2LastError, Ext2ReportVolume, Ext2ReportGroup, Ext2ReportInode.
+ *          Ext2DirectoryOpen, Ext2DirectoryNext, Ext2DirectoryFind,
+ *          Ext2ResolvePath, Ext2FileTypeOfMode, Ext2LastError, Ext2ReportVolume,
+ *          Ext2ReportGroup, Ext2ReportInode, Ext2ReportDirectory.
  * References:
  *   - Poirier, D., "The Second Extended File System: Internal Layout", the
  *     Superblock chapter and its field table: the superblock lies 1024 bytes
@@ -44,6 +46,19 @@
  *   - The same, i_size: upon a revision 1 volume the high 32 bits of a regular
  *     file's size are held in the field otherwise called i_dir_acl, at offset
  *     108.
+ *   - The same, the Directory Structure chapter and Table 4.1: a directory is a
+ *     file whose data is a linked list of entries; the inode number lies at
+ *     offset 0 and is zero where the entry is not in use, the record length at
+ *     4, the name length at 6 and the file type at 7, the name following at 8.
+ *     A record length must be at least the length of its record, must be a
+ *     multiple of four, and no entry may span two blocks; the name length may
+ *     never exceed the record length less eight.
+ *   - The same, Table 4.2: the eight values a file type may take, which are not
+ *     numbered as the formats of i_mode are and must agree with them.
+ *   - Linux kernel documentation, filesystems/ext2.rst: the file type is an
+ *     incompatible feature because a kernel unaware of it would read the name
+ *     length as sixteen bits; which of the two readings applies is therefore a
+ *     property of the feature flag and not of the revision.
  *   - Linux kernel documentation, the ext4 superblock and block group descriptor
  *     tables, consulted as an independent statement of the same offsets.
  */
@@ -55,6 +70,9 @@
 /* The greatest value of s_log_block_size this kernel will accept. */
 #define EXT2_MAXIMUM_LOG_BLOCK_SIZE 2U
 
+/* How many entries of a directory a report writes out before it summarises. */
+#define EXT2_REPORTED_ENTRIES 16U
+
 /* A description of the most recent refusal, and the accounting. */
 static const char *Ext2Error = "none";
 static uint64_t Ext2Read;
@@ -63,6 +81,10 @@ static uint64_t Ext2GroupsReadCount;
 static uint64_t Ext2GroupsRefusedCount;
 static uint64_t Ext2InodesReadCount;
 static uint64_t Ext2InodesRefusedCount;
+static uint64_t Ext2EntriesReadCount;
+static uint64_t Ext2EntriesRefusedCount;
+static uint64_t Ext2PathsResolvedCount;
+static uint64_t Ext2PathsRefusedCount;
 
 /* Records a refusal, so that a report may say why and not merely that. */
 static bool Ext2Refuse(const char *reason)
@@ -91,6 +113,31 @@ static bool Ext2InodeRefuse(const char *reason)
 {
     Ext2Error = reason;
     ++Ext2InodesRefusedCount;
+    return false;
+}
+
+/* The same for a directory entry whose record contradicts the format. */
+static bool Ext2EntryRefuse(const char *reason)
+{
+    Ext2Error = reason;
+    ++Ext2EntriesRefusedCount;
+    return false;
+}
+
+/*
+ * The same for a lookup or a path that resolved to nothing.
+ *
+ * This is counted apart from the entry refusals above because the two are not
+ * the same kind of event and only one of them is a fault. A path that names no
+ * file is an ordinary answer to an ordinary question, and it will be the common
+ * case once a shell is asking; an entry that contradicts the format is a volume
+ * that cannot be trusted. A single counter would report their sum and so would
+ * report neither.
+ */
+static bool Ext2PathRefuse(const char *reason)
+{
+    Ext2Error = reason;
+    ++Ext2PathsRefusedCount;
     return false;
 }
 
@@ -1026,6 +1073,639 @@ void Ext2ReportInode(const Ext2Inode *inode)
     KernelWriteString(" sectors, first block ");
     KernelWriteDecimal((uint64_t)inode->block[0]);
     KernelWriteString(".\n");
+}
+
+/*
+ * The directory.
+ *
+ * Everything above reads a file by its inode number; nothing above knows an
+ * inode number, because a user names a file. A directory is what stands between
+ * the two, and it is an ordinary file whose data happens to be a sequence of
+ * entries rather than anything the format treats specially — which is why the
+ * traversal below rests entirely upon Ext2InodeBlock and adds nothing to it but
+ * an interpretation of the bytes.
+ */
+
+/*
+ * The entry file type corresponding to a format held in i_mode.
+ *
+ * The two numberings are unrelated: i_mode holds the historical Unix values in
+ * its high four bits, and the entry's file type is a small integer assigned in
+ * an order of its own. A directory is 0x4000 in the one and 2 in the other, a
+ * regular file 0x8000 and 1, and a socket 0xC000 and 6. Nothing about either
+ * numbering derives from the other, so the correspondence must be written out.
+ */
+uint8_t Ext2FileTypeOfMode(uint16_t mode)
+{
+    switch (mode & EXT2_S_IFMT)
+    {
+    case EXT2_S_IFREG:
+        return (uint8_t)EXT2_FT_REG_FILE;
+    case EXT2_S_IFDIR:
+        return (uint8_t)EXT2_FT_DIR;
+    case EXT2_S_IFCHR:
+        return (uint8_t)EXT2_FT_CHRDEV;
+    case EXT2_S_IFBLK:
+        return (uint8_t)EXT2_FT_BLKDEV;
+    case EXT2_S_IFIFO:
+        return (uint8_t)EXT2_FT_FIFO;
+    case EXT2_S_IFSOCK:
+        return (uint8_t)EXT2_FT_SOCK;
+    case EXT2_S_IFLNK:
+        return (uint8_t)EXT2_FT_SYMLINK;
+    default:
+        return (uint8_t)EXT2_FT_UNKNOWN;
+    }
+}
+
+const char *Ext2FileTypeName(uint8_t type)
+{
+    switch (type)
+    {
+    case EXT2_FT_REG_FILE:
+        return "regular file";
+    case EXT2_FT_DIR:
+        return "directory";
+    case EXT2_FT_CHRDEV:
+        return "character device";
+    case EXT2_FT_BLKDEV:
+        return "block device";
+    case EXT2_FT_FIFO:
+        return "fifo";
+    case EXT2_FT_SOCK:
+        return "socket";
+    case EXT2_FT_SYMLINK:
+        return "symbolic link";
+    default:
+        return "of no stated type";
+    }
+}
+
+/*
+ * Whether the volume states a file type in its directory entries.
+ *
+ * The two bytes at offset 6 are either a name length of eight bits followed by a
+ * file type, or a name length of sixteen bits. Which of the two a volume holds
+ * is stated by the incompatible feature flag and by nothing else — not by the
+ * revision, a revision 1 volume being free to omit the feature. Reading the
+ * wrong one of the two is not a subtle error: a volume without the feature,
+ * read as though it had it, gives every entry a file type equal to the high byte
+ * of its name length, which is zero, and so declares every file to be of no
+ * stated type. Read the other way about, a name of three bytes becomes a name of
+ * 3 + 256 * EXT2_FT_DIR bytes and the entry is refused.
+ */
+static bool Ext2VolumeStatesFileType(const Ext2Superblock *superblock)
+{
+    return (superblock->feature_incompatible & EXT2_FEATURE_INCOMPAT_FILETYPE) != 0U;
+}
+
+/*
+ * Whether a directory's data may be traversed at all.
+ *
+ * A directory occupies whole blocks: the record length of the last entry of a
+ * block runs to the end of that block, so a size that is not a multiple of the
+ * block size describes a directory whose final block ends in the middle of an
+ * entry. A directory of no size is refused likewise — every directory holds at
+ * least its own entry and its parent's — and both refusals catch an inode that
+ * is not really a directory long before its bytes are interpreted as entries.
+ */
+static bool Ext2DirectoryTraversable(const Ext2Superblock *superblock,
+                                     const Ext2Inode *directory)
+{
+    if (!Ext2InodeIsDirectory(directory))
+    {
+        return Ext2EntryRefuse("the inode is not a directory");
+    }
+
+    if (directory->size == 0U)
+    {
+        return Ext2EntryRefuse("a directory of no size holds not even its own entry");
+    }
+
+    if ((directory->size % (uint64_t)superblock->block_size) != 0U)
+    {
+        return Ext2EntryRefuse("a directory's size is not a whole number of blocks");
+    }
+
+    return true;
+}
+
+/*
+ * Reads and validates the eight-byte header of the entry standing at an offset
+ * within a block, leaving the name unread.
+ *
+ * Every rule the specification states about a record is applied here, because
+ * every one of them is what keeps the traversal from walking off the block or
+ * looping upon itself: a record length below the header cannot be advanced past,
+ * one that is not a multiple of four leaves the next entry unaligned, and one
+ * that reaches beyond the block contradicts the rule that no entry spans two.
+ */
+static bool Ext2ReadEntryHeader(BlockDevice *device, const Ext2Superblock *superblock,
+                                uint32_t block, uint32_t offset, Ext2DirectoryEntry *entry)
+{
+    uint8_t raw[EXT2_DIRECTORY_HEADER_SIZE];
+
+    if (!Ext2ReadBytes(device, superblock, block, offset, EXT2_DIRECTORY_HEADER_SIZE, raw))
+    {
+        return false;
+    }
+
+    entry->inode = Ext2ReadWord(raw, EXT2_OFFSET_DE_INODE);
+    entry->record_length = Ext2ReadHalf(raw, EXT2_OFFSET_DE_RECORD_LENGTH);
+
+    if (Ext2VolumeStatesFileType(superblock))
+    {
+        entry->name_length = (uint16_t)raw[EXT2_OFFSET_DE_NAME_LENGTH];
+        entry->file_type = raw[EXT2_OFFSET_DE_FILE_TYPE];
+    }
+    else
+    {
+        entry->name_length = Ext2ReadHalf(raw, EXT2_OFFSET_DE_NAME_LENGTH);
+        entry->file_type = (uint8_t)EXT2_FT_UNKNOWN;
+    }
+
+    entry->block = block;
+    entry->offset = offset;
+
+    if (entry->record_length < EXT2_DIRECTORY_HEADER_SIZE)
+    {
+        return Ext2EntryRefuse("a directory entry is shorter than its own header");
+    }
+
+    if ((entry->record_length % EXT2_DIRECTORY_ALIGNMENT) != 0U)
+    {
+        return Ext2EntryRefuse("a directory entry is not a multiple of four bytes long");
+    }
+
+    if (entry->record_length > (superblock->block_size - offset))
+    {
+        return Ext2EntryRefuse("a directory entry reaches beyond the block that holds it");
+    }
+
+    if (entry->name_length > (entry->record_length - EXT2_DIRECTORY_HEADER_SIZE))
+    {
+        return Ext2EntryRefuse("a directory entry's name does not fit within it");
+    }
+
+    if (entry->name_length > EXT2_NAME_MAXIMUM)
+    {
+        return Ext2EntryRefuse("a directory entry's name is longer than the format permits");
+    }
+
+    /*
+     * An entry in use names an inode of this volume and bears a name. An entry
+     * naming inode zero is not in use and is not held to either rule: it is the
+     * record left where a name was removed, and its name length is ordinarily
+     * zero but need not be.
+     */
+    if (entry->inode != 0U)
+    {
+        if (entry->inode > superblock->inode_count)
+        {
+            return Ext2EntryRefuse("a directory entry names an inode the volume does not hold");
+        }
+
+        if (entry->name_length == 0U)
+        {
+            return Ext2EntryRefuse("a directory entry in use bears no name");
+        }
+    }
+
+    return true;
+}
+
+/*
+ * Reads the name of an entry whose header has been read and validated.
+ *
+ * The name is read directly into the entry rather than through a buffer of its
+ * own: a name may be 255 bytes, the entry has room for it already, and the
+ * kernel stack is not large enough to hold a second copy without reason. A
+ * character type may alias any object, so reading bytes into the storage of a
+ * char array is defined and not a pun.
+ *
+ * The name is then held to the two rules the resolver depends upon. Neither is
+ * stated by the specification, which describes a name as bytes and attributes no
+ * meaning to any of them; both are enforced because a name containing the
+ * separator would be reachable by no path, and a name containing a null byte
+ * would compare equal to its own prefix once terminated. A volume bearing such a
+ * name is not one this kernel can address correctly, and saying so is better
+ * than resolving a path to the wrong file.
+ */
+static bool Ext2ReadEntryName(BlockDevice *device, const Ext2Superblock *superblock,
+                              Ext2DirectoryEntry *entry)
+{
+    if (!Ext2ReadBytes(device, superblock, entry->block,
+                       entry->offset + EXT2_DIRECTORY_HEADER_SIZE, entry->name_length,
+                       (uint8_t *)entry->name))
+    {
+        return false;
+    }
+
+    entry->name[entry->name_length] = '\0';
+
+    for (uint16_t index = 0U; index < entry->name_length; ++index)
+    {
+        if ((entry->name[index] == EXT2_PATH_SEPARATOR) || (entry->name[index] == '\0'))
+        {
+            return Ext2EntryRefuse("a directory entry's name holds a separator or a null byte");
+        }
+    }
+
+    return true;
+}
+
+void Ext2DirectoryOpen(Ext2DirectoryCursor *cursor, const Ext2Inode *directory)
+{
+    if (cursor == NULL)
+    {
+        return;
+    }
+
+    cursor->directory = directory;
+    cursor->index = 0U;
+    cursor->offset = 0U;
+}
+
+Ext2DirectoryStep Ext2DirectoryNext(BlockDevice *device, const Ext2Superblock *superblock,
+                                    Ext2DirectoryCursor *cursor, Ext2DirectoryEntry *entry)
+{
+    uint64_t blocks;
+
+    if ((device == NULL) || (superblock == NULL) || (cursor == NULL) || (entry == NULL) ||
+        (cursor->directory == NULL))
+    {
+        (void)Ext2EntryRefuse("no device, no volume, no cursor, or nowhere to put the entry");
+        return EXT2_DIRECTORY_FAILED;
+    }
+
+    if (!Ext2DirectoryTraversable(superblock, cursor->directory))
+    {
+        return EXT2_DIRECTORY_FAILED;
+    }
+
+    blocks = cursor->directory->size / (uint64_t)superblock->block_size;
+
+    while (cursor->index < blocks)
+    {
+        uint32_t block;
+
+        if (!Ext2InodeBlock(device, superblock, cursor->directory, cursor->index, &block))
+        {
+            return EXT2_DIRECTORY_FAILED;
+        }
+
+        /*
+         * A block the directory never had allocated holds no entries. Reading it
+         * would yield zeroes, and a record length of zero cannot be advanced
+         * past; passing over the block is both the correct reading of a hole and
+         * the only one that terminates.
+         */
+        if (block == 0U)
+        {
+            ++cursor->index;
+            cursor->offset = 0U;
+            continue;
+        }
+
+        /*
+         * The records of a block run to its end, so a remainder too small to
+         * hold a header is a block that does not account for itself. It is
+         * refused rather than passed over: something wrote a record length that
+         * stops short, and the entries beyond it are unreachable.
+         */
+        if (cursor->offset > (superblock->block_size - EXT2_DIRECTORY_HEADER_SIZE))
+        {
+            (void)Ext2EntryRefuse("a directory block ends in too little space for an entry");
+            return EXT2_DIRECTORY_FAILED;
+        }
+
+        if (!Ext2ReadEntryHeader(device, superblock, block, cursor->offset, entry))
+        {
+            return EXT2_DIRECTORY_FAILED;
+        }
+
+        cursor->offset += entry->record_length;
+
+        if (cursor->offset == superblock->block_size)
+        {
+            ++cursor->index;
+            cursor->offset = 0U;
+        }
+
+        /* An entry naming no inode holds space and not a name. */
+        if (entry->inode == 0U)
+        {
+            continue;
+        }
+
+        if (!Ext2ReadEntryName(device, superblock, entry))
+        {
+            return EXT2_DIRECTORY_FAILED;
+        }
+
+        ++Ext2EntriesReadCount;
+        return EXT2_DIRECTORY_ENTRY_READ;
+    }
+
+    return EXT2_DIRECTORY_END;
+}
+
+bool Ext2DirectoryFind(BlockDevice *device, const Ext2Superblock *superblock,
+                       const Ext2Inode *directory, const char *name, size_t length,
+                       Ext2DirectoryEntry *entry)
+{
+    Ext2DirectoryCursor cursor;
+
+    if ((device == NULL) || (superblock == NULL) || (directory == NULL) || (name == NULL) ||
+        (entry == NULL))
+    {
+        return Ext2PathRefuse("no device, no volume, no directory, or no name to look for");
+    }
+
+    if (length == 0U)
+    {
+        return Ext2PathRefuse("a name of no length names nothing");
+    }
+
+    if (length > EXT2_NAME_MAXIMUM)
+    {
+        return Ext2PathRefuse("a name longer than the format permits can be upon no volume");
+    }
+
+    Ext2DirectoryOpen(&cursor, directory);
+
+    for (;;)
+    {
+        const Ext2DirectoryStep step = Ext2DirectoryNext(device, superblock, &cursor, entry);
+        bool same;
+
+        if (step == EXT2_DIRECTORY_FAILED)
+        {
+            return false;
+        }
+
+        if (step == EXT2_DIRECTORY_END)
+        {
+            return Ext2PathRefuse("the directory holds no entry of that name");
+        }
+
+        if (entry->name_length != (uint16_t)length)
+        {
+            continue;
+        }
+
+        same = true;
+
+        for (size_t index = 0U; index < length; ++index)
+        {
+            if (entry->name[index] != name[index])
+            {
+                same = false;
+                break;
+            }
+        }
+
+        if (same)
+        {
+            return true;
+        }
+    }
+}
+
+bool Ext2ResolvePath(BlockDevice *device, const Ext2Superblock *superblock, const char *path,
+                     Ext2Inode *inode)
+{
+    Ext2DirectoryEntry entry;
+    Ext2Inode current;
+    Ext2Inode next;
+    size_t position = 0U;
+
+    if ((device == NULL) || (superblock == NULL) || (path == NULL) || (inode == NULL))
+    {
+        return Ext2PathRefuse("no device, no volume, no path, or nowhere to put the inode");
+    }
+
+    /*
+     * Only an absolute path is resolved. A relative one is resolved against a
+     * working directory, which is a property of a process and not of a volume,
+     * and there are no processes until Phase 6.
+     */
+    if (path[0] != EXT2_PATH_SEPARATOR)
+    {
+        return Ext2PathRefuse("the path is not absolute");
+    }
+
+    if (!Ext2ReadInode(device, superblock, EXT2_ROOT_INODE, &current))
+    {
+        return false;
+    }
+
+    if (!Ext2InodeIsDirectory(&current))
+    {
+        return Ext2PathRefuse("the root inode of the volume is not a directory");
+    }
+
+    for (;;)
+    {
+        size_t start;
+        size_t length;
+
+        /* Consecutive separators are one separator, and a path may end in them. */
+        while (path[position] == EXT2_PATH_SEPARATOR)
+        {
+            ++position;
+
+            if (position > EXT2_PATH_MAXIMUM)
+            {
+                return Ext2PathRefuse("the path is longer than this kernel will resolve");
+            }
+        }
+
+        if (path[position] == '\0')
+        {
+            break;
+        }
+
+        start = position;
+
+        while ((path[position] != '\0') && (path[position] != EXT2_PATH_SEPARATOR))
+        {
+            ++position;
+
+            if (position > EXT2_PATH_MAXIMUM)
+            {
+                return Ext2PathRefuse("the path is longer than this kernel will resolve");
+            }
+        }
+
+        length = position - start;
+
+        /*
+         * Only a directory holds names. Refusing here rather than within the
+         * lookup distinguishes the two failures a caller cares about: a path
+         * whose components do not exist, and a path that treats a file as though
+         * it were a directory.
+         */
+        if (!Ext2InodeIsDirectory(&current))
+        {
+            return Ext2PathRefuse("a component of the path is not a directory");
+        }
+
+        if (!Ext2DirectoryFind(device, superblock, &current, &path[start], length, &entry))
+        {
+            return false;
+        }
+
+        if (!Ext2ReadInode(device, superblock, entry.inode, &next))
+        {
+            return false;
+        }
+
+        /*
+         * The specification requires the file type of an entry to match the
+         * format of the inode it names. The two are written at different times
+         * by different code, and a volume upon which they disagree is one whose
+         * directories and inodes no longer describe the same filesystem; the
+         * check costs nothing here, the inode having just been read.
+         *
+         * A volume that states no file type declares EXT2_FT_UNKNOWN for every
+         * entry, and there is nothing to check.
+         */
+        if ((entry.file_type != (uint8_t)EXT2_FT_UNKNOWN) &&
+            (entry.file_type != Ext2FileTypeOfMode(next.mode)))
+        {
+            return Ext2PathRefuse("a directory entry's file type contradicts its inode");
+        }
+
+        /*
+         * A symbolic link met within a path must be followed for the rest of the
+         * path to mean anything, and following it means reading the file its
+         * data is, which is sub-task 5.5. Met as the last component it is
+         * returned as it stands, the caller having asked for the link and not
+         * for what it names.
+         */
+        if (Ext2InodeIsSymbolicLink(&next))
+        {
+            size_t remainder = position;
+
+            while (path[remainder] == EXT2_PATH_SEPARATOR)
+            {
+                ++remainder;
+            }
+
+            if (path[remainder] != '\0')
+            {
+                return Ext2PathRefuse(
+                    "a symbolic link stands within the path, which is not yet followed");
+            }
+        }
+
+        current = next;
+    }
+
+    /*
+     * A path written with a trailing separator asserts that what it names is a
+     * directory. The assertion is the caller's and is honoured: "/etc/" names a
+     * directory or it names nothing.
+     */
+    if ((path[position - 1U] == EXT2_PATH_SEPARATOR) && !Ext2InodeIsDirectory(&current))
+    {
+        return Ext2PathRefuse("the path ends in a separator but does not name a directory");
+    }
+
+    *inode = current;
+    ++Ext2PathsResolvedCount;
+    return true;
+}
+
+uint64_t Ext2EntriesRead(void)
+{
+    return Ext2EntriesReadCount;
+}
+
+uint64_t Ext2EntriesRefused(void)
+{
+    return Ext2EntriesRefusedCount;
+}
+
+uint64_t Ext2PathsResolved(void)
+{
+    return Ext2PathsResolvedCount;
+}
+
+uint64_t Ext2PathsRefused(void)
+{
+    return Ext2PathsRefusedCount;
+}
+
+void Ext2ReportDirectoryEntry(const Ext2DirectoryEntry *entry)
+{
+    if (entry == NULL)
+    {
+        return;
+    }
+
+    KernelWriteString("EXT2 entry: inode ");
+    KernelWriteDecimal((uint64_t)entry->inode);
+    KernelWriteString(", ");
+    KernelWriteString(Ext2FileTypeName(entry->file_type));
+    KernelWriteString(", ");
+    KernelWriteDecimal((uint64_t)entry->record_length);
+    KernelWriteString(" bytes at block ");
+    KernelWriteDecimal((uint64_t)entry->block);
+    KernelWriteString(" offset ");
+    KernelWriteDecimal((uint64_t)entry->offset);
+    KernelWriteString(": ");
+    KernelWriteString(entry->name);
+    KernelWriteString("\n");
+}
+
+void Ext2ReportDirectory(BlockDevice *device, const Ext2Superblock *superblock,
+                         const Ext2Inode *directory)
+{
+    Ext2DirectoryCursor cursor;
+    Ext2DirectoryEntry entry;
+    uint64_t counted = 0U;
+
+    if ((device == NULL) || (superblock == NULL) || (directory == NULL))
+    {
+        return;
+    }
+
+    Ext2DirectoryOpen(&cursor, directory);
+
+    for (;;)
+    {
+        const Ext2DirectoryStep step = Ext2DirectoryNext(device, superblock, &cursor, &entry);
+
+        if (step == EXT2_DIRECTORY_FAILED)
+        {
+            KernelWriteString("EXT2 directory ");
+            KernelWriteDecimal((uint64_t)directory->number);
+            KernelWriteString(" could not be read: ");
+            KernelWriteString(Ext2LastError());
+            KernelWriteString("\n");
+            return;
+        }
+
+        if (step == EXT2_DIRECTORY_END)
+        {
+            break;
+        }
+
+        if (counted < EXT2_REPORTED_ENTRIES)
+        {
+            Ext2ReportDirectoryEntry(&entry);
+        }
+
+        ++counted;
+    }
+
+    KernelWriteString("EXT2 directory ");
+    KernelWriteDecimal((uint64_t)directory->number);
+    KernelWriteString(" holds ");
+    KernelWriteDecimal(counted);
+    KernelWriteString(" entries.\n");
 }
 
 const char *Ext2LastError(void)

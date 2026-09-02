@@ -561,8 +561,49 @@ Sections relied upon:
   device `0x6000`, directory `0x4000`, character device `0x2000`, FIFO `0x1000` —
   and the low twelve hold the set-user, set-group and sticky bits and the nine
   permission bits.
+- **Chapter 4, Directory Structure**: a directory is a file, identified by
+  `EXT2_S_IFDIR` in `i_mode`, whose data is a linked list of entries; inode 2
+  holds the root. Table 4.1 gives the record: `inode` at offset 0 as a word,
+  `rec_len` at 4 and `name_len` at 6 as halves, `file_type` at 7 as a byte, and
+  the name from 8, unterminated and no longer than 255 bytes. An `inode` of zero
+  marks a record that is not in use. `rec_len` is at least the length of its own
+  record, entries are aligned upon four bytes, and no entry may span two data
+  blocks; where a name is removed, the record before it has its `rec_len`
+  lengthened to cover it, and where the first record of a block is removed a
+  blank record is left in its place. `name_len` may never exceed `rec_len - 8`.
+  Revision 0 held a sixteen-bit `name_len`, of which the upper byte was
+  reclaimed as `file_type`; the value of `file_type` must match the format of
+  the inode the entry names.
+- **Table 4.2, Defined Inode File Type Values**: `EXT2_FT_UNKNOWN` 0,
+  `EXT2_FT_REG_FILE` 1, `EXT2_FT_DIR` 2, `EXT2_FT_CHRDEV` 3, `EXT2_FT_BLKDEV` 4,
+  `EXT2_FT_FIFO` 5, `EXT2_FT_SOCK` 6, `EXT2_FT_SYMLINK` 7. The numbering is
+  unrelated to that of the `i_mode` formats in Table 3.15.
+- **Table 4.3, Sample Linked Directory Data Layout**: the worked layout of one
+  directory block, against which the entries the boot-time self-test composes
+  were checked, including its final record — inode 0, with a record length
+  running to the end of the block.
+- **Indexed Directory Format**: the hash index is made backward compatible by
+  disguising its interior nodes as records that are not in use, so a linear
+  traversal reads an indexed directory correctly.
 - **Byte order**: every quantity upon the volume is stored least significant byte
   first, irrespective of the machine.
+
+Used by: `kernel/fs/ext2.c`, `kernel/include/oxys/ext2.h`.
+
+### Linux kernel documentation, the ext2 filesystem
+Linux kernel source, `Documentation/filesystems/ext2.rst`.
+`https://www.kernel.org/doc/html/latest/filesystems/ext2.html`
+
+Sections relied upon: **Directories** — "a directory is a filesystem object and
+has an inode just like a file. It is a specially formatted file containing
+records which associate each name with an inode number"; the current
+implementation "uses a singly-linked list to store the filenames in the
+directory"; later revisions "encode the type of the object (file, directory,
+symlink, device, fifo, socket) to avoid the need to check the inode itself"; and,
+decisively, "FILETYPE is an INCOMPAT flag because older kernels would think a
+filename was longer than 256 characters". That last sentence is the reason this
+kernel decides the width of `name_len` from the feature flag alone and not from
+the revision; see [`../storage/EXT2.md`](../storage/EXT2.md), Section 10.2.
 
 Used by: `kernel/fs/ext2.c`, `kernel/include/oxys/ext2.h`.
 
@@ -607,8 +648,6 @@ Used by: `boot/grub/grub.cfg`, `Makefile`.
 | ------------- | ----- | ------- |
 | PCI Local Bus Specification 3.0 | 4 | Configuration space and device enumeration. |
 | ATA/ATAPI Command Set (ACS-3) | 4 | `IDENTIFY DEVICE`; 28-bit and 48-bit logical block addressing. |
-| The Second Extended File System (Poirier) | 5 | Superblock, group descriptors, inodes and directories. |
-| Linux kernel documentation, `filesystems/ext2.rst` | 5 | The on-disk format as presently implemented. |
 | Intel SDM, Volume 2B, `SYSCALL` and `SYSRET` | 6 | The fast system-call mechanism. |
 | Intel MultiProcessor Specification 1.4 | 6 | Application processor bring-up. |
 | ACPI Specification 6.5 | 6, 12 | The Multiple APIC Description Table; the Root System Description Pointer. |

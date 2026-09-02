@@ -3,15 +3,19 @@
  * Purpose: Declares the on-disk structures of an EXT2 volume that this kernel
  *          reads: the superblock, which describes the volume's geometry and
  *          features; the block group descriptor, which locates the three
- *          structures of one group; and the inode, which describes one file and
- *          names the blocks holding its data. All three are declared in the
- *          processor's own order, the volume's order being decoded at the point
- *          of reading.
+ *          structures of one group; the inode, which describes one file and
+ *          names the blocks holding its data; and the directory entry, which is
+ *          the only place in the format where a name appears. All are declared in
+ *          the processor's own order, the volume's order being decoded at the
+ *          point of reading.
  * Key definitions: EXT2_SUPER_MAGIC, EXT2_SUPERBLOCK_OFFSET, Ext2Superblock,
  *          Ext2ReadSuperblock, Ext2GroupCount, Ext2GroupDescriptor,
  *          Ext2ReadGroupDescriptor, Ext2VerifyGroupDescriptors, Ext2Inode,
- *          Ext2ReadInode, Ext2InodeBlock, Ext2LastError, Ext2ReportVolume,
- *          Ext2ReportGroup, Ext2ReportInode.
+ *          Ext2ReadInode, Ext2InodeBlock, Ext2DirectoryEntry,
+ *          Ext2DirectoryCursor, Ext2DirectoryStep, Ext2DirectoryOpen,
+ *          Ext2DirectoryNext, Ext2DirectoryFind, Ext2ResolvePath,
+ *          Ext2FileTypeOfMode, Ext2LastError, Ext2ReportVolume,
+ *          Ext2ReportGroup, Ext2ReportInode, Ext2ReportDirectory.
  * References:
  *   - Poirier, D., "The Second Extended File System: Internal Layout", the
  *     Superblock chapter: the superblock is located 1024 bytes from the start of
@@ -36,6 +40,20 @@
  *     beginning at one and indices at zero.
  *   - The same, Defined Reserved Inodes and Defined i_mode Values: inode 2 is the
  *     root directory, and the file format occupies the high four bits of i_mode.
+ *   - The same, the Directory Structure chapter and Table 4.1: a directory is a
+ *     file whose data is a linked list of entries, each holding a 32-bit inode
+ *     number at offset 0, a 16-bit record length at 4, a name length at 6 and a
+ *     file type at 7, the name following at 8; entries are aligned upon four
+ *     bytes and none spans two blocks; an inode number of zero marks an entry
+ *     that is not in use; and the name length may never exceed the record length
+ *     less eight.
+ *   - The same, Table 4.2: the eight file types an entry may declare, which are
+ *     numbered differently from the formats of i_mode and must agree with them.
+ *   - The same, Table 4.3: the layout of a sample directory, against which the
+ *     entries the self-test composes were checked.
+ *   - Linux kernel documentation, filesystems/ext2.rst: the file type is an
+ *     incompatible feature because a kernel unaware of it would read the name
+ *     length as sixteen bits and believe a name longer than 256 characters.
  *   - Linux kernel documentation, the ext4 superblock, block group descriptor and
  *     inode tables, consulted as an independent statement of the same offsets.
  *     The two
@@ -459,5 +477,208 @@ uint64_t Ext2InodesRefused(void);
 
 /* Writes a description of one inode to the console. */
 void Ext2ReportInode(const Ext2Inode *inode);
+
+/*
+ * The directory entry.
+ *
+ * A directory is an ordinary file whose data is a sequence of these, and it is
+ * the only place in the format where a name appears: an inode describes a file
+ * entirely without naming it, and a name is a property of the directory that
+ * holds it rather than of the file it leads to. That is why one file may bear
+ * several names and why removing one of them need not remove the file.
+ *
+ * The entries of a block form a linked list, each stating the displacement to
+ * the next rather than its own length, so that an entry may be removed by
+ * lengthening the displacement of the entry before it and space may be reclaimed
+ * without moving anything. The list runs to the end of the block and no further:
+ * the last entry of a block states the displacement to the end of that block,
+ * and the next block begins a new list.
+ *
+ * The offsets are declared here for the reason the superblock's are: the
+ * boot-time self-test composes entries from these same names, and a test that
+ * stated the offsets a second time would agree with a mistaken parser as readily
+ * as with a correct one.
+ */
+#define EXT2_OFFSET_DE_INODE         0U
+#define EXT2_OFFSET_DE_RECORD_LENGTH 4U
+#define EXT2_OFFSET_DE_NAME_LENGTH   6U
+#define EXT2_OFFSET_DE_FILE_TYPE     7U
+#define EXT2_OFFSET_DE_NAME          8U
+
+/* The bytes an entry occupies before its name begins. */
+#define EXT2_DIRECTORY_HEADER_SIZE 8U
+
+/* The boundary every entry begins upon, and every record length is a multiple of. */
+#define EXT2_DIRECTORY_ALIGNMENT 4U
+
+/*
+ * The greatest length of a name, in bytes, and the reason the format has two
+ * readings of the two bytes at offset 6.
+ *
+ * Revision 0 held a 16-bit name length there. Since no implementation ever
+ * permitted a name beyond 255 bytes the upper byte was always zero, and it was
+ * reclaimed as the file type — which is why the file type is an *incompatible*
+ * feature and not a compatible one: a kernel that did not know of it would read
+ * the type as the high byte of the length and believe the name to be thousands
+ * of bytes long. Which reading applies is therefore not a matter of the
+ * revision but of EXT2_FEATURE_INCOMPAT_FILETYPE, and this kernel decides it
+ * from that flag alone.
+ */
+#define EXT2_NAME_MAXIMUM 255U
+
+/*
+ * The file types an entry may declare, which are not the file formats i_mode
+ * holds and are not numbered in the same order as them. The two must agree, and
+ * Ext2FileTypeOfMode is the translation between them.
+ */
+#define EXT2_FT_UNKNOWN  0U
+#define EXT2_FT_REG_FILE 1U
+#define EXT2_FT_DIR      2U
+#define EXT2_FT_CHRDEV   3U
+#define EXT2_FT_BLKDEV   4U
+#define EXT2_FT_FIFO     5U
+#define EXT2_FT_SOCK     6U
+#define EXT2_FT_SYMLINK  7U
+
+/* The character separating the components of a path. */
+#define EXT2_PATH_SEPARATOR '/'
+
+/*
+ * The longest path this kernel will resolve. The format imposes no such limit,
+ * a path being no part of the volume at all; the limit is upon the caller, and
+ * exists so that a string that was never terminated is refused rather than
+ * walked until it meets something that faults.
+ */
+#define EXT2_PATH_MAXIMUM 4096U
+
+/*
+ * One directory entry, parsed.
+ *
+ * The name is held terminated, which it is not upon the volume: there the length
+ * is a field and the name is not terminated at all, so a name may contain
+ * anything the length admits. The parser refuses a name containing the separator
+ * or a null byte, both of which would make the name unaddressable by the very
+ * path resolution the entry exists to serve.
+ *
+ * The block and the offset the entry was read from are retained. Nothing in this
+ * sub-task uses them; the insertion and removal of entries in sub-task 5.7 must
+ * know where an entry stands in order to alter the one before it, and an entry
+ * that did not remember where it came from would have to be found a second time.
+ */
+typedef struct Ext2DirectoryEntry
+{
+    uint32_t inode;
+    uint16_t record_length;
+    uint16_t name_length;
+    uint8_t file_type; /* EXT2_FT_UNKNOWN upon a volume that declares no types. */
+    char name[EXT2_NAME_MAXIMUM + 1U];
+    uint32_t block;  /* The block of the volume the entry was read from. */
+    uint32_t offset; /* Its offset within that block. */
+} Ext2DirectoryEntry;
+
+/*
+ * A position within a directory.
+ *
+ * The cursor holds the directory rather than copying it, an inode being some
+ * hundred and forty bytes and the kernel stack being small. The directory must
+ * therefore outlive the cursor, which every caller here satisfies by declaring
+ * the two beside one another.
+ */
+typedef struct Ext2DirectoryCursor
+{
+    const Ext2Inode *directory;
+    uint64_t index;  /* Which block of the directory, counted from zero. */
+    uint32_t offset; /* The byte within that block the next entry begins at. */
+} Ext2DirectoryCursor;
+
+/*
+ * What one step of a traversal produced.
+ *
+ * The three outcomes are distinguished because two of them are ordinary and one
+ * is not: a directory that has ended has been read correctly and completely, and
+ * a caller that could not tell that from a volume it failed to read would stop
+ * at the first bad block and report the directory finished.
+ */
+typedef enum Ext2DirectoryStep
+{
+    EXT2_DIRECTORY_ENTRY_READ, /* An entry was produced. */
+    EXT2_DIRECTORY_END,        /* The directory holds no further entry. */
+    EXT2_DIRECTORY_FAILED      /* The directory could not be read or is malformed. */
+} Ext2DirectoryStep;
+
+/* Places a cursor before the first entry of a directory. */
+void Ext2DirectoryOpen(Ext2DirectoryCursor *cursor, const Ext2Inode *directory);
+
+/*
+ * Produces the next entry of a directory and advances the cursor past it.
+ *
+ * Entries that name no inode are passed over rather than produced. Such an entry
+ * is not corruption: it is how a name is removed, the record remaining to hold
+ * the space it occupied until something else claims it, and a caller listing a
+ * directory has no use for it.
+ *
+ * A block the directory never had allocated holds no entries and is passed over
+ * likewise, which is what distinguishes a hole from a block of zeroes that would
+ * otherwise be read as an entry of no length and refused.
+ *
+ * Ext2LastError describes any failure.
+ */
+Ext2DirectoryStep Ext2DirectoryNext(BlockDevice *device, const Ext2Superblock *superblock,
+                                    Ext2DirectoryCursor *cursor, Ext2DirectoryEntry *entry);
+
+/*
+ * Finds the entry of a directory bearing a name, which is given by its address
+ * and its length and need not be terminated.
+ *
+ * The length is explicit so that one component of a path may be looked up where
+ * it stands, without first being copied out of the path into a buffer of its
+ * own. Names are compared by their bytes and their length alone: the format
+ * attributes no meaning to case, to an encoding, or to any character but the
+ * separator, which cannot occur within a name.
+ *
+ * Returns false where the directory holds no such entry, which is an ordinary
+ * outcome and not a fault of the volume; Ext2LastError distinguishes it.
+ */
+bool Ext2DirectoryFind(BlockDevice *device, const Ext2Superblock *superblock,
+                       const Ext2Inode *directory, const char *name, size_t length,
+                       Ext2DirectoryEntry *entry);
+
+/*
+ * Resolves an absolute path to the inode it names, beginning at the root
+ * directory, which the format fixes as inode 2.
+ *
+ * Repeated separators are equivalent to one, and a trailing separator asserts
+ * that what the path names is a directory. The entries "." and ".." are not
+ * treated specially: every EXT2 directory holds them upon the volume, the ".."
+ * of the root naming the root itself, so the ordinary lookup resolves them and
+ * a kernel that interpreted them here would be second-guessing the volume.
+ *
+ * A symbolic link is resolved no further: met as the last component it is
+ * returned as it stands, and met within the path it is refused. Following one
+ * requires reading the file its data is, which is sub-task 5.5.
+ *
+ * Ext2LastError describes any refusal.
+ */
+bool Ext2ResolvePath(BlockDevice *device, const Ext2Superblock *superblock, const char *path,
+                     Ext2Inode *inode);
+
+/* The entry file type corresponding to the format held in i_mode. */
+uint8_t Ext2FileTypeOfMode(uint16_t mode);
+
+/* The name of an entry file type, for a report. */
+const char *Ext2FileTypeName(uint8_t type);
+
+/* How many entries have been read, and how many refused as malformed. */
+uint64_t Ext2EntriesRead(void);
+uint64_t Ext2EntriesRefused(void);
+
+/* How many paths have been resolved, and how many lookups have failed. */
+uint64_t Ext2PathsResolved(void);
+uint64_t Ext2PathsRefused(void);
+
+/* Writes a description of one entry, and of a whole directory, to the console. */
+void Ext2ReportDirectoryEntry(const Ext2DirectoryEntry *entry);
+void Ext2ReportDirectory(BlockDevice *device, const Ext2Superblock *superblock,
+                         const Ext2Inode *directory);
 
 #endif /* OXYS_EXT2_H */

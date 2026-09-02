@@ -57,7 +57,7 @@ complementary, and neither replaces the other.
 | [`DISK.md`](storage/DISK.md) | The ATA disk in programmed input/output mode. | `drivers/ata/` |
 | [`BLOCK.md`](storage/BLOCK.md) | The generic block-device layer. | `drivers/block/block.c` |
 | [`BUFFER.md`](storage/BUFFER.md) | The buffer cache. | `drivers/block/buffer.c` |
-| [`EXT2.md`](storage/EXT2.md) | The EXT2 volume: its superblock, its group descriptors and its inodes. | `kernel/fs/ext2.c` |
+| [`EXT2.md`](storage/EXT2.md) | The EXT2 volume: its superblock, its group descriptors, its inodes, its directories and the resolution of a path. | `kernel/fs/ext2.c` |
 
 ## The form of a document
 

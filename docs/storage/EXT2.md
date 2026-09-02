@@ -1,6 +1,6 @@
 # The EXT2 Volume
 
-**Phase**: 5, sub-tasks 5.1 to 5.3, of [`../project/PLAN.md`](../project/PLAN.md).
+**Phase**: 5, sub-tasks 5.1 to 5.4, of [`../project/PLAN.md`](../project/PLAN.md).
 
 **Authority**: `PROJECT_GUIDELINES.md`, Sections 2, 3 and 6. Every assertion about
 the format carries a citation, and the specifications are registered in
@@ -342,9 +342,169 @@ and conflating the two here would prevent the second.
 | An inode with no format and no links. | A table entry that was never filled. The bytes past the table are zeroes upon a fresh volume, and a kernel that accepted them would report a file of no type and no blocks rather than the mistake that produced it. |
 | A block index beyond what fifteen pointers can address. | Arithmetic that has run past the end of the decomposition. |
 
-## 10. Verification
+## 10. The directory
 
-### 10.1 The self-test of the superblock
+An inode describes a file entirely without naming it. A **directory** is what
+supplies the name: an ordinary file, with an ordinary inode and ordinary blocks,
+whose data happens to be a sequence of entries associating a name with an inode
+number. Nothing in the format treats a directory's blocks specially — they are
+resolved by the same `Ext2InodeBlock` of Section 9.3 — and the whole of the work
+here is the interpretation of the bytes those blocks hold.
+
+That separation is not incidental. It is why one file may bear several names,
+why removing a name need not remove the file, and why a name is a property of
+the directory that holds it rather than of the file it leads to.
+
+The root directory is inode 2, which the format reserves for it (Table 3.14).
+
+### 10.1 The entry
+
+Table 4.1 gives the record:
+
+| Offset | Width | Field |
+| ------ | ----- | ----- |
+| 0 | 4 | `inode` — the inode this name leads to. **Zero means the record is not in use.** |
+| 4 | 2 | `rec_len` — the displacement from the start of this record to the start of the next. |
+| 6 | 1 | `name_len` — the bytes of name that follow. |
+| 7 | 1 | `file_type` — the format of the file, as Table 4.2 numbers it. |
+| 8 | 0–255 | `name` — not terminated. |
+
+The entries of one block form a **linked list**, each stating the displacement
+to the next rather than its own length. That is what allows a name to be removed
+without moving anything: the record before it absorbs its space by having its own
+`rec_len` lengthened, and the space is reclaimed when something else is inserted.
+Where the first record of a block is removed there is no record before it to
+lengthen, so the record remains where it is with its inode number set to zero and
+everything else about it — its name included — untouched.
+
+The list runs to the **end of the block and no further**. The last record of a
+block states the displacement to the end of that block rather than stopping after
+its name, and the next block begins a new list. The specification states this as
+three rules: records are aligned upon four bytes, `rec_len` is at least the
+length of the record it describes, and **no record may span two blocks**.
+
+### 10.2 The two readings of offset 6
+
+This is the one place in the format where the same two bytes have two lawful
+meanings and where reading the wrong one produces no diagnostic of its own.
+
+Revision 0 held a **sixteen-bit** name length at offset 6. Since no
+implementation ever permitted a name beyond 255 bytes the upper byte was always
+zero, and it was later reclaimed as the file type. Which reading applies is
+stated by `EXT2_FEATURE_INCOMPAT_FILETYPE` and by **nothing else** — not by the
+revision, a revision 1 volume being free to omit the feature.
+
+This is also the reason the file type is an *incompatible* feature rather than a
+compatible one. The Linux documentation puts it plainly: a kernel unaware of it
+"would think a filename was longer than 256 characters". Concretely, the entry
+`.` bears a name length of 1 and a file type of `EXT2_FT_DIR`; read as one
+sixteen-bit quantity those two bytes are `1 + 256 × 2 = 513`, a name that cannot
+fit in a record of twelve bytes. Read the other way about, every entry of a
+volume that states no file type acquires a type equal to the high byte of its
+name length, which is zero, so every file is declared to be of no type.
+
+This kernel decides from the flag alone, and the self-test of Section 11.5
+asserts that it does so by presenting the same bytes under both readings.
+
+### 10.3 The file type, and the format it must agree with
+
+Table 4.2 numbers the types, and the numbering is **unrelated** to the file
+formats `i_mode` holds in its high four bits:
+
+| Entry type | Value | `i_mode` format |
+| ---------- | ----- | --------------- |
+| `EXT2_FT_UNKNOWN` | 0 | — |
+| `EXT2_FT_REG_FILE` | 1 | `EXT2_S_IFREG`, `0x8000` |
+| `EXT2_FT_DIR` | 2 | `EXT2_S_IFDIR`, `0x4000` |
+| `EXT2_FT_CHRDEV` | 3 | `EXT2_S_IFCHR`, `0x2000` |
+| `EXT2_FT_BLKDEV` | 4 | `EXT2_S_IFBLK`, `0x6000` |
+| `EXT2_FT_FIFO` | 5 | `EXT2_S_IFIFO`, `0x1000` |
+| `EXT2_FT_SOCK` | 6 | `EXT2_S_IFSOCK`, `0xC000` |
+| `EXT2_FT_SYMLINK` | 7 | `EXT2_S_IFLNK`, `0xA000` |
+
+Nothing about either numbering derives from the other, so `Ext2FileTypeOfMode`
+writes the correspondence out. The specification requires the two to **agree**,
+and this kernel checks that they do wherever it resolves a path: the entry and
+the inode are written at different times by different code, and a volume upon
+which they disagree is one whose directories and inodes no longer describe the
+same filesystem. The check costs nothing there, the inode having just been read.
+
+### 10.4 Traversal
+
+`Ext2DirectoryNext` advances a cursor — a block index and an offset within it —
+and produces one entry at a time. Three things are passed over rather than
+produced:
+
+1. **A record naming inode 0.** It holds space and not a name. A traversal that
+   read its name rather than its inode number would report a file that was
+   deleted. It is also how the interior nodes of an indexed directory are
+   disguised, which is why a linear traversal reads such a directory correctly;
+   see Section 12, limitation 14.
+2. **A block the directory never had allocated.** Reading a hole yields zeroes,
+   and a record length of zero cannot be advanced past; passing over the block is
+   both the correct reading of a hole and the only one that terminates.
+3. **The padding after the last name of a block**, which is not passed over so
+   much as never seen: the last record's length carries the cursor to the end of
+   the block, and the next block begins a new list.
+
+A directory is the first structure of the volume whose contents are **variable
+rather than fixed**. A superblock lies at a known offset, a descriptor is 32
+bytes and an inode is 128; an entry is as long as its record length says, and the
+next one begins wherever that lands. Every mistake in reading it is therefore
+self-propagating — one record length taken from the wrong offset, or one entry
+advanced by the length of its name rather than by its record length, and every
+entry after it in the block is read from the middle of something else. What comes
+out is not obviously wrong. It is fragments of real names, and a lookup that
+fails to find a file that is there is indistinguishable from a file that is not.
+
+### 10.5 Resolving a path
+
+`Ext2ResolvePath` begins at inode 2 and takes the components of the path in
+turn, looking each up in the directory the previous one named.
+
+- **Only an absolute path is resolved.** A relative one is resolved against a
+  working directory, which is a property of a process and not of a volume, and
+  there are no processes until Phase 6.
+- **Repeated separators are one**, and a **trailing separator asserts that what
+  the path names is a directory**: `/sub/` names a directory or it names nothing.
+- **`.` and `..` are not treated specially.** Every EXT2 directory holds them
+  upon the volume as ordinary entries, the `..` of the root naming the root
+  itself, so the ordinary lookup resolves them. A kernel that interpreted them
+  here would be second-guessing the volume rather than reading it.
+- **A component that is not a directory is refused** before it is searched, which
+  distinguishes the two failures a caller cares about: a path whose components do
+  not exist, and a path that treats a file as though it were a directory.
+- **A name is matched by its whole length.** Names are compared by their bytes
+  and their length alone; the format attributes no meaning to case, to an
+  encoding, or to any character but the separator.
+
+The lookup is given the address and the length of a component rather than a
+terminated string, so one component of a path is looked up **where it stands**
+without first being copied into a buffer of its own.
+
+### 10.6 What is refused
+
+| Refused | Why it matters |
+| ------- | -------------- |
+| A record length below eight. | The header itself does not fit, and a cursor cannot be advanced past it — the traversal would not terminate. |
+| A record length that is not a multiple of four. | Every record after it in the block is left unaligned. |
+| A record reaching beyond the block that holds it. | Contradicts the rule that no entry spans two blocks; the bytes it would claim belong to another block entirely. |
+| A name longer than the record less eight. | The name would be read out of the record that follows. |
+| A name longer than 255 bytes. | Reachable only under the sixteen-bit reading, and the sign that the wrong reading is in use. |
+| An in-use record naming an inode beyond `s_inodes_count`. | A name leading nowhere. |
+| An in-use record bearing no name. | A name that cannot be looked for. |
+| A name holding the separator or a null byte. | Reachable by no path, and equal to its own prefix once terminated. The format permits such a name; this kernel cannot address it correctly, and saying so is better than resolving a path to the wrong file. |
+| A block whose records leave fewer than eight bytes unaccounted for at its end. | Something wrote a record length that stops short, and the entries beyond it are unreachable. |
+| A directory whose size is not a whole number of blocks. | Its final block ends in the middle of a record. |
+| A directory of no size. | Every directory holds at least its own entry and its parent's. |
+| An inode that is not a directory. | Caught before its bytes are interpreted as entries. |
+| An entry whose file type contradicts the format of the inode it names. | The directories and the inodes no longer describe the same filesystem. |
+| A relative path, or one longer than 4096 bytes. | The first has nothing to be resolved against; the second is how a string that was never terminated is refused rather than walked until it meets something that faults. |
+| A symbolic link standing within a path. | Following it means reading the file its data is, which is sub-task 5.5. Met as the last component it is returned as it stands, the caller having asked for the link and not for what it names. |
+
+## 11. Verification
+
+### 11.1 The self-test of the superblock
 
 `KernelVerifyExt2` composes a superblock in the memory-backed block device of
 [`BLOCK.md`](BLOCK.md), Section 5, using the offset names from the header, and
@@ -367,7 +527,7 @@ device's storage directly, beneath both the block layer and the cache, so a cach
 holding the previous contents would answer the next read with them, and the
 assertion would be made against a volume that no longer exists.
 
-### 10.2 The self-test of the descriptor table
+### 11.2 The self-test of the descriptor table
 
 `KernelVerifyGroups` runs against the same composed volume, whose group
 descriptor is written from the offset names of the header. It is asserted here
@@ -386,7 +546,7 @@ through a superblock, and this is where a valid one exists.
 | Free counts and a directory count beyond what the group holds are refused. | A descriptor that contradicts itself. |
 | A descriptor that every other rule accepts, whose free count disagrees with the superblock's, is refused by the whole-table check. | A table read at the wrong offset or one descriptor short — the failure no individually plausible descriptor can reveal. |
 
-### 10.3 The self-test of the inodes
+### 11.3 The self-test of the inodes
 
 The composed volume carries an inode table of its own. Inode 2 is the root
 directory, as the format reserves it, with a single direct block. Inode 11 is a
@@ -410,7 +570,36 @@ block it names lies within the 128 blocks the volume holds.
 | An inode of the table that was never filled is refused. | The zeroes past the table read as a file. |
 | A direct pointer outside the volume is refused when the inode is read; a pointer within an indirect block outside the volume is refused when it is fetched. | Two checks that must both exist, since neither can be performed where the other is. |
 
-### 10.4 A volume the kernel did not compose
+### 11.4 The self-test of the directories
+
+`KernelVerifyDirectories` composes a root directory and one subdirectory within
+the same device of memory, laid out as Table 4.3 lays out its sample: entries
+aligned upon four bytes, an unused record left where a name was removed, and a
+final record whose length runs to the end of the block. The entries are written
+from the same offset names the parser reads, so a mistaken offset cannot agree
+with itself.
+
+The traversal is asserted **entry by entry** against that layout and not merely
+counted, for the reason Section 10.4 gives: a traversal that has gone wrong
+yields fragments of real names rather than an error.
+
+| Property asserted | The silent failure it would catch |
+| ----------------- | --------------------------------- |
+| The root yields `.`, `..`, `file` and `sub`, each with its inode number, its file type, and the block and offset it stands at. | An entry advanced by the length of its name rather than by its record length, which would read every entry after the first from the middle of another. |
+| The unused record between `file` and `sub` is passed over, and the name upon it is not found. | Reporting a file that was deleted. |
+| The final record, whose length runs to the end of the block, ends the traversal. | Reading the padding after the last name as a further entry. |
+| A name is matched by its whole length: `fil` and `files` do not match `file`, nor does `file` given a length of three. | A comparison stopping at the shorter of the two, which would resolve a path to the wrong file. |
+| Twelve paths resolve to the inodes they name, including `/`, `///`, `/.`, `/..`, `/sub/`, `/sub/..`, `/sub/../file` and `//sub///inner`. | Every arithmetic and boundary error in the component walk. |
+| Eight paths that name nothing are refused, including a relative path, a component that does not exist, and a file used as a directory or asserted to be one by a trailing separator. | A path resolving to something, which a caller will then act upon. |
+| Each of the refusals of Section 10.6 refuses, the field in question being altered in the composed volume and restored afterwards. | A malformed directory being walked rather than refused. |
+| An entry declaring `EXT2_FT_DIR` for an inode that is a regular file is refused. | Directories and inodes describing different filesystems. |
+| The same bytes are refused under the sixteen-bit reading and accepted under the eight-bit one, according to the feature flag alone. | The one place in the format where the wrong reading produces no diagnostic of its own. See Section 10.2. |
+
+The cache is invalidated on both sides of every alteration, for the reason
+Section 11.1 gives: the bytes are written beneath both the block layer and the
+cache, and a cache holding the previous contents would answer with them.
+
+### 11.5 A volume the kernel did not compose
 
 A self-test that builds its own volume proves the parser consistent with itself.
 The corroboration must come from a volume built by something else, so three were
@@ -492,7 +681,76 @@ EXT2 root blocks: 772 786 787 788 789 790 791 792 793 794 795 796 798 ... [268]=
 the block at index 268 — which was reached by following the doubly indirect block
 at 1054 to the indirect block at 1055 and taking its first entry.
 
-## 11. Limitations
+
+### 11.6 Directories the kernel did not compose
+
+The root directory is now listed at every boot, upon every device the machine
+carries, and one path is resolved upon it. The names in that listing were written
+by `mke2fs` and not by this project, which is what makes it corroboration rather
+than consistency.
+
+An image was made from a populated directory of 46 entries, whose root therefore
+occupies two blocks, holding a subdirectory `sub` with a `deeper` beneath it:
+
+```sh
+mke2fs -q -F -b 1024 -I 128 -r 1 -d tree/ disk.img 8192
+```
+
+The kernel reported:
+
+```
+EXT2 inode 2: mode 0x41ED (directory), 2048 bytes, 4 links, 4 sectors, first block 292.
+EXT2 root blocks: 292 331
+EXT2 entry: inode 2, directory, 12 bytes at block 292 offset 0: .
+EXT2 entry: inode 2, directory, 12 bytes at block 292 offset 12: ..
+EXT2 entry: inode 11, directory, 20 bytes at block 292 offset 24: lost+found
+EXT2 entry: inode 12, regular file, 16 bytes at block 292 offset 44: README
+EXT2 entry: inode 13, regular file, 40 bytes at block 292 offset 60: entry-with-a-fairly-long-name-1
+...
+EXT2 directory 2 holds 46 entries.
+EXT2 path /lost+found resolves to inode 11, directory of 12288 bytes.
+```
+
+`debugfs -R "ls -l /"` upon the same image lists 46 entries and gives the same
+inode number to each name — 11 for `lost+found`, 12 for `README`, 13 for the
+first of the long names, and so on in the order shown. The offsets are the ones
+the record lengths imply: `.` and `..` occupy twelve bytes each, `lost+found`
+twenty, `README` sixteen, and a name of 31 bytes forty. `debugfs -R "stat
+<11>"` confirms `lost+found` as a directory of 12288 bytes.
+
+The count is the assertion that matters most. Forty-six entries is not a number
+the kernel could reach by accident: it requires every record length in both
+blocks to be read correctly, the traversal to cross from block 292 to block 331
+at exactly the right point, and the final record of each block to end that
+block's list rather than yield an entry.
+
+To exercise path resolution over several components, the probe path was set to
+`//sub/deeper/../deeper/buried` for one boot:
+
+```
+EXT2 path //sub/deeper/../deeper/buried resolves to inode 56, regular file of 2 bytes.
+```
+
+`debugfs -R "stat /sub/deeper/buried"` states inode 56, a regular file of 2
+bytes. The path was written with a doubled leading separator and with a `..` that
+returns to the directory it came from, so the resolution passed through five
+lookups to reach a file three components deep.
+
+A third image was made whose root holds 9000 entries in 530 blocks, which is far
+beyond the twelve direct pointers and beyond the 268 an indirect block adds:
+
+```
+EXT2 inode 2: mode 0x41ED (directory), 542720 bytes, 3 links, 1068 sectors, first block 448.
+EXT2 root blocks: 448 462 463 464 465 466 467 468 469 470 471 472 474 ... [268]=732
+EXT2 directory 2 holds 9003 entries.
+```
+
+`debugfs -R "ls -l /"` lists 9003 entries — the 9000 files, `.`, `..` and
+`lost+found`. The traversal therefore crossed both the direct-to-indirect
+boundary at index 12 and the indirect-to-doubly-indirect boundary at index 268
+without losing or repeating a single record, which is the integration of
+Section 10.4 with the pointer resolution of Section 9.3.
+## 12. Limitations
 
 1. **Nothing is mounted.** The superblock is read, validated and reported; no
    volume is retained and nothing is opened. Sub-task 5.8 introduces the mount.
@@ -505,9 +763,9 @@ at 1054 to the indirect block at 1055 and taking its first entry.
    implemented at all — no EXT2 implementation has ever used them.
 5. **One volume per device.** Partition tables are not read, so a volume must
    begin at the start of its device.
-6. **Nothing reads a file's contents, and nothing reads a directory.** The
-   inode is retrieved and its blocks are resolved; turning that into bytes is
-   sub-task 5.5, and turning a name into an inode number is sub-task 5.4.
+6. **Nothing reads a file's contents.** An inode is retrieved, its blocks are
+   resolved and a name is turned into an inode number; turning the blocks of a
+   file into bytes is sub-task 5.5.
 7. **The extended fields of a large inode are not read.** Only the first 128
    bytes of an inode are decoded, whatever `s_inode_size` states. The
    nanosecond times and the extended attributes that a 256-byte inode carries
@@ -526,3 +784,21 @@ at 1054 to the indirect block at 1055 and taking its first entry.
 11. **The block size may not be smaller than the device's.** A 1024-byte
    filesystem upon a 4096-byte device is a rearrangement this kernel does not
    perform.
+12. **No directory is written.** Names may be looked up and none may be created
+   or removed, which is sub-task 5.7. An entry remembers the block and the
+   offset it was read from against that work, since inserting or removing a name
+   means altering the record before it.
+13. **A symbolic link is not followed.** Met as the last component of a path it
+   is returned as it stands; met within a path it is refused. Following one
+   means reading the file its data is, which is sub-task 5.5, and doing so
+   safely means bounding the depth against a link that names itself.
+14. **The hash index of an indexed directory is not used.** A directory that
+   carries one is read as the linked list it also is: the index is a
+   *compatible* feature precisely because its interior nodes are disguised as
+   records naming inode 0, which this traversal passes over. Every lookup is
+   therefore linear in the entries of the directory, which is what the index
+   exists to avoid, and a directory of many thousands of names is searched a
+   record at a time. Correct, and slow in exactly the case the format provides
+   for.
+15. **Relative paths are not resolved**, there being no working directory to
+   resolve them against until there are processes in Phase 6.
