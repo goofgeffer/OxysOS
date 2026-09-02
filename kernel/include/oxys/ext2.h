@@ -15,7 +15,11 @@
  *          Ext2InodeIsFastSymbolicLink, Ext2DirectoryEntry, Ext2DirectoryCursor,
  *          Ext2DirectoryStep, Ext2DirectoryOpen, Ext2DirectoryNext,
  *          Ext2DirectoryFind, Ext2ResolvePath, Ext2ResolvePathNoFollow,
- *          Ext2FileTypeOfMode, Ext2LastError, Ext2ReportVolume,
+ *          Ext2FileTypeOfMode, Ext2WriteSuperblock, Ext2WriteInode,
+ *          Ext2AllocateBlock, Ext2AllocateInode, Ext2WriteFile,
+ *          Ext2TruncateFile, Ext2DirectoryInsert, Ext2DirectoryRemove,
+ *          Ext2CreateFile, Ext2CreateDirectory, Ext2Link, Ext2Unlink,
+ *          Ext2RemoveDirectory, Ext2LastError, Ext2ReportVolume,
  *          Ext2ReportGroup, Ext2ReportInode, Ext2ReportDirectory.
  * References:
  *   - Poirier, D., "The Second Extended File System: Internal Layout", the
@@ -921,6 +925,120 @@ bool Ext2WriteFile(BlockDevice *device, Ext2Superblock *superblock, Ext2Inode *i
  */
 bool Ext2TruncateFile(BlockDevice *device, Ext2Superblock *superblock, Ext2Inode *inode,
                       uint64_t size);
+
+/*
+ * The greatest number of links a file may bear, and the reason there is one.
+ *
+ * i_links_count is sixteen bits, so the count saturates rather than wrapping;
+ * a count that wrapped to zero would free an inode several files still name.
+ */
+#define EXT2_LINK_MAXIMUM UINT16_C(0xFFFE)
+
+/* The length of a record holding a name of the given length, rounded up to the
+ * four-byte boundary every record begins upon. */
+#define EXT2_RECORD_LENGTH(name_length) \
+    ((uint16_t)((EXT2_DIRECTORY_HEADER_SIZE + (name_length) + (EXT2_DIRECTORY_ALIGNMENT - 1U)) & \
+                ~(EXT2_DIRECTORY_ALIGNMENT - 1U)))
+
+/*
+ * Inserts a name into a directory, naming an inode.
+ *
+ * Space is found within the directory's existing blocks before a block is added
+ * to it: a record longer than the name it holds has slack at its end, and the
+ * format's own removal discipline leaves such slack behind wherever a name was
+ * removed. The record is split, the earlier one shortened to what it actually
+ * needs, and the new one laid in what remains. Only when no block has room is a
+ * block allocated and the directory extended by it.
+ *
+ * The name must not already be present: a directory holding one name twice
+ * names two files by the same path, and which of them is found depends upon
+ * which record the traversal reaches first.
+ */
+bool Ext2DirectoryInsert(BlockDevice *device, Ext2Superblock *superblock, Ext2Inode *directory,
+                         const char *name, size_t length, uint32_t number, uint8_t file_type);
+
+/*
+ * Removes a name from a directory. The inode it named is untouched; removing a
+ * name is not removing a file, which is what Ext2Unlink adds to this.
+ *
+ * The record is absorbed into the one before it by lengthening that record, so
+ * that the space becomes slack an insertion may later use. Where the record is
+ * the first of its block there is nothing before it to lengthen, so it is marked
+ * unused by having its inode number set to zero and is left where it stands —
+ * which is the format's own discipline, and the reason a traversal must pass
+ * over such a record rather than reading the name still lying in it.
+ *
+ * The entries "." and ".." may not be removed: a directory without them is one
+ * that no longer knows itself or its parent.
+ */
+bool Ext2DirectoryRemove(BlockDevice *device, Ext2Superblock *superblock, Ext2Inode *directory,
+                         const char *name, size_t length);
+
+/* Whether a directory holds nothing but "." and "..". */
+bool Ext2DirectoryIsEmpty(BlockDevice *device, const Ext2Superblock *superblock,
+                          const Ext2Inode *directory, bool *empty);
+
+/*
+ * Creates a file in a directory: allocates an inode, gives it the mode and one
+ * link, and inserts the name.
+ *
+ * The file has no blocks and a size of zero; writing to it allocates what it
+ * needs. The mode's format bits decide what is created — a regular file, a
+ * symbolic link, a device — and a directory is refused here, a directory needing
+ * the two entries Ext2CreateDirectory writes into it.
+ */
+bool Ext2CreateFile(BlockDevice *device, Ext2Superblock *superblock, Ext2Inode *directory,
+                    const char *name, size_t length, uint16_t mode, Ext2Inode *inode);
+
+/*
+ * Creates a directory: allocates an inode and one block, writes "." and ".."
+ * into that block, and inserts the name into the parent.
+ *
+ * A new directory bears two links, not one — its own entry "." and the entry the
+ * parent holds — and the parent gains one for the ".." written into the child.
+ * A link count that did not account for both would let a directory still
+ * reachable be freed.
+ */
+bool Ext2CreateDirectory(BlockDevice *device, Ext2Superblock *superblock, Ext2Inode *parent,
+                         const char *name, size_t length, uint16_t mode, Ext2Inode *inode);
+
+/*
+ * Gives an existing file a further name. The inode's link count rises with it,
+ * that count being what says how many names lead to the file.
+ *
+ * A directory may not be given a second name. Two paths to one directory make a
+ * cycle in what must be a tree, and a resolver walking ".." from within it would
+ * have no single answer.
+ */
+bool Ext2Link(BlockDevice *device, Ext2Superblock *superblock, Ext2Inode *directory,
+              const char *name, size_t length, Ext2Inode *target);
+
+/*
+ * Removes a name and, where it was the last, the file itself: the blocks are
+ * freed, the deletion time recorded and the inode returned to the volume.
+ *
+ * The order is the order of the discipline in this header. The name goes first,
+ * so that a machine stopping partway leaves an inode nothing names — which a
+ * check reclaims — rather than a name leading to an inode that has been freed
+ * and may already have been given to somebody else.
+ */
+bool Ext2Unlink(BlockDevice *device, Ext2Superblock *superblock, Ext2Inode *directory,
+                const char *name, size_t length);
+
+/*
+ * Removes a directory, which must be empty. Its block is freed, its inode
+ * returned, its name removed from the parent, and the parent's link count
+ * reduced by the one the child's ".." held.
+ */
+bool Ext2RemoveDirectory(BlockDevice *device, Ext2Superblock *superblock, Ext2Inode *parent,
+                         const char *name, size_t length);
+
+/* How many names have been inserted and removed, and how many files and
+ * directories created and destroyed. */
+uint64_t Ext2NamesInserted(void);
+uint64_t Ext2NamesRemoved(void);
+uint64_t Ext2FilesCreated(void);
+uint64_t Ext2FilesDestroyed(void);
 
 /* The accounting of everything that alters a volume. */
 uint64_t Ext2BlocksAllocated(void);

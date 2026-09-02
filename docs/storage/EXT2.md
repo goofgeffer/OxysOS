@@ -1,6 +1,6 @@
 # The EXT2 Volume
 
-**Phase**: 5, sub-tasks 5.1 to 5.6, of [`../project/PLAN.md`](../project/PLAN.md).
+**Phase**: 5, sub-tasks 5.1 to 5.7, of [`../project/PLAN.md`](../project/PLAN.md).
 
 **Authority**: `PROJECT_GUIDELINES.md`, Sections 2, 3 and 6. Every assertion about
 the format carries a citation, and the specifications are registered in
@@ -403,7 +403,7 @@ fit in a record of twelve bytes. Read the other way about, every entry of a
 volume that states no file type acquires a type equal to the high byte of its
 name length, which is zero, so every file is declared to be of no type.
 
-This kernel decides from the flag alone, and the self-test of Section 13.5
+This kernel decides from the flag alone, and the self-test of Section 14.5
 asserts that it does so by presenting the same bytes under both readings.
 
 ### 10.3 The file type, and the format it must agree with
@@ -439,7 +439,7 @@ produced:
    read its name rather than its inode number would report a file that was
    deleted. It is also how the interior nodes of an indexed directory are
    disguised, which is why a linear traversal reads such a directory correctly;
-   see Section 14, limitation 14.
+   see Section 15, limitation 14.
 2. **A block the directory never had allocated.** Reading a hole yields zeroes,
    and a record length of zero cannot be advanced past; passing over the block is
    both the correct reading of a hole and the only one that terminates.
@@ -622,7 +622,7 @@ mode, the sector count and the extended attribute block, all of which are parsed
 before the words are examined. The words are decoded either way; only their
 interpretation differs.
 
-This was found by the self-test of Section 13.5 failing on the first volume that
+This was found by the self-test of Section 14.5 failing on the first volume that
 carried a fast symbolic link. It is worth recording because it is the
 characteristic shape of a defect in this chapter: the code was correct for every
 case it had been given, and wrong for a case the format permits and every real
@@ -793,9 +793,152 @@ that leaks rather than the side that corrupts.
 | Writing or truncating a directory as a stream of bytes. | Its entries are a structure; sub-task 5.7 alters them properly. |
 | A block index beyond what fifteen pointers can address. | Arithmetic past the end of the decomposition. |
 
-## 13. Verification
+## 13. Names: creating and destroying files
 
-### 13.1 The self-test of the superblock
+Sub-task 5.6 could write a file but not name one. An inode could be allocated and
+filled, and nothing could reach it: a file that no directory names is reachable
+by no path, and the only record that it existed at all is a bit in the inode
+bitmap. This section closes that gap, and in doing so is the first place where
+the two halves of the format — the inode table and the directories — must be kept
+in step with one another.
+
+### 13.1 Insertion: the slack a removal leaves
+
+A record is longer than the name it holds whenever a name has been removed from
+before it, or when it is the last of its block and runs to the end. That excess
+is where the next name goes.
+
+Inserting a name of *n* bytes needs a record of `round_up(8 + n, 4)`. Each block
+of the directory is searched for one of two things:
+
+| Found | Taken by |
+| ----- | -------- |
+| A record naming inode 0 that is long enough | Using it whole |
+| A record in use whose length exceeds what its own name needs, by enough | Shortening it to what it needs, and laying the new record in the remainder |
+
+Only when no block has room is a block allocated, the directory extended by it,
+and the new block given a single record spanning its whole length — which is the
+shape of an empty block, so the ordinary search then finds room in it.
+
+Nothing is ever moved. That is the property the linked list exists to provide,
+and it is why creating and removing the same name repeatedly reuses one piece of
+space rather than growing the directory without limit.
+
+**A name already present is refused.** A directory holding one name twice names
+two files by the same path, and which is found depends on which record the
+traversal reaches first — so the duplicate does not merely waste space, it makes
+the path ambiguous.
+
+### 13.2 Removal: joining two records
+
+A record is removed by lengthening the record before it to cover it. The bytes of
+the removed record stay exactly where they are, unreachable, until an insertion
+takes them.
+
+Where the record is the **first of its block** there is nothing before it to
+lengthen. It is marked unused where it stands, by setting its inode number to
+zero and touching nothing else — which is the format's own discipline, and
+precisely why a traversal must pass over such a record rather than reading the
+name still lying in it (Section 10.4). The two facts are the same fact seen from
+each end.
+
+`.` and `..` may not be removed. A directory without the first no longer knows
+itself, and without the second no longer knows its parent; the resolver finds
+both by looking (Section 10.5), so removing either makes every path through the
+directory fail.
+
+### 13.3 Creating a directory, and the link counts
+
+A directory is not merely an inode with a different mode. Three things must be
+true together, or what results is a directory that is not one:
+
+1. It holds `.` naming itself and `..` naming its parent, the second record
+   running to the end of the block so that the list of that block ends.
+2. Its own link count is **two** — its `.` and the entry the parent holds — and
+   not one.
+3. The parent's link count **rises by one**, for the `..` now standing in the
+   child.
+
+The third is the one that is easy to omit and impossible to see. A parent whose
+count is short by one is a directory that may be freed while a child still names
+it, and nothing reports that until the freed blocks are given to another file.
+`e2fsck` Pass 4 checks exactly this, which is why Section 14.10 is worth more
+than any assertion this kernel makes about itself.
+
+The parent is checked against `EXT2_LINK_MAXIMUM` **before** anything is
+allocated, so a refusal leaves no half-made directory on the volume.
+
+### 13.4 Destroying a file: what the link count is for
+
+`i_links_count` says how many names lead to a file. Removing a name lowers it;
+the file itself is destroyed only when it reaches zero, since until then some
+path still reaches it.
+
+The order is the order of the discipline in Section 12.1, applied to a different
+pair:
+
+| Step | If the machine stops after it |
+| ---- | ----------------------------- |
+| The name is removed first | An inode nothing names — a leak a check reclaims |
+| (the reverse) | A name leading to a freed inode, quite possibly reissued |
+
+Within the destruction, the blocks go before the inode: an inode freed while its
+blocks were still marked used would leak them with nothing left to say which they
+were.
+
+Two particulars. A **fast symbolic link** is not truncated, because the words of
+`i_block` are its target and not pointers; truncating one would read the text as
+blocks of the volume and free them. And a **directory** may not be unlinked as a
+file, nor given a second name — two paths to one directory make a cycle in what
+the format requires to be a tree, and a resolver walking `..` from within it
+would have no single answer.
+
+### 13.5 Destroying a directory
+
+A directory is removed only when it holds nothing but `.` and `..`. Removing one
+that held anything would leave every file within it reachable by no path — an
+inode with a link count above zero that nothing names, which is exactly the state
+a check has to repair by hand.
+
+Its block is freed, its inode returned, and the parent's link count reduced by
+the one the child's `..` held. The root is never removed, whatever it is named by.
+
+### 13.6 A deleted inode is refused
+
+Destroying a file sets `i_dtime` and leaves `i_links_count` at zero. **It does
+not clear the mode or the block pointers** — nothing overwrites them, and a
+recovery tool reads them for exactly that reason.
+
+So nothing distinguishes a destroyed inode from a live file but those two fields,
+and `Ext2ReadInode` now refuses one that has them. No name leads to such an
+inode, so nothing above has any lawful way to reach it: an attempt to read one
+means a directory entry survives that should not, and the blocks it names have
+been given to somebody else. Reading it would serve another file's data under the
+dead file's name.
+
+This was added when the self-test of Section 14.11 asserted that an inode freed
+with its last name could no longer be read, and found that it could.
+
+### 13.7 What is refused
+
+| Refused | Why it matters |
+| ------- | -------------- |
+| A name already present in the directory. | Two files by one path; which is found depends on record order. |
+| A name of no length, longer than 255 bytes, or holding a separator or null byte. | Reachable by no path, or ambiguous with another. |
+| A name given to inode 0, or to an inode beyond the volume. | A name leading nowhere. |
+| Removing `.` or `..`. | The directory would no longer know itself or its parent. |
+| Removing a name that is not there. | Distinguished from success, so a caller is not told it removed something. |
+| Creating a directory with `Ext2CreateFile`. | It would lack `.` and `..`, and its parent's link count would not account for it. |
+| Creating a file with no format in its mode. | An inode of no type is what an unfilled table entry looks like. |
+| A second name for a directory. | A cycle in what must be a tree. |
+| Unlinking a directory, or removing a file with `Ext2RemoveDirectory`. | Each would leave the other's invariants unmaintained. |
+| Removing a directory that is not empty. | Everything within it becomes reachable by no path. |
+| Removing the root. | There is nowhere for a path to begin. |
+| Any of the above upon a read-only volume. | The one judgement standing between this code and somebody else's data. |
+
+## 14. Verification
+
+### 14.1 The self-test of the superblock
 
 `KernelVerifyExt2` composes a superblock in the memory-backed block device of
 [`BLOCK.md`](BLOCK.md), Section 5, using the offset names from the header, and
@@ -818,7 +961,7 @@ device's storage directly, beneath both the block layer and the cache, so a cach
 holding the previous contents would answer the next read with them, and the
 assertion would be made against a volume that no longer exists.
 
-### 13.2 The self-test of the descriptor table
+### 14.2 The self-test of the descriptor table
 
 `KernelVerifyGroups` runs against the same composed volume, whose group
 descriptor is written from the offset names of the header. It is asserted here
@@ -837,7 +980,7 @@ through a superblock, and this is where a valid one exists.
 | Free counts and a directory count beyond what the group holds are refused. | A descriptor that contradicts itself. |
 | A descriptor that every other rule accepts, whose free count disagrees with the superblock's, is refused by the whole-table check. | A table read at the wrong offset or one descriptor short — the failure no individually plausible descriptor can reveal. |
 
-### 13.3 The self-test of the inodes
+### 14.3 The self-test of the inodes
 
 The composed volume carries an inode table of its own. Inode 2 is the root
 directory, as the format reserves it, with a single direct block. Inode 11 is a
@@ -861,7 +1004,7 @@ block it names lies within the 128 blocks the volume holds.
 | An inode of the table that was never filled is refused. | The zeroes past the table read as a file. |
 | A direct pointer outside the volume is refused when the inode is read; a pointer within an indirect block outside the volume is refused when it is fetched. | Two checks that must both exist, since neither can be performed where the other is. |
 
-### 13.4 The self-test of the directories
+### 14.4 The self-test of the directories
 
 `KernelVerifyDirectories` composes a root directory and one subdirectory within
 the same device of memory, laid out as Table 4.3 lays out its sample: entries
@@ -887,10 +1030,10 @@ yields fragments of real names rather than an error.
 | The same bytes are refused under the sixteen-bit reading and accepted under the eight-bit one, according to the feature flag alone. | The one place in the format where the wrong reading produces no diagnostic of its own. See Section 10.2. |
 
 The cache is invalidated on both sides of every alteration, for the reason
-Section 13.1 gives: the bytes are written beneath both the block layer and the
+Section 14.1 gives: the bytes are written beneath both the block layer and the
 cache, and a cache holding the previous contents would answer with them.
 
-### 13.5 The self-test of file reading
+### 14.5 The self-test of file reading
 
 `KernelVerifyFiles` reads the composed file, the composed sparse file, and both
 forms of symbolic link.
@@ -918,7 +1061,7 @@ hide.
 | `Ext2ResolvePathNoFollow` returns the link, follows a link within the path, and is overridden by a trailing separator. | The distinction between acting upon a file and upon its name collapsing in either direction. |
 | A link altered to name itself is refused. | A resolution that recurs until the stack is gone. |
 
-### 13.6 A volume the kernel did not compose
+### 14.6 A volume the kernel did not compose
 
 A self-test that builds its own volume proves the parser consistent with itself.
 The corroboration must come from a volume built by something else, so three were
@@ -1001,7 +1144,7 @@ the block at index 268 — which was reached by following the doubly indirect bl
 at 1054 to the indirect block at 1055 and taking its first entry.
 
 
-### 13.7 Directories the kernel did not compose
+### 14.7 Directories the kernel did not compose
 
 The root directory is now listed at every boot, upon every device the machine
 carries, and one path is resolved upon it. The names in that listing were written
@@ -1069,7 +1212,7 @@ EXT2 directory 2 holds 9003 entries.
 boundary at index 12 and the indirect-to-doubly-indirect boundary at index 268
 without losing or repeating a single record, which is the integration of
 Section 10.4 with the pointer resolution of Section 9.3.
-### 13.8 Files the kernel did not compose
+### 14.8 Files the kernel did not compose
 
 The root directory of every volume is listed at each boot, one path is resolved
 upon it, and what that path names is now read: the target of a symbolic link, or
@@ -1116,7 +1259,7 @@ target `deep` taken against the root that holds it, and two further components
 walked from there.
 
 
-### 13.9 The self-test of writing
+### 14.9 The self-test of writing
 
 `KernelVerifyWrites` is the first self-test in this project that alters a
 filesystem, and the standard it is held to differs from every one before it. Two
@@ -1130,7 +1273,7 @@ decremented its own copy and never wrote it back would satisfy every assertion
 made against memory while leaving the volume claiming a block it had given away.
 
 **Every write is made to the device of memory.** The volumes upon a real disk
-belong to whoever booted this kernel; see Section 13.10 for what is done there,
+belong to whoever booted this kernel; see Section 14.10 for what is done there,
 and upon whose instruction.
 
 | Property asserted | The silent failure it would catch |
@@ -1155,7 +1298,7 @@ back before discarding them, so composing first would flush the writes of the
 test just finished onto the volume just composed, restoring nothing. No self-test
 before this one had ever left a dirty buffer behind.
 
-### 13.10 Writing a volume the kernel did not compose
+### 14.10 Writing a volume the kernel did not compose
 
 The strongest evidence available for this sub-task is not a self-test at all. It
 is `e2fsck`'s opinion of a volume this kernel has written.
@@ -1205,7 +1348,58 @@ now holds eight of 1024, which is seven more. The 8192 bytes extracted with
 `debugfs dump` match the expected pattern byte for byte over their whole length,
 and the other file in the image reads exactly as it did before.
 
-## 14. Limitations
+Sub-task 5.7 extended the same gated test with names. Within one boot the kernel
+created a directory, created a file within it, wrote to that file, and then
+removed both — so a volume that held `/oxys-write-test` before the test holds
+exactly the same set of names afterwards, with that one file rewritten:
+
+```
+EXT2 write test: created /oxys-made (inode 14) holding within (inode 15).
+EXT2 write test: removed both again.
+EXT2 write test: wrote 8192 bytes to /oxys-write-test (inode 13, 16 sectors); volume now reports 7877 free blocks and 2035 free inodes.
+```
+
+`e2fsck -fn` again reported **no errors**, and this time three of its passes are
+the point. Pass 2 checks the directory structure — the records this kernel split
+and joined. Pass 3 checks directory connectivity — the `.` and `..` it wrote.
+Pass 4 checks reference counts — the link counts it raised and lowered, including
+the parent's, which is the one Section 13.3 describes as impossible to see. The
+volume reported `13/2048 files`, exactly as before the test, so the two inodes
+created were genuinely returned; `debugfs -R "ls -l /"` lists the same five
+entries it listed before; and the 8192 bytes still match byte for byte.
+
+
+### 14.11 The self-test of names
+
+`KernelVerifyDirectoryWrites` alters the linked list of records that a directory
+is, and the failures of a list are its subject: a record whose length no longer
+reaches the next one, two records overlapping, a record left in use that nothing
+points past.
+
+**None of them is visible in the operation that caused it.** The name just
+inserted is found perfectly well; the directory reads correctly until the
+traversal reaches the record that was damaged. So the assertions are made by
+traversing the **whole** directory afterwards and counting what comes out, and by
+requiring the volume to account for itself at the end.
+
+| Property asserted | The silent failure it would catch |
+| ----------------- | --------------------------------- |
+| After an insertion the directory yields exactly one entry more than before, and the name resolves as a path. | A record split wrongly, leaving the records after it unreachable or overlapping — invisible in the name just inserted. |
+| A name already present is refused, and so is a second insertion of an existing name. | Two files reachable by one path. |
+| After removal the directory yields exactly what it did before, and the name is gone. | A join that lost or duplicated a record. |
+| Removing a name that is not there, and removing `.` or `..`, are refused. | A caller told it removed something; a directory that no longer knows its parent. |
+| Sixty-four insertions and removals of the same name consume **no blocks**. | A directory that grows without limit under ordinary use, the slack of Section 13.1 never being reused. |
+| A created file has one link, no size, and can be written and reached by path. | An inode allocated but never linked, or linked but never written. |
+| A second name raises the link count; removing one of two names removes the name and not the file. | An unlink that destroys a file another name still leads to — which leaves that name pointing at an inode that may already have been reissued. |
+| Removing the last name frees both the inode and its blocks, and the inode is then free in the bitmap **and** refused as deleted. | A file destroyed in the directory but not on the volume, or an inode reachable after it was freed. |
+| A created directory has two links, its parent gains one, and `/made/.`, `/made/..` and `/made/../made` all resolve. | The link-count error of Section 13.3, and a `..` naming the wrong inode — which would be reachable and would lead out of itself to somewhere else. |
+| A directory holding a file is not empty and is not removed; unlinking it as a file and giving it a second name are refused. | Files made unreachable; a cycle in the tree. |
+| An emptied directory is removed and the parent's link count returns. | The count that Pass 4 of `e2fsck` checks. |
+| The root is not removed. | There is nowhere for a path to begin. |
+| After all of it the free counts return to what they were, the root yields what it did, and `Ext2VerifyGroupDescriptors` passes. | Anything leaked or double-counted across the whole sequence. |
+| A read-only volume refuses insertion, removal, creation and destruction alike. | The judgement that stands between this code and somebody else's data. |
+
+## 15. Limitations
 
 1. **Nothing is mounted.** The superblock is read, validated and reported; no
    volume is retained and nothing is opened. Sub-task 5.8 introduces the mount.
@@ -1222,9 +1416,11 @@ and the other file in the image reads exactly as it did before.
    implemented at all — no EXT2 implementation has ever used them.
 5. **One volume per device.** Partition tables are not read, so a volume must
    begin at the start of its device.
-6. **Nothing is opened.** A file's contents may be read and written by naming it,
-   but there is no descriptor and no position that advances; both belong to the
-   virtual filesystem layer of sub-task 5.8.
+6. **Nothing is opened, and nothing is mounted.** A file may be created, named,
+   read, written, truncated and destroyed by naming it, but there is no
+   descriptor and no position that advances, and no volume is retained between
+   operations. Both belong to the virtual filesystem layer of sub-task 5.8,
+   which is what remains of this phase.
 7. **The extended fields of a large inode are not read.** Only the first 128
    bytes of an inode are decoded, whatever `s_inode_size` states. The
    nanosecond times and the extended attributes that a 256-byte inode carries
@@ -1243,11 +1439,21 @@ and the other file in the image reads exactly as it did before.
 11. **The block size may not be smaller than the device's.** A 1024-byte
    filesystem upon a 4096-byte device is a rearrangement this kernel does not
    perform.
-12. **No directory is written.** Names may be looked up and none may be created
-   or removed, which is sub-task 5.7 — so a file may be written but not yet
-   given a name, and an inode may be allocated but not yet linked to anything.
-   An entry remembers the block and the offset it was read from against that
-   work, since inserting or removing a name means altering the record before it.
+12. **A directory never shrinks.** A block added to a directory is never given
+   back, even when every name in it has been removed; the space becomes slack
+   that a later insertion reuses (Section 13.1). Reclaiming it would mean
+   discovering that a block holds nothing but unused records and removing it
+   from the middle of the file, which is work `e2fsck -D` exists to do offline
+   and which no EXT2 implementation does while running.
+20. **Nothing is renamed.** A name may be created and removed, so a rename is two
+   operations with a window between them in which the file has two names or
+   none. An atomic rename is what `rename()` promises and is not offered here.
+21. **The times are not maintained.** `i_atime`, `i_mtime` and `i_ctime` are
+   written as they stand and never brought up to date, there being no clock this
+   kernel can convert to the seconds since 1970 that the format wants. A file
+   this kernel creates bears a time of zero.
+22. **The owner is not recorded.** A created file is given uid and gid 0, there
+   being no users until Phase 6 and nothing to take them from.
 18. **A sequence of writes is not atomic.** Allocating one block touches four
    structures, and a machine that stops partway leaves the volume inconsistent;
    see Section 12.6. This is what a journal provides and what EXT2 does not have.

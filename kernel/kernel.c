@@ -3995,6 +3995,9 @@ static void KernelReportRootInode(BlockDevice *device, const Ext2Superblock *sup
 static void KernelWriteProbeVolume(BlockDevice *device, Ext2Superblock *superblock)
 {
     Ext2Inode probe;
+    Ext2Inode parent;
+    Ext2Inode made;
+    Ext2Inode within;
     uint64_t moved = 0U;
     uint64_t index;
 
@@ -4076,6 +4079,55 @@ static void KernelWriteProbeVolume(BlockDevice *device, Ext2Superblock *superblo
         KernelWriteString("EXT2 write test: the cache could not be written back.\n");
         return;
     }
+
+    /*
+     * The names of sub-task 5.7, made and unmade within a directory of this
+     * kernel's own creation. Everything here is removed again before the report,
+     * so a volume that held /oxys-write-test before this ran holds exactly the
+     * same set of names afterwards, with that one file rewritten. What is left
+     * for e2fsck to judge is therefore the accounting rather than the tree.
+     */
+    if (!Ext2ResolvePath(device, superblock, "/", &parent))
+    {
+        KernelWriteString("EXT2 write test: the root could not be read.\n");
+        return;
+    }
+
+    if (!Ext2CreateDirectory(device, superblock, &parent, "oxys-made", 9U, 0x01EDU, &made))
+    {
+        KernelWriteString("EXT2 write test: a directory could not be created: ");
+        KernelWriteString(Ext2LastError());
+        KernelWriteString("\n");
+        return;
+    }
+
+    if (!Ext2CreateFile(device, superblock, &made, "within", 6U,
+                        (uint16_t)(EXT2_S_IFREG | 0x01A4U), &within) ||
+        !Ext2WriteFile(device, superblock, &within, 0U, KernelFileBuffer, 64U, &moved) ||
+        (moved != 64U))
+    {
+        KernelWriteString("EXT2 write test: a file could not be created within it: ");
+        KernelWriteString(Ext2LastError());
+        KernelWriteString("\n");
+        return;
+    }
+
+    KernelWriteString("EXT2 write test: created /oxys-made (inode ");
+    KernelWriteDecimal((uint64_t)made.number);
+    KernelWriteString(") holding within (inode ");
+    KernelWriteDecimal((uint64_t)within.number);
+    KernelWriteString(").\n");
+
+    if (!Ext2Unlink(device, superblock, &made, "within", 6U) ||
+        !Ext2RemoveDirectory(device, superblock, &parent, "oxys-made", 9U))
+    {
+        KernelWriteString("EXT2 write test: what was created could not be removed: ");
+        KernelWriteString(Ext2LastError());
+        KernelWriteString("\n");
+        return;
+    }
+
+    KernelWriteString("EXT2 write test: removed both again.\n");
 
     KernelWriteString("EXT2 write test: wrote ");
     KernelWriteDecimal(probe.size);
@@ -4221,10 +4273,19 @@ static void KernelSetVolumeWord(size_t offset, uint32_t value)
  * the self-test of sub-task 5.3 requires to be empty, and is now also the only
  * one an allocation can be given.
  */
+/*
+ * The inodes the volume holds. Thirty-two rather than sixteen since sub-task
+ * 5.7, which creates files and directories and therefore needs inodes to create
+ * them with; the table accordingly occupies four blocks rather than two, and the
+ * data blocks begin two blocks later than they did.
+ */
+#define KERNEL_VOLUME_INODES           32U
+#define KERNEL_VOLUME_USED_INODES      15U
+
 #define KERNEL_VOLUME_GROUP_BLOCKS     127U
 #define KERNEL_VOLUME_USED_BLOCKS      (KERNEL_VOLUME_LAST_BLOCK - 1U)
 #define KERNEL_VOLUME_FREE_BLOCKS      (KERNEL_VOLUME_GROUP_BLOCKS - KERNEL_VOLUME_USED_BLOCKS)
-#define KERNEL_VOLUME_FREE_INODES      1U
+#define KERNEL_VOLUME_FREE_INODES      (KERNEL_VOLUME_INODES - KERNEL_VOLUME_USED_INODES)
 #define KERNEL_VOLUME_DIRECTORIES      2U
 
 /* The byte at which a block of the composed volume begins. */
@@ -4246,23 +4307,23 @@ static size_t KernelDescriptorField(size_t offset)
  * pointer blocks and the data blocks they lead to.
  */
 #define KERNEL_VOLUME_FILE_INODE      11U
-#define KERNEL_VOLUME_DIRECT_FIRST    7U
-#define KERNEL_VOLUME_INDIRECT        19U
-#define KERNEL_VOLUME_INDIRECT_DATA   20U
-#define KERNEL_VOLUME_INDIRECT_LAST   21U
-#define KERNEL_VOLUME_DOUBLE          22U
-#define KERNEL_VOLUME_DOUBLE_LEVEL    23U
-#define KERNEL_VOLUME_DOUBLE_DATA     24U
-#define KERNEL_VOLUME_TRIPLE          25U
-#define KERNEL_VOLUME_TRIPLE_DOUBLE   26U
-#define KERNEL_VOLUME_TRIPLE_INDIRECT 27U
-#define KERNEL_VOLUME_TRIPLE_DATA     28U
-#define KERNEL_VOLUME_ROOT_DATA       29U
-#define KERNEL_VOLUME_SUB_DATA        30U
-#define KERNEL_VOLUME_INNER_DATA      31U
-#define KERNEL_VOLUME_INNER_DATA_LAST 32U
-#define KERNEL_VOLUME_LINK_DATA       33U
-#define KERNEL_VOLUME_LAST_BLOCK      34U
+#define KERNEL_VOLUME_DIRECT_FIRST    9U
+#define KERNEL_VOLUME_INDIRECT        21U
+#define KERNEL_VOLUME_INDIRECT_DATA   22U
+#define KERNEL_VOLUME_INDIRECT_LAST   23U
+#define KERNEL_VOLUME_DOUBLE          24U
+#define KERNEL_VOLUME_DOUBLE_LEVEL    25U
+#define KERNEL_VOLUME_DOUBLE_DATA     26U
+#define KERNEL_VOLUME_TRIPLE          27U
+#define KERNEL_VOLUME_TRIPLE_DOUBLE   28U
+#define KERNEL_VOLUME_TRIPLE_INDIRECT 29U
+#define KERNEL_VOLUME_TRIPLE_DATA     30U
+#define KERNEL_VOLUME_ROOT_DATA       31U
+#define KERNEL_VOLUME_SUB_DATA        32U
+#define KERNEL_VOLUME_INNER_DATA      33U
+#define KERNEL_VOLUME_INNER_DATA_LAST 34U
+#define KERNEL_VOLUME_LINK_DATA       35U
+#define KERNEL_VOLUME_LAST_BLOCK      36U
 
 /*
  * The two inodes the directories lead to besides the file: a subdirectory of the
@@ -4620,7 +4681,10 @@ static void KernelComposeBitmaps(void)
         KernelSetBitmapBit(KERNEL_VOLUME_BLOCK_BITMAP, block - 1U);
     }
 
-    /* The inodes in use: every one but 14, which is left free deliberately. */
+    /*
+     * The inodes in use: 1 to 16 but for 14, which is left free deliberately.
+     * Everything above 16 is free and is what an allocation is given.
+     */
     for (uint32_t number = 1U; number <= 16U; ++number)
     {
         if (number != KERNEL_VOLUME_UNUSED_INODE)
@@ -4672,7 +4736,7 @@ static void KernelComposeVolume(void)
         KernelMemoryDeviceStore[EXT2_SUPERBLOCK_OFFSET + index] = 0U;
     }
 
-    KernelSetVolumeWord(EXT2_OFFSET_INODE_COUNT, 16U);
+    KernelSetVolumeWord(EXT2_OFFSET_INODE_COUNT, KERNEL_VOLUME_INODES);
     KernelSetVolumeWord(EXT2_OFFSET_BLOCK_COUNT, 128U);
     KernelSetVolumeWord(EXT2_OFFSET_RESERVED_BLOCKS, 6U);
     KernelSetVolumeWord(EXT2_OFFSET_FREE_BLOCKS, KERNEL_VOLUME_FREE_BLOCKS);
@@ -4682,7 +4746,7 @@ static void KernelComposeVolume(void)
     KernelSetVolumeWord(EXT2_OFFSET_LOG_FRAGMENT_SIZE, 0U);
     KernelSetVolumeWord(EXT2_OFFSET_BLOCKS_PER_GROUP, 8192U);
     KernelSetVolumeWord(EXT2_OFFSET_FRAGS_PER_GROUP, 8192U);
-    KernelSetVolumeWord(EXT2_OFFSET_INODES_PER_GROUP, 16U);
+    KernelSetVolumeWord(EXT2_OFFSET_INODES_PER_GROUP, KERNEL_VOLUME_INODES);
     KernelSetVolumeHalf(EXT2_OFFSET_MAGIC, EXT2_SUPER_MAGIC);
     KernelSetVolumeHalf(EXT2_OFFSET_STATE, (uint16_t)EXT2_VALID_FS);
     KernelSetVolumeHalf(EXT2_OFFSET_ERRORS, 1U);
@@ -4790,7 +4854,7 @@ static bool KernelVerifyGroups(BlockDevice *device, const Ext2Superblock *superb
     /* The derived geometry of the table itself, before any of it is read. */
     if ((Ext2GroupDescriptorBlock(superblock) != KERNEL_VOLUME_DESCRIPTOR_BLOCK) ||
         (Ext2GroupDescriptorBlocks(superblock) != 1U) ||
-        (Ext2InodeTableBlocks(superblock) != 2U) ||
+        (Ext2InodeTableBlocks(superblock) != 4U) ||
         (Ext2GroupFirstBlock(superblock, 0U) != 1U) ||
         (Ext2GroupBlockCount(superblock, 0U) != 127U))
     {
@@ -4872,8 +4936,8 @@ static bool KernelVerifyGroups(BlockDevice *device, const Ext2Superblock *superb
      * inodes in use, which changes whenever the composition does. */
     if (!KernelDescriptorRefusedWith(device, superblock, EXT2_OFFSET_BG_FREE_BLOCKS, 200U,
                                      true, false) ||
-        !KernelDescriptorRefusedWith(device, superblock, EXT2_OFFSET_BG_FREE_INODES, 17U, true,
-                                     false) ||
+        !KernelDescriptorRefusedWith(device, superblock, EXT2_OFFSET_BG_FREE_INODES,
+                                     superblock->inodes_per_group + 1U, true, false) ||
         !KernelDescriptorRefusedWith(
             device, superblock, EXT2_OFFSET_BG_USED_DIRECTORIES,
             (superblock->inodes_per_group - superblock->free_inode_count) + 1U, true, false))
@@ -5727,23 +5791,61 @@ static bool KernelVerifyWrites(BlockDevice *device, Ext2Superblock *superblock)
 
     /* --- The one free inode, and the exhaustion after it. --- */
 
-    if (!Ext2AllocateInode(device, superblock, false, &number) ||
-        (number != KERNEL_VOLUME_UNUSED_INODE) ||
-        !Ext2InodeInUse(device, superblock, number, &used) || !used)
     {
-        KernelWriteString("  The one free inode was not allocated.\n");
-        succeeded = false;
-    }
-    else if (Ext2AllocateInode(device, superblock, false, &number))
-    {
-        KernelWriteString("  An inode was allocated from a volume holding none.\n");
-        succeeded = false;
-    }
-    else if (!Ext2FreeInode(device, superblock, KERNEL_VOLUME_UNUSED_INODE, false) ||
-             !Ext2InodeInUse(device, superblock, KERNEL_VOLUME_UNUSED_INODE, &used) || used)
-    {
-        KernelWriteString("  An inode was not returned to the volume.\n");
-        succeeded = false;
+        /*
+         * Every free inode of the volume, taken until there are none, and then
+         * returned. Exhausting the volume rather than allocating one is what
+         * asserts that the free count and the bitmap describe the same set: an
+         * allocator that miscounted would either stop early, leaving inodes the
+         * bitmap says are free, or run past the count and issue one twice.
+         */
+        uint32_t taken[KERNEL_VOLUME_INODES];
+        uint32_t count = 0U;
+        const uint32_t available = superblock->free_inode_count;
+
+        while ((count < KERNEL_VOLUME_INODES) &&
+               Ext2AllocateInode(device, superblock, false, &number))
+        {
+            taken[count] = number;
+            ++count;
+        }
+
+        if ((count != available) || (superblock->free_inode_count != 0U))
+        {
+            KernelWriteString("  The free inodes of the volume were not all issued.\n");
+            succeeded = false;
+        }
+
+        /* The lowest free inode is issued first, which is inode 14: the one the
+         * self-test of sub-task 5.3 requires to be empty. */
+        if ((count == 0U) || (taken[0] != KERNEL_VOLUME_UNUSED_INODE))
+        {
+            KernelWriteString("  The lowest free inode was not the first issued.\n");
+            succeeded = false;
+        }
+
+        if (Ext2AllocateInode(device, superblock, false, &number))
+        {
+            KernelWriteString("  An inode was allocated from a volume holding none.\n");
+            succeeded = false;
+        }
+
+        for (uint32_t index = 0U; index < count; ++index)
+        {
+            if (!Ext2InodeInUse(device, superblock, taken[index], &used) || !used ||
+                !Ext2FreeInode(device, superblock, taken[index], false))
+            {
+                KernelWriteString("  An inode was not returned to the volume.\n");
+                succeeded = false;
+                break;
+            }
+        }
+
+        if (superblock->free_inode_count != available)
+        {
+            KernelWriteString("  The inodes returned did not restore the free count.\n");
+            succeeded = false;
+        }
     }
 
     /* An inode belonging to the filesystem is never issued and never freed. */
@@ -5956,6 +6058,373 @@ static bool KernelVerifyWrites(BlockDevice *device, Ext2Superblock *superblock)
     if (succeeded)
     {
         KernelWriteString("EXT2 writes: allocation, writing and truncation are sound.\n");
+    }
+
+    return succeeded;
+}
+
+/* How many entries a directory holds, for an assertion about a whole directory
+ * rather than about one name within it. */
+static bool KernelCountEntries(BlockDevice *device, const Ext2Superblock *superblock,
+                               const Ext2Inode *directory, uint64_t *count)
+{
+    Ext2DirectoryCursor cursor;
+    Ext2DirectoryEntry entry;
+
+    *count = 0U;
+    Ext2DirectoryOpen(&cursor, directory);
+
+    for (;;)
+    {
+        const Ext2DirectoryStep step = Ext2DirectoryNext(device, superblock, &cursor, &entry);
+
+        if (step == EXT2_DIRECTORY_FAILED)
+        {
+            return false;
+        }
+
+        if (step == EXT2_DIRECTORY_END)
+        {
+            return true;
+        }
+
+        ++*count;
+    }
+}
+
+/*
+ * Asserts that names may be inserted into a directory and removed from it, and
+ * that files and directories may be created and destroyed.
+ *
+ * A directory is a linked list of records within each of its blocks, and every
+ * operation here is an alteration of that list. The failures are accordingly the
+ * failures of a list: a record whose length no longer reaches the next one, two
+ * records overlapping, a record left in use that nothing points past. None of
+ * them is visible in the operation that caused it — the directory reads
+ * correctly until the traversal reaches the record that was damaged — so the
+ * assertions are made by traversing the whole directory afterwards and counting
+ * what comes out, and by requiring the volume to account for itself at the end.
+ */
+static bool KernelVerifyDirectoryWrites(BlockDevice *device, Ext2Superblock *superblock)
+{
+    Ext2DirectoryEntry entry;
+    Ext2Inode root;
+    Ext2Inode made;
+    Ext2Inode found;
+    uint64_t count = 0U;
+    uint64_t before = 0U;
+    uint32_t free_blocks;
+    uint32_t free_inodes;
+    uint16_t root_links;
+    bool empty = false;
+    bool succeeded = true;
+
+    KernelWriteString("EXT2 names: asserting insertion, removal and creation.\n");
+
+    if (!Ext2ReadInode(device, superblock, EXT2_ROOT_INODE, &root) ||
+        !KernelCountEntries(device, superblock, &root, &before))
+    {
+        KernelWriteString("  The root directory could not be read.\n");
+        return false;
+    }
+
+    free_blocks = superblock->free_block_count;
+    free_inodes = superblock->free_inode_count;
+    root_links = root.link_count;
+
+    /* --- A name inserted, found, and removed. --- */
+
+    if (!Ext2DirectoryInsert(device, superblock, &root, "inserted", 8U,
+                             KERNEL_VOLUME_FILE_INODE, (uint8_t)EXT2_FT_REG_FILE))
+    {
+        KernelWriteString("  A name could not be inserted: ");
+        KernelWriteString(Ext2LastError());
+        KernelWriteString("\n");
+        succeeded = false;
+    }
+
+    if (!Ext2DirectoryFind(device, superblock, &root, "inserted", 8U, &entry) ||
+        (entry.inode != KERNEL_VOLUME_FILE_INODE) ||
+        !KernelPathIs(device, superblock, "/inserted", KERNEL_VOLUME_FILE_INODE))
+    {
+        KernelWriteString("  An inserted name was not found by looking for it.\n");
+        succeeded = false;
+    }
+
+    /*
+     * The whole directory, traversed. An insertion that split a record wrongly
+     * leaves the records after it unreachable or overlapping, and neither shows
+     * in the name just inserted — only in the count of everything.
+     */
+    if (!KernelCountEntries(device, superblock, &root, &count) || (count != (before + 1U)))
+    {
+        KernelWriteString("  The directory no longer yields the entries it holds.\n");
+        succeeded = false;
+    }
+
+    /* A name already present is refused, a directory holding one name twice
+     * making the path to it ambiguous. */
+    if (Ext2DirectoryInsert(device, superblock, &root, "inserted", 8U, KERNEL_VOLUME_SUB_INODE,
+                            (uint8_t)EXT2_FT_DIR) ||
+        Ext2DirectoryInsert(device, superblock, &root, "file", 4U, KERNEL_VOLUME_FILE_INODE,
+                            (uint8_t)EXT2_FT_REG_FILE))
+    {
+        KernelWriteString("  A name already present was inserted a second time.\n");
+        succeeded = false;
+    }
+
+    if (!Ext2DirectoryRemove(device, superblock, &root, "inserted", 8U) ||
+        Ext2DirectoryFind(device, superblock, &root, "inserted", 8U, &entry) ||
+        !KernelCountEntries(device, superblock, &root, &count) || (count != before))
+    {
+        KernelWriteString("  A name was not removed, or the directory did not recover.\n");
+        succeeded = false;
+    }
+
+    /* Removing what is not there, and removing what may not be removed. */
+    if (Ext2DirectoryRemove(device, superblock, &root, "inserted", 8U) ||
+        Ext2DirectoryRemove(device, superblock, &root, ".", 1U) ||
+        Ext2DirectoryRemove(device, superblock, &root, "..", 2U))
+    {
+        KernelWriteString("  A name that may not be removed was removed.\n");
+        succeeded = false;
+    }
+
+    /*
+     * The space a removal leaves is reused rather than the directory growing.
+     * Inserting and removing the same name many times over must not consume a
+     * block: the record before the removed one absorbs its space, and the next
+     * insertion splits it again.
+     */
+    for (uint32_t attempt = 0U; attempt < 64U; ++attempt)
+    {
+        if (!Ext2DirectoryInsert(device, superblock, &root, "recycled", 8U,
+                                 KERNEL_VOLUME_FILE_INODE, (uint8_t)EXT2_FT_REG_FILE) ||
+            !Ext2DirectoryRemove(device, superblock, &root, "recycled", 8U))
+        {
+            KernelWriteString("  A name could not be inserted and removed repeatedly.\n");
+            succeeded = false;
+            break;
+        }
+    }
+
+    if (superblock->free_block_count != free_blocks)
+    {
+        KernelWriteString("  Repeated insertion and removal consumed blocks.\n");
+        succeeded = false;
+    }
+
+    /* --- A file created, written, linked and destroyed. --- */
+
+    if (!Ext2CreateFile(device, superblock, &root, "created", 7U,
+                        (uint16_t)(EXT2_S_IFREG | 0x01A4U), &made) ||
+        !Ext2InodeIsRegular(&made) || (made.link_count != 1U) || (made.size != 0U) ||
+        (superblock->free_inode_count != (free_inodes - 1U)))
+    {
+        KernelWriteString("  A file was not created.\n");
+        succeeded = false;
+    }
+    else
+    {
+        uint64_t moved = 0U;
+
+        KernelFileBuffer[0] = 0x11U;
+        KernelFileBuffer[1] = 0x22U;
+
+        if (!Ext2WriteFile(device, superblock, &made, 0U, KernelFileBuffer, 2U, &moved) ||
+            (moved != 2U) ||
+            !KernelPathIs(device, superblock, "/created", made.number))
+        {
+            KernelWriteString("  A created file could not be written or reached.\n");
+            succeeded = false;
+        }
+
+        /* A second name for the same file, and the count that records it. */
+        if (!Ext2Link(device, superblock, &root, "linked", 6U, &made) ||
+            (made.link_count != 2U) ||
+            !KernelPathIs(device, superblock, "/linked", made.number))
+        {
+            KernelWriteString("  A file was not given a second name.\n");
+            succeeded = false;
+        }
+
+        /*
+         * Removing one of two names removes the name and not the file. An unlink
+         * that destroyed the file here would leave the other name leading to an
+         * inode that had been freed, and quite possibly reissued.
+         */
+        if (!Ext2Unlink(device, superblock, &root, "created", 7U) ||
+            !Ext2ReadInode(device, superblock, made.number, &found) ||
+            (found.link_count != 1U) ||
+            !KernelPathIs(device, superblock, "/linked", made.number))
+        {
+            KernelWriteString("  Removing one of two names destroyed the file.\n");
+            succeeded = false;
+        }
+
+        if (!Ext2Unlink(device, superblock, &root, "linked", 6U) ||
+            (superblock->free_inode_count != free_inodes) ||
+            (superblock->free_block_count != free_blocks))
+        {
+            KernelWriteString("  Removing the last name did not destroy the file.\n");
+            succeeded = false;
+        }
+
+        /*
+         * The inode is free in the bitmap and is refused as a deleted file. Both
+         * are asserted: the bitmap is what lets it be issued again, and the
+         * refusal is what stops anything reaching it in the meantime.
+         */
+        if (!Ext2InodeInUse(device, superblock, made.number, &empty) || empty ||
+            Ext2ReadInode(device, superblock, made.number, &found))
+        {
+            KernelWriteString("  An inode freed with its last name was still in use.\n");
+            succeeded = false;
+        }
+    }
+
+    /* --- A directory created and removed. --- */
+
+    if (!Ext2CreateDirectory(device, superblock, &root, "made", 4U, 0x01EDU, &made) ||
+        !Ext2InodeIsDirectory(&made) || (made.link_count != 2U) ||
+        (made.size != KERNEL_VOLUME_BLOCK_SIZE) || (root.link_count != (root_links + 1U)))
+    {
+        KernelWriteString("  A directory was not created with its two links.\n");
+        succeeded = false;
+    }
+    else
+    {
+        /*
+         * The two entries every directory holds, resolved by the ordinary lookup
+         * rather than assumed. A directory whose ".." named the wrong inode would
+         * be reachable and would lead out of itself to somewhere else.
+         */
+        if (!KernelPathIs(device, superblock, "/made", made.number) ||
+            !KernelPathIs(device, superblock, "/made/.", made.number) ||
+            !KernelPathIs(device, superblock, "/made/..", EXT2_ROOT_INODE) ||
+            !KernelPathIs(device, superblock, "/made/../made", made.number))
+        {
+            KernelWriteString("  A created directory did not hold \".\" and \"..\".\n");
+            succeeded = false;
+        }
+
+        if (!Ext2DirectoryIsEmpty(device, superblock, &made, &empty) || !empty)
+        {
+            KernelWriteString("  A newly created directory was not empty.\n");
+            succeeded = false;
+        }
+
+        /* A directory holding something is not removed. */
+        if (!Ext2CreateFile(device, superblock, &made, "within", 6U,
+                            (uint16_t)(EXT2_S_IFREG | 0x01A4U), &found) ||
+            !Ext2DirectoryIsEmpty(device, superblock, &made, &empty) || empty)
+        {
+            KernelWriteString("  A directory holding a file reported itself empty.\n");
+            succeeded = false;
+        }
+
+        if (Ext2RemoveDirectory(device, superblock, &root, "made", 4U))
+        {
+            KernelWriteString("  A directory holding a file was removed.\n");
+            succeeded = false;
+        }
+
+        /* A directory may not be unlinked as a file, nor given a second name. */
+        if (Ext2Unlink(device, superblock, &root, "made", 4U) ||
+            Ext2Link(device, superblock, &root, "second", 6U, &made))
+        {
+            KernelWriteString("  A directory was treated as a file.\n");
+            succeeded = false;
+        }
+
+        if (!Ext2Unlink(device, superblock, &made, "within", 6U) ||
+            !Ext2RemoveDirectory(device, superblock, &root, "made", 4U) ||
+            (root.link_count != root_links))
+        {
+            KernelWriteString("  An emptied directory was not removed.\n");
+            succeeded = false;
+        }
+    }
+
+    /* The root may never be removed, whatever it is named by. */
+    if (Ext2RemoveDirectory(device, superblock, &root, ".", 1U))
+    {
+        KernelWriteString("  The root directory was removed.\n");
+        succeeded = false;
+    }
+
+    /* --- Everything taken has been given back. --- */
+
+    if ((superblock->free_block_count != free_blocks) ||
+        (superblock->free_inode_count != free_inodes) ||
+        !KernelCountEntries(device, superblock, &root, &count) || (count != before))
+    {
+        KernelWriteString("  The volume did not return to what it was.\n");
+        succeeded = false;
+    }
+
+    if (!Ext2VerifyGroupDescriptors(device, superblock))
+    {
+        KernelWriteString("  The volume no longer accounts for itself: ");
+        KernelWriteString(Ext2LastError());
+        KernelWriteString("\n");
+        succeeded = false;
+    }
+
+    /* --- A read-only volume holds its names. --- */
+
+    KernelRestoreVolume(device);
+    KernelSetVolumeHalf(EXT2_OFFSET_STATE, (uint16_t)EXT2_ERROR_FS);
+    (void)BufferInvalidateDevice(device);
+
+    {
+        Ext2Superblock frozen;
+
+        if (Ext2ReadSuperblock(device, &frozen) && frozen.read_only &&
+            Ext2ReadInode(device, &frozen, EXT2_ROOT_INODE, &found))
+        {
+            if (Ext2DirectoryInsert(device, &frozen, &found, "no", 2U,
+                                    KERNEL_VOLUME_FILE_INODE, (uint8_t)EXT2_FT_REG_FILE) ||
+                Ext2DirectoryRemove(device, &frozen, &found, "file", 4U) ||
+                Ext2CreateFile(device, &frozen, &found, "no", 2U,
+                               (uint16_t)(EXT2_S_IFREG | 0x01A4U), &made) ||
+                Ext2CreateDirectory(device, &frozen, &found, "no", 2U, 0x01EDU, &made) ||
+                Ext2Unlink(device, &frozen, &found, "file", 4U) ||
+                Ext2RemoveDirectory(device, &frozen, &found, "sub", 3U))
+            {
+                KernelWriteString("  A read-only volume had its names altered.\n");
+                succeeded = false;
+            }
+        }
+        else
+        {
+            KernelWriteString("  A volume not cleanly unmounted was not made read-only.\n");
+            succeeded = false;
+        }
+    }
+
+    KernelRestoreVolume(device);
+
+    /* Nothing may be asked of a null argument, or of a name that is not one. */
+    if (Ext2DirectoryInsert(device, superblock, NULL, "x", 1U, KERNEL_VOLUME_FILE_INODE, 0U) ||
+        Ext2DirectoryInsert(device, superblock, &root, NULL, 1U, KERNEL_VOLUME_FILE_INODE, 0U) ||
+        Ext2DirectoryInsert(device, superblock, &root, "x", 0U, KERNEL_VOLUME_FILE_INODE, 0U) ||
+        Ext2DirectoryInsert(device, superblock, &root, "a/b", 3U, KERNEL_VOLUME_FILE_INODE, 0U) ||
+        Ext2DirectoryInsert(device, superblock, &root, "x", 1U, 0U, 0U) ||
+        Ext2DirectoryInsert(device, superblock, &root, "x", 1U, superblock->inode_count + 1U,
+                            0U) ||
+        Ext2DirectoryRemove(device, superblock, NULL, "x", 1U) ||
+        Ext2CreateFile(device, superblock, &root, "d", 1U, (uint16_t)EXT2_S_IFDIR, &made) ||
+        Ext2CreateDirectory(device, superblock, NULL, "x", 1U, 0x01EDU, &made) ||
+        Ext2DirectoryIsEmpty(device, superblock, &root, NULL))
+    {
+        KernelWriteString("  A directory operation accepted what it should refuse.\n");
+        succeeded = false;
+    }
+
+    if (succeeded)
+    {
+        KernelWriteString("EXT2 names: insertion, removal and creation are sound.\n");
     }
 
     return succeeded;
@@ -6284,12 +6753,13 @@ static void KernelVerifyExt2(void)
      * only naming the values catches it.
      */
     if ((superblock.magic != EXT2_SUPER_MAGIC) || (superblock.revision != EXT2_DYNAMIC_REV) ||
-        (superblock.inode_count != 16U) || (superblock.block_count != 128U) ||
+        (superblock.inode_count != KERNEL_VOLUME_INODES) || (superblock.block_count != 128U) ||
         (superblock.reserved_block_count != 6U) ||
         (superblock.free_block_count != KERNEL_VOLUME_FREE_BLOCKS) ||
         (superblock.free_inode_count != KERNEL_VOLUME_FREE_INODES) ||
         (superblock.first_data_block != 1U) ||
-        (superblock.blocks_per_group != 8192U) || (superblock.inodes_per_group != 16U) ||
+        (superblock.blocks_per_group != 8192U) ||
+        (superblock.inodes_per_group != KERNEL_VOLUME_INODES) ||
         (superblock.state != EXT2_VALID_FS))
     {
         KernelWriteString("  A field of the superblock was read from the wrong place.\n");
@@ -6483,6 +6953,16 @@ static void KernelVerifyExt2(void)
     (void)BufferInvalidateDevice(device);
 
     if (!Ext2ReadSuperblock(device, &superblock) || !KernelVerifyWrites(device, &superblock))
+    {
+        succeeded = false;
+    }
+
+    /* The alteration of a directory, which is what turns an inode into a file
+     * somebody can name. */
+    KernelRestoreVolume(device);
+
+    if (!Ext2ReadSuperblock(device, &superblock) ||
+        !KernelVerifyDirectoryWrites(device, &superblock))
     {
         succeeded = false;
     }
@@ -6866,7 +7346,7 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
     AddressSpaceReport();
 
     VgaSetColour(VGA_COLOUR_LIGHT_GREEN, VGA_COLOUR_BLACK);
-    KernelWriteString("Phase 4 initialisation complete; Phase 5 begun to sub-task 5.6.\n");
+    KernelWriteString("Phase 4 initialisation complete; Phase 5 begun to sub-task 5.7.\n");
 
     VgaSetColour(VGA_COLOUR_LIGHT_GREY, VGA_COLOUR_BLACK);
 
