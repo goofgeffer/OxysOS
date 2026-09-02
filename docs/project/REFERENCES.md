@@ -528,20 +528,41 @@ Sections relied upon:
   large files `0x0002`, binary tree directories `0x0004`.
 - **`s_state`**: 1 denotes a cleanly unmounted volume and 2 one upon which errors
   were detected.
+- **The Block Group Descriptor Table**: the table begins upon the first block
+  following the superblock — the third block of a 1 KiB volume, the second of any
+  larger — and holds one descriptor per group; a shadow copy accompanies every
+  backup superblock. Table 3.12 gives the descriptor: `bg_block_bitmap` at 0,
+  `bg_inode_bitmap` at 4 and `bg_inode_table` at 8, each a word;
+  `bg_free_blocks_count` at 12, `bg_free_inodes_count` at 14 and
+  `bg_used_dirs_count` at 16, each a half; `bg_pad` at 18 and `bg_reserved` at
+  20, 32 bytes in all. Every block identifier within a descriptor is absolute.
+- **Inode Table**: there is one inode table per group, located by
+  `bg_inode_table`, holding `s_inodes_per_group` inodes, so its length follows
+  from the inode size.
 - **Byte order**: every quantity upon the volume is stored least significant byte
   first, irrespective of the machine.
 
 Used by: `kernel/fs/ext2.c`, `kernel/include/oxys/ext2.h`.
 
-### Linux kernel documentation, the ext4 superblock
-Linux kernel source, `Documentation/filesystems/ext4/super.rst`.
+### Linux kernel documentation, the ext4 superblock and group descriptor
+Linux kernel source, `Documentation/filesystems/ext4/super.rst` and
+`Documentation/filesystems/ext4/group_descr.rst`.
 
-Consulted as an independent statement of the superblock field offsets, the two
-formats sharing the layout of every field this kernel reads. It confirms
+Consulted as an independent statement of the superblock and block group
+descriptor field offsets, the two formats sharing the layout of every field this
+kernel reads. It confirms
 `s_magic` at `0x38`, `s_first_ino` at `0x54`, `s_inode_size` at `0x58`,
 `s_block_group_nr` at `0x5A`, the three feature fields at `0x5C`, `0x60` and
 `0x64`, `s_uuid` at `0x68`, `s_volume_name` at `0x78` and `s_last_mounted` at
-`0x88`, and the magic value `0xEF53`.
+`0x88`, and the magic value `0xEF53`. For the descriptor it confirms
+`bg_block_bitmap_lo` at `0x0`, `bg_inode_bitmap_lo` at `0x4`,
+`bg_inode_table_lo` at `0x8`, `bg_free_blocks_count_lo` at `0xC`,
+`bg_free_inodes_count_lo` at `0xE` and `bg_used_dirs_count_lo` at `0x10`.
+
+The two formats diverge at descriptor offset 18, which EXT2 reserves as `bg_pad`
+and ext4 reuses as `bg_flags`. This kernel reads it in neither sense, so the
+divergence does not bear upon it; it is recorded because a reader comparing the
+two tables will meet it.
 
 Used by: `kernel/fs/ext2.c`, `kernel/include/oxys/ext2.h`.
 

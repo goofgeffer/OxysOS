@@ -46,7 +46,7 @@ are separate.
 | `include/oxys/types.h` | The fixed-width integer types, and the distinct address types `PhysicalAddress` and `VirtualAddress`. |
 | `include/oxys/kernel.h` | `KERNEL_VIRTUAL_BASE`, the address translation helpers `PhysicalToVirtual` and `VirtualToPhysical`, and the declarations of `KernelMain` and `KernelPanic`. |
 | `include/oxys/io.h` | `PortReadByte`, `PortWriteByte` and `IoWait`: the accessors for the x86 programmed input/output address space. |
-| `fs/ext2.c` | The EXT2 superblock: its reading through the buffer cache, its decoding from the volume's byte order into the processor's, and the validation that decides whether a volume may be read, may be written, or may not be addressed. `Ext2ReadSuperblock`, `Ext2GroupCount`, `Ext2ReportVolume`. |
+| `fs/ext2.c` | The EXT2 superblock and block group descriptor table: their reading through the buffer cache, their decoding from the volume's byte order into the processor's, and the validation that decides whether a volume may be read, may be written, or may not be addressed at all. `Ext2ReadSuperblock`, `Ext2GroupCount`, `Ext2ReadGroupDescriptor`, `Ext2VerifyGroupDescriptors`, `Ext2ReportVolume`, `Ext2ReportGroup`. |
 | `include/oxys/ext2.h` | The on-disk field offsets of the superblock, the feature flags, and the parsed `Ext2Superblock` description. |
 | `include/oxys/buffer.h` | The interface of the buffer cache implemented in `drivers/block/`: obtaining, releasing, dirtying and flushing a cached block. |
 | `include/oxys/block.h` | The interface of the generic block-device layer implemented in `drivers/block/`: the operations a driver supplies, and the read and write path above them. |

@@ -142,7 +142,17 @@ declaring an incompatible feature this kernel lacks is refused, one declaring a
 read-only compatible feature it lacks is accepted read-only, and the group count
 is derived twice from independent fields and the two required to agree.
 
-**The next work is sub-task 5.2**, the block-group descriptor table.
+Sub-task 5.2 is complete: the block group descriptor table is read and
+validated. It is the structure every other structure of the filesystem is found
+through — an inode is reached by dividing its number into a group, reading that
+group's descriptor for the block its inode table begins at, and indexing into it
+— and a descriptor is six numbers, each plausible wherever it is read from. The
+individual checks are joined by one statement about the table as a whole: the
+groups must account for every free block and every free inode the superblock
+reports.
+
+**The next work is sub-task 5.3**, inode retrieval and the resolution of direct
+and indirect block pointers.
 
 ## Legend
 
@@ -240,7 +250,7 @@ PCI Local Bus Specification 3.0.
 documentation, `Documentation/filesystems/ext2.rst`.
 
 - [x] 5.1 Parse the superblock and validate the EXT2 magic number and revision level.
-- [ ] 5.2 Parse the block-group descriptor table.
+- [x] 5.2 Parse the block-group descriptor table.
 - [ ] 5.3 Implement inode retrieval and the resolution of direct, singly, doubly and triply indirect block pointers.
 - [ ] 5.4 Implement directory-entry traversal and absolute path resolution.
 - [ ] 5.5 Implement file reading.
@@ -401,6 +411,7 @@ The rows are ordered with the most recent first.
 
 | Date | Phase affected | Summary |
 | ---- | -------------- | ------- |
+| 2026-09-01 | Phase 5 | Sub-task 5.2 completed. The block group descriptor table is read and validated. The table begins upon the block after the one the superblock lies within, which is `s_first_data_block + 1` whatever the block size, and a descriptor is located by its position within the table rather than within a block of it, the table occupying several blocks upon any sizeable volume. A descriptor is six numbers and every one of them is plausible wherever it is read from, so the validation is what the work consists of: the three structures must lie within the volume, no two may begin upon the same block, the inode table must end within the volume as well as begin within it — its length is stored nowhere and follows from the inode size — and no count may exceed what the group holds, the last group being short whenever the volume is not an exact multiple of the group size. The statement the table makes as a whole is that the groups account for every free block and every free inode of the volume, and a table read at the wrong offset or one descriptor short yields descriptors that are individually plausible and a sum that is not; it is asserted, but only upon a volume marked cleanly unmounted, a volume that was not being permitted to disagree with itself. Bytes are read from a block through the cache in the quantity wanted — 32 for a descriptor — rather than by copying a block onto the stack. Corroborated against two `mke2fs` images, whose group lines match `dumpe2fs` in full. `docs/storage/EXT2.md` gained Sections 8 and 9.2. |
 | 2026-09-01 | All | `docs/project/INSPIRATIONS.md` added at the project owner's request. It records ToaruOS as the principal inspiration, in the architecture of a wholly original system of this scope and in the style of graphical environment Phase 9 intends, and states expressly that the theme of ToaruOS is not taken — the structure of a graphical environment is inherited, its appearance is not. SerenityOS is recorded for its retro graphical idiom, as a preference of taste for a phase not yet begun rather than as a decision already made. BSD is recorded for the coherence of a system whose kernel, userland and documentation are maintained as one thing, a practice this project already follows. The document exists chiefly to hold a line: `PROJECT_GUIDELINES.md`, Section 2, forbids the transcription of any reference implementation, and an inspiration is a reason for a decision and never a source for one. |
 | 2026-08-31 | Phase 4 | Sub-task 4.1 completed. The serial routine of Phase 1 is now an interrupt-driven driver claiming IR4. The line parameters are computed from a signalling rate rather than stated as a divisor, and the rate realised is reported beside the rate requested, the division being truncating. The driver keeps both modes and needs both: it begins polled, because it serves the diagnostics of an initialisation that precedes the interrupt controller, and it falls back upon polling wherever the interrupt flag is clear, which includes every panic — a driver that assumed interrupts were available would queue a panic message and halt without transmitting it. The transmitter interrupt is enabled only while characters are waiting, the condition it reports being a level and not an event; an adapter with nothing to send holds it asserted permanently, and a driver that left it enabled would be seized by an interrupt no service could dismiss. A writer that fills the transmit buffer waits for room, a diagnostic channel that discards its output being worse than a slow one, while a receiver that fills the receive buffer discards the newest character and counts it, having no one to wait for. `ReadRflags` was added to `kernel/include/oxys/cpu.h`, which had named it in its header without providing it. `docs/devices/SERIAL.md` added and records the design. |
 | 2026-09-01 | Phase 4 | Sub-task 4.2 completed. The display routine of Phase 1 is now a formal driver. The register configuration is read from the Miscellaneous Output Register rather than assumed, the cost of one input instruction being far below the cost of writing the cursor location to an address nothing decodes. The hardware cursor may be positioned, hidden, shaped and read back; the shape is left as the firmware established it, that shape being the one known to be legible upon the machine's own display. Blinking is disabled through the attribute controller, whose shared address and data port is reached through a flip-flop and whose every write is therefore read back, a write that arrived in the wrong state having altered some other register with no symptom the machine could detect. The backspace now crosses into the row above and stops upon the last character standing there, bounded by an erase limit that records where the input began; the objection recorded against this movement in sub-task 4.1 — that the driver could not tell a line of input from the boot log — was answered by supplying that knowledge rather than by withholding the movement. `KernelEchoBackspace` tells a serial terminal of the same movement by ECMA-48 CUU and CHA. `docs/devices/DISPLAY.md` added and records the design. |

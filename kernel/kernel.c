@@ -3671,7 +3671,29 @@ static void KernelReportVolumes(void)
 
         if (Ext2ReadSuperblock(device, &superblock))
         {
+            Ext2GroupDescriptor descriptor;
+
             Ext2ReportVolume(&superblock, device->name);
+
+            /*
+             * The first group's descriptor, and the verification of the whole
+             * table. Both are reported because the table is the structure every
+             * later part of the filesystem is found through, and a volume whose
+             * table this kernel refuses is one it could not mount.
+             */
+            if (Ext2ReadGroupDescriptor(device, &superblock, 0U, &descriptor))
+            {
+                Ext2ReportGroup(&descriptor);
+            }
+
+            if (!Ext2VerifyGroupDescriptors(device, &superblock))
+            {
+                KernelWriteString("EXT2: the descriptor table of ");
+                KernelWriteString(device->name);
+                KernelWriteString(" is not trustworthy: ");
+                KernelWriteString(Ext2LastError());
+                KernelWriteString("\n");
+            }
         }
         else
         {
@@ -3693,22 +3715,92 @@ static void KernelReportVolumes(void)
  * by field, from the offsets the format defines — the same names the parser
  * reads, so that a mistaken offset cannot agree with itself.
  */
-static void KernelSetVolumeHalf(size_t offset, uint16_t value)
+static void KernelStoreHalf(size_t offset, uint16_t value)
 {
-    uint8_t *const field = &KernelMemoryDeviceStore[EXT2_SUPERBLOCK_OFFSET + offset];
+    uint8_t *const field = &KernelMemoryDeviceStore[offset];
 
     field[0] = (uint8_t)(value & 0xFFU);
     field[1] = (uint8_t)((value >> 8) & 0xFFU);
 }
 
-static void KernelSetVolumeWord(size_t offset, uint32_t value)
+static void KernelStoreWord(size_t offset, uint32_t value)
 {
-    uint8_t *const field = &KernelMemoryDeviceStore[EXT2_SUPERBLOCK_OFFSET + offset];
+    uint8_t *const field = &KernelMemoryDeviceStore[offset];
 
     field[0] = (uint8_t)(value & 0xFFU);
     field[1] = (uint8_t)((value >> 8) & 0xFFU);
     field[2] = (uint8_t)((value >> 16) & 0xFFU);
     field[3] = (uint8_t)((value >> 24) & 0xFFU);
+}
+
+/* The same, addressed by a field's offset within the superblock. */
+static void KernelSetVolumeHalf(size_t offset, uint16_t value)
+{
+    KernelStoreHalf(EXT2_SUPERBLOCK_OFFSET + offset, value);
+}
+
+static void KernelSetVolumeWord(size_t offset, uint32_t value)
+{
+    KernelStoreWord(EXT2_SUPERBLOCK_OFFSET + offset, value);
+}
+
+/*
+ * The layout of the composed volume, in blocks of 1024 bytes.
+ *
+ * Block 0 is the boot block, block 1 holds the superblock, and the group
+ * descriptor table follows it. The remainder is laid out as mke2fs would lay it
+ * out: the two bitmaps, then the inode table, then the data blocks. The volume
+ * is 128 blocks and the device of memory is 256 blocks of 512 bytes, so the two
+ * are exactly the same length.
+ */
+#define KERNEL_VOLUME_BLOCK_SIZE       1024U
+#define KERNEL_VOLUME_DESCRIPTOR_BLOCK 2U
+#define KERNEL_VOLUME_BLOCK_BITMAP     3U
+#define KERNEL_VOLUME_INODE_BITMAP     4U
+#define KERNEL_VOLUME_INODE_TABLE      5U
+#define KERNEL_VOLUME_FREE_BLOCKS      100U
+#define KERNEL_VOLUME_FREE_INODES      5U
+#define KERNEL_VOLUME_DIRECTORIES      2U
+
+/* The byte at which a block of the composed volume begins. */
+static size_t KernelVolumeBlock(uint32_t block)
+{
+    return (size_t)block * KERNEL_VOLUME_BLOCK_SIZE;
+}
+
+/* A field of the group descriptor of group 0, which lies first in the table. */
+static size_t KernelDescriptorField(size_t offset)
+{
+    return KernelVolumeBlock(KERNEL_VOLUME_DESCRIPTOR_BLOCK) + offset;
+}
+
+/*
+ * Composes the descriptor of the volume's single group.
+ *
+ * The free counts must agree with the superblock's, there being one group to
+ * account for the whole volume; the verification of the table asserts exactly
+ * that, so a self-test composing them inconsistently would fail upon its own
+ * arithmetic rather than upon the parser's.
+ */
+static void KernelComposeGroupDescriptor(void)
+{
+    for (size_t index = 0U; index < KERNEL_VOLUME_BLOCK_SIZE; ++index)
+    {
+        KernelMemoryDeviceStore[KernelVolumeBlock(KERNEL_VOLUME_DESCRIPTOR_BLOCK) + index] = 0U;
+    }
+
+    KernelStoreWord(KernelDescriptorField(EXT2_OFFSET_BG_BLOCK_BITMAP),
+                    KERNEL_VOLUME_BLOCK_BITMAP);
+    KernelStoreWord(KernelDescriptorField(EXT2_OFFSET_BG_INODE_BITMAP),
+                    KERNEL_VOLUME_INODE_BITMAP);
+    KernelStoreWord(KernelDescriptorField(EXT2_OFFSET_BG_INODE_TABLE),
+                    KERNEL_VOLUME_INODE_TABLE);
+    KernelStoreHalf(KernelDescriptorField(EXT2_OFFSET_BG_FREE_BLOCKS),
+                    (uint16_t)KERNEL_VOLUME_FREE_BLOCKS);
+    KernelStoreHalf(KernelDescriptorField(EXT2_OFFSET_BG_FREE_INODES),
+                    (uint16_t)KERNEL_VOLUME_FREE_INODES);
+    KernelStoreHalf(KernelDescriptorField(EXT2_OFFSET_BG_USED_DIRECTORIES),
+                    (uint16_t)KERNEL_VOLUME_DIRECTORIES);
 }
 
 /*
@@ -3749,6 +3841,8 @@ static void KernelComposeVolume(void)
         KernelMemoryDeviceStore[EXT2_SUPERBLOCK_OFFSET + EXT2_OFFSET_VOLUME_NAME + index] =
             (uint8_t)label[index];
     }
+
+    KernelComposeGroupDescriptor();
 }
 
 /*
@@ -3781,6 +3875,173 @@ static bool KernelVolumeRefusedWith(BlockDevice *device, size_t offset, uint32_t
     KernelComposeVolume();
     (void)BufferInvalidateDevice(device);
     return refused;
+}
+
+/*
+ * Alters one field of the composed group descriptor and reports whether the
+ * given judgement refused the result, restoring the descriptor afterwards.
+ *
+ * The cache is invalidated on both sides of the alteration for the reason
+ * KernelVolumeRefusedWith gives: the descriptor is written beneath the cache,
+ * and a cache still holding the previous descriptor would answer with it.
+ */
+static bool KernelDescriptorRefusedWith(BlockDevice *device, const Ext2Superblock *superblock,
+                                        size_t offset, uint32_t value, bool half,
+                                        bool whole_table)
+{
+    Ext2GroupDescriptor descriptor;
+    bool refused;
+
+    if (half)
+    {
+        KernelStoreHalf(KernelDescriptorField(offset), (uint16_t)value);
+    }
+    else
+    {
+        KernelStoreWord(KernelDescriptorField(offset), value);
+    }
+
+    (void)BufferInvalidateDevice(device);
+
+    refused = whole_table ? !Ext2VerifyGroupDescriptors(device, superblock)
+                          : !Ext2ReadGroupDescriptor(device, superblock, 0U, &descriptor);
+
+    KernelComposeGroupDescriptor();
+    (void)BufferInvalidateDevice(device);
+    return refused;
+}
+
+/*
+ * Asserts that the block group descriptor table is read as it stands, and that a
+ * table this kernel must not trust is refused.
+ *
+ * A descriptor is three block numbers and three counts, and every one of them is
+ * a plausible number wherever it is read from. A table read one block early, or
+ * a descriptor taken to be 24 or 40 bytes rather than 32, yields block numbers
+ * that address real blocks of the volume — the wrong ones — and a kernel that
+ * then wrote an inode would write it over a file. Naming the values, and
+ * asserting the one statement the table makes as a whole, is what catches that.
+ */
+static bool KernelVerifyGroups(BlockDevice *device, const Ext2Superblock *superblock)
+{
+    Ext2GroupDescriptor descriptor;
+    bool succeeded = true;
+
+    /* The derived geometry of the table itself, before any of it is read. */
+    if ((Ext2GroupDescriptorBlock(superblock) != KERNEL_VOLUME_DESCRIPTOR_BLOCK) ||
+        (Ext2GroupDescriptorBlocks(superblock) != 1U) ||
+        (Ext2InodeTableBlocks(superblock) != 2U) ||
+        (Ext2GroupFirstBlock(superblock, 0U) != 1U) ||
+        (Ext2GroupBlockCount(superblock, 0U) != 127U))
+    {
+        KernelWriteString("  The geometry of the descriptor table is wrong.\n");
+        succeeded = false;
+    }
+
+    if (!Ext2ReadGroupDescriptor(device, superblock, 0U, &descriptor))
+    {
+        KernelWriteString("  A well-formed group descriptor was refused: ");
+        KernelWriteString(Ext2LastError());
+        KernelWriteString("\n");
+        return false;
+    }
+
+    if ((descriptor.group != 0U) || (descriptor.block_bitmap != KERNEL_VOLUME_BLOCK_BITMAP) ||
+        (descriptor.inode_bitmap != KERNEL_VOLUME_INODE_BITMAP) ||
+        (descriptor.inode_table != KERNEL_VOLUME_INODE_TABLE) ||
+        (descriptor.free_block_count != KERNEL_VOLUME_FREE_BLOCKS) ||
+        (descriptor.free_inode_count != KERNEL_VOLUME_FREE_INODES) ||
+        (descriptor.used_directory_count != KERNEL_VOLUME_DIRECTORIES))
+    {
+        KernelWriteString("  A field of the group descriptor was read from the wrong "
+                          "place.\n");
+        succeeded = false;
+    }
+
+    /* The whole table, and the one statement it makes about the volume. */
+    if (!Ext2VerifyGroupDescriptors(device, superblock))
+    {
+        KernelWriteString("  A well-formed descriptor table was refused: ");
+        KernelWriteString(Ext2LastError());
+        KernelWriteString("\n");
+        succeeded = false;
+    }
+
+    /* A group the volume does not hold. */
+    if (Ext2ReadGroupDescriptor(device, superblock, superblock->group_count, &descriptor))
+    {
+        KernelWriteString("  A descriptor beyond the end of the table was read.\n");
+        succeeded = false;
+    }
+
+    /* A structure of the group outside the volume, in both directions. */
+    if (!KernelDescriptorRefusedWith(device, superblock, EXT2_OFFSET_BG_INODE_TABLE, 200U,
+                                     false, false) ||
+        !KernelDescriptorRefusedWith(device, superblock, EXT2_OFFSET_BG_BLOCK_BITMAP, 0U,
+                                     false, false))
+    {
+        KernelWriteString("  A group whose structures lie outside the volume was "
+                          "accepted.\n");
+        succeeded = false;
+    }
+
+    /*
+     * An inode table that begins within the volume and ends beyond it. The
+     * length is not stored anywhere and follows from the inode size, so a kernel
+     * that checked only the first block would read the last inodes of the group
+     * from nowhere.
+     */
+    if (!KernelDescriptorRefusedWith(device, superblock, EXT2_OFFSET_BG_INODE_TABLE, 127U,
+                                     false, false))
+    {
+        KernelWriteString("  An inode table running past the end of the volume was "
+                          "accepted.\n");
+        succeeded = false;
+    }
+
+    /* Two structures beginning upon the same block. */
+    if (!KernelDescriptorRefusedWith(device, superblock, EXT2_OFFSET_BG_INODE_BITMAP,
+                                     KERNEL_VOLUME_BLOCK_BITMAP, false, false))
+    {
+        KernelWriteString("  A group with two structures upon one block was accepted.\n");
+        succeeded = false;
+    }
+
+    /* Counts beyond what the group holds. */
+    if (!KernelDescriptorRefusedWith(device, superblock, EXT2_OFFSET_BG_FREE_BLOCKS, 200U,
+                                     true, false) ||
+        !KernelDescriptorRefusedWith(device, superblock, EXT2_OFFSET_BG_FREE_INODES, 17U, true,
+                                     false) ||
+        !KernelDescriptorRefusedWith(device, superblock, EXT2_OFFSET_BG_USED_DIRECTORIES, 12U,
+                                     true, false))
+    {
+        KernelWriteString("  A group reporting more than it holds was accepted.\n");
+        succeeded = false;
+    }
+
+    /*
+     * A descriptor every rule above accepts, whose free count nevertheless
+     * disagrees with the superblock's. This is the assertion the table makes as
+     * a whole and it is the one a misread table fails.
+     */
+    if (!KernelDescriptorRefusedWith(device, superblock, EXT2_OFFSET_BG_FREE_BLOCKS, 50U, true,
+                                     true))
+    {
+        KernelWriteString("  A table not accounting for the volume's free space was "
+                          "accepted.\n");
+        succeeded = false;
+    }
+
+    /* Requests with nothing to work upon. */
+    if (Ext2ReadGroupDescriptor(NULL, superblock, 0U, &descriptor) ||
+        Ext2ReadGroupDescriptor(device, superblock, 0U, NULL) ||
+        Ext2VerifyGroupDescriptors(NULL, superblock))
+    {
+        KernelWriteString("  A degenerate descriptor request was accepted.\n");
+        succeeded = false;
+    }
+
+    return succeeded;
 }
 
 /*
@@ -3979,6 +4240,19 @@ static void KernelVerifyExt2(void)
         (superblock.feature_incompatible != 0U) || (superblock.volume_name[0] != '\0'))
     {
         KernelWriteString("  A volume of revision 0 was not given its fixed values.\n");
+        succeeded = false;
+    }
+
+    KernelComposeVolume();
+    (void)BufferInvalidateDevice(device);
+
+    /*
+     * The block group descriptor table, read from the volume just restored. It
+     * is asserted here rather than in a self-test of its own because it can only
+     * be read through a superblock, and this is where a valid one exists.
+     */
+    if (!Ext2ReadSuperblock(device, &superblock) || !KernelVerifyGroups(device, &superblock))
+    {
         succeeded = false;
     }
 
@@ -4362,7 +4636,7 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
     AddressSpaceReport();
 
     VgaSetColour(VGA_COLOUR_LIGHT_GREEN, VGA_COLOUR_BLACK);
-    KernelWriteString("Phase 4 initialisation complete; Phase 5 begun to sub-task 5.1.\n");
+    KernelWriteString("Phase 4 initialisation complete; Phase 5 begun to sub-task 5.2.\n");
 
     VgaSetColour(VGA_COLOUR_LIGHT_GREY, VGA_COLOUR_BLACK);
 

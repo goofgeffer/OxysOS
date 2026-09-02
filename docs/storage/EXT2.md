@@ -1,6 +1,6 @@
 # The EXT2 Volume
 
-**Phase**: 5, sub-task 5.1, of [`../project/PLAN.md`](../project/PLAN.md).
+**Phase**: 5, sub-tasks 5.1 and 5.2, of [`../project/PLAN.md`](../project/PLAN.md).
 
 **Authority**: `PROJECT_GUIDELINES.md`, Sections 2, 3 and 6. Every assertion about
 the format carries a citation, and the specifications are registered in
@@ -158,9 +158,106 @@ exactly. If they do not, either the volume is corrupt or the parser is reading
 one of the four fields from the wrong offset — and that second possibility is
 precisely the failure that no amount of reading a plausible number can reveal.
 
-## 8. Verification
+## 8. The block group descriptor table
 
-### 8.1 The self-test
+A volume is divided into **block groups**, each holding a fixed number of blocks
+and inodes. The group descriptor table names, for every group, where its three
+structures begin and how much of the group is free. It is the structure through
+which every other structure of the filesystem is found: an inode is located by
+dividing its number by `s_inodes_per_group` to obtain a group, reading that
+group's descriptor to obtain the block its inode table begins at, and indexing
+into that table.
+
+### 8.1 Where the table is
+
+The table begins upon **the first block following the superblock**. The
+superblock always occupies the second kibibyte of the volume, so the block
+containing it is block 1 upon a volume of 1024-byte blocks and block 0 upon any
+larger one — which is exactly what `s_first_data_block` holds. The table
+therefore begins at `s_first_data_block + 1`, and `Ext2GroupDescriptorBlock`
+computes it that way rather than by a comparison against the block size, since
+the volume has already been made to state the same thing twice and to agree with
+itself (Section 7).
+
+A descriptor is **32 bytes**. The table may occupy several blocks, so a
+descriptor is located by its position within the table and not within a block of
+it: descriptor *n* lies at byte `32n`, in block `table + 32n / block_size` at
+offset `32n % block_size`.
+
+| Offset | Width | Field | Held as |
+| ------ | ----- | ----- | ------- |
+| 0 | 4 | `bg_block_bitmap` | `block_bitmap` |
+| 4 | 4 | `bg_inode_bitmap` | `inode_bitmap` |
+| 8 | 4 | `bg_inode_table` | `inode_table` |
+| 12 | 2 | `bg_free_blocks_count` | `free_block_count` |
+| 14 | 2 | `bg_free_inodes_count` | `free_inode_count` |
+| 16 | 2 | `bg_used_dirs_count` | `used_directory_count` |
+| 18 | 2 | `bg_pad` | not read |
+| 20 | 12 | `bg_reserved` | not read |
+
+Every block identifier in a descriptor is **absolute** — a block number of the
+volume, not of the group. The specification states this expressly, and it is the
+one thing about this structure that is easy to assume wrongly: the numbers are
+small, they sit beside a group number, and a kernel that added the group's first
+block to them would still address real blocks of the volume.
+
+The bytes are decoded field by field, for the reasons Section 3 gives. The
+offsets are declared in the header beside the superblock's, so that the self-test
+composes a descriptor from the same names the parser reads.
+
+### 8.2 Reading only what is needed
+
+`Ext2ReadBytes` reads a run of bytes from within one filesystem block through the
+buffer cache, copying from each device block the run spans. Callers ask for the
+bytes they need and no more: a descriptor is 32 bytes and a block pointer is
+four. The cache is holding the block regardless, so copying a whole 4096-byte
+block onto the kernel stack in order to take four bytes out of it would be both
+wasteful and a stack this kernel does not have to spare.
+
+### 8.3 What is refused
+
+A descriptor is six numbers, and every one of them is a plausible number wherever
+it is read from. A table read one block early, or a descriptor taken to be 24 or
+40 bytes rather than 32, yields block numbers that address real blocks of the
+volume — the wrong ones — and a kernel that then wrote an inode would write it
+over a file.
+
+| Refused | Why it matters |
+| ------- | -------------- |
+| A group at or beyond `group_count`. | A read past the end of the table, answered with whatever follows it. |
+| A descriptor table that does not fit within the volume. | The same, from the other direction. |
+| A bitmap or inode table below `s_first_data_block` or at or beyond the block count. | Nothing of a filesystem lies before the first data block, so an identifier below it is as wrong as one beyond the end. |
+| An inode table that begins within the volume and ends beyond it. | Its length is stored nowhere and follows from the inode size; a kernel checking only the first block would read the last inodes of the group from nowhere. |
+| Two of the three structures beginning upon the same block. | Each is at least one block long, so no two can share a block. A descriptor read four bytes adrift yields two identical pointers far more often than three plausible ones. |
+| More free blocks than the group holds, or more free inodes than `s_inodes_per_group`. | A group that contradicts itself. |
+| More directories than the group has inodes in use. | A directory occupies an inode that is in use. |
+| Groups whose free counts do not sum to the superblock's totals. | The statement the table makes as a whole; see below. |
+
+The last is the strongest statement that can be made about the table without
+reading the bitmaps. The groups account for every free block and every free inode
+of the volume, so `sum(bg_free_blocks_count)` must equal `s_free_blocks_count`
+and likewise for the inodes. A table read at the wrong offset, or one descriptor
+short, yields descriptors that are individually plausible and a sum that is not.
+
+It holds only of a volume marked cleanly unmounted. A volume that was not is
+permitted to disagree with itself — that disagreement is what the state means —
+and `Ext2ReadSuperblock` has already made it read-only, so
+`Ext2VerifyGroupDescriptors` checks the individual descriptors of such a volume
+and not the sum.
+
+### 8.4 The last group is short
+
+Every group holds `s_blocks_per_group` blocks except the last, which holds
+whatever remains. The division that fixes the group count rounds upward, so the
+last group is short whenever the volume is not an exact multiple of the group
+size — which is the usual case and not the exception.
+`Ext2GroupBlockCount` returns the short count for the last group, and the free
+block count of a descriptor is checked against it rather than against
+`s_blocks_per_group`.
+
+## 9. Verification
+
+### 9.1 The self-test of the superblock
 
 `KernelVerifyExt2` composes a superblock in the memory-backed block device of
 [`BLOCK.md`](BLOCK.md), Section 5, using the offset names from the header, and
@@ -183,7 +280,26 @@ device's storage directly, beneath both the block layer and the cache, so a cach
 holding the previous contents would answer the next read with them, and the
 assertion would be made against a volume that no longer exists.
 
-### 8.2 A volume the kernel did not compose
+### 9.2 The self-test of the descriptor table
+
+`KernelVerifyGroups` runs against the same composed volume, whose group
+descriptor is written from the offset names of the header. It is asserted here
+rather than in a self-test of its own because a descriptor can only be reached
+through a superblock, and this is where a valid one exists.
+
+| Property asserted | The silent failure it would catch |
+| ----------------- | --------------------------------- |
+| The table begins at block 2, occupies one block, and the inode table occupies two. | Geometry derived from the superblock by the wrong arithmetic, which would place the table upon a block that holds something else. |
+| Group 0 spans 127 blocks, not 8192. | The last group taken to be full length, so a check against it admits a free count larger than the volume. |
+| Every field of the descriptor equals the value composed at that offset. | A field read from the wrong offset, which yields a plausible block number rather than an error. |
+| A group beyond the count is refused. | A read past the end of the table. |
+| A bitmap at block 0, and an inode table at block 200, are refused. | Identifiers outside the volume in both directions. |
+| An inode table at block 127 — within the volume, ending beyond it — is refused. | A length check omitted because only the first block was validated. |
+| Two structures upon one block are refused. | A descriptor read four bytes adrift. |
+| Free counts and a directory count beyond what the group holds are refused. | A descriptor that contradicts itself. |
+| A descriptor that every other rule accepts, whose free count disagrees with the superblock's, is refused by the whole-table check. | A table read at the wrong offset or one descriptor short — the failure no individually plausible descriptor can reveal. |
+
+### 9.3 A volume the kernel did not compose
 
 A self-test that builds its own volume proves the parser consistent with itself.
 The corroboration must come from a volume built by something else, so three were
@@ -207,29 +323,47 @@ EXT2 volume: 2 groups of 8192 blocks and 2048 inodes, first data block 1, first 
 EXT2 volume: features compatible 0x38, incompatible 0x2, read-only 0x3, state clean.
 ```
 
+and, of the first of its two groups:
+
+```
+EXT2 group 0: block bitmap at 66, inode bitmap at 67, inode table at 68; 7599 free blocks, 2037 free inodes, 2 directories.
+```
+
 Every figure matches `dumpe2fs -h` upon the same image, field for field: the
 block and inode counts, both free counts, the geometry of the groups, the inode
 size of 256 bytes, and the three feature words — `ext_attr resize_inode dir_index`
-as `0x38`, `filetype` as `0x2`, and `sparse_super large_file` as `0x3`.
+as `0x38`, `filetype` as `0x2`, and `sparse_super large_file` as `0x3`. The group
+line matches `dumpe2fs` in full, and the whole-table check passed silently upon a
+volume of two groups whose free counts sum to the superblock's totals — 7599 and
+7612 blocks against 15211, 2037 and 2048 inodes against 4085.
 
 A second image of 4096-byte blocks was read equally, and reported
-`first data block 0` as the format requires of any block size but 1024. A disk
-holding no filesystem at all was refused with *the volume bears no EXT2 magic
-number*.
+`first data block 0` as the format requires of any block size but 1024; its one
+group reported bitmaps at blocks 6 and 7 and an inode table at block 8, with
+18736 free blocks and 19989 free inodes, which `dumpe2fs` states identically. A
+disk holding no filesystem at all was refused with *the volume bears no EXT2
+magic number*.
 
-## 9. Limitations
+## 10. Limitations
 
 1. **Nothing is mounted.** The superblock is read, validated and reported; no
    volume is retained and nothing is opened. Sub-task 5.8 introduces the mount.
 2. **The backup superblocks are not consulted.** A volume whose primary
-   superblock is damaged is refused, though a copy of it stands in several block
-   groups. Using them requires the group descriptors of sub-task 5.2.
+   superblock is damaged is refused, though a copy of it — and of the descriptor
+   table — stands in several block groups. Nothing yet falls back upon them.
 3. **Nothing is written.** The mount count and the state are read and not
    updated; a volume this kernel reads does not know it was read.
 4. **Block sizes above 4096 bytes are refused**, and fragments are not
    implemented at all — no EXT2 implementation has ever used them.
 5. **One volume per device.** Partition tables are not read, so a volume must
    begin at the start of its device.
-6. **The block size may not be smaller than the device's.** A 1024-byte
+6. **The bitmaps are not read.** The descriptor states where the block and
+   inode bitmaps of each group begin, and nothing yet looks at them. Until
+   sub-task 5.6 nothing is allocated, so nothing needs to know which blocks are
+   in use; the free counts are read and believed.
+7. **`META_BG` is not implemented.** A volume declaring it is refused as an
+   unimplemented incompatible feature, which is the correct treatment: it moves
+   the descriptor table, and this kernel would read it from the wrong place.
+8. **The block size may not be smaller than the device's.** A 1024-byte
    filesystem upon a 4096-byte device is a rearrangement this kernel does not
    perform.

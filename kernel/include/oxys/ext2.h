@@ -1,11 +1,14 @@
 /*
  * File: kernel/include/oxys/ext2.h
- * Purpose: Declares the EXT2 superblock: the parsed, host-order description of a
- *          volume's geometry and features, the reading and validation of it from
- *          a block device, and the judgement of whether this kernel may address
- *          the volume at all.
+ * Purpose: Declares the on-disk structures of an EXT2 volume that this kernel
+ *          reads: the superblock, which describes the volume's geometry and
+ *          features, and the block group descriptor, which locates the three
+ *          structures of one group. Both are declared in the processor's own
+ *          order, the volume's order being decoded at the point of reading.
  * Key definitions: EXT2_SUPER_MAGIC, EXT2_SUPERBLOCK_OFFSET, Ext2Superblock,
- *          Ext2ReadSuperblock, Ext2GroupCount, Ext2LastError, Ext2ReportVolume.
+ *          Ext2ReadSuperblock, Ext2GroupCount, Ext2GroupDescriptor,
+ *          Ext2ReadGroupDescriptor, Ext2VerifyGroupDescriptors, Ext2LastError,
+ *          Ext2ReportVolume, Ext2ReportGroup.
  * References:
  *   - Poirier, D., "The Second Extended File System: Internal Layout", the
  *     Superblock chapter: the superblock is located 1024 bytes from the start of
@@ -16,9 +19,15 @@
  *   - The same, Reserved Inodes: inodes 1 to 10 are reserved, so the first
  *     inode available to a file is 11 upon a volume of revision 0, which has no
  *     field in which to state it.
- *   - Linux kernel documentation, the ext4 superblock table, consulted as an
- *     independent statement of the same offsets, the two formats agreeing upon
- *     every field this kernel reads.
+ *   - The same, the Block Group Descriptor Table chapter and Table 3.12: the
+ *     table begins upon the first block following the superblock — the third
+ *     block of a 1 KiB volume, the second of any larger — a descriptor occupies
+ *     32 bytes, and every block identifier within one is absolute.
+ *   - Linux kernel documentation, the ext4 superblock and block group descriptor
+ *     tables, consulted as an independent statement of the same offsets. The two
+ *     formats agree upon every field this kernel reads; they diverge only at
+ *     descriptor offset 18, which EXT2 reserves as bg_pad and ext4 reuses as
+ *     bg_flags, and which this kernel reads in neither sense.
  */
 
 #ifndef OXYS_EXT2_H
@@ -117,6 +126,27 @@
 #define EXT2_LAST_MOUNTED_LENGTH 64U
 
 /*
+ * The block group descriptor.
+ *
+ * The table of these begins upon the first block following the superblock —
+ * block 2 upon a volume of 1024-byte blocks, block 1 upon any other — and holds
+ * one descriptor for every group. Each descriptor locates the three structures
+ * of its group: the block bitmap, the inode bitmap and the inode table.
+ *
+ * The offsets are declared here for the same reason the superblock's are: the
+ * boot-time self-test composes a descriptor from these names, and a test that
+ * stated them a second time would agree with a mistaken parser.
+ */
+#define EXT2_GROUP_DESCRIPTOR_SIZE 32U
+
+#define EXT2_OFFSET_BG_BLOCK_BITMAP     0U
+#define EXT2_OFFSET_BG_INODE_BITMAP     4U
+#define EXT2_OFFSET_BG_INODE_TABLE      8U
+#define EXT2_OFFSET_BG_FREE_BLOCKS      12U
+#define EXT2_OFFSET_BG_FREE_INODES      14U
+#define EXT2_OFFSET_BG_USED_DIRECTORIES 16U
+
+/*
  * A superblock, parsed.
  *
  * The fields are held in the processor's own types and order, not in the
@@ -207,5 +237,68 @@ uint64_t Ext2VolumesRefused(void);
 
 /* Writes a description of a volume to the console. */
 void Ext2ReportVolume(const Ext2Superblock *superblock, const char *name);
+
+
+/*
+ * One block group's descriptor, parsed into the processor's own order.
+ *
+ * Every block identifier here is absolute — a block number of the volume and
+ * not of the group — which the specification states expressly, and which is the
+ * one thing about this structure it is easy to assume wrongly.
+ */
+typedef struct Ext2GroupDescriptor
+{
+    uint32_t group; /* Which group this describes, for a report to name. */
+    uint32_t block_bitmap;
+    uint32_t inode_bitmap;
+    uint32_t inode_table;
+    uint16_t free_block_count;
+    uint16_t free_inode_count;
+    uint16_t used_directory_count;
+} Ext2GroupDescriptor;
+
+/* The first block of the group descriptor table, and the blocks it occupies. */
+uint32_t Ext2GroupDescriptorBlock(const Ext2Superblock *superblock);
+uint32_t Ext2GroupDescriptorBlocks(const Ext2Superblock *superblock);
+
+/* The blocks the inode table of any one group occupies. */
+uint32_t Ext2InodeTableBlocks(const Ext2Superblock *superblock);
+
+/*
+ * The first block of a group, and the blocks it holds. Every group holds
+ * s_blocks_per_group blocks except the last, which holds what remains; a caller
+ * that assumed otherwise would address blocks beyond the end of the volume.
+ */
+uint32_t Ext2GroupFirstBlock(const Ext2Superblock *superblock, uint32_t group);
+uint32_t Ext2GroupBlockCount(const Ext2Superblock *superblock, uint32_t group);
+
+/*
+ * Reads one group's descriptor and validates it: the group must exist, each of
+ * the three structures it locates must lie within the volume and be distinct
+ * from the others, the inode table must fit within the volume, and the free
+ * counts must not exceed what the group holds.
+ *
+ * Ext2LastError describes any refusal.
+ */
+bool Ext2ReadGroupDescriptor(BlockDevice *device, const Ext2Superblock *superblock,
+                             uint32_t group, Ext2GroupDescriptor *descriptor);
+
+/*
+ * Reads and validates every descriptor of the table, and asserts that the free
+ * blocks and free inodes the groups report sum to the totals the superblock
+ * reports.
+ *
+ * The sum is checked only upon a volume marked cleanly unmounted: a volume that
+ * was not is permitted to disagree with itself, that disagreement being what an
+ * unclean unmount means, and it is already read-only.
+ */
+bool Ext2VerifyGroupDescriptors(BlockDevice *device, const Ext2Superblock *superblock);
+
+/* How many descriptors have been read, and how many refused. */
+uint64_t Ext2GroupsRead(void);
+uint64_t Ext2GroupsRefused(void);
+
+/* Writes a description of one group to the console. */
+void Ext2ReportGroup(const Ext2GroupDescriptor *descriptor);
 
 #endif /* OXYS_EXT2_H */
