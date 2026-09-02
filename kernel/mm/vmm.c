@@ -8,7 +8,16 @@
  * References:
  *   - Intel 64 and IA-32 Architectures Software Developer's Manual, Volume 3A,
  *     Section 4.5: the 4 KiB page is the unit of mapping.
- *   - docs/design/MEMORY-LAYOUT.md, Section 10: the design of the arena.
+ *   - docs/design/MEMORY-LAYOUT.md, Section 10: the design of the arena, and
+ *     Section 10.4 for the bound every page count is held to.
+ *
+ * Design note upon page counts. Every bound in this file is computed as
+ * page_count * PAGE_SIZE, a 64-bit unsigned product that a large enough count
+ * wraps: 2^52 pages multiply to zero and 2^38 pages carry the bump pointer past
+ * the top of the address space. Each entry point therefore refuses a count above
+ * ARENA_PAGE_CAPACITY before performing any arithmetic upon it, which makes every
+ * multiplication and addition below safe by construction rather than by a test
+ * repeated at each site.
  *
  * Design note. Address space is allocated by a bump pointer with a free list of
  * released ranges searched first. The free list is a fixed-capacity array rather
@@ -48,6 +57,14 @@ static size_t ArenaFreeListCount;
 /* The first address never yet issued. Address space beyond this point is
  * untouched. */
 static VirtualAddress ArenaBumpPointer;
+
+/*
+ * The greatest number of pages the arena could hold were it wholly empty, and
+ * therefore the greatest count any request may name. Every page count entering
+ * this file is bounded by it before it is multiplied by anything; see
+ * KernelPagesAllocate.
+ */
+#define ARENA_PAGE_CAPACITY (KERNEL_ARENA_SIZE / PAGE_SIZE)
 
 /* The number of pages presently allocated, and the greatest number ever
  * allocated, for reporting. */
@@ -185,6 +202,29 @@ void *KernelPagesAllocate(size_t page_count)
         return NULL;
     }
 
+    /*
+     * A count the arena could not hold however empty it is, refused before any
+     * arithmetic is performed upon it.
+     *
+     * This is not merely an early rejection of a request that would fail anyway.
+     * Every bound below is computed as page_count * PAGE_SIZE, and that product
+     * is a 64-bit unsigned quantity: a count of 2^52 multiplies to exactly zero,
+     * and a count of 2^38 gives a product that carries the bump pointer past the
+     * top of the address space and back to a small value. In either case the
+     * comparison that follows compares a wrapped number against the end of the
+     * arena, finds it smaller, and admits the request — the guard computing a
+     * value the guard itself cannot trust.
+     *
+     * Bounding the count by what the arena holds makes every later multiplication
+     * and addition safe by construction rather than by a check at each site: the
+     * product cannot exceed KERNEL_ARENA_SIZE, and the arena ends well below the
+     * top of the address space, so no sum of the two can wrap.
+     */
+    if (page_count > ARENA_PAGE_CAPACITY)
+    {
+        return NULL;
+    }
+
     base = ArenaFreeListTake(page_count);
 
     if (base == 0U)
@@ -249,6 +289,19 @@ void KernelPagesFree(void *address, size_t page_count)
     if (base < KERNEL_ARENA_BASE || base >= (KERNEL_ARENA_BASE + KERNEL_ARENA_SIZE))
     {
         KernelPanic("An address outside the kernel arena was passed to KernelPagesFree.");
+    }
+
+    /*
+     * A count the arena could not hold. No such range was ever issued, so this
+     * is a programming error in the caller and is treated as the other two are.
+     * It is checked for the reason KernelPagesAllocate gives: the accounting
+     * below subtracts the count, and ArenaFreeListInsert multiplies it, and a
+     * count that wrapped either would corrupt the free list with a range that
+     * outlives this call and is handed to somebody else.
+     */
+    if (page_count > ARENA_PAGE_CAPACITY)
+    {
+        KernelPanic("A page count larger than the kernel arena was passed to KernelPagesFree.");
     }
 
     if (!IsPageAligned(base))

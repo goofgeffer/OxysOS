@@ -473,6 +473,56 @@ already mapped are unmapped, their frames returned, and the address range
 restored to the free list. Returning NULL with part of the range mapped would
 leak both frames and address space and leave the arena inconsistent.
 
+### 10.4 Bounding a page count before it is multiplied
+
+Every bound in the arena is computed as `page_count * PAGE_SIZE`, and that
+product is a 64-bit unsigned quantity. The count arrives from a caller, and a
+sufficiently large one wraps it:
+
+| Count | Product | Effect upon the bound |
+| ----- | ------- | --------------------- |
+| 2³⁸ pages | 2⁵⁰ bytes | `0xFFFFC00000000000 + 2⁵⁰` carries past the top of the address space and truncates to `0x0003C00000000000`, which compares below the end of the arena. |
+| 2⁵² pages | 0 | The bound becomes the bump pointer itself, so every request is admitted. |
+
+In each case the comparison guarding the arena compares a wrapped number against
+the arena's end, finds it smaller, and admits the request — a guard computing a
+value the guard itself cannot trust. This is defined behaviour and not undefined:
+unsigned arithmetic wraps by the standard. It is a defect of logic and not of
+conformance, which is why it survived a compiler configured to refuse a great
+deal.
+
+The remedy is not an overflow test at each site. It is to bound the count once,
+at each entry point, by what the arena could hold were it wholly empty:
+
+```
+ARENA_PAGE_CAPACITY = KERNEL_ARENA_SIZE / PAGE_SIZE = 32 TiB / 4 KiB = 2³³
+```
+
+A count so bounded gives a product of at most `KERNEL_ARENA_SIZE`, and the arena
+ends at `0xFFFFE00000000000`, far enough below the top of the address space that
+no sum of the two can wrap. Every later multiplication and addition is then safe
+**by construction** rather than by a check repeated wherever one occurs. The
+allocator returns NULL; `KernelPagesFree` panics, no such range having ever been
+issued, which is the treatment its other two impossible arguments already
+receive.
+
+The damage the check prevents is not the refusal itself — the mapping loop is
+bounded by physical memory and unwinds when a frame cannot be obtained, so an
+oversized request returned NULL before this check existed too. The damage is what
+the wrapped arithmetic left behind:
+
+1. **The bump pointer is carried out of the arena.** A request of 2³⁸ pages
+   advanced it by 2⁵⁰ bytes, leaving it at `0x0003C00000000000` — in the lower
+   half, which is user address space. The next allocation would have been served
+   from there and reported as a success.
+2. **The free list is corrupted.** The unwinding of Section 10.3 inserts the
+   range it failed to map, and `ArenaFreeListInsert` performs the same
+   multiplication when testing for adjacency. A range that outlives the call is
+   left where a later allocation will take it.
+
+Both persist after the failed call and surface far from it, which is what makes
+the defect worth refusing at the door rather than diagnosing later.
+
 ## 11. The kernel heap
 
 Sub-task 2.5 also introduces the slab heap of `kernel/mm/heap.c`, providing
@@ -507,7 +557,34 @@ slab that records none in use is likewise reported. Neither check is complete �
 a pointer into the middle of a live slab would pass both — but each converts a
 class of silent corruption into an immediate diagnosis.
 
-### 11.4 Known limitation
+### 11.4 A size that cannot be represented
+
+A request larger than the greatest class is served by whole pages, and the pages
+required are computed by adding the slab header to the size and rounding the sum
+up to a page:
+
+```c
+AlignUp((uint64_t)size + sizeof(HeapPageHeader), PAGE_SIZE) / PAGE_SIZE
+```
+
+`AlignUp` is `(value + (alignment - 1)) & ~(alignment - 1)`, so the expression
+adds `sizeof(HeapPageHeader) + PAGE_SIZE - 1` to the size before it divides. For
+a size within that distance of `SIZE_MAX` the sum wraps to a small number, the
+division yields a page count of one or two, and **the allocation succeeds**.
+
+This is a worse failure than the arena's, and of a different kind. The arena's
+wrapped bound admitted a request that then failed; this one returns a valid
+pointer to two pages for a request of very nearly the whole address space.
+Nothing reports an error. The caller learns the truth by writing past the end of
+what it was given, at which point the fault has no visible connection to the
+allocation that caused it — and the bound of Section 10.4 does not catch it,
+the page count reaching the arena having already been made small by the wrap.
+
+The size is therefore refused before the addition is performed. A request that
+cannot be represented fails exactly as a request that cannot be satisfied does,
+NULL being the only honest answer to either.
+
+### 11.5 Known limitation
 
 A slab whose objects have all been released is not returned to the arena. Doing
 so would require removing its remaining objects from the class free list, which
@@ -520,7 +597,7 @@ becomes worth addressing when the heap comes under sustained and varied load,
 which is not before Phase 6. The remedy is a doubly linked free list per slab
 rather than per class, at the cost of eight further bytes per free object.
 
-### 11.5 Observed state
+### 11.6 Observed state
 
 After the boot-time self-test under QEMU:
 
@@ -532,10 +609,36 @@ After the boot-time self-test under QEMU:
 | Slab pages retained | 3 |
 
 The three retained pages are those of the 16, 256 and 1024-byte classes, held by
-the limitation of Section 11.4. Zero live allocations confirms the self-test
+the limitation of Section 11.5. Zero live allocations confirms the self-test
 released everything it took.
 
 
+
+### 11.7 The boot-time self-test of the refusals
+
+The refusals of Sections 10.4 and 11.4 are asserted at each boot, with counts and
+sizes chosen for what each does to the arithmetic rather than for being large:
+one page beyond `ARENA_PAGE_CAPACITY`, 2³⁸ pages to wrap the addition, 2⁵² pages
+to wrap the multiplication, and `SIZE_MAX`, `SIZE_MAX - sizeof(void *)` and
+`SIZE_MAX - PAGE_SIZE` to wrap the heap's rounding.
+
+Asserting that each returns NULL is necessary and **not sufficient**, and the
+distinction matters. A request of 2⁵² pages returned NULL before these checks
+existed as well, the mapping loop having exhausted physical memory and unwound;
+a self-test asserting NULL alone would have passed against the very defect it was
+written for. What the wrapped arithmetic did was leave the arena broken behind
+it.
+
+Two further assertions therefore follow the refusals. The count of pages in use
+must be unchanged, and — the one that does the work — an ordinary single-page
+allocation made afterwards must return an address **within the arena**. Before
+the bound existed, a request of 2³⁸ pages left the bump pointer at
+`0x0003C00000000000`, and that subsequent allocation would have been served from
+the lower half and reported as a success.
+
+The heap's refusals need no such corroboration: before the check existed
+`KernelAllocate(SIZE_MAX)` returned a non-null pointer, so asserting NULL
+distinguishes the two states directly.
 ## 12. Per-frame reference counting
 
 Sub-task 2.6 gives every frame a reference count, which is the substrate upon

@@ -399,6 +399,7 @@ static void KernelVerifyAllocators(void)
     void *medium;
     void *large;
     void *zeroed;
+    void *after;
     size_t live_before;
 
     /* --- The page allocator. --- */
@@ -458,9 +459,6 @@ static void KernelVerifyAllocators(void)
     }
 
     /* --- The heap. --- */
-
-    live_before = 0U;
-    (void)live_before;
 
     small = KernelAllocate(16U);
     medium = KernelAllocate(1000U);
@@ -536,6 +534,99 @@ static void KernelVerifyAllocators(void)
         {
             KernelFree(small);
         }
+    }
+
+    /*
+     * The arena as it stands, recorded immediately before the refusals below so
+     * that each may be shown to have left it exactly as it was. It is taken here
+     * rather than at the start of this self-test because a slab, once taken from
+     * the arena, is not returned to it: the pages the heap acquired above are
+     * still held, legitimately, and a baseline older than they are would report
+     * that as damage.
+     */
+    live_before = KernelVirtualPagesInUse();
+
+    /*
+     * A page count larger than the arena is refused, and refused without
+     * wrapping the arithmetic that bounds it.
+     *
+     * The three counts below are chosen for what each does to that arithmetic
+     * rather than for being large. One page beyond the arena's capacity is the
+     * boundary the check states. 2^38 pages multiply to 2^50 bytes, which added
+     * to the bump pointer carries past the top of the address space and returns
+     * a small address that compares below the end of the arena. 2^52 pages
+     * multiply to exactly zero, so the bound becomes the bump pointer itself and
+     * every request is admitted. Before the check existed the second and third
+     * were accepted, and the failure was not the allocation but what it left
+     * behind: the unwinding inserts the range into the free list, where it
+     * outlives the call and is handed to somebody else.
+     */
+    if ((KernelPagesAllocate((KERNEL_ARENA_SIZE / PAGE_SIZE) + 1U) != NULL) ||
+        (KernelPagesAllocate((size_t)1U << 38) != NULL) ||
+        (KernelPagesAllocate((size_t)1U << 52) != NULL))
+    {
+        KernelWriteString("  A page count larger than the arena was accepted.\n");
+        succeeded = false;
+    }
+
+    /*
+     * A size that cannot be represented once the heap's header and the rounding
+     * to a page are added to it is refused rather than wrapped.
+     *
+     * The failure this guards is the worst kind an allocator has: the sum wraps
+     * to a small number, a page or two is allocated, and a valid pointer is
+     * returned for a request of very nearly the whole address space. Nothing
+     * reports an error, and the caller discovers the truth by writing past the
+     * end.
+     */
+    if ((KernelAllocate(SIZE_MAX) != NULL) ||
+        (KernelAllocate(SIZE_MAX - sizeof(void *)) != NULL) ||
+        (KernelAllocate(SIZE_MAX - PAGE_SIZE) != NULL))
+    {
+        KernelWriteString("  A size that cannot be represented was allocated.\n");
+        succeeded = false;
+    }
+
+    if (KernelVirtualPagesInUse() != live_before)
+    {
+        KernelWriteString("  A refused allocation altered the pages in use.\n");
+        succeeded = false;
+    }
+
+    /*
+     * An ordinary allocation made after those refusals must still come from
+     * within the arena.
+     *
+     * This is the assertion that does the work, and the reason the three
+     * refusals above are not sufficient on their own: a request of 2^52 pages
+     * was refused before this check existed too, because the mapping loop
+     * exhausted physical memory and unwound, so asserting NULL alone would have
+     * passed against the defect it is meant to catch. What the wrapped
+     * arithmetic actually did was leave the arena broken behind it — a request
+     * of 2^38 pages advanced the bump pointer by 2^50 bytes, carrying it out of
+     * the upper half entirely and leaving it at 0x0003C00000000000. The
+     * allocation that followed would have been served from the lower half, which
+     * is user address space, and would have been reported as a success.
+     */
+    after = KernelPagesAllocate(1U);
+
+    if (after == NULL)
+    {
+        KernelWriteString("  The arena served nothing after a refusal.\n");
+        succeeded = false;
+    }
+    else
+    {
+        const VirtualAddress address = (VirtualAddress)(uintptr_t)after;
+
+        if ((address < KERNEL_ARENA_BASE) ||
+            (address >= (KERNEL_ARENA_BASE + KERNEL_ARENA_SIZE)))
+        {
+            KernelWriteString("  The arena issued an address outside itself.\n");
+            succeeded = false;
+        }
+
+        KernelPagesFree(after, 1U);
     }
 
     zeroed = KernelAllocateZeroed(256U);
@@ -5726,7 +5817,7 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
     AddressSpaceReport();
 
     VgaSetColour(VGA_COLOUR_LIGHT_GREEN, VGA_COLOUR_BLACK);
-    KernelWriteString("Phase 4 initialisation complete; Phase 5 begun to sub-task 5.3.\n");
+    KernelWriteString("Phase 4 initialisation complete; Phase 5 begun to sub-task 5.4.\n");
 
     VgaSetColour(VGA_COLOUR_LIGHT_GREY, VGA_COLOUR_BLACK);
 

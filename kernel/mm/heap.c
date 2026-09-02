@@ -7,7 +7,8 @@
  * Key functions: KernelHeapInitialise, KernelAllocate, KernelAllocateZeroed,
  *          KernelFree, KernelHeapReport, HeapSizeClassFor, HeapRefillClass.
  * References:
- *   - docs/design/MEMORY-LAYOUT.md, Section 11: the design of the heap.
+ *   - docs/design/MEMORY-LAYOUT.md, Section 11: the design of the heap, and
+ *     Section 11.4 for the sizes that are refused as unrepresentable.
  *   - Bonwick, J., "The Slab Allocator: An Object-Caching Kernel Memory
  *     Allocator", USENIX Summer 1994. Consulted for the object-caching concept
  *     alone; this implementation is original and simpler, having neither
@@ -190,10 +191,31 @@ void *KernelAllocate(size_t size)
      */
     if (class_index == HEAP_CLASS_COUNT)
     {
-        size_t page_count =
-            (size_t)((AlignUp((uint64_t)size + sizeof(HeapPageHeader), PAGE_SIZE)) / PAGE_SIZE);
-        void *pages = KernelPagesAllocate(page_count);
+        size_t page_count;
+        void *pages;
         HeapPageHeader *header;
+
+        /*
+         * A size so large that adding the header, or rounding the sum up to a
+         * page, would carry past the top of a 64-bit quantity.
+         *
+         * This is refused here rather than left to the page allocator, because
+         * the page allocator would never see it: the sum wraps to a small number,
+         * the rounding yields a page count of one or two, and the allocation
+         * succeeds. The caller would receive a valid pointer to a few pages while
+         * believing it holds very nearly the whole address space, and would
+         * discover otherwise by writing past the end of it. A request that cannot
+         * be represented must fail as a request that cannot be satisfied does,
+         * and for the same reason: the answer NULL is the only honest one.
+         */
+        if (size > (SIZE_MAX - sizeof(HeapPageHeader) - (PAGE_SIZE - 1U)))
+        {
+            return NULL;
+        }
+
+        page_count =
+            (size_t)((AlignUp((uint64_t)size + sizeof(HeapPageHeader), PAGE_SIZE)) / PAGE_SIZE);
+        pages = KernelPagesAllocate(page_count);
 
         if (pages == NULL)
         {
