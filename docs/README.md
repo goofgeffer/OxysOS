@@ -29,6 +29,7 @@ complementary, and neither replaces the other.
 | [`TOOLCHAIN.md`](project/TOOLCHAIN.md) | The cross-compilation toolchain and the build system. |
 | [`CODING-STANDARDS.md`](project/CODING-STANDARDS.md) | Style, naming, documentation, the diagnostic regime, and the register of compiler extensions relied upon. |
 | [`REFERENCES.md`](project/REFERENCES.md) | Every specification the project relies upon, with the sections relied upon named. |
+| [`INSPIRATIONS.md`](project/INSPIRATIONS.md) | The systems this project takes its character from, what is taken from each and what is not. |
 
 ### [`design/`](design/)
 

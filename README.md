@@ -23,6 +23,7 @@ four directories. [`docs/README.md`](docs/README.md) is its index.
 | [`TOOLCHAIN.md`](docs/project/TOOLCHAIN.md) | The cross-compilation toolchain, its construction, and the build system. |
 | [`CODING-STANDARDS.md`](docs/project/CODING-STANDARDS.md) | The mandatory conventions of style, naming, documentation and compiler diagnostics. |
 | [`REFERENCES.md`](docs/project/REFERENCES.md) | The bibliography of authoritative specifications consulted by the project. |
+| [`INSPIRATIONS.md`](docs/project/INSPIRATIONS.md) | The systems this project takes its character from — ToaruOS principally, SerenityOS and BSD besides — and the line between an inspiration and a source of code. |
 
 ### [`docs/design/`](docs/design/) — the kernel itself
 

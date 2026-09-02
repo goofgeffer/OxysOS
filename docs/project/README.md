@@ -11,6 +11,7 @@ explains how the kernel functions; that is [`../design/`](../design/),
 | [`TOOLCHAIN.md`](TOOLCHAIN.md) | The `x86_64-elf` cross-toolchain, its construction, and the build system that uses it. |
 | [`CODING-STANDARDS.md`](CODING-STANDARDS.md) | Style, naming, file headers, the `-Wall -Wextra -Werror` regime, and the register of compiler extensions relied upon with the justification of each. |
 | [`REFERENCES.md`](REFERENCES.md) | Every specification the project relies upon, with the sections relied upon named and, where a specification is not publicly distributed, a note of how its details were cross-verified. |
+| [`INSPIRATIONS.md`](INSPIRATIONS.md) | The systems this project takes its character from — ToaruOS principally, SerenityOS and BSD besides — what is taken from each, what is not, and the rule that separates an inspiration from a source of code. |
 
 ## The order of work
 
