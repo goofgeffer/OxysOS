@@ -20,7 +20,7 @@ is the reason it cannot simply be merged into `kernel/`.
 
 | File | Description |
 | ---- | ----------- |
-| `boot.asm` | The Multiboot2 header; the entry point `_start`; `CPUID` and long-mode feature detection; `BootBuildPageTables`; `BootEnableLongMode`; the 64-bit trampoline `BootLongModeEntry`; the higher-half entry point `KernelEntryHigh`; the boot GDT and the boot-time paging structures. |
+| `boot.asm` | The Multiboot2 header; the entry point `_start`; `CPUID` and long-mode feature detection; `BootBuildPageTables`; `BootEnableLongMode`; the 64-bit trampoline `BootLongModeEntry`; the higher-half entry point `KernelEntryHigh`; and, in `.boot.data`, the boot GDT and the boot-time paging structures. |
 | `grub/grub.cfg` | The GRUB configuration embedded within the ISO image, defining the boot menu entries. Staged into the image by the `iso` target of the `Makefile`. |
 
 ## Sequence of execution
@@ -76,3 +76,9 @@ an otherwise unmodified display.
 4. The boot-time paging structures are emitted as initialised zero data rather
    than reserved in `.bss`, so that they occupy a defined physical location
    before the loader has zeroed anything.
+5. `.boot.text` and `.boot.data` occupy separate program headers, one readable
+   and executable and the other readable and writable. Code placed in
+   `.boot.data`, or data placed in `.boot.text`, would defeat that division; a
+   new boot-time table belongs in `.boot.data` and new boot-time code in
+   `.boot.text`. See [`../docs/design/BOOT.md`](../docs/design/BOOT.md),
+   Section 8.

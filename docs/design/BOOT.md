@@ -150,13 +150,48 @@ the System V AMD64 calling convention, and calls `KernelMain`. Should
 `KernelMain` return, which it is not designed to do, the processor is halted
 permanently with interrupts masked.
 
-## 8. Known and accepted conditions
+## 8. The program headers
 
-The linker reports that the image contains a `LOAD` segment with read, write and
-execute permissions. This is a consequence of the `.boot` output section
-containing both the 32-bit code and the boot-time paging structures, which must
-be writable. Separating them would require a distinct program header for code
-that executes for only a few microseconds before the permanent tables of Phase 2
-supersede it. The condition is therefore accepted for the present and is
-scheduled for removal in Phase 13, sub-task 13.3, when write-exclusive-or-execute
-is enforced across the kernel mappings.
+A segment carries one set of permissions, so a section may share a segment only
+with sections of the same permissions. Left to itself the linker packs sections
+into as few segments as it can and gives each the union of the permissions of
+what it holds, which is how an image acquires a segment that is readable,
+writable and executable at once — the condition the linker warns of. `linker.ld`
+declares the segments in a `PHDRS` block instead, so the division is stated
+rather than inferred:
+
+| Segment | Flags | Holds |
+| ------- | ----- | ----- |
+| `boot` | `r-x` | The Multiboot2 header and the 32-bit entry code. |
+| `bootdata` | `rw-` | The boot GDT, the preserved boot loader values, the boot stack and the four boot-time paging structures. |
+| `text` | `r-x` | The 64-bit kernel code. |
+| `rodata` | `r--` | Constants, string literals and read-only tables. |
+| `data` | `rw-` | Initialised writable data, followed by `.bss`. |
+
+The division that made this possible is between the boot code and the boot data.
+They were one output section, `.boot`, because both are linked at their physical
+addresses and both are finished with before the permanent tables of Phase 2 are
+built; but the entry code is executed and never written, and the paging
+structures are written and never executed, so nothing but their common lifetime
+placed them together. They are now `.boot` and `.boot.data`, adjacent and each
+in a segment of its own.
+
+Every output section carries `ALIGN(4K)` twice. The first, before the colon,
+sets the address at which the section begins; the second, after it, sets the
+section's own alignment, which the linker takes as the alignment of the segment
+holding it. Without the second, a segment would inherit the largest alignment
+among its input sections — 16 or 32 bytes — and its file offset would no longer
+be congruent to its address modulo a page, as `p_align` obliges. That congruence
+is what allows a loader to map the file rather than copy it, and so to apply the
+permissions these headers declare. The image accordingly presents five `LOAD`
+segments, each page-aligned in both address and file offset, and none both
+writable and executable.
+
+This is the image's own statement of its permissions and not an enforcement of
+them. GRUB copies the segments to their physical addresses and does not apply
+their flags, and this kernel is running with paging of its own making within a
+few instructions; the mappings that actually enforce anything are the ones
+`PagingInitialise` builds, described in
+[`MEMORY-LAYOUT.md`](MEMORY-LAYOUT.md), Section 5. What the headers give is a
+correct declaration for the loader of Phase 12, which maps rather than copies,
+and for every tool that reads the image in the meantime.

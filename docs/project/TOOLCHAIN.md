@@ -69,6 +69,13 @@ by `PROJECT_GUIDELINES.md`, Section 4.
 | `-Map build/oxys.map` | Emits a link map, which is the primary instrument for correlating a fault address with a symbol before the kernel possesses a symbol table of its own. |
 | `-z max-page-size=0x1000` | Instructs the linker that the page size is 4096 bytes, preventing the alignment of program headers to a larger boundary. |
 
+The program headers themselves are declared by `linker.ld` rather than inferred
+from the sections, so that no `LOAD` segment is both writable and executable; the
+division and the reason for it are recorded in
+[`../design/BOOT.md`](../design/BOOT.md), Section 8. `readelf -lW build/oxys.elf`
+shows the result, and the linker no longer warns of a segment with `RWX`
+permissions.
+
 ## 6. Make targets
 
 | Target | Effect |

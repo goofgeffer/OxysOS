@@ -102,7 +102,8 @@ sections are laid out as follows.
 
 | Section | Virtual address | Load address | Type | Contents |
 | ------- | --------------- | ------------ | ---- | -------- |
-| `.boot` | `0x00100000` | `0x00100000` | PROGBITS | The Multiboot2 header, the 32-bit entry code, the 64-bit trampoline, the boot GDT, the preserved boot loader values, the boot stack and the four paging structures. |
+| `.boot` | `0x00100000` | `0x00100000` | PROGBITS | The Multiboot2 header, the 32-bit entry code and the 64-bit trampoline. |
+| `.boot.data` | `0x00101000` | `0x00101000` | PROGBITS | The boot GDT, the preserved boot loader values, the boot stack and the four boot-time paging structures. |
 | `.text` | `KernelVirtualBase + p` | `p` | PROGBITS | The 64-bit kernel code. |
 | `.rodata` | `KernelVirtualBase + p` | `p` | PROGBITS | Read-only data and string literals. |
 | `.data` | `KernelVirtualBase + p` | `p` | PROGBITS | Initialised writable data. |
@@ -112,8 +113,12 @@ Here `p` denotes the load address that the linker assigns by continuing
 contiguously from the preceding section, and `KernelVirtualBase` is
 `0xFFFFFFFF80000000`.
 
-The `.boot` section is linked at its physical address because it executes before
-paging is enabled. Every subsequent section is linked at its higher-half virtual
+The `.boot` and `.boot.data` sections are linked at their physical addresses
+because they are used before paging is enabled. They are two sections and not
+one so that each may occupy a program header of its own: the entry code is
+executed and never written, the boot data is written and never executed, and a
+single section holding both obliged the linker to describe the pair as readable,
+writable and executable together. See [`BOOT.md`](BOOT.md), Section 8. Every subsequent section is linked at its higher-half virtual
 address, with an explicit `AT()` clause fixing its load address, so that GRUB
 places the image correctly while the code executes from the upper half.
 
@@ -124,7 +129,7 @@ difference between the memory size and the file size of the containing program
 header.
 
 The boot-time paging structures are emitted as initialised zero data within
-`.boot` rather than being reserved in `.bss`, so that they occupy a defined
+`.boot.data` rather than being reserved in `.bss`, so that they occupy a defined
 physical location within the loaded image and require no action by the boot
 loader before `_start` executes.
 
@@ -180,9 +185,9 @@ below 1 MiB, since a processor released from reset begins execution in real mode
 Section 3.6.7 states that the address fields of the section headers "refer to
 where the sections are in memory". That holds for a kernel linked at the address
 at which it is loaded. Oxys-OS is a higher-half kernel: the address field of
-every section other than `.boot` holds a virtual address in the topmost two
-gibibytes. Deriving a physical extent from those values would yield an absurd
-range spanning almost the whole address space.
+every section other than `.boot` and `.boot.data` holds a virtual address in
+the topmost two gibibytes. Deriving a physical extent from those values would
+yield an absurd range spanning almost the whole address space.
 
 The extent is therefore taken from the linker symbols, which are correct by
 construction, and the ELF sections tag is parsed for validation and reporting
@@ -306,7 +311,7 @@ consuming fewer translation-lookaside-buffer entries.
 | ------ | ---------- | ------ |
 | `.text` | Read, execute | Code must not be modifiable. |
 | `.rodata` | Read | Constant data must not be modifiable. |
-| `.data`, `.bss`, `.boot`, all other mapped memory | Read, write | Required for operation. |
+| `.data`, `.bss`, `.boot.data`, all other mapped memory | Read, write | Required for operation. |
 
 The execute-disable bit is not applied. It requires `IA32_EFER.NXE` to be set,
 and its introduction together with SMEP and SMAP belongs to Phase 13, sub-task
@@ -342,7 +347,8 @@ before `KernelMain` was entered, and every pointer the kernel holds is a
 higher-half address.
 
 **One thing did depend upon it, and was missed.** The global descriptor table
-loaded by `boot/boot.asm` resides in the `.boot` section at physical `0x101000`.
+loaded by `boot/boot.asm` resides in the `.boot.data` section at physical
+`0x101000`.
 No segment register was reloaded after the switch, so the cached descriptors
 remained in force and the table was never read again — until Phase 3 installed
 interrupt gates, delivery of which obliges the processor to read the descriptor
