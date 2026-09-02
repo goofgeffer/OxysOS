@@ -539,17 +539,39 @@ Sections relied upon:
 - **Inode Table**: there is one inode table per group, located by
   `bg_inode_table`, holding `s_inodes_per_group` inodes, so its length follows
   from the inode size.
+- **The Inode Structure**, Table 3.13: `i_mode` at 0, `i_uid` at 2, `i_size` at
+  4, the four times at 8, 12, 16 and 20, `i_gid` at 24, `i_links_count` at 26,
+  `i_blocks` at 28, `i_flags` at 32, `i_osd1` at 36, `i_block` at 40 as fifteen
+  words, `i_generation` at 100, `i_file_acl` at 104, `i_dir_acl` at 108,
+  `i_faddr` at 112 and `i_osd2` at 116 — 128 bytes in all. `i_blocks` counts
+  512-byte sectors and not filesystem blocks.
+- **`i_block`**: the first twelve entries are direct, the thirteenth indirect,
+  the fourteenth doubly indirect and the fifteenth triply indirect; a zero
+  denotes a block that is not allocated, a sparse file being the reason the
+  original terminating interpretation was abandoned.
+- **`i_size`**: upon revision 1, and for regular files only, the high 32 bits of
+  the size are held in `i_dir_acl`.
+- **Locating an Inode**: `block group = (inode - 1) / s_inodes_per_group` and
+  `local inode index = (inode - 1) % s_inodes_per_group`. The worked values of
+  Table 3.20 were used to check the arithmetic.
+- **Defined Reserved Inodes**, Table 3.14: inode 1 is the bad-blocks inode and
+  inode 2 the root directory; inodes 1 to 10 are reserved.
+- **Defined `i_mode` Values**, Table 3.15: the file format occupies the high four
+  bits — socket `0xC000`, symbolic link `0xA000`, regular file `0x8000`, block
+  device `0x6000`, directory `0x4000`, character device `0x2000`, FIFO `0x1000` —
+  and the low twelve hold the set-user, set-group and sticky bits and the nine
+  permission bits.
 - **Byte order**: every quantity upon the volume is stored least significant byte
   first, irrespective of the machine.
 
 Used by: `kernel/fs/ext2.c`, `kernel/include/oxys/ext2.h`.
 
-### Linux kernel documentation, the ext4 superblock and group descriptor
-Linux kernel source, `Documentation/filesystems/ext4/super.rst` and
-`Documentation/filesystems/ext4/group_descr.rst`.
+### Linux kernel documentation, the ext4 superblock, group descriptor and inode
+Linux kernel source, `Documentation/filesystems/ext4/super.rst`,
+`group_descr.rst` and `inodes.rst`.
 
-Consulted as an independent statement of the superblock and block group
-descriptor field offsets, the two formats sharing the layout of every field this
+Consulted as an independent statement of the superblock, block group descriptor
+and inode field offsets, the two formats sharing the layout of every field this
 kernel reads. It confirms
 `s_magic` at `0x38`, `s_first_ino` at `0x54`, `s_inode_size` at `0x58`,
 `s_block_group_nr` at `0x5A`, the three feature fields at `0x5C`, `0x60` and
@@ -557,7 +579,11 @@ kernel reads. It confirms
 `0x88`, and the magic value `0xEF53`. For the descriptor it confirms
 `bg_block_bitmap_lo` at `0x0`, `bg_inode_bitmap_lo` at `0x4`,
 `bg_inode_table_lo` at `0x8`, `bg_free_blocks_count_lo` at `0xC`,
-`bg_free_inodes_count_lo` at `0xE` and `bg_used_dirs_count_lo` at `0x10`.
+`bg_free_inodes_count_lo` at `0xE` and `bg_used_dirs_count_lo` at `0x10`. For the
+inode it confirms `i_mode` at `0x0`, `i_uid` at `0x2`, `i_size_lo` at `0x4`,
+`i_dtime` at `0x14`, `i_links_count` at `0x1A`, `i_blocks_lo` at `0x1C`,
+`i_flags` at `0x20`, `i_block[15]` at `0x28` occupying 60 bytes, and
+`i_generation` at `0x64`.
 
 The two formats diverge at descriptor offset 18, which EXT2 reserves as `bg_pad`
 and ext4 reuses as `bg_flags`. This kernel reads it in neither sense, so the

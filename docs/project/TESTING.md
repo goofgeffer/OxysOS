@@ -236,7 +236,15 @@ geometry of the groups, the inode size, the first usable inode and the three
 feature words. The reported group line is compared against `dumpe2fs` in full —
 the two bitmap blocks, the first block of the inode table, the two free counts
 and the directory count — and the absence of a complaint about the table means
-the free counts of every group summed to the totals the superblock states. A second image of 4096-byte blocks exercises the other block size
+the free counts of every group summed to the totals the superblock states.
+
+The root inode is read and its blocks resolved upon every device at every boot,
+so any volume the machine carries exercises the inode code as well. It is
+compared against `debugfs -R "stat <2>"` upon the same image: the mode, the size,
+the link count, the sector count and the block list. An image whose root
+directory is large enough to need the indirect blocks is made with `mke2fs -d`
+from a directory of many files, since a root of one block would exercise nothing
+but the first of the fifteen pointers. A second image of 4096-byte blocks exercises the other block size
 this kernel accepts, and a disk holding no filesystem is expected to be refused
 for want of the magic number.
 
@@ -334,6 +342,8 @@ correct point at which to begin an examination of the boot sequence.
 | 2026-09-01 | QEMU i440fx — the ATA disk presented through the block layer | Passed; the disk of the primary master registered as `ata0`, 536870912 blocks of 512 bytes, writable. |
 | 2026-09-01 | `make verify` — sub-task 4.6, the buffer self-test | Passed; a block held is not read again, a modified block does not reach the device until it is written back, a dirty block evicted under pressure is written back as it goes, a buffer held by a caller survives 64 subsequent misses, a request is refused rather than served when every buffer is held, and invalidation writes back and discards. |
 | 2026-09-01 | `make verify` — sub-task 5.1, the volume self-test | Passed; every field of a composed superblock is read from the offset the format defines, the geometry derived from it is correct, a revision 0 volume receives its fixed values, and each of the twelve refusals refuses — including a volume whose block count and inode count imply different group counts. |
+| 2026-09-01 | QEMU i440fx with an image from `mke2fs -d` — a root directory of 900 entries in 40 blocks | Passed; the root inode reported mode `0x41ED`, 40960 bytes, 3 links and 82 sectors, and blocks 580, 616, 640, 664, 688, 712, 736, 760, 784, 808, 832, 856, 881. `debugfs -R "stat <2>"` states the same inode and the same blocks, index 12 having been reached through the indirect block at 880. |
+| 2026-09-01 | QEMU i440fx with an image from `mke2fs -d` — a root directory of 9000 entries in 500 blocks | Passed; the root reported 512000 bytes and 1006 sectors, the prefix 772, 786-796, 798, and `[268]=1056`. `debugfs` states `(12-267):798-1053, (DIND):1054, (IND):1055, (268-499):1056-1287`, so index 268 was resolved two levels down and matches. |
 | 2026-09-01 | QEMU i440fx with an image from `mke2fs` — 1024-byte blocks, sub-task 5.2 | Passed; group 0 reported block bitmap at 66, inode bitmap at 67, inode table at 68, 7599 free blocks, 2037 free inodes and 2 directories, each matching `dumpe2fs`. The whole-table check passed silently: 7599 and 7612 free blocks sum to the 15211 the superblock states, and 2037 and 2048 free inodes to 4085. |
 | 2026-09-01 | QEMU i440fx with an image from `mke2fs` — 4096-byte blocks, sub-task 5.2 | Passed; one group with bitmaps at blocks 6 and 7, inode table at block 8, 18736 free blocks and 19989 free inodes, matching `dumpe2fs`. |
 | 2026-09-01 | QEMU i440fx with an image from `mke2fs` — 1024-byte blocks | Passed; the kernel reported 16384 blocks of 1024 bytes with 15211 free, 4096 inodes of 256 bytes with 4085 free, 2 groups of 8192 blocks and 2048 inodes, first data block 1, first usable inode 11, and features `0x38`/`0x2`/`0x3`. Every figure matches `dumpe2fs -h` upon the same image. |

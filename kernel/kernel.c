@@ -3643,6 +3643,100 @@ static void KernelVerifyBuffer(void)
 }
 
 /*
+ * Reports the root directory of a volume and the blocks it occupies.
+ *
+ * The root is inode 2 upon every EXT2 volume, so it is the one inode that can be
+ * named without reading a directory first, and it is therefore the corroboration
+ * available at every boot: a volume this kernel did not compose, whose root
+ * inode and block list may be compared against what made the volume.
+ *
+ * A directory of any size would fill the log, so the list is a prefix and not
+ * the whole of it. The prefix is followed by the block standing at the first
+ * index of each indirect range the directory is long enough to reach, named by
+ * its index. Those are the resolutions worth reporting: a prefix alone shows
+ * only that the direct pointers were copied out of the inode, whereas the block
+ * at index 12, at 12 + pointers-per-block, and at 12 + pointers + pointers
+ * squared can each be reached only by following one, two or three blocks of
+ * pointers, and each can be compared against what made the volume.
+ */
+#define KERNEL_REPORTED_BLOCKS 13U
+
+static void KernelReportBlockAt(BlockDevice *device, const Ext2Superblock *superblock,
+                                const Ext2Inode *inode, uint64_t index)
+{
+    uint32_t block;
+
+    KernelWriteString(" [");
+    KernelWriteDecimal(index);
+    KernelWriteString("]=");
+
+    if (!Ext2InodeBlock(device, superblock, inode, index, &block))
+    {
+        KernelWriteString("refused");
+        return;
+    }
+
+    KernelWriteDecimal((uint64_t)block);
+}
+
+static void KernelReportRootInode(BlockDevice *device, const Ext2Superblock *superblock)
+{
+    const uint64_t pointers = superblock->block_size / EXT2_BLOCK_POINTER_SIZE;
+    const uint64_t indirect = EXT2_DIRECT_BLOCK_COUNT;
+    const uint64_t doubly = indirect + pointers;
+    const uint64_t triply = doubly + (pointers * pointers);
+    Ext2Inode root;
+    uint64_t count;
+
+    if (!Ext2ReadInode(device, superblock, EXT2_ROOT_INODE, &root))
+    {
+        KernelWriteString("EXT2: the root inode could not be read: ");
+        KernelWriteString(Ext2LastError());
+        KernelWriteString("\n");
+        return;
+    }
+
+    Ext2ReportInode(&root);
+
+    count = Ext2InodeBlockCount(superblock, &root);
+    KernelWriteString("EXT2 root blocks:");
+
+    for (uint64_t index = 0U; (index < count) && (index < KERNEL_REPORTED_BLOCKS); ++index)
+    {
+        uint32_t block;
+
+        if (!Ext2InodeBlock(device, superblock, &root, index, &block))
+        {
+            KernelWriteString(" (refused: ");
+            KernelWriteString(Ext2LastError());
+            KernelWriteString(")");
+            break;
+        }
+
+        KernelWriteString(" ");
+        KernelWriteDecimal((uint64_t)block);
+    }
+
+    if (count > KERNEL_REPORTED_BLOCKS)
+    {
+        KernelWriteString(" ...");
+    }
+
+    /* The first block of each indirect range the directory reaches. */
+    if (count > doubly)
+    {
+        KernelReportBlockAt(device, superblock, &root, doubly);
+    }
+
+    if (count > triply)
+    {
+        KernelReportBlockAt(device, superblock, &root, triply);
+    }
+
+    KernelWriteString("\n");
+}
+
+/*
  * Reads and reports the superblock of every block device the machine carries.
  *
  * Nothing is mounted and nothing is retained. The purpose is that a volume the
@@ -3694,6 +3788,8 @@ static void KernelReportVolumes(void)
                 KernelWriteString(Ext2LastError());
                 KernelWriteString("\n");
             }
+
+            KernelReportRootInode(device, &superblock);
         }
         else
         {
@@ -3775,6 +3871,123 @@ static size_t KernelDescriptorField(size_t offset)
 }
 
 /*
+ * The blocks of the composed file, chosen so that every level of the
+ * indirection is exercised and every one of them lies within the 128 blocks the
+ * volume holds. Blocks 7 to 18 are the twelve direct blocks; the rest are the
+ * pointer blocks and the data blocks they lead to.
+ */
+#define KERNEL_VOLUME_FILE_INODE      11U
+#define KERNEL_VOLUME_DIRECT_FIRST    7U
+#define KERNEL_VOLUME_INDIRECT        19U
+#define KERNEL_VOLUME_INDIRECT_DATA   20U
+#define KERNEL_VOLUME_INDIRECT_LAST   21U
+#define KERNEL_VOLUME_DOUBLE          22U
+#define KERNEL_VOLUME_DOUBLE_LEVEL    23U
+#define KERNEL_VOLUME_DOUBLE_DATA     24U
+#define KERNEL_VOLUME_TRIPLE          25U
+#define KERNEL_VOLUME_TRIPLE_DOUBLE   26U
+#define KERNEL_VOLUME_TRIPLE_INDIRECT 27U
+#define KERNEL_VOLUME_TRIPLE_DATA     28U
+#define KERNEL_VOLUME_ROOT_DATA       29U
+#define KERNEL_VOLUME_LAST_BLOCK      30U
+
+/* How many pointers a block of the composed volume holds: 1024 / 4. */
+#define KERNEL_VOLUME_POINTERS 256U
+
+/* The size given to the composed file, which is not what the resolver uses. */
+#define KERNEL_VOLUME_FILE_SIZE 274432U
+
+/* A field of an inode, the table beginning at KERNEL_VOLUME_INODE_TABLE. */
+static size_t KernelInodeField(uint32_t number, size_t offset)
+{
+    return KernelVolumeBlock(KERNEL_VOLUME_INODE_TABLE) +
+           ((size_t)(number - 1U) * EXT2_GOOD_OLD_INODE_SIZE) + offset;
+}
+
+/* One entry of a block of pointers. */
+static size_t KernelPointerField(uint32_t block, uint32_t entry)
+{
+    return KernelVolumeBlock(block) + ((size_t)entry * EXT2_BLOCK_POINTER_SIZE);
+}
+
+/* One of the fifteen block pointers of an inode. */
+static size_t KernelInodeBlockField(uint32_t number, uint32_t entry)
+{
+    return KernelInodeField(number, EXT2_OFFSET_I_BLOCK + ((size_t)entry *
+                                                           EXT2_BLOCK_POINTER_SIZE));
+}
+
+/*
+ * Composes an inode table and the blocks of pointers one of its inodes leads to.
+ *
+ * Inode 2 is the root directory, as the format reserves it, with a single direct
+ * block. Inode 11 is a regular file whose fifteen pointers reach every level of
+ * the indirection: twelve direct blocks, an indirect block whose first and last
+ * entries are used and whose second is a hole, a doubly indirect block, and a
+ * triply indirect block. The holes are deliberate — a sparse file is the usual
+ * case and not a curiosity, and a resolver that mistook a hole for the end of
+ * the file would be wrong upon most of the files a system holds.
+ */
+static void KernelComposeInodes(void)
+{
+    for (size_t index = KernelVolumeBlock(KERNEL_VOLUME_INODE_TABLE);
+         index < KernelVolumeBlock(KERNEL_VOLUME_LAST_BLOCK); ++index)
+    {
+        KernelMemoryDeviceStore[index] = 0U;
+    }
+
+    /* The root directory: one block, three links — itself, its own entry, and
+     * the parent entry of a subdirectory. */
+    KernelStoreHalf(KernelInodeField(EXT2_ROOT_INODE, EXT2_OFFSET_I_MODE),
+                    (uint16_t)(EXT2_S_IFDIR | 0x01EDU));
+    KernelStoreWord(KernelInodeField(EXT2_ROOT_INODE, EXT2_OFFSET_I_SIZE),
+                    KERNEL_VOLUME_BLOCK_SIZE);
+    KernelStoreHalf(KernelInodeField(EXT2_ROOT_INODE, EXT2_OFFSET_I_LINKS_COUNT), 3U);
+    KernelStoreWord(KernelInodeField(EXT2_ROOT_INODE, EXT2_OFFSET_I_BLOCKS), 2U);
+    KernelStoreWord(KernelInodeBlockField(EXT2_ROOT_INODE, 0U), KERNEL_VOLUME_ROOT_DATA);
+
+    /* The file. */
+    KernelStoreHalf(KernelInodeField(KERNEL_VOLUME_FILE_INODE, EXT2_OFFSET_I_MODE),
+                    (uint16_t)(EXT2_S_IFREG | 0x01A4U));
+    KernelStoreWord(KernelInodeField(KERNEL_VOLUME_FILE_INODE, EXT2_OFFSET_I_SIZE),
+                    KERNEL_VOLUME_FILE_SIZE);
+    KernelStoreHalf(KernelInodeField(KERNEL_VOLUME_FILE_INODE, EXT2_OFFSET_I_LINKS_COUNT), 1U);
+    KernelStoreWord(KernelInodeField(KERNEL_VOLUME_FILE_INODE, EXT2_OFFSET_I_BLOCKS), 32U);
+    KernelStoreHalf(KernelInodeField(KERNEL_VOLUME_FILE_INODE, EXT2_OFFSET_I_UID), 1000U);
+    KernelStoreHalf(KernelInodeField(KERNEL_VOLUME_FILE_INODE, EXT2_OFFSET_I_GID), 1001U);
+
+    for (uint32_t entry = 0U; entry < EXT2_DIRECT_BLOCK_COUNT; ++entry)
+    {
+        KernelStoreWord(KernelInodeBlockField(KERNEL_VOLUME_FILE_INODE, entry),
+                        KERNEL_VOLUME_DIRECT_FIRST + entry);
+    }
+
+    KernelStoreWord(KernelInodeBlockField(KERNEL_VOLUME_FILE_INODE, EXT2_INDIRECT_INDEX),
+                    KERNEL_VOLUME_INDIRECT);
+    KernelStoreWord(KernelInodeBlockField(KERNEL_VOLUME_FILE_INODE, EXT2_DOUBLE_INDIRECT_INDEX),
+                    KERNEL_VOLUME_DOUBLE);
+    KernelStoreWord(KernelInodeBlockField(KERNEL_VOLUME_FILE_INODE, EXT2_TRIPLE_INDIRECT_INDEX),
+                    KERNEL_VOLUME_TRIPLE);
+
+    /* The indirect block: its first and last entries used, its second a hole. */
+    KernelStoreWord(KernelPointerField(KERNEL_VOLUME_INDIRECT, 0U), KERNEL_VOLUME_INDIRECT_DATA);
+    KernelStoreWord(KernelPointerField(KERNEL_VOLUME_INDIRECT, KERNEL_VOLUME_POINTERS - 1U),
+                    KERNEL_VOLUME_INDIRECT_LAST);
+
+    /* The doubly indirect block, and the indirect block beneath it. */
+    KernelStoreWord(KernelPointerField(KERNEL_VOLUME_DOUBLE, 0U), KERNEL_VOLUME_DOUBLE_LEVEL);
+    KernelStoreWord(KernelPointerField(KERNEL_VOLUME_DOUBLE_LEVEL, 5U),
+                    KERNEL_VOLUME_DOUBLE_DATA);
+
+    /* The triply indirect block, and the two levels beneath it. */
+    KernelStoreWord(KernelPointerField(KERNEL_VOLUME_TRIPLE, 0U), KERNEL_VOLUME_TRIPLE_DOUBLE);
+    KernelStoreWord(KernelPointerField(KERNEL_VOLUME_TRIPLE_DOUBLE, 0U),
+                    KERNEL_VOLUME_TRIPLE_INDIRECT);
+    KernelStoreWord(KernelPointerField(KERNEL_VOLUME_TRIPLE_INDIRECT, 3U),
+                    KERNEL_VOLUME_TRIPLE_DATA);
+}
+
+/*
  * Composes the descriptor of the volume's single group.
  *
  * The free counts must agree with the superblock's, there being one group to
@@ -3843,6 +4056,7 @@ static void KernelComposeVolume(void)
     }
 
     KernelComposeGroupDescriptor();
+    KernelComposeInodes();
 }
 
 /*
@@ -4038,6 +4252,254 @@ static bool KernelVerifyGroups(BlockDevice *device, const Ext2Superblock *superb
         Ext2VerifyGroupDescriptors(NULL, superblock))
     {
         KernelWriteString("  A degenerate descriptor request was accepted.\n");
+        succeeded = false;
+    }
+
+    return succeeded;
+}
+
+/*
+ * Alters one word of the composed filesystem, beneath the superblock, and
+ * reports whether the inode reader refused the result. The volume is recomposed
+ * and the cache invalidated afterwards, for the reason KernelVolumeRefusedWith
+ * gives.
+ */
+static bool KernelInodeRefusedWith(BlockDevice *device, const Ext2Superblock *superblock,
+                                   size_t offset, uint32_t value)
+{
+    Ext2Inode inode;
+    bool refused;
+
+    KernelStoreWord(offset, value);
+    (void)BufferInvalidateDevice(device);
+
+    refused = !Ext2ReadInode(device, superblock, KERNEL_VOLUME_FILE_INODE, &inode);
+
+    KernelComposeVolume();
+    (void)BufferInvalidateDevice(device);
+    return refused;
+}
+
+/*
+ * Asserts that an inode is found where the format says it is, that its fields
+ * are read from the right offsets, and that a file block index is resolved
+ * through however many levels of indirection it requires.
+ *
+ * Locating an inode is three pieces of arithmetic upon numbers that begin at one
+ * and indices that begin at zero, and every plausible mistake in it — omitting
+ * the subtraction, using the block size where the inode size belongs, taking the
+ * group's first block for its inode table — yields an offset that lands upon
+ * some other inode of the same volume. That inode is a valid inode. It simply
+ * belongs to a different file, and nothing in the machine can tell.
+ *
+ * The resolution of the block pointers fails the same way. An index that lands
+ * one entry adrift within an indirect block, or a level of the walk that divides
+ * by the wrong span, produces a block number that is a real block of the volume
+ * holding somebody else's data.
+ */
+static bool KernelVerifyInodes(BlockDevice *device, const Ext2Superblock *superblock)
+{
+    const uint64_t indirect_base = EXT2_DIRECT_BLOCK_COUNT;
+    const uint64_t double_base = indirect_base + KERNEL_VOLUME_POINTERS;
+    const uint64_t triple_base =
+        double_base + ((uint64_t)KERNEL_VOLUME_POINTERS * KERNEL_VOLUME_POINTERS);
+    const uint64_t beyond =
+        triple_base + ((uint64_t)KERNEL_VOLUME_POINTERS * KERNEL_VOLUME_POINTERS *
+                       KERNEL_VOLUME_POINTERS);
+    Ext2Inode root;
+    Ext2Inode file;
+    uint32_t block;
+    bool succeeded = true;
+
+    /* The root directory, which the format reserves as inode 2. */
+    if (!Ext2ReadInode(device, superblock, EXT2_ROOT_INODE, &root))
+    {
+        KernelWriteString("  The root inode was refused: ");
+        KernelWriteString(Ext2LastError());
+        KernelWriteString("\n");
+        return false;
+    }
+
+    if ((root.number != EXT2_ROOT_INODE) || !Ext2InodeIsDirectory(&root) ||
+        Ext2InodeIsRegular(&root) || (root.link_count != 3U) ||
+        (root.size != KERNEL_VOLUME_BLOCK_SIZE) ||
+        (root.block[0] != KERNEL_VOLUME_ROOT_DATA) ||
+        ((root.mode & EXT2_PERMISSION_MASK) != 0x01EDU))
+    {
+        KernelWriteString("  The root inode was not read correctly.\n");
+        succeeded = false;
+    }
+
+    /*
+     * The file, which lies in the second block of the inode table: inode 11 is
+     * index 10, and eight inodes of 128 bytes occupy a block of 1024. An inode
+     * reader that never crossed out of the first block of the table would pass
+     * every assertion above and fail here.
+     */
+    if (!Ext2ReadInode(device, superblock, KERNEL_VOLUME_FILE_INODE, &file))
+    {
+        KernelWriteString("  The composed file inode was refused: ");
+        KernelWriteString(Ext2LastError());
+        KernelWriteString("\n");
+        return false;
+    }
+
+    if ((file.number != KERNEL_VOLUME_FILE_INODE) || !Ext2InodeIsRegular(&file) ||
+        Ext2InodeIsDirectory(&file) || (file.size != KERNEL_VOLUME_FILE_SIZE) ||
+        (file.link_count != 1U) || (file.sector_count != 32U) || (file.uid != 1000U) ||
+        (file.gid != 1001U) || ((file.mode & EXT2_PERMISSION_MASK) != 0x01A4U))
+    {
+        KernelWriteString("  A field of the file inode was read from the wrong place.\n");
+        succeeded = false;
+    }
+
+    if (Ext2InodeBlockCount(superblock, &file) != (KERNEL_VOLUME_FILE_SIZE / 1024U))
+    {
+        KernelWriteString("  The blocks the file's size spans were counted wrongly.\n");
+        succeeded = false;
+    }
+
+    /* The twelve direct blocks, at both ends of the range. */
+    if (!Ext2InodeBlock(device, superblock, &file, 0U, &block) ||
+        (block != KERNEL_VOLUME_DIRECT_FIRST))
+    {
+        KernelWriteString("  The first direct block was resolved wrongly.\n");
+        succeeded = false;
+    }
+
+    if (!Ext2InodeBlock(device, superblock, &file, EXT2_DIRECT_BLOCK_COUNT - 1U, &block) ||
+        (block != (KERNEL_VOLUME_DIRECT_FIRST + EXT2_DIRECT_BLOCK_COUNT - 1U)))
+    {
+        KernelWriteString("  The last direct block was resolved wrongly.\n");
+        succeeded = false;
+    }
+
+    /*
+     * The indirect block, at its first and last entries. The last is the
+     * boundary the whole decomposition turns upon: an index one beyond it must
+     * enter the doubly indirect block instead.
+     */
+    if (!Ext2InodeBlock(device, superblock, &file, indirect_base, &block) ||
+        (block != KERNEL_VOLUME_INDIRECT_DATA))
+    {
+        KernelWriteString("  The first indirect block was resolved wrongly.\n");
+        succeeded = false;
+    }
+
+    if (!Ext2InodeBlock(device, superblock, &file, double_base - 1U, &block) ||
+        (block != KERNEL_VOLUME_INDIRECT_LAST))
+    {
+        KernelWriteString("  The last indirect block was resolved wrongly.\n");
+        succeeded = false;
+    }
+
+    /* A hole within an indirect block, which is a block of zeroes and not an
+     * error and not the end of the file. */
+    if (!Ext2InodeBlock(device, superblock, &file, indirect_base + 1U, &block) ||
+        (block != 0U))
+    {
+        KernelWriteString("  A hole within an indirect block was not reported as one.\n");
+        succeeded = false;
+    }
+
+    /* The doubly indirect block: a hole at its first entry, data at its sixth. */
+    if (!Ext2InodeBlock(device, superblock, &file, double_base, &block) || (block != 0U))
+    {
+        KernelWriteString("  A hole beneath the doubly indirect block was not reported "
+                          "as one.\n");
+        succeeded = false;
+    }
+
+    if (!Ext2InodeBlock(device, superblock, &file, double_base + 5U, &block) ||
+        (block != KERNEL_VOLUME_DOUBLE_DATA))
+    {
+        KernelWriteString("  A doubly indirect block was resolved wrongly.\n");
+        succeeded = false;
+    }
+
+    /* The triply indirect block, three levels down. */
+    if (!Ext2InodeBlock(device, superblock, &file, triple_base + 3U, &block) ||
+        (block != KERNEL_VOLUME_TRIPLE_DATA))
+    {
+        KernelWriteString("  A triply indirect block was resolved wrongly.\n");
+        succeeded = false;
+    }
+
+    /*
+     * A hole at the top of a subtree. The triply indirect entry of this inode is
+     * present, but the doubly indirect block beneath it holds one entry only, so
+     * everything past that entry's range is a hole reached without any block
+     * being read at all.
+     */
+    if (!Ext2InodeBlock(device, superblock, &file,
+                        triple_base + ((uint64_t)KERNEL_VOLUME_POINTERS *
+                                       KERNEL_VOLUME_POINTERS),
+                        &block) ||
+        (block != 0U))
+    {
+        KernelWriteString("  A hole occupying a whole subtree was not reported as one.\n");
+        succeeded = false;
+    }
+
+    /* An index beyond what fifteen pointers can address is refused, not held. */
+    if (Ext2InodeBlock(device, superblock, &file, beyond, &block))
+    {
+        KernelWriteString("  An index beyond the triply indirect range was resolved.\n");
+        succeeded = false;
+    }
+
+    /* Inode numbers the volume does not hold, at both ends. */
+    if (Ext2ReadInode(device, superblock, 0U, &file) ||
+        Ext2ReadInode(device, superblock, superblock->inode_count + 1U, &file))
+    {
+        KernelWriteString("  An inode outside the volume was read.\n");
+        succeeded = false;
+    }
+
+    /*
+     * An inode of the table that was never filled. The bytes are zeroes, which
+     * are a valid encoding of nothing, so accepting them would let arithmetic
+     * that had strayed beyond the table report a file rather than a mistake.
+     */
+    if (Ext2ReadInode(device, superblock, KERNEL_VOLUME_FILE_INODE + 1U, &file))
+    {
+        KernelWriteString("  An inode not in use was read as a file.\n");
+        succeeded = false;
+    }
+
+    /* A direct pointer outside the volume, refused when the inode is read. */
+    if (!KernelInodeRefusedWith(device, superblock,
+                                KernelInodeBlockField(KERNEL_VOLUME_FILE_INODE, 0U), 9999U))
+    {
+        KernelWriteString("  An inode naming a block outside the volume was accepted.\n");
+        succeeded = false;
+    }
+
+    /*
+     * A pointer within an indirect block that lies outside the volume. It cannot
+     * be caught when the inode is read, the block holding it not having been
+     * read then, so it is checked where it is fetched.
+     */
+    KernelStoreWord(KernelPointerField(KERNEL_VOLUME_INDIRECT, 0U), 9999U);
+    (void)BufferInvalidateDevice(device);
+
+    if (Ext2ReadInode(device, superblock, KERNEL_VOLUME_FILE_INODE, &file) &&
+        Ext2InodeBlock(device, superblock, &file, indirect_base, &block))
+    {
+        KernelWriteString("  An indirect pointer outside the volume was resolved.\n");
+        succeeded = false;
+    }
+
+    KernelComposeVolume();
+    (void)BufferInvalidateDevice(device);
+
+    /* Requests with nothing to work upon. */
+    if (Ext2ReadInode(NULL, superblock, EXT2_ROOT_INODE, &file) ||
+        Ext2ReadInode(device, superblock, EXT2_ROOT_INODE, NULL) ||
+        Ext2InodeBlock(device, superblock, NULL, 0U, &block) ||
+        Ext2InodeBlock(device, superblock, &root, 0U, NULL))
+    {
+        KernelWriteString("  A degenerate inode request was accepted.\n");
         succeeded = false;
     }
 
@@ -4252,6 +4714,15 @@ static void KernelVerifyExt2(void)
      * be read through a superblock, and this is where a valid one exists.
      */
     if (!Ext2ReadSuperblock(device, &superblock) || !KernelVerifyGroups(device, &superblock))
+    {
+        succeeded = false;
+    }
+
+    /* The inodes, read through the descriptor table just asserted. */
+    KernelComposeVolume();
+    (void)BufferInvalidateDevice(device);
+
+    if (!Ext2ReadSuperblock(device, &superblock) || !KernelVerifyInodes(device, &superblock))
     {
         succeeded = false;
     }
@@ -4636,7 +5107,7 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
     AddressSpaceReport();
 
     VgaSetColour(VGA_COLOUR_LIGHT_GREEN, VGA_COLOUR_BLACK);
-    KernelWriteString("Phase 4 initialisation complete; Phase 5 begun to sub-task 5.2.\n");
+    KernelWriteString("Phase 4 initialisation complete; Phase 5 begun to sub-task 5.3.\n");
 
     VgaSetColour(VGA_COLOUR_LIGHT_GREY, VGA_COLOUR_BLACK);
 

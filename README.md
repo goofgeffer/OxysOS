@@ -51,7 +51,7 @@ four directories. [`docs/README.md`](docs/README.md) is its index.
 | [`DISK.md`](docs/storage/DISK.md) | The ATA disk in programmed input/output mode: the registers, the two addressing modes, and why a disk driver's failures are silent. |
 | [`BLOCK.md`](docs/storage/BLOCK.md) | The generic block-device layer: what a device is, what the layer refuses before a driver is reached, and why it is tested against memory. |
 | [`BUFFER.md`](docs/storage/BUFFER.md) | The buffer cache: how a block is found, what is discarded when the store is full, and when a modified block reaches its device. |
-| [`EXT2.md`](docs/storage/EXT2.md) | The EXT2 volume: the superblock and the block group descriptor table, their decoding, and which volumes this kernel refuses to address. |
+| [`EXT2.md`](docs/storage/EXT2.md) | The EXT2 volume: the superblock, the block group descriptor table and the inode, their decoding, and which volumes this kernel refuses to address. |
 
 ## Directory-level documentation
 

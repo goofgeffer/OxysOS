@@ -2,13 +2,16 @@
  * File: kernel/include/oxys/ext2.h
  * Purpose: Declares the on-disk structures of an EXT2 volume that this kernel
  *          reads: the superblock, which describes the volume's geometry and
- *          features, and the block group descriptor, which locates the three
- *          structures of one group. Both are declared in the processor's own
- *          order, the volume's order being decoded at the point of reading.
+ *          features; the block group descriptor, which locates the three
+ *          structures of one group; and the inode, which describes one file and
+ *          names the blocks holding its data. All three are declared in the
+ *          processor's own order, the volume's order being decoded at the point
+ *          of reading.
  * Key definitions: EXT2_SUPER_MAGIC, EXT2_SUPERBLOCK_OFFSET, Ext2Superblock,
  *          Ext2ReadSuperblock, Ext2GroupCount, Ext2GroupDescriptor,
- *          Ext2ReadGroupDescriptor, Ext2VerifyGroupDescriptors, Ext2LastError,
- *          Ext2ReportVolume, Ext2ReportGroup.
+ *          Ext2ReadGroupDescriptor, Ext2VerifyGroupDescriptors, Ext2Inode,
+ *          Ext2ReadInode, Ext2InodeBlock, Ext2LastError, Ext2ReportVolume,
+ *          Ext2ReportGroup, Ext2ReportInode.
  * References:
  *   - Poirier, D., "The Second Extended File System: Internal Layout", the
  *     Superblock chapter: the superblock is located 1024 bytes from the start of
@@ -23,8 +26,19 @@
  *     table begins upon the first block following the superblock — the third
  *     block of a 1 KiB volume, the second of any larger — a descriptor occupies
  *     32 bytes, and every block identifier within one is absolute.
- *   - Linux kernel documentation, the ext4 superblock and block group descriptor
- *     tables, consulted as an independent statement of the same offsets. The two
+ *   - The same, the Inode Table chapter and Table 3.13: an inode occupies the
+ *     first 128 bytes of whatever s_inode_size states, i_block at offset 40
+ *     holding fifteen block numbers of which twelve are direct, the thirteenth
+ *     indirect, the fourteenth doubly indirect and the fifteenth triply so; a
+ *     zero among them denotes a block that is not allocated.
+ *   - The same, Locating an Inode: the group is (inode - 1) / s_inodes_per_group
+ *     and the index within it (inode - 1) % s_inodes_per_group, inode numbers
+ *     beginning at one and indices at zero.
+ *   - The same, Defined Reserved Inodes and Defined i_mode Values: inode 2 is the
+ *     root directory, and the file format occupies the high four bits of i_mode.
+ *   - Linux kernel documentation, the ext4 superblock, block group descriptor and
+ *     inode tables, consulted as an independent statement of the same offsets.
+ *     The two
  *     formats agree upon every field this kernel reads; they diverge only at
  *     descriptor offset 18, which EXT2 reserves as bg_pad and ext4 reuses as
  *     bg_flags, and which this kernel reads in neither sense.
@@ -145,6 +159,79 @@
 #define EXT2_OFFSET_BG_FREE_BLOCKS      12U
 #define EXT2_OFFSET_BG_FREE_INODES      14U
 #define EXT2_OFFSET_BG_USED_DIRECTORIES 16U
+
+/*
+ * The inode.
+ *
+ * An inode describes one file — its format, its permissions, its size, its
+ * times, and the blocks holding its data. It carries no name; names live in
+ * directories alone.
+ *
+ * The structure occupies the first 128 bytes of whatever s_inode_size states.
+ * A revision 1 volume may state a larger size, as mke2fs now does by default,
+ * and the bytes beyond the 128th belong to extensions this kernel does not read;
+ * EXT2_GOOD_OLD_INODE_SIZE is that 128 and is also the size a revision 0 volume
+ * has no field in which to state.
+ */
+#define EXT2_OFFSET_I_MODE        0U
+#define EXT2_OFFSET_I_UID         2U
+#define EXT2_OFFSET_I_SIZE        4U
+#define EXT2_OFFSET_I_ATIME       8U
+#define EXT2_OFFSET_I_CTIME       12U
+#define EXT2_OFFSET_I_MTIME       16U
+#define EXT2_OFFSET_I_DTIME       20U
+#define EXT2_OFFSET_I_GID         24U
+#define EXT2_OFFSET_I_LINKS_COUNT 26U
+#define EXT2_OFFSET_I_BLOCKS      28U
+#define EXT2_OFFSET_I_FLAGS       32U
+#define EXT2_OFFSET_I_OSD1        36U
+#define EXT2_OFFSET_I_BLOCK       40U
+#define EXT2_OFFSET_I_GENERATION  100U
+#define EXT2_OFFSET_I_FILE_ACL    104U
+#define EXT2_OFFSET_I_DIR_ACL     108U
+#define EXT2_OFFSET_I_FADDR       112U
+
+/*
+ * The fifteen entries of i_block. The first twelve name blocks of the file
+ * directly; the last three name blocks of pointers, one, two and three levels
+ * deep. A zero entry at any level denotes a block that was never allocated —
+ * a hole — and not the end of the file.
+ */
+#define EXT2_BLOCK_POINTER_COUNT   15U
+#define EXT2_DIRECT_BLOCK_COUNT    12U
+#define EXT2_INDIRECT_INDEX        12U
+#define EXT2_DOUBLE_INDIRECT_INDEX 13U
+#define EXT2_TRIPLE_INDIRECT_INDEX 14U
+
+/* The width of a block pointer, in bytes, wherever one is stored. */
+#define EXT2_BLOCK_POINTER_SIZE 4U
+
+/* The reserved inodes. Numbers below s_first_ino belong to the filesystem. */
+#define EXT2_BAD_INODE         1U
+#define EXT2_ROOT_INODE        2U
+#define EXT2_ACL_INDEX_INODE   3U
+#define EXT2_ACL_DATA_INODE    4U
+#define EXT2_BOOT_LOADER_INODE 5U
+#define EXT2_UNDELETE_INODE    6U
+
+/* The file format, held in the high four bits of i_mode. */
+#define EXT2_S_IFMT   UINT16_C(0xF000)
+#define EXT2_S_IFSOCK UINT16_C(0xC000)
+#define EXT2_S_IFLNK  UINT16_C(0xA000)
+#define EXT2_S_IFREG  UINT16_C(0x8000)
+#define EXT2_S_IFBLK  UINT16_C(0x6000)
+#define EXT2_S_IFDIR  UINT16_C(0x4000)
+#define EXT2_S_IFCHR  UINT16_C(0x2000)
+#define EXT2_S_IFIFO  UINT16_C(0x1000)
+
+/* The overrides and the permission bits, which occupy the low twelve. */
+#define EXT2_S_ISUID         UINT16_C(0x0800)
+#define EXT2_S_ISGID         UINT16_C(0x0400)
+#define EXT2_S_ISVTX         UINT16_C(0x0200)
+#define EXT2_S_IRWXU         UINT16_C(0x01C0)
+#define EXT2_S_IRWXG         UINT16_C(0x0038)
+#define EXT2_S_IRWXO         UINT16_C(0x0007)
+#define EXT2_PERMISSION_MASK UINT16_C(0x0FFF)
 
 /*
  * A superblock, parsed.
@@ -300,5 +387,77 @@ uint64_t Ext2GroupsRefused(void);
 
 /* Writes a description of one group to the console. */
 void Ext2ReportGroup(const Ext2GroupDescriptor *descriptor);
+
+
+/*
+ * One inode, parsed.
+ *
+ * The size is held as a single 64-bit quantity. A revision 1 volume stores the
+ * high half of a regular file's size in the field a revision 0 volume calls
+ * i_dir_acl, which is the format's own arrangement and not this kernel's, and
+ * joining the halves here means nothing above must remember to.
+ */
+typedef struct Ext2Inode
+{
+    uint32_t number; /* The inode this is, for a report to name. */
+    uint16_t mode;
+    uint16_t uid;
+    uint16_t gid;
+    uint64_t size;
+    uint32_t access_time;
+    uint32_t change_time;
+    uint32_t modify_time;
+    uint32_t delete_time;
+    uint16_t link_count;
+    uint32_t sector_count; /* i_blocks: 512-byte sectors, not volume blocks. */
+    uint32_t flags;
+    uint32_t block[EXT2_BLOCK_POINTER_COUNT];
+    uint32_t generation;
+    uint32_t file_acl;
+} Ext2Inode;
+
+/*
+ * Reads an inode by number and validates it.
+ *
+ * The inode is refused where the number is outside the volume, where the group
+ * or its descriptor cannot be read, where a block pointer addresses a block the
+ * volume does not hold, or where the inode is not in use — an inode with no
+ * format and no links is a table entry that was never filled, and reading one is
+ * how arithmetic that has strayed beyond the table announces itself.
+ *
+ * Ext2LastError describes any refusal.
+ */
+bool Ext2ReadInode(BlockDevice *device, const Ext2Superblock *superblock, uint32_t number,
+                   Ext2Inode *inode);
+
+/*
+ * Resolves the index of a block within a file to the block of the volume that
+ * holds it, following the indirect blocks as far as is needed.
+ *
+ * A resolved block of zero is a hole: a block the file never had allocated,
+ * which reads as zeroes. That is distinct from a refusal, which means the index
+ * is beyond what fifteen pointers can address or the volume contradicts itself.
+ *
+ * The index is not checked against the file's size. A caller reading a file
+ * bounds itself by the size; a caller walking the blocks a file has allocated
+ * does not, and the two must not be conflated here.
+ */
+bool Ext2InodeBlock(BlockDevice *device, const Ext2Superblock *superblock,
+                    const Ext2Inode *inode, uint64_t index, uint32_t *block);
+
+/* How many blocks of the volume the file's size spans. */
+uint64_t Ext2InodeBlockCount(const Ext2Superblock *superblock, const Ext2Inode *inode);
+
+/* The format of the file the inode describes. */
+bool Ext2InodeIsDirectory(const Ext2Inode *inode);
+bool Ext2InodeIsRegular(const Ext2Inode *inode);
+bool Ext2InodeIsSymbolicLink(const Ext2Inode *inode);
+
+/* How many inodes have been read, and how many refused. */
+uint64_t Ext2InodesRead(void);
+uint64_t Ext2InodesRefused(void);
+
+/* Writes a description of one inode to the console. */
+void Ext2ReportInode(const Ext2Inode *inode);
 
 #endif /* OXYS_EXT2_H */

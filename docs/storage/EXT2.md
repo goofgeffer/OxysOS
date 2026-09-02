@@ -1,6 +1,6 @@
 # The EXT2 Volume
 
-**Phase**: 5, sub-tasks 5.1 and 5.2, of [`../project/PLAN.md`](../project/PLAN.md).
+**Phase**: 5, sub-tasks 5.1 to 5.3, of [`../project/PLAN.md`](../project/PLAN.md).
 
 **Authority**: `PROJECT_GUIDELINES.md`, Sections 2, 3 and 6. Every assertion about
 the format carries a citation, and the specifications are registered in
@@ -255,9 +255,96 @@ size — which is the usual case and not the exception.
 block count of a descriptor is checked against it rather than against
 `s_blocks_per_group`.
 
-## 9. Verification
+## 9. The inode
 
-### 9.1 The self-test of the superblock
+An inode describes one file: its format, its permissions, its owner, its times,
+its size, and the blocks holding its data. It carries no name. Names live in
+directories alone, which is what makes a hard link possible and what makes
+sub-task 5.4 a separate piece of work.
+
+### 9.1 Finding one
+
+Inode numbers begin at **one**; indices begin at zero. The group holding an inode
+and its index within that group's table are therefore
+
+```
+group = (number - 1) / s_inodes_per_group
+index = (number - 1) % s_inodes_per_group
+```
+
+and the inode lies at `index * s_inode_size` within the table whose first block
+the group's descriptor gives. Three pieces of arithmetic, and every plausible
+mistake in them — omitting the subtraction, using the block size where the inode
+size belongs, taking the group's first block for its inode table — lands upon
+some other inode **of the same volume**. That inode is a valid inode. It simply
+belongs to a different file, and nothing in the machine can tell.
+
+The superblock has already been made to state an inode size that is a power of
+two no larger than a block (Section 7), so a whole number of inodes occupies a
+block and no inode straddles two. That is what allows the 128 bytes to be read as
+one run.
+
+An inode occupies the **first 128 bytes** of whatever `s_inode_size` states.
+A revision 1 volume may state more — `mke2fs` now defaults to 256 — and the bytes
+beyond the 128th belong to extensions this kernel does not read.
+
+### 9.2 The size, in two halves
+
+A revision 1 volume keeps the high 32 bits of a **regular file's** size in the
+field a revision 0 volume calls `i_dir_acl`, at offset 108. The two halves are
+joined here so that nothing above must remember to.
+
+They are joined only for a regular file. Upon a directory the same bytes mean
+something else entirely, and a kernel that joined them regardless would give a
+directory a size of some gigabytes and read it until it fell off the volume.
+
+### 9.3 Resolving a block of the file
+
+`i_block` holds fifteen block numbers. The first twelve name blocks of the file
+directly. The thirteenth names a block of pointers, the fourteenth a block of
+pointers to blocks of pointers, and the fifteenth one level deeper again. With a
+block size of *B* a block holds *P = B/4* pointers, so the ranges are
+
+| Index range | Reached through |
+| ----------- | --------------- |
+| 0 to 11 | `i_block` directly |
+| 12 to 11 + *P* | the indirect block |
+| 12 + *P* to 11 + *P* + *P*² | the doubly indirect block |
+| 12 + *P* + *P*² to 11 + *P* + *P*² + *P*³ | the triply indirect block |
+| beyond | refused; fifteen pointers cannot address it |
+
+`Ext2InodeBlock` reduces the index by each range it lies beyond, so that what
+remains is the offset within the range it lies in, and the level is then the
+number of pointer blocks to walk. One loop performs the walk for all three
+levels, dividing the offset by the span of one entry at each step; the span at
+the deepest level is one block, so the last step indexes directly.
+
+**A zero is a hole, not an end.** In the original implementation a zero entry
+terminated the list; in a sparse file it means a block that was never allocated,
+which reads as zeroes. A resolver that mistook a hole for the end of the file
+would be wrong upon most of the files a system holds. A zero *pointer block* is a
+hole occupying the whole subtree beneath it — none of the blocks it would have
+named exist — so `Ext2ReadPointer` returns zero for any entry of a table block of
+zero, without reading anything, and the same function serves all three levels.
+
+**The index is not checked against the size.** A caller reading a file bounds
+itself by the size; a caller walking the blocks a file has allocated does not,
+and conflating the two here would prevent the second.
+
+### 9.4 What is refused
+
+| Refused | Why it matters |
+| ------- | -------------- |
+| Inode 0, or a number beyond `s_inodes_count`. | Zero is not an inode: a directory entry bearing it names nothing, which is how a deleted entry is recorded. |
+| An inode whose group's descriptor is refused. | The table it lies in was located by a descriptor that is not trustworthy. |
+| Any of the fifteen pointers addressing a block the volume does not hold. | Checked when the inode is read, before any of them is used. |
+| A pointer within an indirect block addressing such a block. | Cannot be caught when the inode is read, the block holding it not having been read then, so it is checked where it is fetched. |
+| An inode with no format and no links. | A table entry that was never filled. The bytes past the table are zeroes upon a fresh volume, and a kernel that accepted them would report a file of no type and no blocks rather than the mistake that produced it. |
+| A block index beyond what fifteen pointers can address. | Arithmetic that has run past the end of the decomposition. |
+
+## 10. Verification
+
+### 10.1 The self-test of the superblock
 
 `KernelVerifyExt2` composes a superblock in the memory-backed block device of
 [`BLOCK.md`](BLOCK.md), Section 5, using the offset names from the header, and
@@ -280,7 +367,7 @@ device's storage directly, beneath both the block layer and the cache, so a cach
 holding the previous contents would answer the next read with them, and the
 assertion would be made against a volume that no longer exists.
 
-### 9.2 The self-test of the descriptor table
+### 10.2 The self-test of the descriptor table
 
 `KernelVerifyGroups` runs against the same composed volume, whose group
 descriptor is written from the offset names of the header. It is asserted here
@@ -299,7 +386,31 @@ through a superblock, and this is where a valid one exists.
 | Free counts and a directory count beyond what the group holds are refused. | A descriptor that contradicts itself. |
 | A descriptor that every other rule accepts, whose free count disagrees with the superblock's, is refused by the whole-table check. | A table read at the wrong offset or one descriptor short — the failure no individually plausible descriptor can reveal. |
 
-### 9.3 A volume the kernel did not compose
+### 10.3 The self-test of the inodes
+
+The composed volume carries an inode table of its own. Inode 2 is the root
+directory, as the format reserves it, with a single direct block. Inode 11 is a
+regular file whose fifteen pointers reach every level of the indirection: twelve
+direct blocks, an indirect block whose first and last entries are used and whose
+second is a hole, a doubly indirect block, and a triply indirect block. Every
+block it names lies within the 128 blocks the volume holds.
+
+| Property asserted | The silent failure it would catch |
+| ----------------- | --------------------------------- |
+| Inode 2 is a directory of three links and one block, with the permissions composed. | The format bits taken from the wrong end of `i_mode`, or the mode read as a word. |
+| Inode 11 is found. It is index 10, and eight inodes of 128 bytes fill a block of 1024, so it lies in the **second** block of the table. | An inode reader that never crosses out of the first block of the table — which passes every assertion about inode 2. |
+| Every field of inode 11 equals the value composed at that offset. | A field read from the wrong offset, which yields a plausible number. |
+| Indices 0 and 11 resolve to the first and last direct blocks. | The direct range taken as eleven or thirteen entries. |
+| Index 12 resolves through the indirect block; index 11 + *P* resolves to its last entry. | The boundary the whole decomposition turns upon; one entry adrift here yields a real block of the volume. |
+| Index 13 is a hole, and so is the first index of the doubly indirect range. | A hole mistaken for the end of the file, or for an error. |
+| Index 12 + *P* + 5 resolves two levels down; index 12 + *P* + *P*² + 3 resolves three. | A level of the walk dividing by the wrong span. |
+| An index whose subtree is absent at the top is a hole, reached without reading any block. | A resolver that refused rather than reporting a hole, or that read a pointer block numbered zero. |
+| An index beyond the triply indirect range is refused. | Arithmetic that has run past the end of the decomposition. |
+| Inode 0 and an inode beyond the count are refused. | Numbers treated as indices. |
+| An inode of the table that was never filled is refused. | The zeroes past the table read as a file. |
+| A direct pointer outside the volume is refused when the inode is read; a pointer within an indirect block outside the volume is refused when it is fetched. | Two checks that must both exist, since neither can be performed where the other is. |
+
+### 10.4 A volume the kernel did not compose
 
 A self-test that builds its own volume proves the parser consistent with itself.
 The corroboration must come from a volume built by something else, so three were
@@ -344,7 +455,44 @@ group reported bitmaps at blocks 6 and 7 and an inode table at block 8, with
 disk holding no filesystem at all was refused with *the volume bears no EXT2
 magic number*.
 
-## 10. Limitations
+The root inode is read and its blocks resolved at every boot, upon every device
+the machine carries, which is what puts the inode code of Section 9 against
+volumes this kernel did not compose. Two further images were made whose root
+directory is large enough to need the indirect blocks, `mke2fs -d` populating
+them from a directory of files:
+
+```sh
+mke2fs -q -t ext2 -b 1024 -L oxys-root -F -d root/ ext2-dir.img 16384
+mke2fs -q -t ext2 -b 1024 -N 16384 -L oxys-big-root -F -d bigroot/ ext2-bigdir.img 65536
+```
+
+Of the first, whose root holds 900 entries in 40 blocks, the kernel reported:
+
+```
+EXT2 inode 2: mode 0x41ED (directory), 40960 bytes, 3 links, 82 sectors, first block 580.
+EXT2 root blocks: 580 616 640 664 688 712 736 760 784 808 832 856 881 ...
+```
+
+`debugfs -R "stat <2>"` states the same inode — mode 0755, size 40960, 3 links,
+block count 82 — and the same blocks, `(0):580, (1):616, … (11):856, (IND):880,
+(12):881`. The thirteenth number is the one that matters: index 12 was reached by
+reading the indirect block at 880, which the kernel never sees as a block of the
+file and never prints.
+
+Of the second, whose root holds 9000 entries in 500 blocks and therefore reaches
+the doubly indirect block:
+
+```
+EXT2 inode 2: mode 0x41ED (directory), 512000 bytes, 3 links, 1006 sectors, first block 772.
+EXT2 root blocks: 772 786 787 788 789 790 791 792 793 794 795 796 798 ... [268]=1056
+```
+
+`debugfs` states `(0):772, (1-11):786-796, (IND):797, (12-267):798-1053,
+(DIND):1054, (IND):1055, (268-499):1056-1287`. The prefix matches, and so does
+the block at index 268 — which was reached by following the doubly indirect block
+at 1054 to the indirect block at 1055 and taking its first entry.
+
+## 11. Limitations
 
 1. **Nothing is mounted.** The superblock is read, validated and reported; no
    volume is retained and nothing is opened. Sub-task 5.8 introduces the mount.
@@ -357,13 +505,24 @@ magic number*.
    implemented at all — no EXT2 implementation has ever used them.
 5. **One volume per device.** Partition tables are not read, so a volume must
    begin at the start of its device.
-6. **The bitmaps are not read.** The descriptor states where the block and
+6. **Nothing reads a file's contents, and nothing reads a directory.** The
+   inode is retrieved and its blocks are resolved; turning that into bytes is
+   sub-task 5.5, and turning a name into an inode number is sub-task 5.4.
+7. **The extended fields of a large inode are not read.** Only the first 128
+   bytes of an inode are decoded, whatever `s_inode_size` states. The
+   nanosecond times and the extended attributes that a 256-byte inode carries
+   are not available.
+8. **`i_faddr`, `i_osd1` and `i_osd2` are not read.** Fragments were never
+   implemented by any EXT2, and the operating-system dependent fields hold the
+   high halves of the user and group identifiers upon Linux, which this kernel
+   has no use for until it has users.
+9. **The bitmaps are not read.** The descriptor states where the block and
    inode bitmaps of each group begin, and nothing yet looks at them. Until
    sub-task 5.6 nothing is allocated, so nothing needs to know which blocks are
    in use; the free counts are read and believed.
-7. **`META_BG` is not implemented.** A volume declaring it is refused as an
+10. **`META_BG` is not implemented.** A volume declaring it is refused as an
    unimplemented incompatible feature, which is the correct treatment: it moves
    the descriptor table, and this kernel would read it from the wrong place.
-8. **The block size may not be smaller than the device's.** A 1024-byte
+11. **The block size may not be smaller than the device's.** A 1024-byte
    filesystem upon a 4096-byte device is a rearrangement this kernel does not
    perform.

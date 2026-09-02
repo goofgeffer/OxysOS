@@ -6,8 +6,8 @@
  *          whether the volume may be read, may be written, or may not be
  *          addressed at all.
  * Key functions: Ext2ReadSuperblock, Ext2GroupCount, Ext2ReadGroupDescriptor,
- *          Ext2VerifyGroupDescriptors, Ext2LastError, Ext2ReportVolume,
- *          Ext2ReportGroup.
+ *          Ext2VerifyGroupDescriptors, Ext2ReadInode, Ext2InodeBlock,
+ *          Ext2LastError, Ext2ReportVolume, Ext2ReportGroup, Ext2ReportInode.
  * References:
  *   - Poirier, D., "The Second Extended File System: Internal Layout", the
  *     Superblock chapter and its field table: the superblock lies 1024 bytes
@@ -31,6 +31,19 @@
  *     bg_free_inodes_count and bg_used_dirs_count at 12, 14 and 16 are halves.
  *   - The same, Inode Table: there is one inode table per group and it holds
  *     s_inodes_per_group inodes, so its length follows from the inode size.
+ *   - The same, Locating an Inode: the group holding an inode is
+ *     (inode - 1) / s_inodes_per_group and its index within that group's table is
+ *     (inode - 1) % s_inodes_per_group, inode numbers beginning at one and
+ *     indices at zero. The worked values of Table 3.20 were used to check the
+ *     arithmetic.
+ *   - The same, Table 3.13 and the description of i_block: an inode is 128 bytes
+ *     of defined structure; i_block at offset 40 holds fifteen block numbers, the
+ *     first twelve direct, the thirteenth indirect, the fourteenth doubly
+ *     indirect and the fifteenth triply indirect; a zero entry denotes a block
+ *     that is not allocated rather than the end of the file.
+ *   - The same, i_size: upon a revision 1 volume the high 32 bits of a regular
+ *     file's size are held in the field otherwise called i_dir_acl, at offset
+ *     108.
  *   - Linux kernel documentation, the ext4 superblock and block group descriptor
  *     tables, consulted as an independent statement of the same offsets.
  */
@@ -48,6 +61,8 @@ static uint64_t Ext2Read;
 static uint64_t Ext2Refused;
 static uint64_t Ext2GroupsReadCount;
 static uint64_t Ext2GroupsRefusedCount;
+static uint64_t Ext2InodesReadCount;
+static uint64_t Ext2InodesRefusedCount;
 
 /* Records a refusal, so that a report may say why and not merely that. */
 static bool Ext2Refuse(const char *reason)
@@ -68,6 +83,14 @@ static bool Ext2GroupRefuse(const char *reason)
 {
     Ext2Error = reason;
     ++Ext2GroupsRefusedCount;
+    return false;
+}
+
+/* The same again for an inode, counted apart from both. */
+static bool Ext2InodeRefuse(const char *reason)
+{
+    Ext2Error = reason;
+    ++Ext2InodesRefusedCount;
     return false;
 }
 
@@ -689,6 +712,320 @@ void Ext2ReportGroup(const Ext2GroupDescriptor *descriptor)
     KernelWriteString(" free inodes, ");
     KernelWriteDecimal((uint64_t)descriptor->used_directory_count);
     KernelWriteString(" directories.\n");
+}
+
+/*
+ * The number of block pointers one block holds. Every level of the indirection
+ * branches by this, and the file block index is decomposed in terms of it.
+ */
+static uint32_t Ext2PointersPerBlock(const Ext2Superblock *superblock)
+{
+    return superblock->block_size / EXT2_BLOCK_POINTER_SIZE;
+}
+
+/*
+ * Reads one entry of a block of pointers.
+ *
+ * A table block of zero is a hole occupying the whole subtree beneath it: the
+ * pointer block was never allocated, so none of the blocks it would have named
+ * exist, and every entry of it reads as zero. Returning zero rather than
+ * refusing is what makes a sparse file readable, and it is the reason this is
+ * one function rather than a check repeated at each of the three levels.
+ */
+static bool Ext2ReadPointer(BlockDevice *device, const Ext2Superblock *superblock,
+                            uint32_t table, uint64_t entry, uint32_t *block)
+{
+    uint8_t raw[EXT2_BLOCK_POINTER_SIZE];
+
+    if (table == 0U)
+    {
+        *block = 0U;
+        return true;
+    }
+
+    if (!Ext2BlockExists(superblock, table))
+    {
+        return Ext2InodeRefuse("a block of pointers lies outside the volume");
+    }
+
+    if (!Ext2ReadBytes(device, superblock, table,
+                       (uint32_t)(entry * EXT2_BLOCK_POINTER_SIZE), EXT2_BLOCK_POINTER_SIZE,
+                       raw))
+    {
+        return false;
+    }
+
+    *block = Ext2ReadWord(raw, 0U);
+
+    if ((*block != 0U) && !Ext2BlockExists(superblock, *block))
+    {
+        return Ext2InodeRefuse("a block pointer addresses a block the volume does not hold");
+    }
+
+    return true;
+}
+
+bool Ext2InodeBlock(BlockDevice *device, const Ext2Superblock *superblock,
+                    const Ext2Inode *inode, uint64_t index, uint32_t *block)
+{
+    uint64_t per_block;
+    uint64_t remaining;
+    uint32_t level;
+
+    if ((device == NULL) || (superblock == NULL) || (inode == NULL) || (block == NULL))
+    {
+        return Ext2InodeRefuse("no device, no volume, no inode, or nowhere to put the block");
+    }
+
+    if (index < EXT2_DIRECT_BLOCK_COUNT)
+    {
+        *block = inode->block[index];
+        return true;
+    }
+
+    per_block = (uint64_t)Ext2PointersPerBlock(superblock);
+    remaining = index - EXT2_DIRECT_BLOCK_COUNT;
+
+    /*
+     * The three indirect entries address per_block, per_block squared and
+     * per_block cubed blocks in turn. The index is reduced by each range it lies
+     * beyond, so that what remains is the offset within the range it lies in;
+     * the level is then the number of pointer blocks that must be walked.
+     */
+    if (remaining < per_block)
+    {
+        level = 1U;
+    }
+    else
+    {
+        remaining -= per_block;
+
+        if (remaining < (per_block * per_block))
+        {
+            level = 2U;
+        }
+        else
+        {
+            remaining -= per_block * per_block;
+
+            if (remaining < (per_block * per_block * per_block))
+            {
+                level = 3U;
+            }
+            else
+            {
+                return Ext2InodeRefuse("the block index is beyond what an inode can address");
+            }
+        }
+    }
+
+    /*
+     * The walk begins at the entry of i_block for the level and descends,
+     * dividing the offset by the span of one entry at each step. The span of an
+     * entry at the deepest level is one block, so the last step indexes directly.
+     */
+    *block = inode->block[EXT2_INDIRECT_INDEX + (level - 1U)];
+
+    while (level > 0U)
+    {
+        uint64_t span = 1U;
+
+        for (uint32_t power = 1U; power < level; ++power)
+        {
+            span *= per_block;
+        }
+
+        if (!Ext2ReadPointer(device, superblock, *block, remaining / span, block))
+        {
+            return false;
+        }
+
+        remaining %= span;
+        --level;
+    }
+
+    return true;
+}
+
+uint64_t Ext2InodeBlockCount(const Ext2Superblock *superblock, const Ext2Inode *inode)
+{
+    if ((superblock == NULL) || (inode == NULL))
+    {
+        return 0U;
+    }
+
+    return (inode->size + (uint64_t)superblock->block_size - 1U) /
+           (uint64_t)superblock->block_size;
+}
+
+bool Ext2InodeIsDirectory(const Ext2Inode *inode)
+{
+    return (inode != NULL) && ((inode->mode & EXT2_S_IFMT) == EXT2_S_IFDIR);
+}
+
+bool Ext2InodeIsRegular(const Ext2Inode *inode)
+{
+    return (inode != NULL) && ((inode->mode & EXT2_S_IFMT) == EXT2_S_IFREG);
+}
+
+bool Ext2InodeIsSymbolicLink(const Ext2Inode *inode)
+{
+    return (inode != NULL) && ((inode->mode & EXT2_S_IFMT) == EXT2_S_IFLNK);
+}
+
+bool Ext2ReadInode(BlockDevice *device, const Ext2Superblock *superblock, uint32_t number,
+                   Ext2Inode *inode)
+{
+    uint8_t raw[EXT2_GOOD_OLD_INODE_SIZE];
+    Ext2GroupDescriptor descriptor;
+    Ext2Inode parsed;
+    uint32_t group;
+    uint32_t index;
+    uint32_t position;
+
+    if ((device == NULL) || (superblock == NULL) || (inode == NULL))
+    {
+        return Ext2InodeRefuse("no device, no volume, or nowhere to put the inode");
+    }
+
+    /*
+     * Inode numbers begin at one, and the volume holds s_inodes_count of them.
+     * Zero is not an inode at all: a directory entry bearing it names nothing,
+     * which is how a deleted entry is recorded.
+     */
+    if ((number == 0U) || (number > superblock->inode_count))
+    {
+        return Ext2InodeRefuse("the volume holds no inode of that number");
+    }
+
+    group = (number - 1U) / superblock->inodes_per_group;
+    index = (number - 1U) % superblock->inodes_per_group;
+
+    if (!Ext2ReadGroupDescriptor(device, superblock, group, &descriptor))
+    {
+        return false;
+    }
+
+    /*
+     * The inode lies at index * s_inode_size within the group's table. The
+     * superblock has already been made to state an inode size that is a power of
+     * two no larger than a block, so a whole number of inodes occupies a block
+     * and the 128 bytes read below never straddle two.
+     */
+    position = index * superblock->inode_size;
+
+    if (!Ext2ReadBytes(device, superblock,
+                       descriptor.inode_table + (position / superblock->block_size),
+                       position % superblock->block_size, EXT2_GOOD_OLD_INODE_SIZE, raw))
+    {
+        return false;
+    }
+
+    parsed.number = number;
+    parsed.mode = Ext2ReadHalf(raw, EXT2_OFFSET_I_MODE);
+    parsed.uid = Ext2ReadHalf(raw, EXT2_OFFSET_I_UID);
+    parsed.gid = Ext2ReadHalf(raw, EXT2_OFFSET_I_GID);
+    parsed.access_time = Ext2ReadWord(raw, EXT2_OFFSET_I_ATIME);
+    parsed.change_time = Ext2ReadWord(raw, EXT2_OFFSET_I_CTIME);
+    parsed.modify_time = Ext2ReadWord(raw, EXT2_OFFSET_I_MTIME);
+    parsed.delete_time = Ext2ReadWord(raw, EXT2_OFFSET_I_DTIME);
+    parsed.link_count = Ext2ReadHalf(raw, EXT2_OFFSET_I_LINKS_COUNT);
+    parsed.sector_count = Ext2ReadWord(raw, EXT2_OFFSET_I_BLOCKS);
+    parsed.flags = Ext2ReadWord(raw, EXT2_OFFSET_I_FLAGS);
+    parsed.generation = Ext2ReadWord(raw, EXT2_OFFSET_I_GENERATION);
+    parsed.file_acl = Ext2ReadWord(raw, EXT2_OFFSET_I_FILE_ACL);
+    parsed.size = (uint64_t)Ext2ReadWord(raw, EXT2_OFFSET_I_SIZE);
+
+    /*
+     * A revision 1 volume keeps the high half of a regular file's size in the
+     * field a revision 0 volume calls i_dir_acl. It is a size only for a regular
+     * file: upon a directory the same bytes mean something else entirely, and a
+     * kernel that joined them regardless would give a directory a size of some
+     * gigabytes and read it until it fell off the volume.
+     */
+    if ((superblock->revision >= EXT2_DYNAMIC_REV) &&
+        ((parsed.mode & EXT2_S_IFMT) == EXT2_S_IFREG))
+    {
+        parsed.size |= (uint64_t)Ext2ReadWord(raw, EXT2_OFFSET_I_DIR_ACL) << 32;
+    }
+
+    for (uint32_t entry = 0U; entry < EXT2_BLOCK_POINTER_COUNT; ++entry)
+    {
+        parsed.block[entry] =
+            Ext2ReadWord(raw, EXT2_OFFSET_I_BLOCK + (entry * EXT2_BLOCK_POINTER_SIZE));
+
+        if ((parsed.block[entry] != 0U) && !Ext2BlockExists(superblock, parsed.block[entry]))
+        {
+            return Ext2InodeRefuse("a block pointer of the inode lies outside the volume");
+        }
+    }
+
+    /*
+     * An inode with no format and no links is a table entry that was never
+     * filled. Refusing it is how arithmetic that has strayed beyond the inode
+     * table announces itself: the bytes past the table are zeroes upon a fresh
+     * volume, and a kernel that accepted them would report a file of no type and
+     * no blocks rather than the mistake that produced it.
+     */
+    if ((parsed.mode == 0U) && (parsed.link_count == 0U))
+    {
+        return Ext2InodeRefuse("the inode is not in use");
+    }
+
+    *inode = parsed;
+    ++Ext2InodesReadCount;
+    return true;
+}
+
+uint64_t Ext2InodesRead(void)
+{
+    return Ext2InodesReadCount;
+}
+
+uint64_t Ext2InodesRefused(void)
+{
+    return Ext2InodesRefusedCount;
+}
+
+void Ext2ReportInode(const Ext2Inode *inode)
+{
+    if (inode == NULL)
+    {
+        return;
+    }
+
+    KernelWriteString("EXT2 inode ");
+    KernelWriteDecimal((uint64_t)inode->number);
+    KernelWriteString(": mode ");
+    KernelWriteHexadecimal((uint64_t)inode->mode);
+    KernelWriteString(" (");
+
+    if (Ext2InodeIsDirectory(inode))
+    {
+        KernelWriteString("directory");
+    }
+    else if (Ext2InodeIsRegular(inode))
+    {
+        KernelWriteString("regular file");
+    }
+    else if (Ext2InodeIsSymbolicLink(inode))
+    {
+        KernelWriteString("symbolic link");
+    }
+    else
+    {
+        KernelWriteString("other");
+    }
+
+    KernelWriteString("), ");
+    KernelWriteDecimal(inode->size);
+    KernelWriteString(" bytes, ");
+    KernelWriteDecimal((uint64_t)inode->link_count);
+    KernelWriteString(" links, ");
+    KernelWriteDecimal((uint64_t)inode->sector_count);
+    KernelWriteString(" sectors, first block ");
+    KernelWriteDecimal((uint64_t)inode->block[0]);
+    KernelWriteString(".\n");
 }
 
 const char *Ext2LastError(void)
