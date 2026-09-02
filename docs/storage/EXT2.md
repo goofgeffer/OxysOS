@@ -1,6 +1,6 @@
 # The EXT2 Volume
 
-**Phase**: 5, sub-tasks 5.1 to 5.4, of [`../project/PLAN.md`](../project/PLAN.md).
+**Phase**: 5, sub-tasks 5.1 to 5.5, of [`../project/PLAN.md`](../project/PLAN.md).
 
 **Authority**: `PROJECT_GUIDELINES.md`, Sections 2, 3 and 6. Every assertion about
 the format carries a citation, and the specifications are registered in
@@ -403,7 +403,7 @@ fit in a record of twelve bytes. Read the other way about, every entry of a
 volume that states no file type acquires a type equal to the high byte of its
 name length, which is zero, so every file is declared to be of no type.
 
-This kernel decides from the flag alone, and the self-test of Section 11.5
+This kernel decides from the flag alone, and the self-test of Section 12.5
 asserts that it does so by presenting the same bytes under both readings.
 
 ### 10.3 The file type, and the format it must agree with
@@ -439,7 +439,7 @@ produced:
    read its name rather than its inode number would report a file that was
    deleted. It is also how the interior nodes of an indexed directory are
    disguised, which is why a linear traversal reads such a directory correctly;
-   see Section 12, limitation 14.
+   see Section 13, limitation 14.
 2. **A block the directory never had allocated.** Reading a hole yields zeroes,
    and a record length of zero cannot be advanced past; passing over the block is
    both the correct reading of a hole and the only one that terminates.
@@ -482,6 +482,39 @@ The lookup is given the address and the length of a component rather than a
 terminated string, so one component of a path is looked up **where it stands**
 without first being copied into a buffer of its own.
 
+#### Following a symbolic link
+
+Sub-task 5.4 refused a link standing within a path and returned one standing at
+the end unresolved, following one requiring the file reading that did not then
+exist. It exists now (Section 11.4), and both are resolved.
+
+A link is followed by **resolving its target to an inode and continuing the
+original path from that point** — not by splicing the target into the path and
+starting again. The two are equivalent, and this one needs no buffer to hold the
+spliced path, which matters when each level of the resolution already carries a
+target of its own.
+
+A relative target is resolved against **the directory holding the link**, which
+is the whole of the difference between a relative target and an absolute one, and
+the reason the resolver must be able to begin somewhere other than the root.
+
+Two entry points are offered, and the distinction is the one POSIX draws between
+acting upon a file and acting upon its name:
+
+| | A link within the path | A link as the last component |
+| --- | --- | --- |
+| `Ext2ResolvePath` | Followed | Followed |
+| `Ext2ResolvePathNoFollow` | Followed | Returned as it stands |
+
+A trailing separator overrides the second column. `"/link/"` asserts a directory,
+and a link is not one, so the path is asking for what the link names whichever
+entry point was called.
+
+At most `EXT2_SYMLINK_DEPTH_MAXIMUM` links are followed in one resolution. The
+format offers no protection against a link naming itself and cannot: such a link
+is a valid file whose contents happen to be its own name. Eight is the depth
+POSIX requires an implementation to allow.
+
 ### 10.6 What is refused
 
 | Refused | Why it matters |
@@ -500,11 +533,115 @@ without first being copied into a buffer of its own.
 | An inode that is not a directory. | Caught before its bytes are interpreted as entries. |
 | An entry whose file type contradicts the format of the inode it names. | The directories and the inodes no longer describe the same filesystem. |
 | A relative path, or one longer than 4096 bytes. | The first has nothing to be resolved against; the second is how a string that was never terminated is refused rather than walked until it meets something that faults. |
-| A symbolic link standing within a path. | Following it means reading the file its data is, which is sub-task 5.5. Met as the last component it is returned as it stands, the caller having asked for the link and not for what it names. |
+| More than `EXT2_SYMLINK_DEPTH_MAXIMUM` symbolic links followed in one resolution. | A link naming itself, directly or around a cycle. The format permits it, and nothing but a depth bound terminates the resolution. |
+| A symbolic link whose target cannot be read. | Refused by the rules of Section 11.5 rather than followed to somewhere else. |
 
-## 11. Verification
+## 11. Reading a file
 
-### 11.1 The self-test of the superblock
+Everything to this point **locates** things: a superblock, a descriptor, an
+inode, a block of a file, a name within a directory. This is the first section
+that produces the contents of a file, and it is the shortest piece of work in
+the chapter precisely because the locating was done properly. The whole of it is
+the arithmetic of a byte range against a block size, and one call per block to
+`Ext2InodeBlock`, which has existed since Section 9.3.
+
+### 11.1 The range
+
+A read is given an offset within the file and a length. Each turn of the loop
+serves the part of the request lying within one block:
+
+```
+index  = offset / block_size          which block of the file
+within = offset % block_size          where in that block
+take   = min(block_size - within, remaining)
+```
+
+`take` is what makes the first and last blocks of a range partial and every
+block between them whole, without those three cases being written separately.
+The block index goes to `Ext2InodeBlock`, which resolves it through however many
+levels of indirection it needs; nothing here knows or cares how many that was.
+
+### 11.2 A hole reads as zeroes
+
+`Ext2InodeBlock` yields zero for a block the file never had allocated. The read
+fills that part of the buffer with zeroes rather than refusing.
+
+This is not leniency. The contents of a file at a hole **are** zeroes, by
+definition rather than by accident, and a reader cannot distinguish a hole from a
+block that was written with zeroes — which is the entire point of one. A kernel
+that refused would be unable to read most of the files a system holds.
+
+### 11.3 The end of the file is not a failure
+
+A read that would cross the end of the file is shortened to it. A read beginning
+at or beyond the end yields no bytes and **succeeds**.
+
+Every reader arrives at the end of a file; it is how reading concludes. A kernel
+reporting it as an error would oblige each of them to treat the ordinary
+conclusion of its work as a fault, and would leave them unable to distinguish it
+from a volume that could not be read. The count reports it instead, so the return
+value means what it says: false is a failure, and zero bytes is the end.
+
+A directory is refused outright. Its bytes are entries, it is read by traversing
+it (Section 10.4), and a caller reading it as a stream would receive record
+lengths and inode numbers as though they were text.
+
+### 11.4 Symbolic links, and the two places a target lives
+
+A symbolic link is a file whose contents are a path. The specification's
+Symbolic Links chapter puts the optimisation plainly: *"For all symlink shorter
+than 60 bytes long, the data is stored within the inode itself; it uses the
+fields which would normally be used to store the pointers to data blocks."*
+
+Sixty bytes is fifteen pointers of four. So there are two forms:
+
+| Form | Where the target is | How it is read |
+| ---- | ------------------- | -------------- |
+| Fast | The sixty bytes of `i_block` | Recovered from the fifteen decoded words, least significant byte first |
+| Slow | Blocks of the volume | Read as any other file is, by Section 11.1 |
+
+**Which form a link is must be decided by `i_blocks` and not by the size.** The
+two agree upon every link a filesystem creates, the one being the reason for the
+other; they part when the inode carries an extended attribute block, which
+`i_blocks` counts and which is not data. A test upon the size alone would then
+read the target out of pointers to a block that exists. The test is therefore
+that the sectors the inode declares, less those of an extended attribute block,
+are zero — which is how Linux distinguishes them.
+
+#### The defect this exposed in Section 9
+
+`Ext2ReadInode` validated all fifteen words of `i_block` as block numbers,
+refusing an inode naming a block the volume does not hold. That check is correct
+for every file but a fast symbolic link, where those words are **text**. The
+target `sub` read as a pointer is the word `0x00627573` — a block some millions
+beyond the end of any volume — so every fast symbolic link on every real volume
+was refused, and the diagnosis named a block pointer that was not one.
+
+The validation is now skipped for such an inode, the decision resting upon the
+mode, the sector count and the extended attribute block, all of which are parsed
+before the words are examined. The words are decoded either way; only their
+interpretation differs.
+
+This was found by the self-test of Section 12.5 failing on the first volume that
+carried a fast symbolic link. It is worth recording because it is the
+characteristic shape of a defect in this chapter: the code was correct for every
+case it had been given, and wrong for a case the format permits and every real
+volume contains.
+
+### 11.5 What is refused
+
+| Refused | Why it matters |
+| ------- | -------------- |
+| A read of a directory. | Its bytes are entries; a caller reading them as a stream has mistaken what it holds. |
+| A target read for an inode that is not a symbolic link. | The bytes would be data, or block pointers, read as a path. |
+| A symbolic link bearing no target. | It names nothing. The format does not forbid it; resolving the empty path would reach whatever happened to be current. |
+| A target longer than the caller's buffer. | Refused rather than truncated: a truncated path names a different file, and may well name a real one. |
+| A target holding a null byte. | It would be a path shorter than the file says it is, and everything above treats it as terminated. |
+| A fast link whose size exceeds sixty bytes. | It declares no blocks and has no room for the target it claims. |
+
+## 12. Verification
+
+### 12.1 The self-test of the superblock
 
 `KernelVerifyExt2` composes a superblock in the memory-backed block device of
 [`BLOCK.md`](BLOCK.md), Section 5, using the offset names from the header, and
@@ -527,7 +664,7 @@ device's storage directly, beneath both the block layer and the cache, so a cach
 holding the previous contents would answer the next read with them, and the
 assertion would be made against a volume that no longer exists.
 
-### 11.2 The self-test of the descriptor table
+### 12.2 The self-test of the descriptor table
 
 `KernelVerifyGroups` runs against the same composed volume, whose group
 descriptor is written from the offset names of the header. It is asserted here
@@ -546,7 +683,7 @@ through a superblock, and this is where a valid one exists.
 | Free counts and a directory count beyond what the group holds are refused. | A descriptor that contradicts itself. |
 | A descriptor that every other rule accepts, whose free count disagrees with the superblock's, is refused by the whole-table check. | A table read at the wrong offset or one descriptor short — the failure no individually plausible descriptor can reveal. |
 
-### 11.3 The self-test of the inodes
+### 12.3 The self-test of the inodes
 
 The composed volume carries an inode table of its own. Inode 2 is the root
 directory, as the format reserves it, with a single direct block. Inode 11 is a
@@ -570,7 +707,7 @@ block it names lies within the 128 blocks the volume holds.
 | An inode of the table that was never filled is refused. | The zeroes past the table read as a file. |
 | A direct pointer outside the volume is refused when the inode is read; a pointer within an indirect block outside the volume is refused when it is fetched. | Two checks that must both exist, since neither can be performed where the other is. |
 
-### 11.4 The self-test of the directories
+### 12.4 The self-test of the directories
 
 `KernelVerifyDirectories` composes a root directory and one subdirectory within
 the same device of memory, laid out as Table 4.3 lays out its sample: entries
@@ -596,10 +733,38 @@ yields fragments of real names rather than an error.
 | The same bytes are refused under the sixteen-bit reading and accepted under the eight-bit one, according to the feature flag alone. | The one place in the format where the wrong reading produces no diagnostic of its own. See Section 10.2. |
 
 The cache is invalidated on both sides of every alteration, for the reason
-Section 11.1 gives: the bytes are written beneath both the block layer and the
+Section 12.1 gives: the bytes are written beneath both the block layer and the
 cache, and a cache holding the previous contents would answer with them.
 
-### 11.5 A volume the kernel did not compose
+### 12.5 The self-test of file reading
+
+`KernelVerifyFiles` reads the composed file, the composed sparse file, and both
+forms of symbolic link.
+
+The composed file holds, at each offset, a byte **derived from that offset**
+rather than a constant or a pattern repeating every block. This is the whole
+design of the test. Under a constant fill, a reader that returned the right
+number of bytes from the wrong block would be indistinguishable from a correct
+one; under a pattern repeating every block, so would a reader that resolved the
+wrong block of the right file. Resolving the wrong block is the failure this
+entire chapter is arranged to catch, and the fill is chosen so that it cannot
+hide.
+
+| Property asserted | The silent failure it would catch |
+| ----------------- | --------------------------------- |
+| The whole 1500-byte file reads as composed, across the boundary between its two blocks and ending part-way through the second. | A range mapped short, or a second block resolved wrongly. |
+| A 100-byte run beginning at offset 1000 crosses the boundary at 1024 and returns the right bytes on both sides. | A reader taking the whole run from one block, which would return 24 correct bytes and 76 wrong ones. |
+| A run wholly within the second block returns the right bytes. | An offset applied to the file where it belongs to the block, or the reverse. |
+| A read crossing the end is shortened to it; a read at or beyond the end returns zero bytes and succeeds; a read of no length returns no bytes. | The end of a file reported as an error, which would oblige every caller to treat the conclusion of its work as a fault. |
+| Block 12 of the sparse file reads as data and block 13 reads as zeroes. | A reader returning zeroes for both, or data for both — either of which passes an assertion made upon one alone. |
+| A directory is refused. | Entries returned to a caller expecting text. |
+| The fast link is recognised as fast, the slow one as slow, and both targets read exactly. | The two forms are read by entirely different code; a volume carrying only the common one leaves half of it unexercised. |
+| A target longer than the buffer is refused rather than truncated. | A truncated path names a different file, and may well name a real one. |
+| Five paths resolve through the links, including one whose target is relative and one absolute, and one where the link stands within the path. | Every error in the re-entry of the resolver, and in resolving a relative target against the wrong directory. |
+| `Ext2ResolvePathNoFollow` returns the link, follows a link within the path, and is overridden by a trailing separator. | The distinction between acting upon a file and upon its name collapsing in either direction. |
+| A link altered to name itself is refused. | A resolution that recurs until the stack is gone. |
+
+### 12.6 A volume the kernel did not compose
 
 A self-test that builds its own volume proves the parser consistent with itself.
 The corroboration must come from a volume built by something else, so three were
@@ -682,7 +847,7 @@ the block at index 268 — which was reached by following the doubly indirect bl
 at 1054 to the indirect block at 1055 and taking its first entry.
 
 
-### 11.6 Directories the kernel did not compose
+### 12.7 Directories the kernel did not compose
 
 The root directory is now listed at every boot, upon every device the machine
 carries, and one path is resolved upon it. The names in that listing were written
@@ -750,7 +915,53 @@ EXT2 directory 2 holds 9003 entries.
 boundary at index 12 and the indirect-to-doubly-indirect boundary at index 268
 without losing or repeating a single record, which is the integration of
 Section 10.4 with the pointer resolution of Section 9.3.
-## 12. Limitations
+### 12.8 Files the kernel did not compose
+
+The root directory of every volume is listed at each boot, one path is resolved
+upon it, and what that path names is now read: the target of a symbolic link, or
+the first sixteen bytes of a regular file. The path is resolved **without**
+following a last link, so a link reports itself and its target rather than
+silently reporting what it names.
+
+An image was made from a tree holding a file, a directory two deep, and one link
+of each form:
+
+```sh
+mke2fs -q -F -b 1024 -I 128 -r 1 -d tree/ fs5.img 8192
+```
+
+With the probe set to each in turn, the kernel reported:
+
+```
+EXT2 path /content.txt resolves to inode 12, regular file of 22 bytes.
+EXT2 path /content.txt begins: 0x4F 0x78 0x79 0x73 0x2D 0x4F 0x53 0x20 0x72 0x65 0x61 0x64 0x73 0x20 0x61 0x20 (16 bytes read)
+
+EXT2 path /shortlink resolves to inode 17, symbolic link of 4 bytes.
+EXT2 path /shortlink is a target held within its inode: deep
+
+EXT2 path /longlink resolves to inode 16, symbolic link of 71 bytes.
+EXT2 path /longlink is a target held in a block: /deep/../deep/../deep/../deep/../deep/../deep/../deep/deeper/buried.txt
+```
+
+`debugfs -R "ls -l /"` gives inode 12 to `content.txt`, 17 to `shortlink` and 16
+to `longlink`; `stat` reports `Blockcount: 0` for the first link and `2` for the
+second, which is the distinction of Section 11.4 as the volume itself records it.
+The sixteen bytes are `Oxys-OS reads a` — `xxd` upon the host gives
+`4f7879732d4f53207265616473206120` for the same prefix, byte for byte.
+
+Finally, the probe was set to a path passing **through** a link:
+
+```
+EXT2 path /shortlink/deeper/buried.txt resolves to inode 15, regular file of 7 bytes.
+EXT2 path /shortlink/deeper/buried.txt begins: 0x62 0x75 0x72 0x69 0x65 0x64 0xA (7 bytes read)
+```
+
+`debugfs -R "stat /deep/deeper/buried.txt"` states inode 15, a regular file of 7
+bytes, and the bytes are `buried\n`. The link was resolved mid-path, its relative
+target `deep` taken against the root that holds it, and two further components
+walked from there.
+
+## 13. Limitations
 
 1. **Nothing is mounted.** The superblock is read, validated and reported; no
    volume is retained and nothing is opened. Sub-task 5.8 introduces the mount.
@@ -763,9 +974,10 @@ Section 10.4 with the pointer resolution of Section 9.3.
    implemented at all — no EXT2 implementation has ever used them.
 5. **One volume per device.** Partition tables are not read, so a volume must
    begin at the start of its device.
-6. **Nothing reads a file's contents.** An inode is retrieved, its blocks are
-   resolved and a name is turned into an inode number; turning the blocks of a
-   file into bytes is sub-task 5.5.
+6. **Nothing is opened, and nothing is written.** A file's contents may be read
+   by naming it, but there is no descriptor, no position that advances, and no
+   means of altering anything. Writing is sub-task 5.6 and the descriptor
+   belongs to the virtual filesystem layer of sub-task 5.8.
 7. **The extended fields of a large inode are not read.** Only the first 128
    bytes of an inode are decoded, whatever `s_inode_size` states. The
    nanosecond times and the extended attributes that a 256-byte inode carries
@@ -788,10 +1000,14 @@ Section 10.4 with the pointer resolution of Section 9.3.
    or removed, which is sub-task 5.7. An entry remembers the block and the
    offset it was read from against that work, since inserting or removing a name
    means altering the record before it.
-13. **A symbolic link is not followed.** Met as the last component of a path it
-   is returned as it stands; met within a path it is refused. Following one
-   means reading the file its data is, which is sub-task 5.5, and doing so
-   safely means bounding the depth against a link that names itself.
+13. **A symbolic link's target may not exceed 255 bytes**, and at most eight are
+   followed in resolving one path. Neither bound is a property of the format,
+   which limits a target only by the size of the file holding it and says
+   nothing about following one. Both are bounds upon this kernel: a link is
+   followed by re-entering the resolver, so each is a stack frame carrying a
+   target buffer of its own. Eight is the depth POSIX requires an
+   implementation to allow; 255 accommodates every target a system is likely to
+   hold and is not the 4096 a path may reach.
 14. **The hash index of an indexed directory is not used.** A directory that
    carries one is read as the linked list it also is: the index is a
    *compatible* feature precisely because its interior nodes are disguised as
@@ -800,5 +1016,15 @@ Section 10.4 with the pointer resolution of Section 9.3.
    exists to avoid, and a directory of many thousands of names is searched a
    record at a time. Correct, and slow in exactly the case the format provides
    for.
-15. **Relative paths are not resolved**, there being no working directory to
-   resolve them against until there are processes in Phase 6.
+15. **Relative paths are not resolved** from outside, there being no working
+   directory to resolve them against until there are processes in Phase 6. A
+   relative *symbolic link target* is resolved, against the directory holding
+   the link, that directory being known.
+16. **A read is not cached above the buffer cache**, and there is no read-ahead.
+   Each read resolves its block pointers afresh, so reading a large file
+   sequentially re-walks the indirect blocks for every block of it. They will be
+   in the buffer cache, so the cost is the walk and not the disk; it becomes
+   worth addressing when something reads a large file often, which is not before
+   Phase 7.
+17. **`i_atime` is not updated by a read.** Nothing is written to a volume at
+   all, so a file this kernel reads does not record that it was read.

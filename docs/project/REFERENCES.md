@@ -585,6 +585,15 @@ Sections relied upon:
 - **Indexed Directory Format**: the hash index is made backward compatible by
   disguising its interior nodes as records that are not in use, so a linear
   traversal reads an indexed directory correctly.
+- **Symbolic Links**: a symbolic link is a file holding a text string
+  interpreted as a path to another file, absolute or relative, which affects
+  pathname resolution; it is a file in its own right and exists independently of
+  its target, which it does not oblige to exist. Symbolic links do not affect an
+  inode's link count. "For all symlink shorter than 60 bytes long, the data is
+  stored within the inode itself; it uses the fields which would normally be
+  used to store the pointers to data blocks" — sixty being the fifteen pointers
+  of four bytes, and the optimisation being worth having because most links are
+  shorter than that.
 - **Byte order**: every quantity upon the volume is stored least significant byte
   first, irrespective of the machine.
 

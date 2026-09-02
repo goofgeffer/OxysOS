@@ -3782,6 +3782,9 @@ static void KernelVerifyBuffer(void)
  * that resolution works upon a volume this kernel did not compose. */
 #define KERNEL_PROBE_PATH "/lost+found"
 
+/* How many bytes of a regular file the probe reports. */
+#define KERNEL_REPORTED_BYTES 16U
+
 static void KernelReportBlockAt(BlockDevice *device, const Ext2Superblock *superblock,
                                 const Ext2Inode *inode, uint64_t index)
 {
@@ -3872,7 +3875,7 @@ static void KernelReportRootInode(BlockDevice *device, const Ext2Superblock *sup
      * look for upon a volume it knows nothing else about; a volume that does not
      * hold it reports the refusal, which is itself the correct answer.
      */
-    if (Ext2ResolvePath(device, superblock, KERNEL_PROBE_PATH, &probe))
+    if (Ext2ResolvePathNoFollow(device, superblock, KERNEL_PROBE_PATH, &probe))
     {
         KernelWriteString("EXT2 path " KERNEL_PROBE_PATH " resolves to inode ");
         KernelWriteDecimal((uint64_t)probe.number);
@@ -3881,6 +3884,59 @@ static void KernelReportRootInode(BlockDevice *device, const Ext2Superblock *sup
         KernelWriteString(" of ");
         KernelWriteDecimal(probe.size);
         KernelWriteString(" bytes.\n");
+
+        /*
+         * What the probe holds, which is the one exercise of the reading of
+         * Section 5.5 upon a volume this kernel did not compose. The path is
+         * resolved without following a last link, so that a link reports itself
+         * and its target rather than silently reporting what it names.
+         */
+        if (Ext2InodeIsSymbolicLink(&probe))
+        {
+            char target[EXT2_SYMLINK_MAXIMUM + 1U];
+
+            if (Ext2ReadSymbolicLink(device, superblock, &probe, target, sizeof target))
+            {
+                KernelWriteString("EXT2 path " KERNEL_PROBE_PATH " is a ");
+                KernelWriteString(Ext2InodeIsFastSymbolicLink(superblock, &probe)
+                                      ? "target held within its inode: "
+                                      : "target held in a block: ");
+                KernelWriteString(target);
+                KernelWriteString("\n");
+            }
+            else
+            {
+                KernelWriteString("EXT2 path " KERNEL_PROBE_PATH " has no readable target: ");
+                KernelWriteString(Ext2LastError());
+                KernelWriteString("\n");
+            }
+        }
+        else if (Ext2InodeIsRegular(&probe))
+        {
+            uint8_t head[KERNEL_REPORTED_BYTES];
+            uint64_t read = 0U;
+
+            if (Ext2ReadFile(device, superblock, &probe, 0U, head, sizeof head, &read))
+            {
+                KernelWriteString("EXT2 path " KERNEL_PROBE_PATH " begins:");
+
+                for (uint64_t index = 0U; index < read; ++index)
+                {
+                    KernelWriteString(" ");
+                    KernelWriteHexadecimal((uint64_t)head[index]);
+                }
+
+                KernelWriteString(" (");
+                KernelWriteDecimal(read);
+                KernelWriteString(" bytes read)\n");
+            }
+            else
+            {
+                KernelWriteString("EXT2 path " KERNEL_PROBE_PATH " could not be read: ");
+                KernelWriteString(Ext2LastError());
+                KernelWriteString("\n");
+            }
+        }
     }
     else
     {
@@ -4045,7 +4101,9 @@ static size_t KernelDescriptorField(size_t offset)
 #define KERNEL_VOLUME_ROOT_DATA       29U
 #define KERNEL_VOLUME_SUB_DATA        30U
 #define KERNEL_VOLUME_INNER_DATA      31U
-#define KERNEL_VOLUME_LAST_BLOCK      32U
+#define KERNEL_VOLUME_INNER_DATA_LAST 32U
+#define KERNEL_VOLUME_LINK_DATA       33U
+#define KERNEL_VOLUME_LAST_BLOCK      34U
 
 /*
  * The two inodes the directories lead to besides the file: a subdirectory of the
@@ -4064,6 +4122,28 @@ static size_t KernelDescriptorField(size_t offset)
  * other inode would begin asserting the wrong thing without saying so.
  */
 #define KERNEL_VOLUME_UNUSED_INODE 14U
+
+/*
+ * The two symbolic links, one of each form. A target shorter than sixty bytes is
+ * held within the inode, in the fields that would otherwise be block pointers;
+ * a longer one is held in a block like any other file. Both forms are composed
+ * because they are read by entirely different code and a volume carrying only
+ * the common one would leave half of that code unexercised.
+ */
+#define KERNEL_VOLUME_FAST_LINK_INODE 15U
+#define KERNEL_VOLUME_SLOW_LINK_INODE 16U
+
+/* What each names. The fast target is relative and is resolved against the
+ * directory holding the link; the slow one is absolute and long enough to
+ * require a block, which is what makes it slow. */
+#define KERNEL_VOLUME_FAST_LINK_TARGET "sub"
+#define KERNEL_VOLUME_SLOW_LINK_TARGET \
+    "/sub/../sub/../sub/../sub/../sub/../sub/../sub/../sub/../sub/inner"
+
+/* The regular file within the subdirectory: two blocks, the second partly
+ * filled, so that a read crossing a block boundary and a read ending within a
+ * block are both exercised. */
+#define KERNEL_VOLUME_INNER_SIZE 1500U
 
 /* How many pointers a block of the composed volume holds: 1024 / 4. */
 #define KERNEL_VOLUME_POINTERS 256U
@@ -4133,11 +4213,36 @@ static void KernelComposeInodes(void)
     KernelStoreHalf(KernelInodeField(KERNEL_VOLUME_INNER_INODE, EXT2_OFFSET_I_MODE),
                     (uint16_t)(EXT2_S_IFREG | 0x01A4U));
     KernelStoreWord(KernelInodeField(KERNEL_VOLUME_INNER_INODE, EXT2_OFFSET_I_SIZE),
-                    KERNEL_VOLUME_BLOCK_SIZE);
+                    KERNEL_VOLUME_INNER_SIZE);
     KernelStoreHalf(KernelInodeField(KERNEL_VOLUME_INNER_INODE, EXT2_OFFSET_I_LINKS_COUNT), 1U);
-    KernelStoreWord(KernelInodeField(KERNEL_VOLUME_INNER_INODE, EXT2_OFFSET_I_BLOCKS), 2U);
+    KernelStoreWord(KernelInodeField(KERNEL_VOLUME_INNER_INODE, EXT2_OFFSET_I_BLOCKS), 4U);
     KernelStoreWord(KernelInodeBlockField(KERNEL_VOLUME_INNER_INODE, 0U),
                     KERNEL_VOLUME_INNER_DATA);
+    KernelStoreWord(KernelInodeBlockField(KERNEL_VOLUME_INNER_INODE, 1U),
+                    KERNEL_VOLUME_INNER_DATA_LAST);
+
+    /*
+     * The two symbolic links. The fast one declares no sectors, which is what
+     * says its target is within the inode; the slow one declares the two sectors
+     * of its single block, which is what says the target is not.
+     */
+    KernelStoreHalf(KernelInodeField(KERNEL_VOLUME_FAST_LINK_INODE, EXT2_OFFSET_I_MODE),
+                    (uint16_t)(EXT2_S_IFLNK | 0x01FFU));
+    KernelStoreWord(KernelInodeField(KERNEL_VOLUME_FAST_LINK_INODE, EXT2_OFFSET_I_SIZE),
+                    (uint32_t)(sizeof(KERNEL_VOLUME_FAST_LINK_TARGET) - 1U));
+    KernelStoreHalf(KernelInodeField(KERNEL_VOLUME_FAST_LINK_INODE, EXT2_OFFSET_I_LINKS_COUNT),
+                    1U);
+    KernelStoreWord(KernelInodeField(KERNEL_VOLUME_FAST_LINK_INODE, EXT2_OFFSET_I_BLOCKS), 0U);
+
+    KernelStoreHalf(KernelInodeField(KERNEL_VOLUME_SLOW_LINK_INODE, EXT2_OFFSET_I_MODE),
+                    (uint16_t)(EXT2_S_IFLNK | 0x01FFU));
+    KernelStoreWord(KernelInodeField(KERNEL_VOLUME_SLOW_LINK_INODE, EXT2_OFFSET_I_SIZE),
+                    (uint32_t)(sizeof(KERNEL_VOLUME_SLOW_LINK_TARGET) - 1U));
+    KernelStoreHalf(KernelInodeField(KERNEL_VOLUME_SLOW_LINK_INODE, EXT2_OFFSET_I_LINKS_COUNT),
+                    1U);
+    KernelStoreWord(KernelInodeField(KERNEL_VOLUME_SLOW_LINK_INODE, EXT2_OFFSET_I_BLOCKS), 2U);
+    KernelStoreWord(KernelInodeBlockField(KERNEL_VOLUME_SLOW_LINK_INODE, 0U),
+                    KERNEL_VOLUME_LINK_DATA);
 
     /* The file. */
     KernelStoreHalf(KernelInodeField(KERNEL_VOLUME_FILE_INODE, EXT2_OFFSET_I_MODE),
@@ -4178,6 +4283,76 @@ static void KernelComposeInodes(void)
                     KERNEL_VOLUME_TRIPLE_INDIRECT);
     KernelStoreWord(KernelPointerField(KERNEL_VOLUME_TRIPLE_INDIRECT, 3U),
                     KERNEL_VOLUME_TRIPLE_DATA);
+}
+
+/*
+ * The byte a composed file holds at an offset within itself.
+ *
+ * The value depends upon the offset, so a read that returned the right number of
+ * bytes from the wrong place fails: a constant fill, or a pattern repeating
+ * every block, would be returned identically by a reader that resolved the wrong
+ * block, and the test would pass upon a defect it exists to catch.
+ */
+static uint8_t KernelFileByteAt(uint64_t offset)
+{
+    return (uint8_t)(((offset * 31U) + 7U) & 0xFFU);
+}
+
+/* Writes a terminated string into the device's storage, without its terminator,
+ * a target upon the volume being bounded by the file's size and not terminated. */
+static void KernelStoreText(size_t offset, const char *text)
+{
+    for (size_t index = 0U; text[index] != '\0'; ++index)
+    {
+        KernelMemoryDeviceStore[offset + index] = (uint8_t)text[index];
+    }
+}
+
+/*
+ * Composes the contents of the files: the two blocks of the regular file within
+ * the subdirectory, one block of the sparse file so that a block holding data
+ * may be contrasted with the hole beside it, and the target of the symbolic link
+ * too long to be held within its inode.
+ *
+ * The fast link's target is stored in the fifteen words of i_block, which is
+ * where the pointers would otherwise be. It is written here as the bytes the
+ * volume holds, in the volume's own order, so that the parser recovers it by the
+ * decoding it applies to every other field rather than by agreement with this.
+ */
+static void KernelComposeFiles(void)
+{
+    const size_t indirect = KernelVolumeBlock(KERNEL_VOLUME_INDIRECT_DATA);
+
+    /*
+     * The file occupies two blocks, which are addressed through the pointers the
+     * inode holds rather than by relying upon their being adjacent in the store.
+     */
+    for (uint64_t offset = 0U; offset < KERNEL_VOLUME_INNER_SIZE; ++offset)
+    {
+        const uint32_t block = (offset < KERNEL_VOLUME_BLOCK_SIZE)
+                                   ? KERNEL_VOLUME_INNER_DATA
+                                   : KERNEL_VOLUME_INNER_DATA_LAST;
+        const size_t within = (size_t)(offset % KERNEL_VOLUME_BLOCK_SIZE);
+
+        KernelMemoryDeviceStore[KernelVolumeBlock(block) + within] = KernelFileByteAt(offset);
+    }
+
+    /*
+     * Block 12 of the sparse file, which is the first block its indirect block
+     * names. Block 13 is a hole and is deliberately left as it is: the two lie
+     * beside one another so that a reader returning zeroes for both, or data for
+     * both, is caught.
+     */
+    for (uint32_t offset = 0U; offset < KERNEL_VOLUME_BLOCK_SIZE; ++offset)
+    {
+        KernelMemoryDeviceStore[indirect + offset] =
+            KernelFileByteAt((uint64_t)EXT2_DIRECT_BLOCK_COUNT * KERNEL_VOLUME_BLOCK_SIZE +
+                             offset);
+    }
+
+    KernelStoreText(KernelVolumeBlock(KERNEL_VOLUME_LINK_DATA), KERNEL_VOLUME_SLOW_LINK_TARGET);
+    KernelStoreText(KernelInodeField(KERNEL_VOLUME_FAST_LINK_INODE, EXT2_OFFSET_I_BLOCK),
+                    KERNEL_VOLUME_FAST_LINK_TARGET);
 }
 
 /*
@@ -4246,6 +4421,10 @@ static void KernelComposeDirectories(void)
 
     position = KernelComposeEntry(position, KERNEL_VOLUME_SUB_INODE, 12U,
                                   (uint8_t)EXT2_FT_DIR, "sub");
+    position = KernelComposeEntry(position, KERNEL_VOLUME_FAST_LINK_INODE, 20U,
+                                  (uint8_t)EXT2_FT_SYMLINK, "link-fast");
+    position = KernelComposeEntry(position, KERNEL_VOLUME_SLOW_LINK_INODE, 20U,
+                                  (uint8_t)EXT2_FT_SYMLINK, "link-slow");
 
     /* The last record of the block runs to the end of it. */
     (void)KernelComposeEntry(position, 0U,
@@ -4333,6 +4512,7 @@ static void KernelComposeVolume(void)
     KernelComposeGroupDescriptor();
     KernelComposeInodes();
     KernelComposeDirectories();
+    KernelComposeFiles();
 }
 
 /*
@@ -4960,6 +5140,294 @@ static bool KernelVerifyEntryReadings(BlockDevice *device)
 }
 
 /*
+ * The buffer a file is read into by the self-test.
+ *
+ * It is static rather than automatic because it is larger than a page and the
+ * kernel stack, though 64 KiB, is shared with every interrupt taken while the
+ * test runs. Nothing is concurrent here, so one buffer suffices.
+ */
+static uint8_t KernelFileBuffer[KERNEL_VOLUME_INNER_SIZE + 64U];
+
+/* Whether a run of the buffer holds the bytes the composed file holds at an
+ * offset within itself. */
+static bool KernelFileBufferMatches(uint64_t offset, uint64_t length)
+{
+    for (uint64_t index = 0U; index < length; ++index)
+    {
+        if (KernelFileBuffer[index] != KernelFileByteAt(offset + index))
+        {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+/* Whether a run of the buffer is entirely zero, which is what a hole reads as. */
+static bool KernelFileBufferIsZero(uint64_t length)
+{
+    for (uint64_t index = 0U; index < length; ++index)
+    {
+        if (KernelFileBuffer[index] != 0U)
+        {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+/*
+ * Asserts that the contents of a file are read, that a hole reads as zeroes,
+ * that the end of the file is reported by the count rather than as a failure,
+ * and that both forms of symbolic link are read and followed.
+ *
+ * The composed file holds a byte derived from its own offset rather than a
+ * constant or a pattern repeating every block. That is deliberate: a reader that
+ * returned the right number of bytes from the wrong block would be
+ * indistinguishable from a correct one under either of those, and resolving the
+ * wrong block is the failure this whole chapter is arranged to catch.
+ */
+static bool KernelVerifyFiles(BlockDevice *device, const Ext2Superblock *superblock)
+{
+    const uint64_t data_offset = (uint64_t)EXT2_DIRECT_BLOCK_COUNT * KERNEL_VOLUME_BLOCK_SIZE;
+    const uint64_t hole_offset = data_offset + KERNEL_VOLUME_BLOCK_SIZE;
+    char target[EXT2_SYMLINK_MAXIMUM + 1U];
+    Ext2Inode inode;
+    uint64_t read = 0U;
+    bool succeeded = true;
+
+    KernelWriteString("EXT2 files: asserting reading, holes and symbolic links.\n");
+
+    if (!Ext2ResolvePath(device, superblock, "/sub/inner", &inode))
+    {
+        KernelWriteString("  The composed file was not found: ");
+        KernelWriteString(Ext2LastError());
+        KernelWriteString("\n");
+        return false;
+    }
+
+    /* The whole file, every byte of it, across the boundary between its two
+     * blocks and ending part-way through the second. */
+    if (!Ext2ReadFile(device, superblock, &inode, 0U, KernelFileBuffer,
+                      sizeof KernelFileBuffer, &read) ||
+        (read != KERNEL_VOLUME_INNER_SIZE) || !KernelFileBufferMatches(0U, read))
+    {
+        KernelWriteString("  A file was not read as it was composed.\n");
+        succeeded = false;
+    }
+
+    /*
+     * A run crossing the boundary between the two blocks. The first block ends
+     * at 1024 and this run begins at 1000, so a reader that took the whole run
+     * from one block would return 24 correct bytes and 76 wrong ones.
+     */
+    if (!Ext2ReadFile(device, superblock, &inode, 1000U, KernelFileBuffer, 100U, &read) ||
+        (read != 100U) || !KernelFileBufferMatches(1000U, read))
+    {
+        KernelWriteString("  A read across a block boundary returned the wrong bytes.\n");
+        succeeded = false;
+    }
+
+    /* A run wholly within the second block, which begins at an offset the first
+     * block does not contain. */
+    if (!Ext2ReadFile(device, superblock, &inode, 1100U, KernelFileBuffer, 64U, &read) ||
+        (read != 64U) || !KernelFileBufferMatches(1100U, read))
+    {
+        KernelWriteString("  A read from the second block returned the wrong bytes.\n");
+        succeeded = false;
+    }
+
+    /*
+     * The end of the file. A read that would cross it is shortened to it, and a
+     * read beginning at or beyond it yields nothing and succeeds — the end of a
+     * file is where every reader arrives, and reporting it as a failure would
+     * oblige each of them to treat the conclusion of its work as a fault.
+     */
+    if (!Ext2ReadFile(device, superblock, &inode, KERNEL_VOLUME_INNER_SIZE - 100U,
+                      KernelFileBuffer, 1000U, &read) ||
+        (read != 100U) || !KernelFileBufferMatches(KERNEL_VOLUME_INNER_SIZE - 100U, read))
+    {
+        KernelWriteString("  A read crossing the end of the file was not shortened to it.\n");
+        succeeded = false;
+    }
+
+    if (!Ext2ReadFile(device, superblock, &inode, KERNEL_VOLUME_INNER_SIZE, KernelFileBuffer,
+                      64U, &read) ||
+        (read != 0U))
+    {
+        KernelWriteString("  A read at the end of the file did not report the end.\n");
+        succeeded = false;
+    }
+
+    if (!Ext2ReadFile(device, superblock, &inode, KERNEL_VOLUME_INNER_SIZE + 4096U,
+                      KernelFileBuffer, 64U, &read) ||
+        (read != 0U))
+    {
+        KernelWriteString("  A read beyond the end of the file did not report the end.\n");
+        succeeded = false;
+    }
+
+    if (!Ext2ReadFile(device, superblock, &inode, 0U, KernelFileBuffer, 0U, &read) ||
+        (read != 0U))
+    {
+        KernelWriteString("  A read of no length was not answered with no bytes.\n");
+        succeeded = false;
+    }
+
+    /*
+     * A hole reads as zeroes, and the block beside it reads as data. The sparse
+     * file holds block 12 and not block 13, and the two are asserted together
+     * because a reader that returned zeroes for both, or data for both, would
+     * pass either assertion alone.
+     */
+    if (!Ext2ResolvePath(device, superblock, "/file", &inode))
+    {
+        KernelWriteString("  The composed sparse file was not found.\n");
+        succeeded = false;
+    }
+    else
+    {
+        if (!Ext2ReadFile(device, superblock, &inode, data_offset, KernelFileBuffer, 64U,
+                          &read) ||
+            (read != 64U) || !KernelFileBufferMatches(data_offset, read))
+        {
+            KernelWriteString("  A block reached through the indirect block read wrongly.\n");
+            succeeded = false;
+        }
+
+        if (!Ext2ReadFile(device, superblock, &inode, hole_offset, KernelFileBuffer, 64U,
+                          &read) ||
+            (read != 64U) || !KernelFileBufferIsZero(read))
+        {
+            KernelWriteString("  A hole did not read as zeroes.\n");
+            succeeded = false;
+        }
+    }
+
+    /* A directory is traversed and not read. */
+    if (Ext2ResolvePath(device, superblock, "/sub", &inode) &&
+        Ext2ReadFile(device, superblock, &inode, 0U, KernelFileBuffer, 64U, &read))
+    {
+        KernelWriteString("  A directory was read as a stream of bytes.\n");
+        succeeded = false;
+    }
+
+    /* --- The symbolic links. --- */
+
+    if (!Ext2ResolvePathNoFollow(device, superblock, "/link-fast", &inode) ||
+        (inode.number != KERNEL_VOLUME_FAST_LINK_INODE) ||
+        !Ext2InodeIsFastSymbolicLink(superblock, &inode) ||
+        !Ext2ReadSymbolicLink(device, superblock, &inode, target, sizeof target) ||
+        !KernelSameString(target, KERNEL_VOLUME_FAST_LINK_TARGET))
+    {
+        KernelWriteString("  A target held within its inode was not read.\n");
+        succeeded = false;
+    }
+
+    if (!Ext2ResolvePathNoFollow(device, superblock, "/link-slow", &inode) ||
+        (inode.number != KERNEL_VOLUME_SLOW_LINK_INODE) ||
+        Ext2InodeIsFastSymbolicLink(superblock, &inode) ||
+        !Ext2ReadSymbolicLink(device, superblock, &inode, target, sizeof target) ||
+        !KernelSameString(target, KERNEL_VOLUME_SLOW_LINK_TARGET))
+    {
+        KernelWriteString("  A target held in a block was not read.\n");
+        succeeded = false;
+    }
+
+    /* A target the caller has no room for is refused rather than truncated. */
+    if (Ext2ResolvePathNoFollow(device, superblock, "/link-slow", &inode) &&
+        Ext2ReadSymbolicLink(device, superblock, &inode, target,
+                             sizeof(KERNEL_VOLUME_SLOW_LINK_TARGET) - 1U))
+    {
+        KernelWriteString("  A target longer than the buffer was accepted.\n");
+        succeeded = false;
+    }
+
+    /*
+     * Resolution through the links. The fast link names a directory by a
+     * relative target, so it is resolved against the root, which holds the link;
+     * the slow link names a file by an absolute target that walks through the
+     * subdirectory eight times before descending into it.
+     */
+    if (!KernelPathIs(device, superblock, "/link-fast", KERNEL_VOLUME_SUB_INODE) ||
+        !KernelPathIs(device, superblock, "/link-fast/", KERNEL_VOLUME_SUB_INODE) ||
+        !KernelPathIs(device, superblock, "/link-fast/inner", KERNEL_VOLUME_INNER_INODE) ||
+        !KernelPathIs(device, superblock, "/link-fast/../file", KERNEL_VOLUME_FILE_INODE) ||
+        !KernelPathIs(device, superblock, "/link-slow", KERNEL_VOLUME_INNER_INODE))
+    {
+        KernelWriteString("  A path through a symbolic link did not resolve.\n");
+        succeeded = false;
+    }
+
+    /*
+     * The link itself, rather than what it names. A trailing separator overrides
+     * the distinction: a path asserting a directory is asking for what the link
+     * names, a link not being one.
+     */
+    if (!Ext2ResolvePathNoFollow(device, superblock, "/link-fast", &inode) ||
+        (inode.number != KERNEL_VOLUME_FAST_LINK_INODE))
+    {
+        KernelWriteString("  A last symbolic link was followed when it should not be.\n");
+        succeeded = false;
+    }
+
+    if (!Ext2ResolvePathNoFollow(device, superblock, "/link-fast/", &inode) ||
+        (inode.number != KERNEL_VOLUME_SUB_INODE))
+    {
+        KernelWriteString("  A trailing separator did not override the link.\n");
+        succeeded = false;
+    }
+
+    /* A link within the path is followed whether or not the last one is. */
+    if (!Ext2ResolvePathNoFollow(device, superblock, "/link-fast/inner", &inode) ||
+        (inode.number != KERNEL_VOLUME_INNER_INODE))
+    {
+        KernelWriteString("  A symbolic link within the path was not followed.\n");
+        succeeded = false;
+    }
+
+    /*
+     * A link that names itself. The format permits it — it is a valid file whose
+     * contents happen to be its own name — and nothing but a depth bound stops
+     * the resolver from following it until the stack is gone.
+     */
+    KernelStoreWord(KernelInodeField(KERNEL_VOLUME_FAST_LINK_INODE, EXT2_OFFSET_I_SIZE), 9U);
+    KernelStoreText(KernelInodeField(KERNEL_VOLUME_FAST_LINK_INODE, EXT2_OFFSET_I_BLOCK),
+                    "link-fast");
+    (void)BufferInvalidateDevice(device);
+
+    if (Ext2ResolvePath(device, superblock, "/link-fast", &inode))
+    {
+        KernelWriteString("  A symbolic link naming itself was followed to an end.\n");
+        succeeded = false;
+    }
+
+    KernelComposeVolume();
+    (void)BufferInvalidateDevice(device);
+
+    /* Nothing may be asked of a null argument. */
+    if (Ext2ReadFile(NULL, superblock, &inode, 0U, KernelFileBuffer, 64U, &read) ||
+        Ext2ReadFile(device, superblock, NULL, 0U, KernelFileBuffer, 64U, &read) ||
+        Ext2ReadFile(device, superblock, &inode, 0U, NULL, 64U, &read) ||
+        Ext2ReadFile(device, superblock, &inode, 0U, KernelFileBuffer, 64U, NULL) ||
+        Ext2ReadSymbolicLink(device, superblock, &inode, NULL, sizeof target) ||
+        Ext2ReadSymbolicLink(device, superblock, &inode, target, 0U) ||
+        Ext2ResolvePathNoFollow(device, superblock, NULL, &inode))
+    {
+        KernelWriteString("  A read accepted a null argument.\n");
+        succeeded = false;
+    }
+
+    if (succeeded)
+    {
+        KernelWriteString("EXT2 files: reading, holes and symbolic links are sound.\n");
+    }
+
+    return succeeded;
+}
+
+/*
  * Asserts that a directory is traversed as the format lays it out, and that a
  * path is resolved to the inode it names.
  *
@@ -4979,12 +5447,14 @@ static bool KernelVerifyEntryReadings(BlockDevice *device)
  */
 static bool KernelVerifyDirectories(BlockDevice *device, const Ext2Superblock *superblock)
 {
-    static const char *const expected_names[] = {".", "..", "file", "sub"};
-    static const uint32_t expected_inodes[] = {EXT2_ROOT_INODE, EXT2_ROOT_INODE,
-                                               KERNEL_VOLUME_FILE_INODE,
-                                               KERNEL_VOLUME_SUB_INODE};
-    static const uint8_t expected_types[] = {(uint8_t)EXT2_FT_DIR, (uint8_t)EXT2_FT_DIR,
-                                             (uint8_t)EXT2_FT_REG_FILE, (uint8_t)EXT2_FT_DIR};
+    static const char *const expected_names[] = {".",   "..",        "file",
+                                                "sub", "link-fast", "link-slow"};
+    static const uint32_t expected_inodes[] = {
+        EXT2_ROOT_INODE,          EXT2_ROOT_INODE,               KERNEL_VOLUME_FILE_INODE,
+        KERNEL_VOLUME_SUB_INODE,  KERNEL_VOLUME_FAST_LINK_INODE, KERNEL_VOLUME_SLOW_LINK_INODE};
+    static const uint8_t expected_types[] = {
+        (uint8_t)EXT2_FT_DIR,     (uint8_t)EXT2_FT_DIR,     (uint8_t)EXT2_FT_REG_FILE,
+        (uint8_t)EXT2_FT_DIR,     (uint8_t)EXT2_FT_SYMLINK, (uint8_t)EXT2_FT_SYMLINK};
     const size_t expected_count = sizeof(expected_names) / sizeof(expected_names[0]);
     const size_t root_block = KernelVolumeBlock(KERNEL_VOLUME_ROOT_DATA);
     Ext2DirectoryCursor cursor;
@@ -5463,6 +5933,15 @@ static void KernelVerifyExt2(void)
         succeeded = false;
     }
 
+    /* The contents of the files, reached through the paths just asserted. */
+    KernelComposeVolume();
+    (void)BufferInvalidateDevice(device);
+
+    if (!Ext2ReadSuperblock(device, &superblock) || !KernelVerifyFiles(device, &superblock))
+    {
+        succeeded = false;
+    }
+
     KernelComposeVolume();
     (void)BufferInvalidateDevice(device);
 
@@ -5843,7 +6322,7 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
     AddressSpaceReport();
 
     VgaSetColour(VGA_COLOUR_LIGHT_GREEN, VGA_COLOUR_BLACK);
-    KernelWriteString("Phase 4 initialisation complete; Phase 5 begun to sub-task 5.4.\n");
+    KernelWriteString("Phase 4 initialisation complete; Phase 5 begun to sub-task 5.5.\n");
 
     VgaSetColour(VGA_COLOUR_LIGHT_GREY, VGA_COLOUR_BLACK);
 

@@ -11,9 +11,10 @@
  * Key definitions: EXT2_SUPER_MAGIC, EXT2_SUPERBLOCK_OFFSET, Ext2Superblock,
  *          Ext2ReadSuperblock, Ext2GroupCount, Ext2GroupDescriptor,
  *          Ext2ReadGroupDescriptor, Ext2VerifyGroupDescriptors, Ext2Inode,
- *          Ext2ReadInode, Ext2InodeBlock, Ext2DirectoryEntry,
- *          Ext2DirectoryCursor, Ext2DirectoryStep, Ext2DirectoryOpen,
- *          Ext2DirectoryNext, Ext2DirectoryFind, Ext2ResolvePath,
+ *          Ext2ReadInode, Ext2InodeBlock, Ext2ReadFile, Ext2ReadSymbolicLink,
+ *          Ext2InodeIsFastSymbolicLink, Ext2DirectoryEntry, Ext2DirectoryCursor,
+ *          Ext2DirectoryStep, Ext2DirectoryOpen, Ext2DirectoryNext,
+ *          Ext2DirectoryFind, Ext2ResolvePath, Ext2ResolvePathNoFollow,
  *          Ext2FileTypeOfMode, Ext2LastError, Ext2ReportVolume,
  *          Ext2ReportGroup, Ext2ReportInode, Ext2ReportDirectory.
  * References:
@@ -54,6 +55,11 @@
  *   - Linux kernel documentation, filesystems/ext2.rst: the file type is an
  *     incompatible feature because a kernel unaware of it would read the name
  *     length as sixteen bits and believe a name longer than 256 characters.
+ *   - The same, the Symbolic Links chapter: a symbolic link holds a text string
+ *     interpreted as a path to another file; for a target shorter than 60 bytes
+ *     the string is stored within the inode itself, in the fields that would
+ *     otherwise hold the pointers to its data blocks, which avoids allocating a
+ *     whole block for a string most links are shorter than.
  *   - Linux kernel documentation, the ext4 superblock, block group descriptor and
  *     inode tables, consulted as an independent statement of the same offsets.
  *     The two
@@ -479,6 +485,82 @@ uint64_t Ext2InodesRefused(void);
 void Ext2ReportInode(const Ext2Inode *inode);
 
 /*
+ * The bytes of i_block a symbolic link's target occupies in place of the
+ * pointers that would otherwise be there. Fifteen pointers of four bytes are
+ * sixty, and a target shorter than that is stored within the inode rather than
+ * being given a block of its own — an optimisation worth having, since nearly
+ * every symbolic link on a system is shorter than sixty characters.
+ */
+#define EXT2_FAST_SYMLINK_CAPACITY (EXT2_BLOCK_POINTER_COUNT * EXT2_BLOCK_POINTER_SIZE)
+
+/*
+ * The longest target this kernel will read, and the number of links it will
+ * follow in resolving one path.
+ *
+ * Neither is a property of the format, which bounds a target only by the size of
+ * the file holding it and says nothing whatever about following one. Both are
+ * bounds upon this kernel: the resolver follows a link by resolving its target,
+ * which re-enters the resolver, so each is a stack frame carrying a target
+ * buffer, and a link naming itself would otherwise recur until the stack was
+ * gone. Eight is the depth POSIX requires an implementation to allow.
+ */
+#define EXT2_SYMLINK_MAXIMUM       255U
+#define EXT2_SYMLINK_DEPTH_MAXIMUM 8U
+
+/*
+ * Reads bytes of a file, from an offset within it, and reports how many were
+ * read.
+ *
+ * The read is bounded by the file's size. An offset at or beyond the end yields
+ * no bytes and is not a failure — it is the end of the file, which every reader
+ * must reach — so a caller distinguishes the end from an error by the count and
+ * not by the return value. A read that crosses the end is shortened to it.
+ *
+ * A block the file never had allocated reads as zeroes rather than being
+ * refused. That is what a hole means, and a sparse file is the ordinary case
+ * rather than a curiosity.
+ *
+ * A directory is refused. Its bytes are entries and are read by traversing it;
+ * a caller reading them as a stream has almost certainly mistaken what it holds.
+ *
+ * Upon failure the count reports the bytes transferred before it, and the
+ * remainder of the buffer is indeterminate.
+ */
+bool Ext2ReadFile(BlockDevice *device, const Ext2Superblock *superblock,
+                  const Ext2Inode *inode, uint64_t offset, void *buffer, uint64_t length,
+                  uint64_t *read);
+
+/*
+ * Whether a symbolic link holds its target within the inode rather than in
+ * blocks of the volume.
+ *
+ * The test is that the inode has no data blocks, and not that its size is below
+ * sixty. The two agree upon every link a filesystem creates, the one being the
+ * reason for the other; they part when the inode carries an extended attribute
+ * block, which i_blocks counts and which is not data. Testing the size alone
+ * would then read the target out of the pointers to a block that exists.
+ */
+bool Ext2InodeIsFastSymbolicLink(const Ext2Superblock *superblock, const Ext2Inode *inode);
+
+/*
+ * Reads the target of a symbolic link, terminating it.
+ *
+ * A target is not terminated upon the volume: its length is the file's size, as
+ * for any other file. It is terminated here because what it is read for is to be
+ * resolved as a path.
+ *
+ * Both forms are read. A target held within the inode is taken from the bytes of
+ * i_block; one held in blocks is read as any other file is.
+ */
+bool Ext2ReadSymbolicLink(BlockDevice *device, const Ext2Superblock *superblock,
+                          const Ext2Inode *inode, char *target, size_t capacity);
+
+/* How many files have been read, how many bytes, and how many reads refused. */
+uint64_t Ext2FilesRead(void);
+uint64_t Ext2BytesRead(void);
+uint64_t Ext2ReadsRefused(void);
+
+/*
  * The directory entry.
  *
  * A directory is an ordinary file whose data is a sequence of these, and it is
@@ -653,14 +735,30 @@ bool Ext2DirectoryFind(BlockDevice *device, const Ext2Superblock *superblock,
  * of the root naming the root itself, so the ordinary lookup resolves them and
  * a kernel that interpreted them here would be second-guessing the volume.
  *
- * A symbolic link is resolved no further: met as the last component it is
- * returned as it stands, and met within the path it is refused. Following one
- * requires reading the file its data is, which is sub-task 5.5.
- *
- * Ext2LastError describes any refusal.
+ * A symbolic link met anywhere in the path is followed, including as the last
+ * component, which is the behaviour of every operation that acts upon a file
+ * rather than upon the name of one. A target is resolved against the directory
+ * holding the link where it is relative, and from the root where it is absolute.
+ * At most EXT2_SYMLINK_DEPTH_MAXIMUM links are followed in one resolution, a
+ * link naming itself being otherwise unbounded.
  */
 bool Ext2ResolvePath(BlockDevice *device, const Ext2Superblock *superblock, const char *path,
                      Ext2Inode *inode);
+
+/*
+ * The same, save that a symbolic link standing as the last component is returned
+ * as it stands rather than followed. Links within the path are followed as
+ * before: it is the file the path names that is left unresolved, not the route
+ * taken to it.
+ *
+ * This is the distinction between acting upon a file and acting upon its name,
+ * and both are needed — the first by anything that opens a file, the second by
+ * anything that must see the link itself. A trailing separator overrides it: a
+ * path that asserts a directory is asking for what the link names, since a link
+ * is not one.
+ */
+bool Ext2ResolvePathNoFollow(BlockDevice *device, const Ext2Superblock *superblock,
+                             const char *path, Ext2Inode *inode);
 
 /* The entry file type corresponding to the format held in i_mode. */
 uint8_t Ext2FileTypeOfMode(uint16_t mode);

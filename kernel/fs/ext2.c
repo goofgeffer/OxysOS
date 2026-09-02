@@ -7,9 +7,11 @@
  *          addressed at all.
  * Key functions: Ext2ReadSuperblock, Ext2GroupCount, Ext2ReadGroupDescriptor,
  *          Ext2VerifyGroupDescriptors, Ext2ReadInode, Ext2InodeBlock,
+ *          Ext2ReadFile, Ext2ReadSymbolicLink, Ext2InodeIsFastSymbolicLink,
  *          Ext2DirectoryOpen, Ext2DirectoryNext, Ext2DirectoryFind,
- *          Ext2ResolvePath, Ext2FileTypeOfMode, Ext2LastError, Ext2ReportVolume,
- *          Ext2ReportGroup, Ext2ReportInode, Ext2ReportDirectory.
+ *          Ext2ResolvePath, Ext2ResolvePathNoFollow, Ext2FileTypeOfMode,
+ *          Ext2LastError, Ext2ReportVolume, Ext2ReportGroup, Ext2ReportInode,
+ *          Ext2ReportDirectory.
  * References:
  *   - Poirier, D., "The Second Extended File System: Internal Layout", the
  *     Superblock chapter and its field table: the superblock lies 1024 bytes
@@ -59,6 +61,11 @@
  *     incompatible feature because a kernel unaware of it would read the name
  *     length as sixteen bits; which of the two readings applies is therefore a
  *     property of the feature flag and not of the revision.
+ *   - The same, the Symbolic Links chapter: a symbolic link holds a text string
+ *     interpreted as a path to another file; for a target shorter than 60 bytes
+ *     the string is stored within the inode itself, in the fields that would
+ *     otherwise hold the pointers to its data blocks, which avoids allocating a
+ *     whole block for a string most links are shorter than.
  *   - Linux kernel documentation, the ext4 superblock and block group descriptor
  *     tables, consulted as an independent statement of the same offsets.
  */
@@ -85,6 +92,9 @@ static uint64_t Ext2EntriesReadCount;
 static uint64_t Ext2EntriesRefusedCount;
 static uint64_t Ext2PathsResolvedCount;
 static uint64_t Ext2PathsRefusedCount;
+static uint64_t Ext2FilesReadCount;
+static uint64_t Ext2BytesReadCount;
+static uint64_t Ext2ReadsRefusedCount;
 
 /* Records a refusal, so that a report may say why and not merely that. */
 static bool Ext2Refuse(const char *reason)
@@ -138,6 +148,14 @@ static bool Ext2PathRefuse(const char *reason)
 {
     Ext2Error = reason;
     ++Ext2PathsRefusedCount;
+    return false;
+}
+
+/* The same for a read of a file's contents, counted apart from the rest. */
+static bool Ext2ReadRefuse(const char *reason)
+{
+    Ext2Error = reason;
+    ++Ext2ReadsRefusedCount;
     return false;
 }
 
@@ -929,6 +947,7 @@ bool Ext2ReadInode(BlockDevice *device, const Ext2Superblock *superblock, uint32
     uint32_t group;
     uint32_t index;
     uint32_t position;
+    bool holds_target;
 
     if ((device == NULL) || (superblock == NULL) || (inode == NULL))
     {
@@ -996,12 +1015,33 @@ bool Ext2ReadInode(BlockDevice *device, const Ext2Superblock *superblock, uint32
         parsed.size |= (uint64_t)Ext2ReadWord(raw, EXT2_OFFSET_I_DIR_ACL) << 32;
     }
 
+    /*
+     * The fifteen words of i_block are block pointers for every file but one: a
+     * symbolic link whose target is shorter than sixty bytes holds that target
+     * in them instead, which is why it needs no block at all.
+     *
+     * Whether this inode is such a link is decided before the words are
+     * examined, because the two readings are incompatible. Read as pointers, the
+     * text "sub" is the word 0x00627573 — a block number some millions beyond the
+     * end of any volume this kernel composes — and validating it as one refuses
+     * the inode outright. Every fast symbolic link upon every real volume would
+     * be unreadable, and the diagnosis would name a block pointer that is not a
+     * block pointer.
+     *
+     * The words are decoded either way. Ext2ReadSymbolicLink recovers the bytes
+     * of the target from them, in the order the volume stores them. The decision
+     * rests upon the mode, the sector count and the extended attribute block,
+     * every one of which has been parsed above.
+     */
+    holds_target = Ext2InodeIsFastSymbolicLink(superblock, &parsed);
+
     for (uint32_t entry = 0U; entry < EXT2_BLOCK_POINTER_COUNT; ++entry)
     {
         parsed.block[entry] =
             Ext2ReadWord(raw, EXT2_OFFSET_I_BLOCK + (entry * EXT2_BLOCK_POINTER_SIZE));
 
-        if ((parsed.block[entry] != 0U) && !Ext2BlockExists(superblock, parsed.block[entry]))
+        if (!holds_target && (parsed.block[entry] != 0U) &&
+            !Ext2BlockExists(superblock, parsed.block[entry]))
         {
             return Ext2InodeRefuse("a block pointer of the inode lies outside the volume");
         }
@@ -1073,6 +1113,236 @@ void Ext2ReportInode(const Ext2Inode *inode)
     KernelWriteString(" sectors, first block ");
     KernelWriteDecimal((uint64_t)inode->block[0]);
     KernelWriteString(".\n");
+}
+
+/*
+ * File reading.
+ *
+ * Everything to this point locates things: a superblock, a descriptor, an inode,
+ * a block of a file, a name within a directory. This is the first that produces
+ * the contents of a file, and it is the shortest piece of work in the chapter
+ * precisely because the locating was done properly — the whole of it is the
+ * arithmetic of a byte range against a block size, and one call per block to
+ * machinery that already exists.
+ */
+
+/* Fills a run of bytes with zeroes. There is no C library until Phase 7. */
+static void Ext2FillZero(uint8_t *destination, uint32_t length)
+{
+    for (uint32_t index = 0U; index < length; ++index)
+    {
+        destination[index] = 0U;
+    }
+}
+
+bool Ext2ReadFile(BlockDevice *device, const Ext2Superblock *superblock,
+                  const Ext2Inode *inode, uint64_t offset, void *buffer, uint64_t length,
+                  uint64_t *read)
+{
+    uint8_t *destination = (uint8_t *)buffer;
+    uint64_t remaining;
+    uint64_t taken = 0U;
+
+    if ((device == NULL) || (superblock == NULL) || (inode == NULL) || (read == NULL) ||
+        ((buffer == NULL) && (length != 0U)))
+    {
+        return Ext2ReadRefuse("no device, no volume, no inode, nowhere to read into, or "
+                              "nowhere to put the count");
+    }
+
+    *read = 0U;
+
+    /*
+     * A directory's bytes are entries, and are read by traversing it. A caller
+     * reading them as a stream has mistaken what it holds, and would receive
+     * record lengths and inode numbers as though they were text.
+     */
+    if (Ext2InodeIsDirectory(inode))
+    {
+        return Ext2ReadRefuse("a directory is traversed and not read as a stream of bytes");
+    }
+
+    /*
+     * The end of the file is not a failure. A reader arrives at it by reading,
+     * and a kernel that reported it as an error would oblige every caller to
+     * treat the ordinary conclusion of its work as a fault; the count reports it
+     * instead. An offset beyond the end is the same answer for the same reason.
+     */
+    if (offset >= inode->size)
+    {
+        return true;
+    }
+
+    remaining = inode->size - offset;
+
+    if (remaining > length)
+    {
+        remaining = length;
+    }
+
+    while (remaining > 0U)
+    {
+        const uint64_t index = offset / (uint64_t)superblock->block_size;
+        const uint32_t within = (uint32_t)(offset % (uint64_t)superblock->block_size);
+        uint32_t take = superblock->block_size - within;
+        uint32_t block;
+
+        if ((uint64_t)take > remaining)
+        {
+            take = (uint32_t)remaining;
+        }
+
+        if (!Ext2InodeBlock(device, superblock, inode, index, &block))
+        {
+            *read = taken;
+            return false;
+        }
+
+        /*
+         * A hole reads as zeroes. The block was never allocated, so there is
+         * nothing upon the volume to read and nothing is read: the file's
+         * contents at that offset are zeroes by definition, not by accident, and
+         * a reader cannot tell a hole from a block that was written with zeroes,
+         * which is exactly the point of one.
+         */
+        if (block == 0U)
+        {
+            Ext2FillZero(destination, take);
+        }
+        else if (!Ext2ReadBytes(device, superblock, block, within, take, destination))
+        {
+            *read = taken;
+            return false;
+        }
+
+        destination += take;
+        offset += take;
+        remaining -= take;
+        taken += take;
+    }
+
+    *read = taken;
+    Ext2BytesReadCount += taken;
+    ++Ext2FilesReadCount;
+    return true;
+}
+
+bool Ext2InodeIsFastSymbolicLink(const Ext2Superblock *superblock, const Ext2Inode *inode)
+{
+    uint32_t attribute_sectors;
+
+    if ((superblock == NULL) || !Ext2InodeIsSymbolicLink(inode))
+    {
+        return false;
+    }
+
+    /*
+     * i_blocks counts 512-byte sectors, and an extended attribute block is among
+     * them although it is not data. Subtracting it leaves the sectors the file's
+     * own contents occupy, and a symbolic link with none of those holds its
+     * target within the inode.
+     */
+    attribute_sectors = (inode->file_acl != 0U) ? (superblock->block_size / 512U) : 0U;
+
+    return inode->sector_count == attribute_sectors;
+}
+
+bool Ext2ReadSymbolicLink(BlockDevice *device, const Ext2Superblock *superblock,
+                          const Ext2Inode *inode, char *target, size_t capacity)
+{
+    if ((device == NULL) || (superblock == NULL) || (inode == NULL) || (target == NULL) ||
+        (capacity == 0U))
+    {
+        return Ext2ReadRefuse("no device, no volume, no inode, or nowhere to put the target");
+    }
+
+    if (!Ext2InodeIsSymbolicLink(inode))
+    {
+        return Ext2ReadRefuse("the inode is not a symbolic link");
+    }
+
+    /*
+     * A link with no target names nothing. The format does not forbid it; it
+     * cannot be resolved, and saying so here is better than resolving the empty
+     * path to whatever it happens to reach.
+     */
+    if (inode->size == 0U)
+    {
+        return Ext2ReadRefuse("a symbolic link bearing no target");
+    }
+
+    if (inode->size >= (uint64_t)capacity)
+    {
+        return Ext2ReadRefuse("a symbolic link's target is longer than this kernel will read");
+    }
+
+    if (Ext2InodeIsFastSymbolicLink(superblock, inode))
+    {
+        if (inode->size > EXT2_FAST_SYMLINK_CAPACITY)
+        {
+            return Ext2ReadRefuse("a symbolic link holds no blocks and no room for its target");
+        }
+
+        /*
+         * The target occupies the sixty bytes of i_block, and i_block was decoded
+         * into fifteen words when the inode was read. The bytes are recovered
+         * from those words in the order the volume stores them, least significant
+         * first — the same order the decoding assumed, applied in reverse.
+         */
+        for (uint32_t index = 0U; index < (uint32_t)inode->size; ++index)
+        {
+            const uint32_t word = inode->block[index / EXT2_BLOCK_POINTER_SIZE];
+            const uint32_t shift = (index % EXT2_BLOCK_POINTER_SIZE) * 8U;
+
+            target[index] = (char)((word >> shift) & 0xFFU);
+        }
+    }
+    else
+    {
+        uint64_t read = 0U;
+
+        if (!Ext2ReadFile(device, superblock, inode, 0U, target, inode->size, &read))
+        {
+            return false;
+        }
+
+        if (read != inode->size)
+        {
+            return Ext2ReadRefuse("a symbolic link's target was read short");
+        }
+    }
+
+    target[inode->size] = '\0';
+
+    /*
+     * A target holding a null byte would be a path shorter than the file says it
+     * is, and everything below this point treats it as a terminated string. The
+     * format permits the byte; this kernel cannot resolve what it produces.
+     */
+    for (uint32_t index = 0U; index < (uint32_t)inode->size; ++index)
+    {
+        if (target[index] == '\0')
+        {
+            return Ext2ReadRefuse("a symbolic link's target holds a null byte");
+        }
+    }
+
+    return true;
+}
+
+uint64_t Ext2FilesRead(void)
+{
+    return Ext2FilesReadCount;
+}
+
+uint64_t Ext2BytesRead(void)
+{
+    return Ext2BytesReadCount;
+}
+
+uint64_t Ext2ReadsRefused(void)
+{
+    return Ext2ReadsRefusedCount;
 }
 
 /*
@@ -1472,53 +1742,119 @@ bool Ext2DirectoryFind(BlockDevice *device, const Ext2Superblock *superblock,
     }
 }
 
-bool Ext2ResolvePath(BlockDevice *device, const Ext2Superblock *superblock, const char *path,
-                     Ext2Inode *inode)
+/*
+ * Whether a path ends in a separator, which is an assertion by the caller that
+ * what it names is a directory.
+ *
+ * It is determined before the walk because it governs the treatment of the last
+ * component: a link is not a directory, so a path ending in a separator is
+ * asking for what the link names whether or not the caller asked links to be
+ * followed.
+ */
+static bool Ext2PathAssertsDirectory(const char *path, size_t length)
+{
+    return (length > 0U) && (path[length - 1U] == EXT2_PATH_SEPARATOR);
+}
+
+/* The length of a path, refusing one that is not terminated within the bound. */
+static bool Ext2PathLength(const char *path, size_t *length)
+{
+    size_t position = 0U;
+
+    while (path[position] != '\0')
+    {
+        ++position;
+
+        if (position > EXT2_PATH_MAXIMUM)
+        {
+            return Ext2PathRefuse("the path is longer than this kernel will resolve");
+        }
+    }
+
+    *length = position;
+    return true;
+}
+
+/*
+ * Resolves a path against a starting directory, following symbolic links.
+ *
+ * The depth is the number of links already followed. A link is followed by
+ * resolving its target, which re-enters this function, so the depth is what
+ * bounds a link that names itself — directly, or around a cycle of several. The
+ * format offers no protection against such a link and cannot: it is a valid
+ * file whose contents happen to be its own name.
+ *
+ * A link is followed by resolving its target to an inode and continuing the
+ * original path from that point, rather than by splicing the target into the
+ * path and starting again. The two are equivalent, and this one needs no buffer
+ * to hold the spliced path — which matters, every level of the recursion already
+ * carrying a target of its own.
+ */
+static bool Ext2ResolveFrom(BlockDevice *device, const Ext2Superblock *superblock,
+                            const Ext2Inode *start, const char *path, bool follow_last,
+                            uint32_t depth, Ext2Inode *inode)
 {
     Ext2DirectoryEntry entry;
     Ext2Inode current;
     Ext2Inode next;
+    size_t length;
     size_t position = 0U;
+    bool asserts_directory;
 
-    if ((device == NULL) || (superblock == NULL) || (path == NULL) || (inode == NULL))
+    if (depth > EXT2_SYMLINK_DEPTH_MAXIMUM)
     {
-        return Ext2PathRefuse("no device, no volume, no path, or nowhere to put the inode");
+        return Ext2PathRefuse("too many symbolic links were followed to resolve one path");
     }
 
-    /*
-     * Only an absolute path is resolved. A relative one is resolved against a
-     * working directory, which is a property of a process and not of a volume,
-     * and there are no processes until Phase 6.
-     */
-    if (path[0] != EXT2_PATH_SEPARATOR)
-    {
-        return Ext2PathRefuse("the path is not absolute");
-    }
-
-    if (!Ext2ReadInode(device, superblock, EXT2_ROOT_INODE, &current))
+    if (!Ext2PathLength(path, &length))
     {
         return false;
     }
 
+    if (length == 0U)
+    {
+        return Ext2PathRefuse("an empty path names nothing");
+    }
+
+    asserts_directory = Ext2PathAssertsDirectory(path, length);
+
+    /*
+     * An absolute target begins again at the root; a relative one continues from
+     * the directory it was found in. This is the whole of the difference between
+     * the two, and it is why a link must be resolved against the directory
+     * holding it rather than against the root or the working directory.
+     */
+    if (path[0] == EXT2_PATH_SEPARATOR)
+    {
+        if (!Ext2ReadInode(device, superblock, EXT2_ROOT_INODE, &current))
+        {
+            return false;
+        }
+    }
+    else if (start != NULL)
+    {
+        current = *start;
+    }
+    else
+    {
+        return Ext2PathRefuse("the path is not absolute");
+    }
+
     if (!Ext2InodeIsDirectory(&current))
     {
-        return Ext2PathRefuse("the root inode of the volume is not a directory");
+        return Ext2PathRefuse("a path is resolved against something that is not a directory");
     }
 
     for (;;)
     {
-        size_t start;
-        size_t length;
+        size_t start_of_component;
+        size_t component_length;
+        bool last;
 
         /* Consecutive separators are one separator, and a path may end in them. */
         while (path[position] == EXT2_PATH_SEPARATOR)
         {
             ++position;
-
-            if (position > EXT2_PATH_MAXIMUM)
-            {
-                return Ext2PathRefuse("the path is longer than this kernel will resolve");
-            }
         }
 
         if (path[position] == '\0')
@@ -1526,19 +1862,31 @@ bool Ext2ResolvePath(BlockDevice *device, const Ext2Superblock *superblock, cons
             break;
         }
 
-        start = position;
+        start_of_component = position;
 
         while ((path[position] != '\0') && (path[position] != EXT2_PATH_SEPARATOR))
         {
             ++position;
-
-            if (position > EXT2_PATH_MAXIMUM)
-            {
-                return Ext2PathRefuse("the path is longer than this kernel will resolve");
-            }
         }
 
-        length = position - start;
+        component_length = position - start_of_component;
+
+        /*
+         * Whether this is the last component, which governs whether a link
+         * standing here is followed. A separator after it does not make it any
+         * less the last: "/link/" names the last component still, and asserts
+         * that it is a directory.
+         */
+        last = true;
+
+        for (size_t look = position; path[look] != '\0'; ++look)
+        {
+            if (path[look] != EXT2_PATH_SEPARATOR)
+            {
+                last = false;
+                break;
+            }
+        }
 
         /*
          * Only a directory holds names. Refusing here rather than within the
@@ -1551,7 +1899,8 @@ bool Ext2ResolvePath(BlockDevice *device, const Ext2Superblock *superblock, cons
             return Ext2PathRefuse("a component of the path is not a directory");
         }
 
-        if (!Ext2DirectoryFind(device, superblock, &current, &path[start], length, &entry))
+        if (!Ext2DirectoryFind(device, superblock, &current, &path[start_of_component],
+                               component_length, &entry))
         {
             return false;
         }
@@ -1578,26 +1927,28 @@ bool Ext2ResolvePath(BlockDevice *device, const Ext2Superblock *superblock, cons
         }
 
         /*
-         * A symbolic link met within a path must be followed for the rest of the
-         * path to mean anything, and following it means reading the file its
-         * data is, which is sub-task 5.5. Met as the last component it is
-         * returned as it stands, the caller having asked for the link and not
-         * for what it names.
+         * A link within the path must be followed for the rest of the path to
+         * mean anything. A link as the last component is followed only if the
+         * caller asked for the file rather than for its name — or if the path
+         * asserts a directory, a link not being one.
          */
-        if (Ext2InodeIsSymbolicLink(&next))
+        if (Ext2InodeIsSymbolicLink(&next) && (!last || follow_last || asserts_directory))
         {
-            size_t remainder = position;
+            char target[EXT2_SYMLINK_MAXIMUM + 1U];
+            Ext2Inode resolved;
 
-            while (path[remainder] == EXT2_PATH_SEPARATOR)
+            if (!Ext2ReadSymbolicLink(device, superblock, &next, target, sizeof target))
             {
-                ++remainder;
+                return false;
             }
 
-            if (path[remainder] != '\0')
+            if (!Ext2ResolveFrom(device, superblock, &current, target, true, depth + 1U,
+                                 &resolved))
             {
-                return Ext2PathRefuse(
-                    "a symbolic link stands within the path, which is not yet followed");
+                return false;
             }
+
+            next = resolved;
         }
 
         current = next;
@@ -1608,12 +1959,62 @@ bool Ext2ResolvePath(BlockDevice *device, const Ext2Superblock *superblock, cons
      * directory. The assertion is the caller's and is honoured: "/etc/" names a
      * directory or it names nothing.
      */
-    if ((path[position - 1U] == EXT2_PATH_SEPARATOR) && !Ext2InodeIsDirectory(&current))
+    if (asserts_directory && !Ext2InodeIsDirectory(&current))
     {
         return Ext2PathRefuse("the path ends in a separator but does not name a directory");
     }
 
     *inode = current;
+    return true;
+}
+
+bool Ext2ResolvePath(BlockDevice *device, const Ext2Superblock *superblock, const char *path,
+                     Ext2Inode *inode)
+{
+    if ((device == NULL) || (superblock == NULL) || (path == NULL) || (inode == NULL))
+    {
+        return Ext2PathRefuse("no device, no volume, no path, or nowhere to put the inode");
+    }
+
+    /*
+     * Only an absolute path is resolved here. A relative one is resolved against
+     * a working directory, which is a property of a process and not of a volume,
+     * and there are no processes until Phase 6. Ext2ResolveFrom accepts a
+     * relative path because a symbolic link's target may be one, and is resolved
+     * against the directory holding the link.
+     */
+    if (path[0] != EXT2_PATH_SEPARATOR)
+    {
+        return Ext2PathRefuse("the path is not absolute");
+    }
+
+    if (!Ext2ResolveFrom(device, superblock, NULL, path, true, 0U, inode))
+    {
+        return false;
+    }
+
+    ++Ext2PathsResolvedCount;
+    return true;
+}
+
+bool Ext2ResolvePathNoFollow(BlockDevice *device, const Ext2Superblock *superblock,
+                             const char *path, Ext2Inode *inode)
+{
+    if ((device == NULL) || (superblock == NULL) || (path == NULL) || (inode == NULL))
+    {
+        return Ext2PathRefuse("no device, no volume, no path, or nowhere to put the inode");
+    }
+
+    if (path[0] != EXT2_PATH_SEPARATOR)
+    {
+        return Ext2PathRefuse("the path is not absolute");
+    }
+
+    if (!Ext2ResolveFrom(device, superblock, NULL, path, false, 0U, inode))
+    {
+        return false;
+    }
+
     ++Ext2PathsResolvedCount;
     return true;
 }
