@@ -62,9 +62,9 @@ of truth for progress. It comprises 13 major phases, ordered by dependency:
 
 Each phase shall be broken into atomic, testable sub-tasks.
 
-The graphical work is **divided** between Phases 6 and 9, and the division is by dependency and not by preference. What requires no process to exist — the framebuffer the boot loader describes, the primitives, the font and console, the pointer, the compositing surface — belongs to Phase 6, where it also supplies the diagnostic console every later phase reports through. What cannot be built without processes — the window manager, the client protocol, the system services and the desktop they maintain — remains after the shell, in Phase 9. This supersedes the former rule that placed the whole of the GUI after the shell; the reasoning is recorded in `docs/project/PLAN.md` under Phase 6, and was amended by the project owner's decision on 2026-09-03.
+The graphical work is divided between Phases 6 and 9, by dependency. What requires no process to exist — the framebuffer the boot loader describes, the 2D primitives, the bitmap font and the console above it, the pointer, the compositing surface — belongs to Phase 6, and supplies the diagnostic console every later phase reports through. What cannot be built without processes — the window manager, the client protocol, the system services and the desktop they maintain — belongs to Phase 9, after the shell.
 
-UEFI remains a dedicated phase before final polish.
+UEFI is a dedicated phase before final polish.
 
 ## 6. Research and Reference Protocol
 - **Permitted Sources**:
