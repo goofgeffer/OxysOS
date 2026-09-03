@@ -162,8 +162,11 @@ provides that the processor sets the accessed bit of a descriptor when its
 selector is loaded, and these descriptors have that bit clear. In read-only
 memory the first segment load would itself fault.
 
-Phase 6, sub-task 6.1, extends this table with the user-mode descriptors and the
-task state segment.
+Phase 6, sub-task 6.1, has since extended this table to seven descriptors in
+eight slots, adding the user-mode code and data segments and the sixteen-byte
+task state segment descriptor. The order of the three user descriptors is not
+free: it is fixed by the arithmetic `SYSCALL` and `SYSRET` derive their selectors
+by. See [`PRIVILEGE.md`](PRIVILEGE.md), Section 2.
 
 ### 5.1 The general lesson
 
@@ -171,6 +174,12 @@ A structure that the processor reads directly must remain mapped for as long as
 the processor may read it, and the processor's reads are not visible in the
 source. The interrupt descriptor table, the task state segment of Phase 6 and the
 application processor trampoline of sub-task 6.8 are all of this kind.
+
+Sub-task 6.1 met the same lesson from its other side, and it is recorded in
+[`PRIVILEGE.md`](PRIVILEGE.md), Section 6: such a structure must also be
+*established* at a point where the processor's rejection of it can be reported.
+`LTR` faults upon a malformed task state segment descriptor, and a fault raised
+before any gate existed would have escalated to a reset.
 
 ## 6. Verification
 
@@ -507,8 +516,12 @@ the mask is honoured.
    and fatal; demand paging and stack growth do not exist. The handler tests the
    error code for a write to a present page before consulting the paging
    structures at all, so the commoner faults cost nothing extra.
-2. No interrupt stack table entry is used. A fault taken on a bad stack cannot
-   presently be reported. This requires the task state segment of sub-task 6.1.
+2. One interrupt stack table entry is used, since sub-task 6.1: the double
+   fault is delivered upon a stack of its own, so a fault taken upon a bad stack
+   is now reported rather than escalating to a reset. The page fault is
+   deliberately given none, an interrupt stack table entry being a fixed address
+   that does not nest and the page-fault handler being one that may itself
+   fault. See [`PRIVILEGE.md`](PRIVILEGE.md), Section 3.2.
 3. Three devices claim a request line: the interval timer of sub-task 3.6 upon
    IR0, described in `docs/devices/TIME.md`; the PS/2 keyboard of sub-task 3.7 upon IR1,
    described in `docs/devices/KEYBOARD.md`; and the 16550 serial adapter of sub-task 4.1

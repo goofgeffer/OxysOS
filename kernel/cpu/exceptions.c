@@ -30,6 +30,8 @@
 #include <oxys/interrupts.h>
 #include <oxys/cpu.h>
 #include <oxys/paging.h>
+#include <oxys/idt.h>
+#include <oxys/tss.h>
 #include <oxys/kernel.h>
 
 /* The number of quadwords of stack reproduced in a diagnostic report. */
@@ -334,4 +336,32 @@ void ExceptionInitialise(void)
     /* The page fault has its own handler, the error code and CR2 requiring
      * treatment that the general report does not provide. */
     InterruptRegisterHandler(14U, ExceptionPageFaultHandler, "page fault");
+}
+
+bool ExceptionInstallInterruptStacks(void)
+{
+    /*
+     * The double fault is delivered upon a stack of its own.
+     *
+     * It is raised when the processor cannot deliver an earlier exception, and
+     * by far the commonest reason it cannot is that the stack was the thing that
+     * went wrong — exhausted, unmapped, or pointing at nothing. Delivering it
+     * upon that same stack means the processor cannot push its frame either, and
+     * a fault taken while delivering a double fault is not a third exception but
+     * a shutdown: the machine resets with nothing written anywhere.
+     *
+     * This project has already met one. The account is in
+     * docs/design/INTERRUPTS.md, Section 5, where an unmapped descriptor table
+     * turned a general-protection exception into a triple fault and a reboot
+     * loop, and the cause had to be found from QEMU's own trace because the
+     * kernel emitted nothing. With an entry of the interrupt stack table the
+     * same sequence would have produced a double fault upon a sound stack, and
+     * the handler would have printed the frame.
+     *
+     * This is applied after every gate has been installed and after the task
+     * state segment has been loaded, and it is a separate step for that reason:
+     * the index selects an entry of a segment, and a segment that did not yet
+     * exist would furnish a stack pointer of zero.
+     */
+    return IdtSetGateStack(EXCEPTION_DOUBLE_FAULT, (uint8_t)TSS_IST_DOUBLE_FAULT);
 }

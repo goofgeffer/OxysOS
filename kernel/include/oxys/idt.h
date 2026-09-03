@@ -5,7 +5,7 @@
  *          installed and the table loaded into the processor.
  * Key definitions: IdtGateDescriptor, IdtRegister, IDT_ENTRY_COUNT,
  *          IDT_GATE_TYPE_INTERRUPT, IDT_GATE_TYPE_TRAP, IdtInitialise,
- *          IdtSetGate, IdtLimit, IdtBase.
+ *          IdtSetGate, IdtSetGateStack, IdtGateStack, IdtLimit, IdtBase.
  * References:
  *   - Intel 64 and IA-32 Architectures Software Developer's Manual, Volume 3A,
  *     Section 6.10 (Interrupt Descriptor Table) and Section 6.14.1 (64-Bit Mode
@@ -72,8 +72,10 @@ typedef struct IdtGateDescriptor
     /*
      * Bits 2:0 select an entry of the interrupt stack table in the task state
      * segment; zero selects the legacy stack-switching behaviour. Bits 7:3 are
-     * reserved and must be zero. The interrupt stack table is not used until the
-     * task state segment is established in Phase 6, sub-task 6.1.
+     * reserved and must be zero. Sub-task 6.1 established the task state segment
+     * and gave the double fault an entry of its own; every other vector selects
+     * none, and is delivered upon whatever stack was in use unless the privilege
+     * level changes.
      */
     uint8_t interrupt_stack_table;
     /*
@@ -131,6 +133,25 @@ void IdtInitialise(void);
  *     descriptor privilege level.
  */
 void IdtSetGate(uint8_t vector, uint64_t handler, uint8_t type_and_attributes);
+
+/*
+ * Selects the entry of the interrupt stack table upon which a vector is
+ * delivered, the entries being numbered from one and zero meaning that no entry
+ * is selected and the legacy behaviour applies.
+ *
+ * It is separate from IdtSetGate, and applied to an already installed gate,
+ * because the two happen at different times: every gate is installed before the
+ * task state segment exists, and an index naming an entry of a segment that had
+ * not been loaded would be a stack pointer of zero. Refer to
+ * docs/design/PRIVILEGE.md, Section 4.
+ *
+ * Returns false where the vector has no gate installed, or where the entry is
+ * above the seven the architecture provides.
+ */
+bool IdtSetGateStack(uint8_t vector, uint8_t interrupt_stack_table_entry);
+
+/* The interrupt stack table entry a vector's gate presently selects. */
+uint8_t IdtGateStack(uint8_t vector);
 
 /* The limit presently loaded, read back from the processor with SIDT. */
 uint16_t IdtLimit(void);

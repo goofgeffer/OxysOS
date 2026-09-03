@@ -270,13 +270,59 @@ The target destroys any existing machine named `Oxys-OS`, creates a machine with
 serial port to `build/vbox-serial.log`, attaches the ISO to an IDE controller,
 and starts the machine.
 
-**Present status**: `VBoxManage` is not installed in this WSL2 environment, so
-the target cannot be executed here. VirtualBox is a Windows host application;
-execution requires either that the Windows `VBoxManage.exe` be reachable from
-WSL2 or that the test be performed from a Windows command prompt against the ISO
-in the WSL2 filesystem. The project owner performs this test upon the Windows
-host directly, and sub-task 1.11 of `PLAN.md` is recorded as passed upon that
-authority.
+**Present status**: there is no `VBoxManage` upon the WSL2 `PATH`, so the target
+above fails its own tool check. The Windows binary is nevertheless reachable at
+`/mnt/c/Program Files/Oracle/VirtualBox/VBoxManage.exe`, and the test may be
+performed by hand through it. Two adjustments are required, both because that
+binary is a Windows program and understands no WSL2 path:
+
+```sh
+VB="/mnt/c/Program Files/Oracle/VirtualBox/VBoxManage.exe"
+mkdir -p /mnt/c/Users/<user>/oxys-vbox
+cp build/oxys.iso /mnt/c/Users/<user>/oxys-vbox/oxys.iso
+
+"$VB" createvm  --name "Oxys-OS" --ostype Other_64 --register
+"$VB" modifyvm  "Oxys-OS" --memory 512 --cpus 2 --firmware bios
+"$VB" storagectl "Oxys-OS" --name "IDE" --add ide
+"$VB" storageattach "Oxys-OS" --storagectl "IDE" --port 0 --device 0     --type dvddrive --medium 'C:\Users\<user>\oxys-vbox\oxys.iso'
+"$VB" startvm "Oxys-OS" --type headless
+```
+
+The ISO must be staged upon the Windows filesystem and named by a Windows path;
+the same applies to any file the machine is asked to write.
+
+### 9.1 There is no serial channel under VirtualBox
+
+The serial port is omitted from the commands above deliberately. The kernel does
+not detect VirtualBox's 16550A: it reports `Serial self-test skipped; no adapter
+is present.` and `Serial adapter: absent; no diagnostic channel.`, claims no
+request line, and therefore transmits nothing. A `--uartmode1 file` log is
+written as an empty file and a `--uartmode1 tcpserver` socket accepts a
+connection and delivers no byte. This is a property of the machine and not of any
+one sub-task; it predates the tests recorded here and is not investigated by
+them.
+
+The consequence is that **the automated assertion of Section 1 cannot be
+performed under VirtualBox**, that assertion being made upon the serial output.
+What can be read is the VGA console, and the kernel emits more of it than the
+25 rows hold, so the completed screen shows only the last of the self-tests.
+
+### 9.2 Reading a self-test verdict that has scrolled away
+
+Pause the machine while the line is still upon the screen, and photograph it:
+
+```sh
+"$VB" startvm "Oxys-OS" --type headless
+sleep 5.9          # the boot menu, then the interval up to the line wanted
+"$VB" controlvm "Oxys-OS" pause
+"$VB" controlvm "Oxys-OS" screenshotpng 'C:\Users\<user>\oxys-vbox\s.png'
+"$VB" controlvm "Oxys-OS" poweroff
+```
+
+The interval is found by bisection and jitters by some tenths of a second
+between runs, so several attempts may be needed to place a particular line upon
+the screen. It is a crude procedure and it is the only one available while the
+machine has no serial channel.
 
 ## 10. Testing upon physical hardware
 
@@ -391,10 +437,74 @@ back correctly, and `e2fsck` nevertheless reported every inode the kernel had
 freed as the member of a corrupted orphan list. It is recorded in
 [`../storage/VFS.md`](../storage/VFS.md), Section 11.1.
 
-## 13. Test record
+## 13. Verification of the privilege apparatus
+
+The descriptors, the task state segment, the interrupt stack table and the three
+system-call registers of sub-task 6.1 are asserted at every boot by
+`KernelVerifyPrivilege`. Each assertion, and the silent failure it catches, is
+tabulated in [`../design/PRIVILEGE.md`](../design/PRIVILEGE.md), Section 7.
+
+Two of the five parts do more than inspect a structure, and they are the two
+worth describing here, because inspecting a structure the processor reads
+establishes only what this kernel wrote into it.
+
+**The interrupt stack table is exercised.** Vector 200 — clear of everything the
+machine uses — is registered, raised by `int $200`, then given the double fault's
+interrupt stack table entry and raised again. The evidence is the address at
+which the trap frame was built, that frame being the first thing placed upon
+whatever stack the processor selected. The two addresses must differ, the first
+must lie outside the double-fault stack and the second within it. The double
+fault itself cannot be raised for this: its handler is fatal by design.
+
+**The transition is exercised.** `SYSCALL` may be executed from privilege level
+0. It raises no privilege, there being none to raise, but it loads `CS` and `SS`
+from `IA32_STAR`, transfers to `IA32_LSTAR`, saves the return address in `RCX`
+and the flags in `R11`, and clears the bits `IA32_FMASK` names — so the whole
+mechanism is exercisable now, with no user program, no user mapping and no user
+stack. The provisional entry point records what the processor loaded, those
+values existing nowhere else. It is executed twice, once with the interrupt flag
+clear and once with it set, because the assertion that `IA32_FMASK` cleared the
+flag says nothing whatever if the flag was already clear.
+
+### 13.1 The negative test
+
+A self-test is worth nothing until it has been seen to fail. To repeat it:
+
+```sh
+# Remove the interrupt flag from the mask the kernel writes into IA32_FMASK.
+sed -i 's/RFLAGS_TRAP | RFLAGS_INTERRUPT_ENABLE |/RFLAGS_TRAP |/'     kernel/include/oxys/syscall.h
+make verify
+```
+
+The run must report two failures and end `Privilege self-test FAILED.` — the
+configuration assertion of Section 7.4 of the design document and the exercised
+assertion of Section 7.5, which is the pair that distinguishes "the register does
+not say so" from "the processor did not do so":
+
+```
+  IA32_FMASK does not clear the interrupt flag, so the kernel would be entered
+    interruptible upon a user stack
+  the interrupt flag was still set within the handler, so the kernel was entered
+    interruptible
+Privilege self-test FAILED.
+```
+
+Restore the file afterwards. Note that `make verify` still reports
+`VERIFICATION SUCCEEDED`: it greps for the completion banner and knows nothing of
+any self-test's verdict, which is a limitation of the harness recorded in
+Section 1 and not a fault of this test.
+
+## 14. Test record
 
 | Date | Test | Result |
 | ---- | ---- | ------ |
+| 2026-09-03 | VirtualBox 7, headless, 512 MiB, two processors, legacy BIOS — sub-task 6.1 | Passed; the machine reached `Phase 6 initialisation complete` and the echo loop. The privilege report read identically to QEMU's upon a different hypervisor's descriptor tables and a different memory map: task state segment at `0xFFFFFFFF80186960` with limit 103 and task register `0x30`, `RSP0` `0xFFFFFFFF80186960`, `IST1` `0xFFFFFFFF80182960`, I/O map base 104 beyond the limit, `IA32_STAR` `0x18000800000000` deriving `CS 0x8`/`SS 0x10` and `CS 0x2B`/`SS 0x23`, and `IA32_FMASK` `0x47700`. `Privilege self-test passed.` was read from the console by the pause procedure of Section 9.2. That the machine reached the banner at all is itself evidence, `LTR`, `int $200` upon an interrupt stack and two executions of `SYSCALL` all occurring before it and each failing as a fault rather than as a message. |
+| 2026-09-03 | VirtualBox — the serial channel | Not available; the kernel reports `Serial adapter: absent; no diagnostic channel.` and transmits nothing, so `make verify`'s assertion cannot be made under this hypervisor. Pre-existing and unrelated to sub-task 6.1; recorded in Section 9.1. |
+| 2026-09-03 | `make verify` — sub-task 6.1, the privilege self-test | Passed; forty-eight assertions. The table's limit covers the eight slots and `GDTR` names this table; each user descriptor is decoded field by field and says what it must — present, DPL 3, and 64-bit code, compatibility-mode code or writable data respectively; and the three descriptors stand at the displacements `SYSCALL` and `SYSRET` derive their selectors by, which is asserted as an ordering because every descriptor may be individually perfect and the transition still fail. The task state segment descriptor's base and limit name the segment exactly, and its type is **11 and not 9**, which only the processor writes and is therefore the sole evidence that `LTR` was accepted; the task register holds `0x30`; `RSP0` is non-zero and sixteen-byte aligned; the double fault's stack is non-zero and distinct from it; and the I/O map base lies beyond the limit, so no port is permitted to user mode. `IA32_EFER.SCE` is set and `IA32_LSTAR` holds the entry point, both read back from the processor; the four selectors the processor will derive are computed by its own arithmetic and are `0x08`, `0x10`, `0x2B` and `0x23`; and `IA32_FMASK` clears `IF`, `DF`, `TF`, `NT` and `AC`. |
+| 2026-09-03 | `make verify` — sub-task 6.1, the interrupt stack table exercised | Passed; vector 200 raised without an interrupt stack table entry built its trap frame outside the double-fault stack, and raised with the double fault's entry built it within, the two addresses differing. This is the assertion that the processor *reads* the task state segment, as against the assertions that this kernel wrote one: a segment whose descriptor the processor had rejected, or a task register never loaded, would satisfy every inspection and switch no stack. The gate for vector 14 is confirmed to hold no entry, an interrupt stack table entry being a fixed address that does not nest and the page-fault handler being one that may itself fault; an entry above the seven the architecture provides is refused and leaves the gate unaltered; and the probe vector is left as it was found. |
+| 2026-09-03 | `make verify` — sub-task 6.1, the transition exercised | Passed; `SYSCALL` executed from privilege level 0 reached the entry point `IA32_LSTAR` names, and the entry point observed `CS` `0x08` and `SS` `0x10` — the selectors the processor loaded, which exist nowhere else, the instruction loading them and the return replacing them. Executed a second time with the interrupt flag deliberately set, the entry point observed it **clear**, which is `IA32_FMASK` working and is not observable at all in the first pass; and the flag was set again upon return, so the flags saved in `R11` were restored. |
+| 2026-09-03 | `make verify` — sub-task 6.1, **the negative test** | Passed; with `RFLAGS_INTERRUPT_ENABLE` removed from `SYSCALL_FLAG_MASK`, exactly the two assertions that bear upon it reported — the one upon the register and the one upon what the processor did — and the run ended `Privilege self-test FAILED.` The edit was reverted and the run repeated, reporting `Privilege self-test passed.` The procedure is Section 13.1. |
+| 2026-09-03 | `make all` — build with the full diagnostic regime, after sub-task 6.1 | Passed; no diagnostics, including from the `_Static_assert` upon the size of `TaskStateSegment`, which fails the compilation if the packed attribute is ever lost. |
 | 2026-09-02 | `make verify` — sub-task 5.8, the filesystem self-test | Passed; some ninety assertions upon two composed volumes. A path resolves through components, repeated and trailing separators, `.`, `..` and both forms of symbolic link, and is refused for the reason that distinguishes each refusal; a descriptor reads a file whose contents depend upon their offsets, its position advancing by exactly what was transferred, and the end of the file is reported by the count; two descriptors upon one file have two positions and one identity; a directory is listed and what it lists is what resolves; a file is created, written, read back identically, appended to, truncated in both directions, given a second name and destroyed, and is refused destruction while something holds it; a new directory bears two links and its parent gains one, which is returned when it is removed. |
 | 2026-09-02 | `make verify` — sub-task 5.8, the mount | Passed; a second volume, identical to the first but for the owner of one file, is mounted upon a directory of it. The mount point becomes the second volume's root; a path crossing it reaches the second volume and one that does not reaches the first; what the mount covers is entirely unreachable; `..` from the mounted root leaves the volume and arrives at the parent of the mount point, and a path that returns and crosses again reaches the second volume once more; a read-only mount refuses a write and a creation; neither mount may be withdrawn while anything is held; and the covered directory reappears exactly as it was. No node was left held and no descriptor open. |
 | 2026-09-02 | `make verify` — sub-task 5.8, the mark a mount leaves | Passed; the state read back **out of the medium** after a writable mount has the clean bit clear and the error bit clear, with the mount count raised; after a clean withdrawal the clean bit is set again; and `Ext2VerifyGroupDescriptors` passes upon a superblock read afresh afterwards. |

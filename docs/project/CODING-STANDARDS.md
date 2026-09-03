@@ -81,7 +81,9 @@ documented. The following are in use.
 
 | Extension | Where | Rationale |
 | --------- | ----- | --------- |
-| GNU C extended inline assembly (`__asm__ __volatile__`) | `kernel/include/oxys/io.h`, `kernel/kernel.c`, `kernel/include/oxys/cpu.h` | ISO C provides no means of expressing the `IN`, `OUT`, `CLI`, `STI`, `HLT`, `INT n`, `PUSHFQ` or control-register instructions. No conforming alternative exists. `INT n` is used only by the boot-time self-tests, which must raise an interrupt deliberately in order to observe how one is handled. `STI` is used by those tests and by the echo loop of `docs/devices/KEYBOARD.md`, Section 7.2, where it must immediately precede `HLT` for the reason given there. `PUSHFQ` is used by `ReadRflags`, upon which a driver's choice between waiting for an interrupt and polling for the same condition depends; see `docs/devices/SERIAL.md`, Section 4. `REP INSW` moves the 256 words of a disk sector without the overhead of 256 separate transfers upon a path that is already the slowest way to reach a disk; there is deliberately no corresponding writer, for the reason given in `docs/storage/DISK.md`, Section 5. |
+| GNU C extended inline assembly (`__asm__ __volatile__`) | `kernel/include/oxys/io.h`, `kernel/kernel.c`, `kernel/include/oxys/cpu.h` | ISO C provides no means of expressing the `IN`, `OUT`, `CLI`, `STI`, `HLT`, `INT n`, `PUSHFQ` or control-register instructions. No conforming alternative exists. `INT n` is used only by the boot-time self-tests, which must raise an interrupt deliberately in order to observe how one is handled. `STI` is used by those tests and by the echo loop of `docs/devices/KEYBOARD.md`, Section 7.2, where it must immediately precede `HLT` for the reason given there. `PUSHFQ` is used by `ReadRflags`, upon which a driver's choice between waiting for an interrupt and polling for the same condition depends; see `docs/devices/SERIAL.md`, Section 4. `REP INSW` moves the 256 words of a disk sector without the overhead of 256 separate transfers upon a path that is already the slowest way to reach a disk; there is deliberately no corresponding writer, for the reason given in `docs/storage/DISK.md`, Section 5. Sub-task 6.1 adds `RDMSR` and `WRMSR`, without which the three registers that configure the system-call mechanism cannot be reached at all; `LTR` and `STR`, which load and read the task register; `CPUID`, by which the availability of that mechanism is established before it is enabled; and `SYSCALL`, executed by the self-test alone, there being no user program until sub-task 6.5. |
+| `__attribute__((packed))` | `kernel/include/oxys/tss.h` | The layout of the task state segment is the processor's and not the compiler's: the processor reads `rsp0` and the interrupt stack table at fixed byte offsets, without asking, at moments when nothing can be reported. Padding inserted for alignment would displace every field after it. Section 7.1 below excludes an overlaid structure for a format read from a medium, and this is not one — it is neither read from a medium nor byte-order dependent, and there is no decoding step it could be given, the processor being the only reader. The declaration is followed by a `_Static_assert` upon its size, so that the requirement is enforced rather than assumed. See `docs/design/PRIVILEGE.md`, Section 3. |
+| `__attribute__((aligned(16)))` | `kernel/cpu/tss.c` | The System V AMD64 ABI, Section 3.2.2, requires the stack pointer to be sixteen-byte aligned at a function's entry, and the stacks named by the task state segment are loaded by the processor and not by any code that could align them. ISO C provides `_Alignas`, which would serve for the arrays; it is not used, so that the segment and the stacks it names carry the same annotation and a reader need not establish that two spellings mean one thing. |
 | `_Noreturn` | `kernel/kernel.c` | This is an ISO C11 keyword, not an extension. It is listed here for completeness because it affects code generation. |
 
 ## 7.1 On-disk and on-wire structures
@@ -103,11 +105,19 @@ a self-test composing such a structure uses the same names the decoder reads. A
 test that restated the offsets would agree with a mistaken decoder as readily as
 with a correct one.
 
-The exception already in the tree is `kernel/include/oxys/multiboot2.h`, which
-describes a structure the boot loader places in memory rather than one read from
-a medium: its fields are naturally aligned by the specification and are read by
+Two structures in the tree stand outside this rule, and both for the same
+reason: neither is read from a medium.
+
+`kernel/include/oxys/multiboot2.h` describes a structure the boot loader places
+in memory. Its fields are naturally aligned by the specification and are read by
 the processor that was handed them, so no packing and no byte-order decision
 arises.
+
+`kernel/include/oxys/tss.h` describes a structure **the processor itself reads**,
+at offsets the architecture fixes. Here packing is not merely permitted but
+required, and the alternative the rule above prefers does not exist: there is no
+decoding step to write, because this kernel is not the reader. It is registered
+in Section 7 with its rationale, and its size is asserted at compile time.
 
 ## 8. Prohibitions
 

@@ -2,15 +2,16 @@
 
 **Phase**: 1, sub-tasks 1.7 and 1.8. This directory grows in every subsequent
 phase.
-**Detailed design**: [`../docs/design/ARCHITECTURE.md`](../docs/design/ARCHITECTURE.md) and
-[`../docs/design/MEMORY-LAYOUT.md`](../docs/design/MEMORY-LAYOUT.md).
+**Detailed design**: [`../docs/design/ARCHITECTURE.md`](../docs/design/ARCHITECTURE.md),
+[`../docs/design/MEMORY-LAYOUT.md`](../docs/design/MEMORY-LAYOUT.md) and
+[`../docs/design/PRIVILEGE.md`](../docs/design/PRIVILEGE.md).
 
 ## Purpose
 
 This directory holds the architecture-independent core of the monolithic kernel:
 the C entry point, and, as the phases proceed, memory management, the interrupt
-dispatcher, the scheduler, the system-call layer and the virtual filesystem. All
-code here executes in 64-bit long mode at a higher-half virtual address, with
+dispatcher, the apparatus of a privilege transition, the scheduler, the
+system-call layer and the virtual filesystem. All code here executes in 64-bit long mode at a higher-half virtual address, with
 paging already enabled — which distinguishes it from `boot/`, and is why the two
 are separate.
 
@@ -18,17 +19,24 @@ are separate.
 
 | Path | Description |
 | ---- | ----------- |
-| `kernel.c` | `KernelMain`, the C entry point: it validates the boot loader handover, initialises every subsystem of Phases 1 to 5 in dependency order, runs the boot-time self-tests, mounts a volume the machine carries at the root, and enters the keyboard echo loop where a keyboard is present or halts where none is. `KernelPanic`, the unrecoverable-error path. `KernelHalt`, `KernelWriteString`, `KernelWriteDecimal` and `KernelWriteHexadecimal`. |
-| `cpu/exceptions.c` | The exception handlers, the decoding of both error-code formats, and `ExceptionReportState`. |
-| `include/oxys/exceptions.h` | The error-code flags of both formats and the exception interface. |
+| `kernel.c` | `KernelMain`, the C entry point: it validates the boot loader handover, initialises every subsystem of Phases 1 to 5 and the privilege apparatus of
+sub-task 6.1 in dependency order, runs the boot-time self-tests, mounts a volume the machine carries at the root, and enters the keyboard echo loop where a keyboard is present or halts where none is. `KernelPanic`, the unrecoverable-error path. `KernelHalt`, `KernelWriteString`, `KernelWriteDecimal` and `KernelWriteHexadecimal`. |
+| `cpu/exceptions.c` | The exception handlers, the decoding of both error-code formats, `ExceptionInstallInterruptStacks`, which gives the double fault a stack of its own, and `ExceptionReportState`. |
+| `include/oxys/exceptions.h` | The error-code flags of both formats, the vector of the double fault, and the exception interface. |
 | `include/oxys/cpu.h` | Accessors for the control registers `CR0`, `CR2`, `CR3` and `CR4`, and for `RFLAGS`, by which a driver determines whether an interrupt it means to wait for could be delivered at all. |
 | `cpu/interrupt_stubs.asm` | The 256 per-vector stubs, the common stub, and the table of stub addresses. |
 | `cpu/interrupts.c` | `InterruptInitialise`, `InterruptDispatch`, the dispatch table and its registration interface, and the frame reporting routines. |
-| `cpu/gdt.c`, `cpu/gdt.asm` | The kernel global descriptor table and the segment reload. |
+| `cpu/gdt.c`, `cpu/gdt.asm` | The kernel global descriptor table, the user-mode descriptors at the displacements `SYSCALL` and `SYSRET` derive their selectors by, the run-time construction of the sixteen-byte task state segment descriptor, and the segment reload. |
 | `include/oxys/interrupts.h` | The trap frame and the interrupt interface. |
-| `include/oxys/gdt.h` | The `LGDT` operand, the selectors and the interface of the descriptor table. |
-| `cpu/idt.c` | The interrupt descriptor table. `IdtInitialise`, `IdtSetGate`, and the accessors that read the table register back with `SIDT`. |
-| `include/oxys/idt.h` | The 64-bit gate descriptor, the `LIDT` operand, the gate types and the attribute bits. |
+| `include/oxys/gdt.h` | The `LGDT` operand, the kernel, user and task state segment selectors, the requested privilege level a user selector carries, and the interface of the descriptor table. |
+| `cpu/idt.c` | The interrupt descriptor table. `IdtInitialise`, `IdtSetGate`, `IdtSetGateStack`, `IdtGateStack`, and the accessors that read the table register back with `SIDT`. |
+| `include/oxys/idt.h` | The 64-bit gate descriptor, the `LIDT` operand, the gate types, the attribute bits, and the assignment of an interrupt stack table entry to a gate. |
+| `cpu/tss.c` | The task state segment: the stack the processor loads upon a transfer to privilege level 0, the separate stack a double fault is delivered upon, the sixteen-byte descriptor built for it within the global descriptor table, and the loading of the task register. `TssInitialise`, `TssSetKernelStack`, `TssKernelStack`, `TssInterruptStack`, `TssIoMapBase`, `TssAddress`, `TssLimit`, `TssTaskRegister`, `TssReport`. |
+| `include/oxys/tss.h` | `TaskStateSegment`, its size asserted at compile time; the interrupt stack table entry the double fault is given; the sizes of the two stacks; and the interface of the segment. |
+| `cpu/syscall.c` | The configuration of the fast system-call mechanism: the establishment of processor support by `CPUID`, the selectors written into `IA32_STAR`, the entry point written into `IA32_LSTAR`, the flags cleared by `IA32_FMASK`, the enabling of `IA32_EFER.SCE`, and the derivation of the four selectors the processor computes from `IA32_STAR`. `SyscallInitialise`, `SyscallIsEnabled`, `SyscallStar`, `SyscallLstar`, `SyscallFmask`, `SyscallEntryAddress`, `SyscallDerivedKernelCode`, `SyscallDerivedKernelStack`, `SyscallDerivedUserCode`, `SyscallDerivedUserStack`, `SyscallEntries`, `SyscallObservedCode`, `SyscallObservedStack`, `SyscallObservedFlags`, `SyscallReport`. |
+| `cpu/syscall_entry.asm` | `SyscallEntry`, the address `IA32_LSTAR` holds. Provisional in sub-task 6.1: it records the selectors and flags the processor loaded, which exist nowhere else, and returns by restoring `R11` and jumping to `RCX`. Sub-task 6.2 replaces it. |
+| `include/oxys/syscall.h` | The named bits of `RFLAGS`, `SYSCALL_FLAG_MASK` composed from them, and the interface by which the configuration is read back from the processor and asserted. |
+| `include/oxys/msr.h` | The numbers of the model-specific registers the kernel uses, the `SCE` bit of `IA32_EFER`, and `ReadMsr` and `WriteMsr`. |
 | `mm/heap.c` | The kernel heap. `KernelAllocate`, `KernelAllocateZeroed` and `KernelFree`. |
 | `mm/vmm.c` | The kernel virtual address allocator. `KernelPagesAllocate` and `KernelPagesFree`. |
 | `include/oxys/heap.h` | The interface of the kernel heap. |
@@ -98,6 +106,9 @@ processor permanently.
 | Intel SDM, Volume 1 | 18.3 | The programmed input/output address space. |
 | Intel SDM, Volume 2B, "HLT" | — | The halt instruction and the conditions that resume it. |
 | Intel SDM, Volume 3A | 3.3.7.1, 4.5 | Canonical addressing, and the higher-half translation helpers. |
+| Intel SDM, Volume 3A | 3.4.5, 5.8.8, 6.14.4, 8.2.3, 8.7, 20.5.2, Table 2-1 | The segment descriptor format; the selectors `SYSCALL` and `SYSRET` derive from `IA32_STAR`; the unconditional loading of an interrupt stack table entry; the sixteen-byte task state segment descriptor; the 64-bit task state segment; the I/O map base beyond the limit; and `IA32_EFER.SCE`. |
+| Intel SDM, Volume 2A, `LTR`, `CPUID` | — | The loading of the task register, and the establishment of processor support for the mechanism. |
+| Intel SDM, Volume 2B, `SYSCALL`, `SYSRET` | — | What the transition saves, loads and clears, and that `SYSRET` returns to privilege level 3 unconditionally. |
 
 Full citations are held in [`../docs/project/REFERENCES.md`](../docs/project/REFERENCES.md).
 

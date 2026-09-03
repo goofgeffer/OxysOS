@@ -130,10 +130,70 @@ Sections relied upon:
   save those for global pages.
 - **Volume 3A, Section 13.1**, the enabling and state management required of the
   SSE and x87 units.
+- **Volume 1, Section 3.4.3**, the flags of the `RFLAGS` register, from which the
+  mask written into `IA32_FMASK` is composed.
+- **Volume 2B, "SYSCALL"**, the fast system-call transition: `RCX` receives the
+  address of the following instruction and `R11` the value of `RFLAGS` before the
+  mask is applied; `RIP` is loaded from `IA32_LSTAR`; `CS` and `SS` are loaded
+  from `IA32_STAR`; every bit set in `IA32_FMASK` is then cleared in `RFLAGS`;
+  and the stack pointer is *not* changed.
+- **Volume 2B, "SYSRET"**, the inverse transition, which returns to privilege
+  level 3 unconditionally, the requested privilege level of the selectors it
+  loads being forced to 3.
+- **Volume 3A, Section 5.8.8**, fast system calls in 64-bit mode: `SYSCALL` loads
+  `CS` from `IA32_STAR[47:32]` and `SS` from that value plus eight; `SYSRET` with
+  a 64-bit operand size loads `CS` from `IA32_STAR[63:48]` plus sixteen and `SS`
+  from that value plus eight. This fixes the order of the user descriptors in the
+  global descriptor table.
+- **Volume 3A, Table 2-1**, `IA32_EFER` bit 0, `SCE`, without which `SYSCALL`
+  raises an invalid-opcode exception.
+- **Volume 3A, Section 8.7 and Figure 8-11**, the 64-bit task state segment: its
+  104 bytes, `RSP0` to `RSP2`, the seven interrupt stack table entries, and the
+  I/O map base.
+- **Volume 3A, Section 8.2.3 and Figure 8-4**, the sixteen-byte task state
+  segment descriptor of 64-bit mode, whose type is 9 while the segment is
+  available and 11 once a task register has been loaded with a selector for it.
+- **Volume 3A, Section 6.14.4**, the interrupt stack table: where a gate names an
+  entry, the processor loads that stack unconditionally, whether or not the
+  privilege level changes — which is what makes it usable for a fault taken at
+  privilege level 0 upon a stack that is itself the fault.
+- **Volume 3A, Section 20.5.2**, the I/O permission bitmap: where the map base
+  exceeds the segment limit, there is no bitmap and every port is denied to a
+  privilege level above `IOPL`.
+- **Volume 2A, "LTR"**, the loading of the task register: the operand is a
+  selector for an available task state segment descriptor, and the instruction
+  marks that descriptor busy.
+- **Volume 2A, "CPUID"**, leaf `0x80000000` reporting the highest extended leaf
+  implemented, and bit 11 of `EDX` from leaf `0x80000001` reporting the
+  availability of `SYSCALL` and `SYSRET`.
+- **Volume 4**, the model-specific registers `IA32_EFER` (`0xC0000080`),
+  `IA32_STAR` (`0xC0000081`), `IA32_LSTAR` (`0xC0000082`), `IA32_CSTAR`
+  (`0xC0000083`), `IA32_FMASK` (`0xC0000084`), `IA32_FS_BASE` (`0xC0000100`),
+  `IA32_GS_BASE` (`0xC0000101`) and `IA32_KERNEL_GS_BASE` (`0xC0000102`).
 
 Used by: `boot/boot.asm`, `linker.ld`, `Makefile`, `kernel/include/oxys/io.h`,
 `kernel/kernel.c`, `kernel/include/oxys/pic.h`, `kernel/include/oxys/pit.h`,
-`docs/design/MEMORY-LAYOUT.md`, `docs/design/INTERRUPTS.md`.
+`kernel/cpu/gdt.c`, `kernel/cpu/tss.c`, `kernel/cpu/syscall.c`,
+`kernel/cpu/syscall_entry.asm`, `kernel/include/oxys/tss.h`,
+`kernel/include/oxys/syscall.h`, `kernel/include/oxys/msr.h`,
+`docs/design/MEMORY-LAYOUT.md`, `docs/design/INTERRUPTS.md`,
+`docs/design/PRIVILEGE.md`.
+
+### AMD64 Architecture Programmer's Manual, Volume 2: System Programming
+Advanced Micro Devices, publication 24593.
+
+Consulted as the second authority upon the mechanism AMD defined, where the two
+manuals describe one processor feature and agree.
+
+Sections relied upon:
+
+- **Section 6.1**, `SYSCALL` and `SYSRET`, and the three registers that
+  configure them under the names `STAR`, `LSTAR` and `SFMASK`. The mechanism is
+  AMD's; Intel's manual documents the same register numbers and the same
+  behaviour, and the two are cited together where a reader may know it under
+  either set of names.
+
+Used by: `kernel/include/oxys/msr.h`, `docs/design/PRIVILEGE.md`.
 
 ### System V Application Binary Interface, AMD64 Architecture Processor Supplement
 `https://gitlab.com/x86-psABIs/x86-64-ABI`
@@ -145,9 +205,16 @@ Sections relied upon:
   pointer, which is inadmissible in kernel code.
 - **Section 3.2.3**, parameter passing: the first two integer arguments are
   passed in `RDI` and `RSI`.
+- **Section 3.2.1**, the direction flag is required to be clear at a function's
+  entry, which is among the reasons it appears in `IA32_FMASK`.
+- **Section 3.2.2**, the stack pointer is sixteen-byte aligned at a function's
+  entry, which is why the stacks the task state segment names are aligned and
+  sized in multiples of sixteen.
 - The ELF64 object file format.
 
-Used by: `boot/boot.asm`, `linker.ld`, `Makefile`.
+Used by: `boot/boot.asm`, `linker.ld`, `Makefile`, `kernel/cpu/tss.c`,
+`kernel/include/oxys/tss.h`, `kernel/include/oxys/syscall.h`,
+`docs/design/PRIVILEGE.md`.
 
 ### ISO/IEC 9899:2011, Programming languages — C
 International Organization for Standardization.
@@ -705,9 +772,9 @@ Used by: `boot/grub/grub.cfg`, `Makefile`.
 | ------------- | ----- | ------- |
 | PCI Local Bus Specification 3.0 | 4 | Configuration space and device enumeration. |
 | ATA/ATAPI Command Set (ACS-3) | 4 | `IDENTIFY DEVICE`; 28-bit and 48-bit logical block addressing. |
-| Intel SDM, Volume 2B, `SYSCALL` and `SYSRET` | 6 | The fast system-call mechanism. |
 | IEEE Std 1003.1-2017, System Interfaces | 6, 7 | `fork()`, `exec()`, `wait()` and the file-descriptor semantics a fork imposes upon the open file table. |
 | Intel MultiProcessor Specification 1.4 | 6 | Application processor bring-up. |
+| Intel SDM, Volume 3A, Chapter 11 | 6 | The Local APIC and the I/O APIC, which retire the 8259A. |
 | ACPI Specification 6.5 | 6, 12 | The Multiple APIC Description Table; the Root System Description Pointer. |
 | VESA BIOS Extensions 3.0 | 9 | Linear framebuffer modes under legacy BIOS. |
 | UEFI Specification 2.10, Section 12.9 | 9, 12 | The Graphics Output Protocol. |

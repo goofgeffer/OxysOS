@@ -49,7 +49,30 @@
  * Registers a handler for every architecture-defined exception, vectors 0 to 31.
  * The interrupt dispatcher must have been initialised beforehand.
  */
+/*
+ * The vector of the double fault, per Intel SDM, Volume 3A, Section 6.15.
+ *
+ * It is named because sub-task 6.1 gives it a stack of its own and the number
+ * appears in two places thereafter: where the stack is attached, and where the
+ * self-test asserts that it was.
+ */
+#define EXCEPTION_DOUBLE_FAULT UINT8_C(8)
+
 void ExceptionInitialise(void);
+
+/*
+ * Attaches the interrupt stack table entries the exceptions require, the double
+ * fault being the only one that presently has one.
+ *
+ * It is separate from ExceptionInitialise because it must run after the task
+ * state segment has been loaded, and the gates are installed before that. The
+ * reasons are recorded at the definition and in docs/design/PRIVILEGE.md,
+ * Section 4.
+ *
+ * Returns false where the gate is absent or the entry is not one the
+ * architecture provides.
+ */
+bool ExceptionInstallInterruptStacks(void);
 
 /*
  * Emits a full diagnosis of the processor state: the decoded vector, the decoded

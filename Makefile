@@ -108,6 +108,8 @@ C_SOURCES := kernel/kernel.c \
              kernel/mm/heap.c \
              kernel/cpu/gdt.c \
              kernel/cpu/idt.c \
+             kernel/cpu/tss.c \
+             kernel/cpu/syscall.c \
              kernel/cpu/interrupts.c \
              kernel/cpu/exceptions.c \
              kernel/fs/ext2.c \
@@ -125,7 +127,8 @@ C_SOURCES := kernel/kernel.c \
 
 ASM_SOURCES := boot/boot.asm \
                kernel/cpu/interrupt_stubs.asm \
-               kernel/cpu/gdt.asm
+               kernel/cpu/gdt.asm \
+               kernel/cpu/syscall_entry.asm
 
 OBJECTS := $(patsubst %.c,$(BUILD_DIR)/%.c.o,$(C_SOURCES)) \
            $(patsubst %.asm,$(BUILD_DIR)/%.asm.o,$(ASM_SOURCES))

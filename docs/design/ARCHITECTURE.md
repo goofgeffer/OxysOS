@@ -63,7 +63,7 @@ complementary and neither replaces the other.
 
 ## 3. Present composition
 
-As of the completion of Phase 5, the system comprises
+As of the completion of Phase 5 and of sub-task 6.1, the system comprises
 the following translation units.
 
 | Unit | Role |
@@ -73,7 +73,10 @@ the following translation units.
 | `kernel/cpu/interrupt_stubs.asm` | The 256 per-vector entry stubs and the common stub that saves the registers and calls the dispatcher. |
 | `kernel/cpu/interrupts.c` | The installation of the stubs, the dispatch table and the routing of each vector to its registered handler. |
 | `kernel/cpu/gdt.c`, `kernel/cpu/gdt.asm` | The kernel global descriptor table and the reloading of the segment registers. |
-| `kernel/cpu/idt.c` | The interrupt descriptor table: its storage, the installation of a gate, and the loading of the table. |
+| `kernel/cpu/idt.c` | The interrupt descriptor table: its storage, the installation of a gate, the assignment of an interrupt stack table entry to a gate, and the loading of the table. |
+| `kernel/cpu/tss.c` | The task state segment: the stacks the processor loads when it needs one it can trust, its descriptor within the global descriptor table, and the loading of the task register. |
+| `kernel/cpu/syscall.c` | The configuration of the fast system-call mechanism: `IA32_STAR`, `IA32_LSTAR`, `IA32_FMASK` and the enabling bit of `IA32_EFER`. |
+| `kernel/cpu/syscall_entry.asm` | The entry point `IA32_LSTAR` names. Provisional in sub-task 6.1; replaced by the dispatch path of sub-task 6.2. |
 | `kernel/mm/heap.c` | The kernel heap: a slab allocator of eight size classes over the kernel arena. |
 | `kernel/mm/vmm.c` | The kernel virtual address allocator, issuing ranges of the kernel arena backed by frames. |
 | `kernel/mm/paging.c` | The permanent kernel paging hierarchy: its construction, activation, software translation and copy-on-write fault resolution. |
@@ -139,7 +142,7 @@ Phase 3 is installed. The dependency is resolved by implementing the memory
 management structures of sub-tasks 2.1 to 2.6 first, then Phase 3, and finally
 returning to sub-tasks 2.7 and 2.8.
 
-**Status.** Phases 2 to 5 are complete. The dependency
+**Status.** Phases 2 to 5 are complete, and Phase 6 has begun. The dependency
 described above has been discharged: sub-task 3.4 supplied the fault handler,
 sub-task 2.7 the copy-on-write resolution beneath it, and sub-task 2.8 the
 address-space cloning that creates the shared pages the resolution acts upon.
@@ -147,9 +150,10 @@ Sub-task 3.5 has since remapped the interrupt controllers, so that a device may
 be heard; sub-task 3.6 supplied the first device that speaks; and sub-task 3.7
 the first that a person operates. Phase 4 supplied the devices beneath a
 filesystem and Phase 5 the filesystem itself, which sub-task 5.8 completed by
-mounting an EXT2 volume through a virtual filesystem layer. Work resumes at
-Phase 6, whose system calls are the operations of that layer with a user's
-arguments copied in.
+mounting an EXT2 volume through a virtual filesystem layer. Sub-task 6.1 has
+since established the apparatus a privilege transition is performed out of, and
+exercised it; work continues at sub-task 6.2, whose system calls are the
+operations of that layer with a user's arguments copied in.
 
 ## 5. Privilege and address-space model
 
@@ -157,6 +161,14 @@ The kernel occupies the upper half of the canonical 48-bit address space and is
 mapped into every address space, so that a system call or an interrupt requires
 no change of the page-table root. User processes occupy the lower half. The
 detailed layout is recorded in `MEMORY-LAYOUT.md`.
+
+The machinery of the transition between the two privilege levels — the user-mode
+descriptors and the order the processor's own arithmetic imposes upon them, the
+task state segment holding the stacks the processor loads when it needs one it
+can trust, and the three registers that configure `SYSCALL` — was established by
+sub-task 6.1 and is recorded in `PRIVILEGE.md`. Everything above privilege level
+0 remains prospective until sub-task 6.5: the apparatus stands and has been
+exercised, but no program yet runs in it.
 
 ## 6. Diagnostic policy
 

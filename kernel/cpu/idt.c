@@ -3,7 +3,8 @@
  * Purpose: Implements the interrupt descriptor table: the storage for the 256
  *          gate descriptors, the installation of a gate, and the loading of the
  *          table into the processor.
- * Key functions: IdtInitialise, IdtSetGate, IdtLoad, IdtLimit, IdtBase,
+ * Key functions: IdtInitialise, IdtSetGate, IdtSetGateStack, IdtGateStack,
+ *          IdtLoad, IdtLimit, IdtBase,
  *          IdtTableAddress, IdtReport.
  * References:
  *   - Intel 64 and IA-32 Architectures Software Developer's Manual, Volume 3A,
@@ -78,6 +79,40 @@ void IdtInitialise(void)
     }
 
     IdtLoad();
+}
+
+bool IdtSetGateStack(uint8_t vector, uint8_t interrupt_stack_table_entry)
+{
+    IdtGateDescriptor *const gate = &IdtTable[vector];
+
+    /*
+     * Bits 2:0 of the field select the entry; bits 7:3 are reserved and must be
+     * zero, so a value above seven is refused rather than truncated. A truncated
+     * index would select a different entry of the table, which is a valid stack
+     * pointer belonging to another exception and would then be used by both.
+     */
+    if (interrupt_stack_table_entry > 7U)
+    {
+        return false;
+    }
+
+    /*
+     * A gate that is not present names no handler, so no stack can usefully be
+     * attached to it: the assignment would be lost the moment the gate was
+     * installed, IdtSetGate clearing this field.
+     */
+    if ((gate->type_and_attributes & IDT_ATTRIBUTE_PRESENT) == 0U)
+    {
+        return false;
+    }
+
+    gate->interrupt_stack_table = interrupt_stack_table_entry;
+    return true;
+}
+
+uint8_t IdtGateStack(uint8_t vector)
+{
+    return (uint8_t)(IdtTable[vector].interrupt_stack_table & UINT8_C(0x07));
 }
 
 /*
