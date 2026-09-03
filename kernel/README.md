@@ -36,7 +36,7 @@ are separate.
 | `cpu/tss.c` | The task state segment: the stack the processor loads upon a transfer to privilege level 0, the separate stack a double fault is delivered upon, the sixteen-byte descriptor built for it within the global descriptor table, and the loading of the task register. `TssInitialise`, `TssSetKernelStack`, `TssKernelStack`, `TssInterruptStack`, `TssIoMapBase`, `TssAddress`, `TssLimit`, `TssTaskRegister`, `TssReport`. |
 | `include/oxys/tss.h` | `TaskStateSegment`, its size asserted at compile time; the interrupt stack table entry the double fault is given; the sizes of the two stacks; and the interface of the segment. |
 | `cpu/syscall.c` | The configuration of the fast system-call mechanism: the establishment of processor support by `CPUID`, the selectors written into `IA32_STAR`, the entry point written into `IA32_LSTAR`, the flags cleared by `IA32_FMASK`, the enabling of `IA32_EFER.SCE`, and the derivation of the four selectors the processor computes from `IA32_STAR`. `SyscallInitialise`, `SyscallIsEnabled`, `SyscallStar`, `SyscallLstar`, `SyscallFmask`, `SyscallEntryAddress`, `SyscallDerivedKernelCode`, `SyscallDerivedKernelStack`, `SyscallDerivedUserCode`, `SyscallDerivedUserStack`, `SyscallEntries`, `SyscallObservedCode`, `SyscallObservedStack`, `SyscallObservedFlags`, `SyscallReport`. |
-| `cpu/syscall_entry.asm` | `SyscallEntry`, the address `IA32_LSTAR` holds. Provisional in sub-task 6.1: it records the selectors and flags the processor loaded, which exist nowhere else, and returns by restoring `R11` and jumping to `RCX`. Sub-task 6.2 replaces it. |
+| `cpu/syscall_entry.asm` | `SyscallEntry`, the address `IA32_LSTAR` holds. Provisional in sub-task 6.1: it records the selectors and flags the processor loaded, which exist nowhere else, and returns by restoring `R11` and jumping to `RCX`. Sub-task 6.7 replaces it. |
 | `include/oxys/syscall.h` | The named bits of `RFLAGS`, `SYSCALL_FLAG_MASK` composed from them, and the interface by which the configuration is read back from the processor and asserted. |
 | `include/oxys/msr.h` | The numbers of the model-specific registers the kernel uses, the `SCE` bit of `IA32_EFER`, and `ReadMsr` and `WriteMsr`. |
 | `mm/heap.c` | The kernel heap. `KernelAllocate`, `KernelAllocateZeroed` and `KernelFree`. |
@@ -128,7 +128,7 @@ Full citations are held in [`../docs/project/REFERENCES.md`](../docs/project/REF
    there is a machine whose image size matters; `test/README.md` records the
    consequences.
 4. The frame allocator is not yet safe against concurrent access; from sub-task
-   6.8 its bitmap and search hint require a spinlock. Nothing here is yet safe
+   6.13 its bitmap and search hint require a spinlock. Nothing here is yet safe
    against concurrent access. Every structure
    introduced from Phase 2 onward must record its locking discipline in its
    defining file's header, as `docs/design/ARCHITECTURE.md`, Section 1, requires.

@@ -132,7 +132,7 @@ say so is worse than one that is merely coarse, because the error is invisible
 in every individual measurement and present in every one.
 
 One thousand hertz was chosen because a millisecond is the natural unit for the
-delays a device driver requires and for the scheduling quantum of sub-task 6.10,
+delays a device driver requires and for the scheduling quantum of sub-task 6.15,
 and because the resulting interrupt load — one interrupt per millisecond — is of
 no consequence to throughput.
 
@@ -161,7 +161,7 @@ divisor took effect, and Section 7 describes the use the self-test makes of it.
 | UEFI runtime services | 12.6 | Time and date by firmware call, upon the UEFI boot path. |
 
 The interval timer is retired as an interrupt source when the I/O APIC
-supersedes the 8259A in sub-task 6.7. It is likely to be retained until then as
+supersedes the 8259A in sub-task 6.12. It is likely to be retained until then as
 the calibration reference for the sources that replace it, which is the usual
 arrangement and the reason the counter-reading interface of Section 5 is exposed
 rather than kept private.
@@ -212,15 +212,15 @@ Under QEMU, at the completion of the self-test:
 
 1. The tick counter is unsynchronised. A 64-bit aligned access is not torn upon
    x86_64, so a reader observes either the old value or the new; from sub-task
-   6.8 a reader upon another processor will additionally require the read to be
+   6.13 a reader upon another processor will additionally require the read to be
    ordered, which the `volatile` qualifier does not by itself guarantee.
 2. `PitWaitTicks` is a busy wait. It occupies the processor entirely and cannot
    be used once there is anything else for the processor to do. The sleeping wait
-   belongs to the scheduler of sub-task 6.10.
+   belongs to the scheduler of sub-task 6.15.
 3. There is no accounting of a tick that was missed. Were interrupts masked
    across a period longer than the tick interval, the ticks falling within it
    would simply not be counted and the kernel's notion of elapsed time would lag
    with no record of the fact. The counter's own value could in principle be used
    to detect this, and is not.
-4. The timer is a single device and cannot serve several processors. Sub-task 6.7
+4. The timer is a single device and cannot serve several processors. Sub-task 6.12
    introduces the per-processor Local APIC timer for that purpose.

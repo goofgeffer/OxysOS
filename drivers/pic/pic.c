@@ -61,7 +61,7 @@
  *
  * Concurrency. The mask registers and the routing table are unsynchronised. Until
  * the interrupt flag is set there is one flow of control and the question does
- * not arise; from sub-task 6.8 the read-modify-write of a mask register and the
+ * not arise; from sub-task 6.13 the read-modify-write of a mask register and the
  * registration of a handler both require the spinlock governing this device,
  * since an interrupt handler and an application processor may enter either.
  */
@@ -421,7 +421,7 @@ void PicDisable(void)
     /*
      * The device is retired, not merely quiescent, so the flag that governs the
      * report is cleared with it. Were it left set, PicReport would continue to
-     * describe a controller that is remapped and claimed after sub-task 6.7 had
+     * describe a controller that is remapped and claimed after sub-task 6.12 had
      * superseded it, which is precisely the sort of stale diagnostic that sends
      * an investigation in the wrong direction.
      */

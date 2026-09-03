@@ -118,7 +118,7 @@ void TssInitialise(void);
 /*
  * Sets the stack the processor loads upon a transfer to privilege level 0.
  *
- * There is one stack until sub-task 6.4, there being one thread of control. From
+ * There is one stack until sub-task 6.9, there being one thread of control. From
  * that point each thread has a kernel stack of its own and the scheduler sets
  * this field as part of every switch: the field says where the *next* entry to
  * the kernel will place its frame, so a stale value would deliver a system call

@@ -16,7 +16,7 @@
  *     load and store the table register, and the format of their operand.
  *
  * Concurrency. The table is loaded once per processor. Each application
- * processor started in sub-task 6.9 must execute LIDT for itself, since IDTR is
+ * processor started in sub-task 6.14 must execute LIDT for itself, since IDTR is
  * a per-processor register, but they may all reference this one table.
  */
 

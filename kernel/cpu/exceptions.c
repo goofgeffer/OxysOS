@@ -21,7 +21,7 @@
  *   - Intel SDM, Volume 3A, Section 2.5: the control registers reported below.
  *
  * Concurrency. These handlers write to the shared output devices without a lock.
- * From sub-task 6.8 a fault taken simultaneously upon two processors would
+ * From sub-task 6.13 a fault taken simultaneously upon two processors would
  * interleave two reports; the diagnostic path will require a lock of its own,
  * one that a handler may take even when the general kernel lock is held.
  */

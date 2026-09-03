@@ -55,10 +55,10 @@ objective rather than an unreasonable one.
 **Its style of graphical environment.** A compositing window system serving
 client processes through a protocol of its own, with a stacking window manager
 above it, is the style of graphical environment Oxys-OS intends. The sub-tasks
-of Phase 9 in [`PLAN.md`](PLAN.md) — the compositing surface abstraction, the
-stacking window manager, the client protocol by which user processes create and
-draw windows — describe that style, and it is the style this inspiration
-concerns.
+of Phases 6 and 9 in [`PLAN.md`](PLAN.md) — the compositing surface abstraction
+of sub-task 6.6, and the stacking window manager and client protocol of
+sub-tasks 9.1 and 9.2 — describe that style, and it is the style this
+inspiration concerns.
 
 **What is not taken.** The theme of ToaruOS is not taken. Its visual identity —
 its palette, its decorations, its iconography, its naming, its presentation — is
@@ -129,12 +129,12 @@ it produced. A thing is written here, from nothing, by this project.
 
 ## 6. Limitations of this document
 
-This document states intentions concerning phases that have not been begun.
-Phase 9 is the phase both graphical inspirations concern, and no sub-task of it
-is implemented; nothing here should be read as a description of behaviour that
-exists. When Phase 9 is reached, what is actually built is recorded in its own
-document under [`../design/`](../design/), and this document is revised to
-record how much of the intention survived contact with the work.
+This document states intentions concerning work that has not been begun. The
+graphical inspirations concern sub-tasks 6.2 to 6.6 and the whole of Phase 9,
+and none of those is implemented; nothing here should be read as a description
+of behaviour that exists. When they are reached, what is actually built is
+recorded in its own document under [`../design/`](../design/), and this document
+is revised to record how much of the intention survived contact with the work.
 
 The characterisations of the three systems above are stated in general terms
 deliberately. This project cites specifications for its assertions about

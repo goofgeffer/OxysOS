@@ -45,7 +45,7 @@
  * Concurrency. The tick counter is written by the interrupt handler and read by
  * ordinary kernel code. A 64-bit aligned access is not torn upon x86_64, so a
  * reader observes either the old value or the new and never a mixture, and no
- * lock is required. From sub-task 6.8 a reader upon another processor will
+ * lock is required. From sub-task 6.13 a reader upon another processor will
  * additionally require the compiler and the processor to be prevented from
  * reordering the read, which the volatile qualifier alone does not guarantee.
  */
@@ -98,7 +98,7 @@ static bool PitRunning;
  * The handler does nothing but count. That is deliberate: it runs with the
  * interrupt flag clear, at the highest priority the controller offers, and every
  * instruction executed within it delays every other interrupt in the machine.
- * The scheduling decision that sub-task 6.10 will take upon each tick is
+ * The scheduling decision that sub-task 6.15 will take upon each tick is
  * expressed as work performed elsewhere, not as work performed here.
  *
  * The end-of-interrupt is not signalled here; the routing layer of

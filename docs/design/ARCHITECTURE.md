@@ -42,7 +42,7 @@ than as later additions, in accordance with `PROJECT_GUIDELINES.md`, Section 5:
 | `drivers/` | Device drivers, one subdirectory per device class. | Phase 1 |
 | `libc/` | The minimal C library linked into user programs. | Phase 7 |
 | `userland/` | User programs: the utilities and the shell. | Phase 7 |
-| `graphics/` | The framebuffer, the drawing primitives and the window manager. | Phase 9 |
+| `graphics/` | The framebuffer, the drawing primitives, the font and the compositing surface. | Phase 6 |
 | `crypto/` | The random-number generator, the hash function and the symmetric cipher. | Phase 10 |
 | `net/` | The network protocol stack. | Phase 11 |
 | `uefi/` | The UEFI application entry point and the UEFI handoff path. | Phase 12 |
@@ -77,7 +77,7 @@ the following translation units.
 | `kernel/cpu/idt.c` | The interrupt descriptor table: its storage, the installation of a gate, the assignment of an interrupt stack table entry to a gate, and the loading of the table. |
 | `kernel/cpu/tss.c` | The task state segment: the stacks the processor loads when it needs one it can trust, its descriptor within the global descriptor table, and the loading of the task register. |
 | `kernel/cpu/syscall.c` | The configuration of the fast system-call mechanism: `IA32_STAR`, `IA32_LSTAR`, `IA32_FMASK` and the enabling bit of `IA32_EFER`. |
-| `kernel/cpu/syscall_entry.asm` | The entry point `IA32_LSTAR` names. Provisional in sub-task 6.1; replaced by the dispatch path of sub-task 6.2. |
+| `kernel/cpu/syscall_entry.asm` | The entry point `IA32_LSTAR` names. Provisional in sub-task 6.1; replaced by the dispatch path of sub-task 6.7. |
 | `kernel/test/volume.c` | The test fixture: two block devices backed by memory, and an EXT2 volume composed within them. |
 | `kernel/test/verify_memory.c` | The self-tests of the frame allocator, the paging hierarchy, the allocators, reference counting, copy-on-write and address spaces. |
 | `kernel/test/verify_interrupts.c` | The self-tests of the descriptor table, the stubs and their trap frame, the dispatcher and the exception handlers. |
@@ -125,7 +125,7 @@ Phase 1  Bootstrapping
                                             Phase 5  EXT2 filesystem
                                                      |
                                                      v
-                    Phase 6  System calls, processes, SMP
+                Phase 6  Graphics, system calls, processes, SMP
                                                      |
                                                      v
                             Phase 7  Userland and C library
@@ -135,7 +135,7 @@ Phase 1  Bootstrapping
                                                      |
                           +--------------------------+--------------+
                           v                          v              v
-                  Phase 9  GUI            Phase 10  Crypto   Phase 11  Networking
+              Phase 9  Desktop           Phase 10  Crypto   Phase 11  Networking
                           |                          |              |
                           +--------------------------+--------------+
                                                      v
@@ -161,8 +161,9 @@ the first that a person operates. Phase 4 supplied the devices beneath a
 filesystem and Phase 5 the filesystem itself, which sub-task 5.8 completed by
 mounting an EXT2 volume through a virtual filesystem layer. Sub-task 6.1 has
 since established the apparatus a privilege transition is performed out of, and
-exercised it; work continues at sub-task 6.2, whose system calls are the
-operations of that layer with a user's arguments copied in.
+exercised it; work continues at sub-task 6.2, which acquires the linear
+framebuffer the boot loader can supply, and thence to sub-task 6.7, whose system
+calls are the operations of that layer with a user's arguments copied in.
 
 ## 5. Privilege and address-space model
 
@@ -176,7 +177,7 @@ descriptors and the order the processor's own arithmetic imposes upon them, the
 task state segment holding the stacks the processor loads when it needs one it
 can trust, and the three registers that configure `SYSCALL` — was established by
 sub-task 6.1 and is recorded in `PRIVILEGE.md`. Everything above privilege level
-0 remains prospective until sub-task 6.5: the apparatus stands and has been
+0 remains prospective until sub-task 6.10: the apparatus stands and has been
 exercised, but no program yet runs in it.
 
 ## 6. Diagnostic policy

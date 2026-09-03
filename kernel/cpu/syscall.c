@@ -20,11 +20,11 @@
  * that the transition is *configured*: that the processor knows which
  * descriptors to load, where to transfer, and what to clear from the flags. The
  * entry path, the dispatch table and the validation of a user's arguments are
- * sub-task 6.2, and the entry point installed here is a placeholder that
- * sub-task 6.2 replaces; the reasons it is shaped as it is are recorded in
+ * sub-task 6.7, and the entry point installed here is a placeholder that
+ * sub-task 6.7 replaces; the reasons it is shaped as it is are recorded in
  * kernel/cpu/syscall_entry.asm.
  *
- * Concurrency. Every register written here is per-processor. Sub-task 6.9 must
+ * Concurrency. Every register written here is per-processor. Sub-task 6.14 must
  * repeat this configuration upon each application processor as it is brought up,
  * with the same values; a processor that entered user mode without it would find
  * SYSCALL an invalid opcode.

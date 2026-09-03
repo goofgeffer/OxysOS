@@ -27,7 +27,7 @@ permission and the whole of physical memory at `0xFFFF800000000000`; a kernel
 arena and a slab heap serve allocations of arbitrary size; every frame carries a
 reference count and returns to the allocator only upon its last release; and an
 address space may be created, cloned by the copy-on-write discipline, activated
-and destroyed. The substrate `fork()` is built upon in sub-task 6.6 is therefore
+and destroyed. The substrate `fork()` is built upon in sub-task 6.11 is therefore
 complete. See [`../design/MEMORY-LAYOUT.md`](../design/MEMORY-LAYOUT.md).
 
 **Phase 3 is complete.** The interrupt descriptor table is loaded; a stub for
@@ -76,9 +76,13 @@ beyond the segment limit, which is what denies every port to user mode.
 set. Both the interrupt stack table and the transition itself are exercised —
 `SYSCALL` being executable from privilege level 0, where it raises no privilege
 but performs every other part of the transition — so the mechanism is proved with
-no user program in existence. The next work is sub-task 6.2, whose system calls
-are the operations of the Phase 5 filesystem layer with a user's arguments copied
-in. See [`../design/PRIVILEGE.md`](../design/PRIVILEGE.md).
+no user program in existence. The next work is sub-task 6.2, the linear
+framebuffer, and the drawing that stands upon it through sub-task 6.6 — moved
+here from Phase 9 because none of it needs a process, and because every phase
+after it reports through the console it provides. The system calls follow at
+sub-task 6.7, and are the operations of the Phase 5 filesystem layer with a
+user's arguments copied in. See
+[`../design/PRIVILEGE.md`](../design/PRIVILEGE.md).
 
 **The testing arrangement**, which is not a phase and governs every one of them:
 there is no test harness and there will be none before Phase 7, so the kernel
@@ -194,29 +198,61 @@ documentation, `Documentation/filesystems/ext2.rst`.
 
 ---
 
-## Phase 6 — System Calls, Process Management and Symmetric Multi-Processing
+## Phase 6 — Graphics, System Calls, Process Management and Symmetric Multi-Processing
 
-**Objective**: Execute user-mode programs, schedule them across multiple
-processors, and expose kernel services by system call.
+**Objective**: Present a graphical display, execute user-mode programs, schedule
+them across multiple processors, and expose kernel services by system call.
 
 **Specifications**: Intel SDM Volume 3A, Chapters 5, 8 and 11, and Volume 2B
 (`SYSCALL`/`SYSRET`); System V ABI for AMD64; Intel MultiProcessor
-Specification 1.4; ACPI Specification 6.5 (MADT).
+Specification 1.4; ACPI Specification 6.5 (MADT); Multiboot2 Specification,
+Section 3.6.12 (framebuffer information tag); VESA BIOS Extensions 3.0.
 
 - [x] 6.1 Install the GDT and TSS required for privilege transition; configure IA32_STAR, IA32_LSTAR and IA32_FMASK. *(The kernel GDT and its null, code and data descriptors were established early, in Phase 3; what remained was the user-mode descriptors, the task state segment and the system-call MSRs. Designed in `docs/design/PRIVILEGE.md`.)*
-- [ ] 6.2 Implement the `SYSCALL` entry path, the system-call dispatch table and argument validation.
-- [ ] 6.3 Implement the ELF64 loader for statically linked executables.
-- [ ] 6.4 Define the process control block, the address-space descriptor and the thread structure.
-- [ ] 6.5 Implement context switching and the initial transition to user mode via `IRETQ`.
-- [ ] 6.6 Implement `fork()` upon the Phase 2 copy-on-write substrate, together with `execve()`, `exit()` and `wait()`.
-- [ ] 6.7 Parse the ACPI MADT; initialise the Local APIC and the I/O APIC; retire the 8259A PIC.
-- [ ] 6.8 Implement spinlocks, per-CPU data areas and inter-processor interrupts, including TLB shootdown. *(Ordered before the bring-up that needs them; see the note below.)*
-- [ ] 6.9 Implement application-processor bring-up by INIT-SIPI-SIPI and a real-mode trampoline.
-- [ ] 6.10 Implement a multiprocessor-aware round-robin scheduler with per-CPU run queues and processor affinity.
+- [ ] 6.2 Request a linear framebuffer by the Multiboot2 framebuffer tag and map it into kernel space.
+- [ ] 6.3 Implement 2D primitives: pixel, line, rectangle, blit and clipping.
+- [ ] 6.4 Implement a bitmap font renderer, and a graphical console above it that the diagnostic path may write to.
+- [ ] 6.5 Implement a PS/2 mouse driver upon the second device port of the 8042, and a cursor.
+- [ ] 6.6 Implement a compositing surface abstraction and double buffering.
+- [ ] 6.7 Implement the `SYSCALL` entry path, the system-call dispatch table and argument validation.
+- [ ] 6.8 Implement the ELF64 loader for statically linked executables.
+- [ ] 6.9 Define the process control block, the address-space descriptor and the thread structure.
+- [ ] 6.10 Implement context switching and the initial transition to user mode via `IRETQ`.
+- [ ] 6.11 Implement `fork()` upon the Phase 2 copy-on-write substrate, together with `execve()`, `exit()` and `wait()`.
+- [ ] 6.12 Parse the ACPI MADT; initialise the Local APIC and the I/O APIC; retire the 8259A PIC.
+- [ ] 6.13 Implement spinlocks, per-CPU data areas and inter-processor interrupts, including TLB shootdown. *(Ordered before the bring-up that needs them; see the note below.)*
+- [ ] 6.14 Implement application-processor bring-up by INIT-SIPI-SIPI and a real-mode trampoline.
+- [ ] 6.15 Implement a multiprocessor-aware round-robin scheduler with per-CPU run queues and processor affinity.
 
-**Why 6.8 precedes 6.9.** These two stood in the opposite order until
-2026-09-03, and the order was wrong. Sub-task 6.9 starts processors; sub-task
-6.8 supplies the locks without which nothing they touch is safe. Every shared
+**Why 6.2 to 6.6 are here.** The framebuffer and the drawing above it were
+sub-tasks 9.1 to 9.5 until 2026-09-03, and `PROJECT_GUIDELINES.md`, Section 5,
+placed the whole of the graphical work after the shell. They are moved here at
+the project owner's decision, and the split is along a real line rather than an
+arbitrary one: **nothing in 6.2 to 6.6 depends upon a process existing.** A
+framebuffer is memory the boot loader describes and this kernel maps; primitives,
+a font and a compositing surface are arithmetic upon that memory; and a mouse is
+another device upon the 8042 controller, whose second port the keyboard driver of
+sub-task 3.7 already leaves alone. Every one of them is written, exercised and
+asserted with the machinery Phases 2 to 5 already provide.
+
+What genuinely does need processes is the half that stays in Phase 9: a window
+manager has nothing to manage, and a client protocol has no client, until there
+is something to run. That division is why this is a split and not a wholesale
+reordering.
+
+Two things are gained and one is given up. The diagnostic path acquires a console
+that is not eighty by twenty-five characters of text, and every phase from here
+to the end reports through it; and the choice between the VESA path and the UEFI
+Graphics Output Protocol is forced now, while Phase 12 can still be shaped around
+it, rather than in Phase 9 when it can no longer be. What is given up is that the
+surface abstraction of sub-task 6.6 is designed before any user-mode client
+exists to design it against, so its interface is a judgement rather than a
+response. That is recorded here so that the judgement is revisited in sub-task
+9.2 and not merely inherited.
+
+**Why 6.13 precedes 6.14.** These two stood in the opposite order until
+2026-09-03, and the order was wrong. Sub-task 6.14 starts processors; sub-task
+6.13 supplies the locks without which nothing they touch is safe. Every shared
 structure this kernel has — the frame allocator's bitmap and search hint, the
 heap, the buffer cache, the mount and node tables of the filesystem layer, the
 interrupt dispatch table — is presently unsynchronised, and each says so in its
@@ -267,22 +303,39 @@ condition it exists for has not yet arrived.
 
 ---
 
-## Phase 9 — Graphical User Interface
+## Phase 9 — The Desktop, its System Services and its Configuration
 
-**Objective**: Provide a graphical display and a window system.
+**Objective**: Build a usable desktop upon the graphics of Phase 6: the window
+system that arranges it, the long-lived processes that maintain it, the
+configuration those processes read, and the applications a person operates it
+with.
 
-**Specifications**: VESA BIOS Extensions 3.0; UEFI Specification 2.10,
-Section 12.9 (Graphics Output Protocol); Multiboot2 Specification, Section 3.6.12
-(framebuffer information tag).
+**Specifications**: IEEE Std 1003.1-2017 (process lifetime, signals and the
+descriptors a service inherits); System V ABI for AMD64; UEFI Specification 2.10,
+Section 12.9 (Graphics Output Protocol), where Phase 12 supplies the framebuffer
+in place of Phase 6.
 
-- [ ] 9.1 Request a linear framebuffer by the Multiboot2 framebuffer tag and map it into kernel space.
-- [ ] 9.2 Implement 2D primitives: pixel, line, rectangle, blit and clipping.
-- [ ] 9.3 Implement a bitmap font renderer.
-- [ ] 9.4 Implement a PS/2 mouse driver and a cursor.
-- [ ] 9.5 Implement a compositing surface abstraction and double buffering.
-- [ ] 9.6 Implement a stacking window manager with focus and event routing.
-- [ ] 9.7 Implement the client protocol by which user processes create and draw windows.
-- [ ] 9.8 Implement demonstration applications: a terminal emulator window and a clock.
+Phase 6 supplied the framebuffer, the primitives, the font, the pointer and the
+compositing surface — everything that can be built without a process to own it.
+What remains is everything that cannot, which is why this phase follows the
+shell and not the framebuffer.
+
+- [ ] 9.1 Implement a stacking window manager with focus and event routing.
+- [ ] 9.2 Implement the client protocol by which user processes create, draw and receive events upon windows. *(The surface interface of sub-task 6.6 is revisited here against its first real client, and revised if it does not survive one.)*
+- [ ] 9.3 Implement `init`: the first user process, the supervision of the services below it, and the orderly shutdown of both.
+- [ ] 9.4 Define the system configuration format, its parser, and the `/etc` hierarchy the services and the desktop read at start.
+- [ ] 9.5 Implement the session: the desktop root, the panel, the launcher, and the ownership of the display that decides who may draw upon it.
+- [ ] 9.6 Implement a terminal emulator window hosting the Phase 8 shell.
+- [ ] 9.7 Implement the utilities the desktop is not usable without: a file manager, a text viewer and a clock.
+- [ ] 9.8 Implement the settings application, by which the configuration of sub-task 9.4 is edited rather than hand-written.
+
+**What this phase is now.** Until 2026-09-03 this was the whole of the graphical
+work, from the framebuffer upward. Its first five sub-tasks were moved to Phase 6
+at the project owner's decision, upon the division recorded there: what needs no
+process was brought forward, and what does was left here. The phase is therefore
+no longer "graphics" — it is the desktop as a thing a person uses, and the
+system processes and configuration without which a window system is a
+demonstration rather than an environment.
 
 ---
 
@@ -375,7 +428,8 @@ copies of an argument do not agree with each other for long.
 
 | Date | Phase | Change | Commit | Design |
 | ---- | ----- | ------ | ------ | ------ |
-| 2026-09-03 | Phase 6 | Sub-tasks 6.8 and 6.9 exchanged, so that spinlocks and per-CPU data precede the application-processor bring-up rather than following it. In the old order a milestone started processors against a kernel whose every shared structure was unsynchronised, and could be neither demonstrated nor asserted. Every reference to either number, in code and documentation alike, updated with it. | *(this change)* | [`PLAN.md`](PLAN.md), Phase 6 |
+| 2026-09-03 | Phases 6, 9 | Phase 9 split at the project owner's decision. Its first five sub-tasks — the framebuffer, the primitives, the font, the mouse and the compositing surface — become sub-tasks 6.2 to 6.6, none of them needing a process to exist; the window manager, the client protocol and the desktop services they support remain in Phase 9, which is now the desktop rather than graphics. Old 6.2 to 6.10 renumbered to 6.7 to 6.15, and every reference across 35 files with them. `PROJECT_GUIDELINES.md` §5 amended accordingly. | *(this change)* | [`PLAN.md`](PLAN.md), Phases 6 and 9 |
+| 2026-09-03 | Phase 6 | Sub-tasks 6.8 and 6.9 exchanged — their numbers that day; they are 6.13 and 6.14 since the renumbering above — so that spinlocks and per-CPU data precede the application-processor bring-up rather than following it. In the old order a milestone started processors against a kernel whose every shared structure was unsynchronised, and could be neither demonstrated nor asserted. Every reference to either number, in code and documentation alike, updated with it. | `c3befd8` | [`PLAN.md`](PLAN.md), Phase 6 |
 | 2026-09-03 | All | The boot-time self-tests moved out of `kernel.c` into `kernel/test/`, one file per subsystem. `kernel.c` fell from 9,050 lines to 708. `make verify` now fails when a self-test reports a failure, which it previously could not see. This revision history rewritten as an index rather than a third account of each change. | `8e778e2` | [`../../kernel/test/README.md`](../../kernel/test/README.md), [`TESTING.md`](TESTING.md) §1 |
 | 2026-09-03 | Phase 6 | Sub-task 6.1: the apparatus of a privilege transition. User-mode descriptors ordered by the arithmetic `SYSCALL` and `SYSRET` derive their selectors by; a task state segment with a stack for the double fault; `IA32_STAR`, `IA32_LSTAR` and `IA32_FMASK`. The interrupt stack table and the transition are exercised, not merely inspected. | `1903603` | [`../design/PRIVILEGE.md`](../design/PRIVILEGE.md) |
 | 2026-09-02 | Phase 5 | Sub-task 5.8: the virtual filesystem layer, and an EXT2 root volume mounted through it. A mount is found through the node it covers and never through a path prefix; a file reached twice is one node; a volume opened for writing is marked unclean before anything else is written to it. | `f83f498` | [`../storage/VFS.md`](../storage/VFS.md) |

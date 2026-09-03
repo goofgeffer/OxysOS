@@ -27,7 +27,7 @@
  * because every manual uses it; nothing here switches a task.
  *
  * Concurrency. There is one segment because there is one processor. From
- * sub-task 6.9 each processor requires a segment of its own, with its own stacks
+ * sub-task 6.14 each processor requires a segment of its own, with its own stacks
  * and its own descriptor, because RSP0 names the stack of whatever is running
  * upon *that* processor; a shared segment would deliver two system calls upon
  * one stack. The task register is per-processor already, so what must be
@@ -42,7 +42,7 @@
  * The segment itself.
  *
  * It is not const: the processor reads it, and this kernel writes RSP0 at every
- * privilege transition from sub-task 6.4. It is aligned so that no field crosses
+ * privilege transition from sub-task 6.9. It is aligned so that no field crosses
  * a cache line unnecessarily, the processor reading RSP0 upon every entry from
  * user mode.
  */
@@ -56,7 +56,7 @@ static TaskStateSegment Tss __attribute__((aligned(16)));
  * change: the processor holds it in a structure it reads without asking.
  *
  * There is no guard page beneath it. The kernel arena of sub-task 2.5 could
- * supply one, and sub-task 6.4 will need to when each thread has a stack of its
+ * supply one, and sub-task 6.9 will need to when each thread has a stack of its
  * own and the stacks are numerous enough that an overflow becomes likely; until
  * then an overflow runs into the .bss below, which is the double-fault stack,
  * and the double fault that results is delivered upon a stack of its own and is

@@ -39,7 +39,7 @@
  * The self-test of the privilege-transition apparatus, sub-task 6.1.
  *
  * Nothing here transfers to privilege level 3: there is no user mapping and no
- * program to put in it until sub-task 6.5. What is asserted is that every
+ * program to put in it until sub-task 6.10. What is asserted is that every
  * structure the processor will consult when it does is present, well formed, and
  * says what this kernel believes it says.
  *

@@ -192,7 +192,7 @@ reads the other's index without modifying it. The event is written *before* the
 write index is advanced, so a consumer that observes the advance is guaranteed a
 complete event beneath it.
 
-From sub-task 6.8, with several consumers possible, the consumer's side requires
+From sub-task 6.13, with several consumers possible, the consumer's side requires
 the spinlock governing this device. The producer's side will not: there is one
 keyboard, and therefore one producer.
 
@@ -341,14 +341,14 @@ At the completion of the self-test under QEMU:
    Phase 8, which is the first thing that will care.
 2. Number lock is not tracked, so the keypad always yields digits. The cursor
    movements it selects require the latch and a second table.
-3. Only the first device port is used. The mouse of sub-task 9.4 occupies the
+3. Only the first device port is used. The mouse of sub-task 6.5 occupies the
    second, which is presently disabled.
 4. The two extended keys that produce characters, the keypad's enter and solidus,
    produce none.
 5. There is no notion of a keyboard interrupt, a line discipline, or echo control.
    Those are properties of a terminal rather than of a keyboard and belong to the
    shell of Phase 8.
-6. The consumer's side of the buffer is unsynchronised; from sub-task 6.8 it
+6. The consumer's side of the buffer is unsynchronised; from sub-task 6.13 it
    requires the spinlock governing this device.
 7. The "fake shift" sequences are not suppressed. The controller emits `E0 2A`
    before, and `E0 AA` after, several extended keys — the keypad's solidus, and
@@ -357,6 +357,6 @@ At the completion of the self-test under QEMU:
    to treat an extended `0x2A` as a shift, which is correct, but then decodes it
    as an ordinary key and emits a `KeyEvent` bearing that scancode, `extended`
    set and no character. A consumer of characters is unaffected, since the event
-   carries none; a consumer that counts key events, such as the window system of
-   sub-task 9.7, would see phantom keys. Suppressing them requires the driver to
+   carries none; a consumer that counts key events, such as the window manager of
+   sub-task 9.1, would see phantom keys. Suppressing them requires the driver to
    recognise the sequence as a whole rather than one code at a time.

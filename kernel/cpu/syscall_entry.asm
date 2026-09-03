@@ -22,7 +22,7 @@
 ;
 ; What this is, and what it is not.
 ;
-; This is a placeholder. Sub-task 6.2 replaces it with the real entry path: one
+; This is a placeholder. Sub-task 6.7 replaces it with the real entry path: one
 ; that exchanges GS with IA32_KERNEL_GS_BASE to find the per-processor data,
 ; switches to the kernel stack the task state segment names, builds a frame,
 ; validates the call number and its arguments, and returns by SYSRET.
@@ -33,7 +33,7 @@
 ; a genuine entry from privilege level 3 would arrive here executing kernel code
 ; upon a user stack — which is why the real path's first act must be to leave
 ; that stack. Nothing enters here from privilege level 3, there being no user
-; program until sub-task 6.5, and the only caller is the self-test of this
+; program until sub-task 6.10, and the only caller is the self-test of this
 ; sub-task, which executes SYSCALL from privilege level 0 where RSP is already
 ; the kernel stack. The pushes below are safe for that caller and for no other.
 ;

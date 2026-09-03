@@ -34,8 +34,8 @@ first transition is attempted, because the failure of any of them is a
 general-protection exception or a reset and not a return code.
 
 This sub-task builds those structures and proves them. It does not run a user
-program — that is sub-task 6.5 — and it does not implement a single system call —
-that is sub-task 6.2. What it establishes is that when those arrive, the machine
+program — that is sub-task 6.10 — and it does not implement a single system call —
+that is sub-task 6.7. What it establishes is that when those arrive, the machine
 underneath them is already known to work:
 
 1. **The descriptors** a transition loads: a 64-bit code segment and a writable
@@ -195,14 +195,14 @@ that nests, which is the ordinary one.
 
 ### 3.3 What is not here yet
 
-There is one segment, because there is one processor. From sub-task 6.9 each
+There is one segment, because there is one processor. From sub-task 6.14 each
 processor requires a segment of its own, with its own stacks and its own
 descriptor, because `rsp0` names the stack of whatever is running upon *that*
 processor and a shared segment would deliver two system calls onto one stack. The
 task register is per-processor already, so what must be duplicated is the storage
 and not the mechanism.
 
-`TssSetKernelStack` exists and is unused. From sub-task 6.4, when each thread has
+`TssSetKernelStack` exists and is unused. From sub-task 6.9, when each thread has
 a kernel stack of its own, the context switch must write `rsp0` at every switch;
 the function is the seam that will be called there.
 
@@ -259,7 +259,7 @@ answer and lose every one of the reasons above.
 
 `SyscallEntry` in `kernel/cpu/syscall_entry.asm` records the selectors and flags
 the processor loaded, increments a counter, restores `RFLAGS` from `R11` and
-jumps to `RCX`. Sub-task 6.2 replaces it entirely. Two of its properties are
+jumps to `RCX`. Sub-task 6.7 replaces it entirely. Two of its properties are
 deliberate and would be defects in the real path:
 
 **It does not switch stacks.** `SYSCALL` leaves `RSP` exactly as the caller had
@@ -268,7 +268,7 @@ reason `IF` must be in the mask. A genuine entry from privilege level 3 would
 arrive here executing kernel code upon a user stack, and the real path's first
 act must be to leave it, by `SWAPGS` to reach the per-processor data and a load
 of the kernel stack from it. Nothing enters here from privilege level 3, there
-being no user program until sub-task 6.5, and the only caller is the self-test,
+being no user program until sub-task 6.10, and the only caller is the self-test,
 which executes `SYSCALL` from privilege level 0 where `RSP` is already a kernel
 stack. The two pushes are safe for that caller and for no other.
 
@@ -392,7 +392,7 @@ compared against the value written into it. The two are different assertions: a
 table whose user descriptors stood in the wrong order would satisfy an assertion
 upon `IA32_STAR` and fail this one, and that failure would otherwise have first
 appeared as a general-protection exception at the first return to user mode in
-sub-task 6.5, a long way from its cause.
+sub-task 6.10, a long way from its cause.
 
 ### 7.5 The transition itself
 
@@ -467,11 +467,11 @@ the table.
 ## 9. Present limitations
 
 1. **The entry point is a placeholder.** It records and returns; it dispatches
-   nothing, validates nothing and switches no stack. Sub-task 6.2 replaces it.
+   nothing, validates nothing and switches no stack. Sub-task 6.7 replaces it.
    See Section 5.
 2. **`IA32_KERNEL_GS_BASE` is not written.** The real entry path needs `SWAPGS`
    to reach the per-processor data it will load the kernel stack from. The
-   register is defined in `msr.h` and used by nothing; sub-task 6.2 writes it.
+   register is defined in `msr.h` and used by nothing; sub-task 6.7 writes it.
 3. **`IA32_CSTAR` is not written.** It is the entry point for `SYSCALL` from
    compatibility mode, which this kernel does not support. A 32-bit program is
    not something this kernel can run at all, so an unwritten `CSTAR` is not a
@@ -479,12 +479,12 @@ the table.
 4. **The kernel stack has no guard page.** An overflow runs into the `.bss`
    below it, which happens to be the double-fault stack, so the overflow is
    caught by the double fault and reported. That is an accident of placement and
-   not a design. Sub-task 6.4, where each thread has a stack of its own and the
+   not a design. Sub-task 6.9, where each thread has a stack of its own and the
    stacks become numerous enough that an overflow becomes likely, must take them
    from the kernel arena of sub-task 2.5 with a guard page beneath each.
 5. **One task state segment, one processor.** See Section 3.3.
 6. **`rsp0` is written once and never updated.** It is correct while there is one
-   kernel stack. From sub-task 6.4 the context switch must write it at every
+   kernel stack. From sub-task 6.9 the context switch must write it at every
    switch; `TssSetKernelStack` exists for that and is presently uncalled.
 7. **Six interrupt stack table entries are unused.** Only the double fault has
    one. The non-maskable interrupt and the machine-check exception are the
@@ -493,5 +493,5 @@ the table.
 8. **`CR4.SMAP` and `CR4.SMEP` are not set.** The `AC` bit is cleared in
    `IA32_FMASK` in anticipation of `SMAP`, but the feature itself is not enabled,
    so a supervisor access to a user page does not presently fault. Enabling them
-   belongs with sub-task 6.5, where the first user mapping exists to be protected
+   belongs with sub-task 6.10, where the first user mapping exists to be protected
    from.

@@ -2,7 +2,7 @@
  * File: kernel/include/oxys/addrspace.h
  * Purpose: Declares the address space, being a paging hierarchy that may be
  *          created, cloned by copy-on-write, activated and destroyed. This is
- *          the substrate upon which fork() is built in sub-task 6.6.
+ *          the substrate upon which fork() is built in sub-task 6.11.
  * Key definitions: AddressSpace, AddressSpaceCreate, AddressSpaceClone,
  *          AddressSpaceDestroy, AddressSpaceSwitch, AddressSpaceMapPage.
  * References:

@@ -106,7 +106,7 @@ header. The corpus is enumerated in
    panic exists before the test harness of Phase 7. Where that is so, the test
    asserts the admitting direction and says that it does.
 3. **Nothing here is safe against concurrent execution.** The fixture is a pair
-   of static arrays and the tests write to them. From sub-task 6.8 the corpus
+   of static arrays and the tests write to them. From sub-task 6.13 the corpus
    must run on one processor, or be given a fixture per processor.
 4. **The fixture is one volume geometry**: 1024-byte blocks, one block group, 32
    inodes. A volume with several groups is exercised only by the probes against

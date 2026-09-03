@@ -51,16 +51,20 @@ of truth for progress. It comprises 13 major phases, ordered by dependency:
 3. **Interrupts, Exceptions & Keyboard Input** — IDT, PIC/APIC, interrupt dispatcher, PS/2 keyboard driver.
 4. **Basic Device Drivers** — Serial (COM1), VGA text mode, ATA PIO, PCI enumeration.
 5. **EXT2 Filesystem** — Superblock, group descriptors, inodes, directories, read/write support, mounting.
-6. **System Calls, Process Management & SMP** — Syscall interface, ELF loader, PCBs, scheduler (MP-aware), context switching, APIC initialisation, CPU bring-up, IPIs, spinlocks.
+6. **Graphics, System Calls, Process Management & SMP** — Linear framebuffer, 2D primitives, bitmap font and graphical console, PS/2 mouse, compositing surface; syscall interface, ELF loader, PCBs, scheduler (MP-aware), context switching, APIC initialisation, spinlocks and IPIs, CPU bring-up.
 7. **Userland & Minimal C Library** — Libc core functions, `malloc`/`free`, syscall wrappers, basic utilities (`ls`, `cat`, `echo`), initial ramdisk.
 8. **Shell** — Command interpreter, built-ins, external program execution, job control.
-9. **GUI (Graphics)** — Framebuffer initialisation (VBE or UEFI GOP), 2D primitives, window manager, keyboard/mouse integration, demo applications.
+9. **The Desktop, its System Services & its Configuration** — Stacking window manager, the client protocol serving user processes, `init` and service supervision, the system configuration format and the `/etc` hierarchy, the session and its panel, terminal emulator, the utilities a desktop requires, and the settings application.
 10. **Cryptography** — PRNG (RDRAND/timing), SHA-256, AES-128/256, user-space API.
 11. **Networking** — Ethernet driver (RTL8139/E1000), ARP, IP, ICMP, UDP, minimal TCP, socket API, utility (`ping`).
 12. **UEFI Transition** — UEFI application entry point, System Table parsing, Boot Services, runtime services, GOP integration, dual-boot (BIOS + UEFI) capability.
 13. **Polish, Optimisation & Final Hardening** — Performance optimisation, security hardening (SMEP, SMAP, KASLR), comprehensive documentation, real-hardware testing, final image.
 
-Each phase shall be broken into atomic, testable sub-tasks. The GUI is explicitly placed after the shell, and UEFI is a dedicated phase before final polish.
+Each phase shall be broken into atomic, testable sub-tasks.
+
+The graphical work is **divided** between Phases 6 and 9, and the division is by dependency and not by preference. What requires no process to exist — the framebuffer the boot loader describes, the primitives, the font and console, the pointer, the compositing surface — belongs to Phase 6, where it also supplies the diagnostic console every later phase reports through. What cannot be built without processes — the window manager, the client protocol, the system services and the desktop they maintain — remains after the shell, in Phase 9. This supersedes the former rule that placed the whole of the GUI after the shell; the reasoning is recorded in `docs/project/PLAN.md` under Phase 6, and was amended by the project owner's decision on 2026-09-03.
+
+UEFI remains a dedicated phase before final polish.
 
 ## 6. Research and Reference Protocol
 - **Permitted Sources**:

@@ -29,7 +29,7 @@
  * circular. A fixed array has no such dependency, and its capacity is a bound on
  * fragmentation rather than on the number of live allocations.
  *
- * Concurrency. Not yet safe against concurrent access. From sub-task 6.8 the
+ * Concurrency. Not yet safe against concurrent access. From sub-task 6.13 the
  * bump pointer and the free list require a spinlock.
  */
 

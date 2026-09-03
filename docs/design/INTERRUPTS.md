@@ -173,7 +173,7 @@ by. See [`PRIVILEGE.md`](PRIVILEGE.md), Section 2.
 A structure that the processor reads directly must remain mapped for as long as
 the processor may read it, and the processor's reads are not visible in the
 source. The interrupt descriptor table, the task state segment of Phase 6 and the
-application processor trampoline of sub-task 6.9 are all of this kind.
+application processor trampoline of sub-task 6.14 are all of this kind.
 
 Sub-task 6.1 met the same lesson from its other side, and it is recorded in
 [`PRIVILEGE.md`](PRIVILEGE.md), Section 6: such a structure must also be
@@ -502,12 +502,12 @@ the mask is honoured.
 
 ### 9.8 Limitations
 
-1. The controller is not disabled in favour of the Local APIC and the I/O APIC until sub-task 6.7. `PicDisable` exists for that purpose and is
+1. The controller is not disabled in favour of the Local APIC and the I/O APIC until sub-task 6.12. `PicDisable` exists for that purpose and is
    not yet called.
 2. Nothing here is safe against concurrent access. The read-modify-write of a
-   mask register is not atomic, and from sub-task 6.8 both it and the
+   mask register is not atomic, and from sub-task 6.13 both it and the
    registration of a handler require the spinlock governing this device.
-3. The routing layer names its interface after the 8259A. When the I/O APIC supersedes it in sub-task 6.7, the device drivers of Phases 3 and 4
+3. The routing layer names its interface after the 8259A. When the I/O APIC supersedes it in sub-task 6.12, the device drivers of Phases 3 and 4
    will require their registration calls to be redirected to the successor.
 
 ## 10. Present limitations

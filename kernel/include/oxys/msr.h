@@ -48,7 +48,7 @@
 /*
  * The segment-base registers. None is written yet; IA32_KERNEL_GS_BASE is what
  * SWAPGS exchanges with GS.base, and is how the system-call entry path of
- * sub-task 6.2 will find the kernel's per-processor data with nothing but a
+ * sub-task 6.7 will find the kernel's per-processor data with nothing but a
  * register the user could not have set.
  */
 #define IA32_FS_BASE        UINT32_C(0xC0000100)

@@ -35,9 +35,9 @@
  * directory by two routes would be matched against one prefix and not the other.
  *
  * Concurrency. This implementation is not yet safe against concurrent access.
- * From sub-task 6.8 the mount table, the node table and the open file table each
+ * From sub-task 6.13 the mount table, the node table and the open file table each
  * require a lock, and a node's reference count must be adjusted atomically. The
- * open file table additionally becomes per-process in sub-task 6.4: a descriptor
+ * open file table additionally becomes per-process in sub-task 6.9: a descriptor
  * is an index into a process's own table, and the description it names is shared
  * between the processes a fork produced. Nothing here assumes otherwise; the
  * table is simply global while there is one thread of control.

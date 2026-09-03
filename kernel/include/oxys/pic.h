@@ -144,7 +144,7 @@ uint64_t PicSpuriousCount(void);
 uint64_t PicUnclaimedCount(void);
 
 /*
- * Masks every line of both controllers. Used in Phase 6, sub-task 6.7, when the
+ * Masks every line of both controllers. Used in Phase 6, sub-task 6.12, when the
  * Local APIC and the I/O APIC supersede this device.
  */
 void PicDisable(void);

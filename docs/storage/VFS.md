@@ -36,7 +36,7 @@ reached both.
 
 This layer supplies the three. It is the last sub-task of Phase 5 because it is
 the one that turns a format into a filesystem, and it is where Phase 6 begins:
-the system calls of sub-task 6.2 are these operations with a user's arguments
+the system calls of sub-task 6.7 are these operations with a user's arguments
 copied in.
 
 ## 2. The shape
@@ -517,7 +517,7 @@ the mount count, so the field is now written as well.
    process and there are none before Phase 6. A relative *symbolic link target*
    is resolved, against the directory holding the link, that directory being
    known.
-2. **The open file table is global.** In sub-task 6.4 it becomes per-process: a
+2. **The open file table is global.** In sub-task 6.9 it becomes per-process: a
    descriptor is an index into a process's own table, and the description it
    names is shared between the processes a fork produced. Nothing here assumes
    otherwise; the table is simply global while there is one thread of control.
@@ -565,6 +565,6 @@ the mount count, so the field is now written as well.
     to write a diagnostic to a file. Only the filesystems' private descriptions —
     a superblock, an inode — are allocated, and those are bounded by these
     tables.
-12. **Nothing here is safe against concurrent access.** From sub-task 6.8 the
+12. **Nothing here is safe against concurrent access.** From sub-task 6.13 the
     mount table, the node table and the open file table each require a lock, and
     a node's reference count must be adjusted atomically.

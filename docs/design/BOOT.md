@@ -56,7 +56,7 @@ Its fields, in the order prescribed by Section 3.1.1, are as follows.
 | 16 | tags | The terminating tag alone: type `0`, flags `0`, size `8` | Section 3.1.3 |
 
 No optional request tags are presently emitted. The framebuffer tag will be
-added in Phase 9, sub-task 9.1.
+added in Phase 6, sub-task 6.2.
 
 ## 3. The machine state at entry
 

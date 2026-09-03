@@ -3,7 +3,7 @@
  * Purpose: Implements the address space: the creation, cloning by copy-on-write,
  *          activation and destruction of a paging hierarchy. Sub-task 2.8, and
  *          the last of the memory-management substrate upon which fork() will be
- *          built in sub-task 6.6.
+ *          built in sub-task 6.11.
  * Key functions: AddressSpaceCreate, AddressSpaceClone, AddressSpaceDestroy,
  *          AddressSpaceSwitch, AddressSpaceCloneStructure, AddressSpaceReleaseStructure.
  * References:
@@ -22,7 +22,7 @@
  *
  * Concurrency. Cloning walks and modifies the source hierarchy, and is therefore
  * not safe against a concurrent fault upon the same address space. From sub-task
- * 6.8 it must be performed under the lock governing the address space, and the
+ * 6.13 it must be performed under the lock governing the address space, and the
  * invalidation performed here must be accompanied by a shootdown to the other
  * processors upon which the source may be active.
  */

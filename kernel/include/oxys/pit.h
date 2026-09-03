@@ -48,7 +48,7 @@
 /*
  * The tick rate the kernel requests. One thousand hertz gives a resolution of
  * one millisecond, which is the natural unit for the delays a device driver
- * requires and for the scheduling quantum of sub-task 6.10, and is low enough
+ * requires and for the scheduling quantum of sub-task 6.15, and is low enough
  * that the interrupt is of no consequence to throughput.
  */
 #define PIT_DEFAULT_FREQUENCY UINT32_C(1000)
@@ -84,7 +84,7 @@ void PitInitialise(uint32_t frequency);
  *
  * The counter is incremented by an interrupt handler and read by ordinary kernel
  * code. A 64-bit aligned read is not torn upon this architecture, so no lock is
- * required to observe a consistent value; from sub-task 6.8 an ordering
+ * required to observe a consistent value; from sub-task 6.13 an ordering
  * guarantee will nevertheless be required of readers upon other processors.
  */
 uint64_t PitTickCount(void);

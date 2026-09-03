@@ -107,7 +107,7 @@ uint64_t SyscallEntryAddress(void);
  * descriptor table whose user descriptors stood in the wrong order would satisfy
  * an assertion upon IA32_STAR and fail here, which is the failure that would
  * otherwise appear as a general-protection exception at the first return to user
- * mode in sub-task 6.5.
+ * mode in sub-task 6.10.
  */
 uint16_t SyscallDerivedKernelCode(void);
 uint16_t SyscallDerivedKernelStack(void);
@@ -119,7 +119,7 @@ uint16_t SyscallDerivedUserStack(void);
  * it has been entered.
  *
  * These exist for the self-test of this sub-task. Nothing executes SYSCALL yet
- * but that test, there being no user program until sub-task 6.5, and the values
+ * but that test, there being no user program until sub-task 6.10, and the values
  * the processor loads can be established in no other way: they are loaded by the
  * instruction and are gone by the time it returns.
  */
