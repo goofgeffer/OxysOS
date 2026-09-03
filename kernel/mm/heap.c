@@ -22,7 +22,7 @@
  * for the 16-byte class is the difference between 6 per cent overhead and 100
  * per cent.
  *
- * Concurrency. Not yet safe against concurrent access. From sub-task 6.9 each
+ * Concurrency. Not yet safe against concurrent access. From sub-task 6.8 each
  * class free list requires a lock, and per-processor caches become worthwhile.
  */
 

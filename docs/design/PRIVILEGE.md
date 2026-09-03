@@ -195,7 +195,7 @@ that nests, which is the ordinary one.
 
 ### 3.3 What is not here yet
 
-There is one segment, because there is one processor. From sub-task 6.8 each
+There is one segment, because there is one processor. From sub-task 6.9 each
 processor requires a segment of its own, with its own stacks and its own
 descriptor, because `rsp0` names the stack of whatever is running upon *that*
 processor and a shared segment would deliver two system calls onto one stack. The

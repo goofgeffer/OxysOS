@@ -565,6 +565,6 @@ the mount count, so the field is now written as well.
     to write a diagnostic to a file. Only the filesystems' private descriptions —
     a superblock, an inode — are allocated, and those are bounded by these
     tables.
-12. **Nothing here is safe against concurrent access.** From sub-task 6.9 the
+12. **Nothing here is safe against concurrent access.** From sub-task 6.8 the
     mount table, the node table and the open file table each require a lock, and
     a node's reference count must be adjusted atomically.

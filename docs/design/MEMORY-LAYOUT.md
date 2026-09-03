@@ -177,7 +177,7 @@ and must be reserved separately by the frame allocator of sub-task 2.2:
 
 The low mebibyte is reserved in its entirety rather than by the map, because it
 contains structures that the map does not describe and that later phases will
-require: the application processor trampoline of sub-task 6.8 must be placed
+require: the application processor trampoline of sub-task 6.9 must be placed
 below 1 MiB, since a processor released from reset begins execution in real mode.
 
 ### 6.2 Why the kernel extent is not derived from the ELF sections tag
@@ -848,7 +848,7 @@ this section's test and that of Section 14.6.
    address space that is not the active one, and needs none: a fault is raised
    only by the processor that is translating through that space.
 3. No shootdown is performed. `INVLPG` invalidates the translation upon the
-   executing processor only; from sub-task 6.9 the other processors holding a
+   executing processor only; from sub-task 6.8 the other processors holding a
    stale entry must be signalled by inter-processor interrupt.
 
 ## 14. Address-space cloning
@@ -988,6 +988,6 @@ the real hierarchy, not by a probe.
    answering what a space maps without walking it. The process control block of
    sub-task 6.4 is where that record belongs.
 3. Cloning is not safe against a concurrent fault upon the same address space.
-   From sub-task 6.9 it must be performed under the lock governing the space, and
+   From sub-task 6.8 it must be performed under the lock governing the space, and
    the invalidation of Section 14.4 accompanied by a shootdown to the other
    processors upon which the source may be active.

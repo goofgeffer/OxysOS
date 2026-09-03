@@ -192,7 +192,7 @@ reads the other's index without modifying it. The event is written *before* the
 write index is advanced, so a consumer that observes the advance is guaranteed a
 complete event beneath it.
 
-From sub-task 6.9, with several consumers possible, the consumer's side requires
+From sub-task 6.8, with several consumers possible, the consumer's side requires
 the spinlock governing this device. The producer's side will not: there is one
 keyboard, and therefore one producer.
 
@@ -348,7 +348,7 @@ At the completion of the self-test under QEMU:
 5. There is no notion of a keyboard interrupt, a line discipline, or echo control.
    Those are properties of a terminal rather than of a keyboard and belong to the
    shell of Phase 8.
-6. The consumer's side of the buffer is unsynchronised; from sub-task 6.9 it
+6. The consumer's side of the buffer is unsynchronised; from sub-task 6.8 it
    requires the spinlock governing this device.
 7. The "fake shift" sequences are not suppressed. The controller emits `E0 2A`
    before, and `E0 AA` after, several extended keys — the keypad's solidus, and

@@ -22,7 +22,7 @@
  * time allocation but no means of removing a particular frame from the middle.
  *
  * Concurrency. This implementation is not yet safe against concurrent access.
- * From sub-task 6.9 the bitmap must be protected by a spinlock, since several
+ * From sub-task 6.8 the bitmap must be protected by a spinlock, since several
  * processors will allocate simultaneously. The single mutable index
  * FrameSearchHint is the other structure that will require protection.
  */

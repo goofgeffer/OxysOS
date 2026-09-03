@@ -38,7 +38,7 @@
  *
  * Concurrency. Nothing here holds state of its own beyond the volume attached to
  * a mount and the inode attached to a node, both of which the layer above
- * governs the lifetime of. The locking that sub-task 6.9 introduces therefore
+ * governs the lifetime of. The locking that sub-task 6.8 introduces therefore
  * belongs in that layer and in `ext2.c`, not here.
  */
 

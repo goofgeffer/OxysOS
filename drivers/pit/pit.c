@@ -45,7 +45,7 @@
  * Concurrency. The tick counter is written by the interrupt handler and read by
  * ordinary kernel code. A 64-bit aligned access is not torn upon x86_64, so a
  * reader observes either the old value or the new and never a mixture, and no
- * lock is required. From sub-task 6.9 a reader upon another processor will
+ * lock is required. From sub-task 6.8 a reader upon another processor will
  * additionally require the compiler and the processor to be prevented from
  * reordering the read, which the volatile qualifier alone does not guarantee.
  */

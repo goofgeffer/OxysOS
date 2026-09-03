@@ -24,7 +24,7 @@
  * sub-task 6.2 replaces; the reasons it is shaped as it is are recorded in
  * kernel/cpu/syscall_entry.asm.
  *
- * Concurrency. Every register written here is per-processor. Sub-task 6.8 must
+ * Concurrency. Every register written here is per-processor. Sub-task 6.9 must
  * repeat this configuration upon each application processor as it is brought up,
  * with the same values; a processor that entered user mode without it would find
  * SYSCALL an invalid opcode.

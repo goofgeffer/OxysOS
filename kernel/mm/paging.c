@@ -20,7 +20,7 @@
  *   - docs/design/MEMORY-LAYOUT.md, Section 8: the design of this hierarchy.
  *
  * Concurrency. This code runs once, before any application processor is started,
- * and requires no synchronisation. From sub-task 6.9, any later modification of
+ * and requires no synchronisation. From sub-task 6.8, any later modification of
  * a mapping shared between processors must be followed by a translation
  * lookaside buffer shootdown by inter-processor interrupt.
  */
@@ -401,7 +401,7 @@ uint64_t PagingDirectMapExtent(void)
  * may have cached. INVLPG is used in preference to reloading CR3 because it
  * discards one entry rather than the whole buffer.
  *
- * From sub-task 6.9 this must be accompanied by a shootdown: other processors
+ * From sub-task 6.8 this must be accompanied by a shootdown: other processors
  * hold their own translation-lookaside buffers, and an entry cached there is not
  * affected by an invalidation performed here.
  */

@@ -52,7 +52,7 @@
  * and a single consumer. The producer advances the write index alone and the
  * consumer the read index alone, and each reads the other's index without
  * modifying it, so the arrangement is correct without a lock upon one processor.
- * From sub-task 6.9, with several consumers possible, the consumer's side
+ * From sub-task 6.8, with several consumers possible, the consumer's side
  * requires the spinlock governing this device; the producer's side does not,
  * there being one keyboard and therefore one producer.
  */

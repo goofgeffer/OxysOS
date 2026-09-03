@@ -22,7 +22,7 @@
  *
  * Concurrency. Cloning walks and modifies the source hierarchy, and is therefore
  * not safe against a concurrent fault upon the same address space. From sub-task
- * 6.9 it must be performed under the lock governing the address space, and the
+ * 6.8 it must be performed under the lock governing the address space, and the
  * invalidation performed here must be accompanied by a shootdown to the other
  * processors upon which the source may be active.
  */

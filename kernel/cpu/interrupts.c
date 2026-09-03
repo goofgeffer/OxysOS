@@ -23,7 +23,7 @@
  *
  * Concurrency. The dispatch table is written during initialisation and read
  * thereafter, which is safe without a lock so long as registration precedes the
- * enabling of interrupts. From sub-task 6.9 a handler registered while other
+ * enabling of interrupts. From sub-task 6.8 a handler registered while other
  * processors are running requires the write to be ordered against their reads.
  */
 

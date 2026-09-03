@@ -61,7 +61,7 @@
  *
  * Concurrency. The mask registers and the routing table are unsynchronised. Until
  * the interrupt flag is set there is one flow of control and the question does
- * not arise; from sub-task 6.9 the read-modify-write of a mask register and the
+ * not arise; from sub-task 6.8 the read-modify-write of a mask register and the
  * registration of a handler both require the spinlock governing this device,
  * since an interrupt handler and an application processor may enter either.
  */

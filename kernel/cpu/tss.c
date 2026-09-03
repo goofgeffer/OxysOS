@@ -27,7 +27,7 @@
  * because every manual uses it; nothing here switches a task.
  *
  * Concurrency. There is one segment because there is one processor. From
- * sub-task 6.8 each processor requires a segment of its own, with its own stacks
+ * sub-task 6.9 each processor requires a segment of its own, with its own stacks
  * and its own descriptor, because RSP0 names the stack of whatever is running
  * upon *that* processor; a shared segment would deliver two system calls upon
  * one stack. The task register is per-processor already, so what must be

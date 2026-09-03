@@ -210,9 +210,30 @@ Specification 1.4; ACPI Specification 6.5 (MADT).
 - [ ] 6.5 Implement context switching and the initial transition to user mode via `IRETQ`.
 - [ ] 6.6 Implement `fork()` upon the Phase 2 copy-on-write substrate, together with `execve()`, `exit()` and `wait()`.
 - [ ] 6.7 Parse the ACPI MADT; initialise the Local APIC and the I/O APIC; retire the 8259A PIC.
-- [ ] 6.8 Implement application-processor bring-up by INIT-SIPI-SIPI and a real-mode trampoline.
-- [ ] 6.9 Implement spinlocks, per-CPU data areas and inter-processor interrupts, including TLB shootdown.
+- [ ] 6.8 Implement spinlocks, per-CPU data areas and inter-processor interrupts, including TLB shootdown. *(Ordered before the bring-up that needs them; see the note below.)*
+- [ ] 6.9 Implement application-processor bring-up by INIT-SIPI-SIPI and a real-mode trampoline.
 - [ ] 6.10 Implement a multiprocessor-aware round-robin scheduler with per-CPU run queues and processor affinity.
+
+**Why 6.8 precedes 6.9.** These two stood in the opposite order until
+2026-09-03, and the order was wrong. Sub-task 6.9 starts processors; sub-task
+6.8 supplies the locks without which nothing they touch is safe. Every shared
+structure this kernel has — the frame allocator's bitmap and search hint, the
+heap, the buffer cache, the mount and node tables of the filesystem layer, the
+interrupt dispatch table — is presently unsynchronised, and each says so in its
+own file's header. Bringing a second processor up before the locks exist would
+produce a milestone that the testing mandate requires to be bootable and
+testable, and that cannot be either: it would either park the new processors
+immediately, in which case nothing is demonstrated, or let them run, in which
+case the machine is corrupt in a way no assertion here would catch.
+
+The reordering costs nothing, because everything in 6.8 can be exercised upon
+one processor. A spinlock's uncontended acquire and release, and the per-CPU
+data area reached through `GS`, are single-processor mechanisms outright. An
+inter-processor interrupt sent to one's own Local APIC is delivered like any
+other, so the shootdown handler may be made to run and the invalidation it
+performs observed — the same device as sub-task 6.1's execution of `SYSCALL`
+from privilege level 0, where the mechanism is exercised in full although the
+condition it exists for has not yet arrived.
 
 ---
 
@@ -354,8 +375,9 @@ copies of an argument do not agree with each other for long.
 
 | Date | Phase | Change | Commit | Design |
 | ---- | ----- | ------ | ------ | ------ |
+| 2026-09-03 | Phase 6 | Sub-tasks 6.8 and 6.9 exchanged, so that spinlocks and per-CPU data precede the application-processor bring-up rather than following it. In the old order a milestone started processors against a kernel whose every shared structure was unsynchronised, and could be neither demonstrated nor asserted. Every reference to either number, in code and documentation alike, updated with it. | *(this change)* | [`PLAN.md`](PLAN.md), Phase 6 |
+| 2026-09-03 | All | The boot-time self-tests moved out of `kernel.c` into `kernel/test/`, one file per subsystem. `kernel.c` fell from 9,050 lines to 708. `make verify` now fails when a self-test reports a failure, which it previously could not see. This revision history rewritten as an index rather than a third account of each change. | `8e778e2` | [`../../kernel/test/README.md`](../../kernel/test/README.md), [`TESTING.md`](TESTING.md) §1 |
 | 2026-09-03 | Phase 6 | Sub-task 6.1: the apparatus of a privilege transition. User-mode descriptors ordered by the arithmetic `SYSCALL` and `SYSRET` derive their selectors by; a task state segment with a stack for the double fault; `IA32_STAR`, `IA32_LSTAR` and `IA32_FMASK`. The interrupt stack table and the transition are exercised, not merely inspected. | `1903603` | [`../design/PRIVILEGE.md`](../design/PRIVILEGE.md) |
-| 2026-09-03 | All | The boot-time self-tests moved out of `kernel.c` into `kernel/test/`, one file per subsystem. `kernel.c` fell from 9,050 lines to 708. `make verify` now fails when a self-test reports a failure, which it previously could not see. This revision history rewritten as an index rather than a third account of each change. | `*(this change)*` | [`../../kernel/test/README.md`](../../kernel/test/README.md), [`TESTING.md`](TESTING.md) §1 |
 | 2026-09-02 | Phase 5 | Sub-task 5.8: the virtual filesystem layer, and an EXT2 root volume mounted through it. A mount is found through the node it covers and never through a path prefix; a file reached twice is one node; a volume opened for writing is marked unclean before anything else is written to it. | `f83f498` | [`../storage/VFS.md`](../storage/VFS.md) |
 | 2026-09-02 | Phase 5 | **A defect in sub-task 5.7 found by `e2fsck`**, not by any assertion this kernel makes. `i_dtime` is overloaded — a deletion time, or the link to the next inode on the orphan list, distinguished by magnitude — so the constant 1 recorded for want of a clock made every freed inode appear orphaned. Now `UINT32_MAX`. | `f83f498` | [`../storage/VFS.md`](../storage/VFS.md) §11.1 |
 | 2026-09-02 | Phase 5 | Sub-task 5.7: names, and the creation of files. Directory entries inserted and removed, link counts maintained on both sides, and an inode freed only with its last name. | `ebc5987` | [`../storage/EXT2.md`](../storage/EXT2.md) |

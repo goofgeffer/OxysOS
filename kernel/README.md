@@ -128,7 +128,7 @@ Full citations are held in [`../docs/project/REFERENCES.md`](../docs/project/REF
    there is a machine whose image size matters; `test/README.md` records the
    consequences.
 4. The frame allocator is not yet safe against concurrent access; from sub-task
-   6.9 its bitmap and search hint require a spinlock. Nothing here is yet safe
+   6.8 its bitmap and search hint require a spinlock. Nothing here is yet safe
    against concurrent access. Every structure
    introduced from Phase 2 onward must record its locking discipline in its
    defining file's header, as `docs/design/ARCHITECTURE.md`, Section 1, requires.
