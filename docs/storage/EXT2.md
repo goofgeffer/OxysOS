@@ -675,6 +675,20 @@ does not announce itself. The cheaper-looking order is the wrong one.
 is made into a buffer which is then marked dirty, so a caller that needs the
 volume consistent upon the medium must call `BufferSync`.
 
+And one rule that is not a discipline so much as a consequence of them:
+**every structure is read before it is written, and only the fields this kernel
+parses are altered within it.** Composing 1024 bytes of superblock from the
+parsed structure would write zeroes over every field this kernel does not
+parse — the journal identifiers, the hash seed, the mount options, the head of
+the orphan list — and would present the volume to the system that made it as
+though those fields had never been set.
+
+The fields `Ext2WriteSuperblock` maintains are accordingly a short list: the two
+free counts, the state, the write time, and — since sub-task 5.8, the mount being
+the only thing that alters it — the mount count. An operation that alters none of
+them writes them all back unchanged, which the read-modify-write makes a no-op
+rather than a risk.
+
 ### 12.2 The bitmaps
 
 One bit stands for each block of a group and each inode of it, **1 meaning used**
@@ -918,6 +932,33 @@ dead file's name.
 
 This was added when the self-test of Section 14.11 asserted that an inode freed
 with its last name could no longer be read, and found that it could.
+
+#### The deletion time may not be a small number
+
+`i_dtime` means two things upon an EXT2 volume, and which of them is meant is
+decided by magnitude alone.
+
+Of an inode that has been freed it is the time of the deletion, which is what it
+is defined as. Of an inode upon the **orphan list** — files whose last name went
+while something still held them open — it is the *number of the next inode in
+that list*, the list being threaded through this field rather than being given a
+structure of its own. A check cannot ask which meaning is intended, so `e2fsck`
+reads a value below `s_inodes_count` as a link and anything above it as a time.
+
+This kernel has no clock and so cannot state when a file was deleted; what it
+must state is *that* it was, which is what a non-zero `i_dtime` means. It
+originally recorded the constant 1, and every inode it had ever freed was
+therefore reported by `e2fsck` as the member of a corrupted orphan list naming
+inode 1 — upon volumes that were in fact intact. The value is now
+`EXT2_DELETION_TIME_UNKNOWN`, which is `UINT32_MAX`: no volume has an inode
+numbered above `s_inodes_count`, so it cannot be read as a link, and it is the
+last second the field can express, which is a defensible way of saying that the
+moment is not known.
+
+It was found in sub-task 5.8, by running `e2fsck` over a volume the filesystem
+layer had created and destroyed files upon. Nothing within this kernel could see
+it: the operation reported success and the volume read back correctly. Only a
+tool that knew what the field meant could tell.
 
 ### 13.7 What is refused
 
@@ -1401,26 +1442,27 @@ requiring the volume to account for itself at the end.
 
 ## 15. Limitations
 
-1. **Nothing is mounted.** The superblock is read, validated and reported; no
-   volume is retained and nothing is opened. Sub-task 5.8 introduces the mount.
+1. **Discharged in sub-task 5.8.** A volume is mounted, retained and opened; see
+   [`VFS.md`](VFS.md). What follows here concerns the format alone.
 2. **The backup superblocks are not consulted.** A volume whose primary
    superblock is damaged is refused, though a copy of it — and of the descriptor
    table — stands in several block groups. Nothing yet falls back upon them.
-3. **A volume is not marked as mounted.** The mount count and the mount time are
-   read and never updated, and the state is not set to record that the volume is
-   in use. A volume this kernel writes therefore does not record that this kernel
-   had it open, so a machine that stopped while writing would leave a volume that
-   `e2fsck` believes was cleanly unmounted. That belongs with the mount of
-   sub-task 5.8, there being nothing yet that mounts.
+3. **The mount time is still not written**, there being no clock. The state and
+   the mount count are: a volume mounted for writing has the bit that says it was
+   cleanly unmounted cleared, and the count raised, before anything else is
+   written to it, and the bit is set again when the mount is withdrawn. See
+   [`VFS.md`](VFS.md), Section 8. `s_mtime` and `s_wtime` are read and never
+   brought up to date, so a check cannot say *when* the volume was last opened,
+   only that it was and how many times.
 4. **Block sizes above 4096 bytes are refused**, and fragments are not
    implemented at all — no EXT2 implementation has ever used them.
 5. **One volume per device.** Partition tables are not read, so a volume must
    begin at the start of its device.
-6. **Nothing is opened, and nothing is mounted.** A file may be created, named,
-   read, written, truncated and destroyed by naming it, but there is no
-   descriptor and no position that advances, and no volume is retained between
-   operations. Both belong to the virtual filesystem layer of sub-task 5.8,
-   which is what remains of this phase.
+6. **Nothing here is opened.** The operations of this document act upon a file
+   by naming it: there is no descriptor and no position that advances. Both are
+   supplied by the layer above, in [`VFS.md`](VFS.md), Section 7; they are
+   deliberately not properties of the format, an open file being a property of
+   the kernel that has the file open.
 7. **The extended fields of a large inode are not read.** Only the first 128
    bytes of an inode are decoded, whatever `s_inode_size` states. The
    nanosecond times and the extended attributes that a 256-byte inode carries
@@ -1429,10 +1471,8 @@ requiring the volume to account for itself at the end.
    implemented by any EXT2, and the operating-system dependent fields hold the
    high halves of the user and group identifiers upon Linux, which this kernel
    has no use for until it has users.
-9. **The bitmaps are not read.** The descriptor states where the block and
-   inode bitmaps of each group begin, and nothing yet looks at them. Until
-   sub-task 5.6 nothing is allocated, so nothing needs to know which blocks are
-   in use; the free counts are read and believed.
+9. **Discharged in sub-task 5.6.** The bitmaps are read, and blocks and inodes
+   are allocated from them and returned to them; see Section 12.2.
 10. **`META_BG` is not implemented.** A volume declaring it is refused as an
    unimplemented incompatible feature, which is the correct treatment: it moves
    the descriptor table, and this kernel would read it from the wrong place.
@@ -1481,12 +1521,21 @@ requiring the volume to account for itself at the end.
 15. **Relative paths are not resolved** from outside, there being no working
    directory to resolve them against until there are processes in Phase 6. A
    relative *symbolic link target* is resolved, against the directory holding
-   the link, that directory being known.
+   the link, that directory being known. The layer above inherits the limitation
+   rather than remedying it; see [`VFS.md`](VFS.md), Section 12.1.
 16. **A read is not cached above the buffer cache**, and there is no read-ahead.
    Each read resolves its block pointers afresh, so reading a large file
    sequentially re-walks the indirect blocks for every block of it. They will be
    in the buffer cache, so the cost is the walk and not the disk; it becomes
    worth addressing when something reads a large file often, which is not before
    Phase 7.
-17. **`i_atime` is not updated by a read.** Nothing is written to a volume at
-   all, so a file this kernel reads does not record that it was read.
+17. **`i_atime` is not updated by a read.** There is no clock to set it from, so
+   a file this kernel reads does not record that it was read. The same holds of
+   `i_mtime` upon a write; see limitation 21.
+
+23. **`s_last_orphan` is neither read nor written**, so this kernel keeps no list
+   of files whose last name has gone while something still holds them open. That
+   is why the layer above refuses to unlink a file that is open rather than
+   keeping it alive until the last descriptor closes; see [`VFS.md`](VFS.md),
+   Section 9.3. The field is preserved across every write, `Ext2WriteSuperblock`
+   reading the superblock before altering the fields this kernel maintains.

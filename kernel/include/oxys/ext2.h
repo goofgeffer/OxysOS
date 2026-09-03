@@ -927,6 +927,28 @@ bool Ext2TruncateFile(BlockDevice *device, Ext2Superblock *superblock, Ext2Inode
                       uint64_t size);
 
 /*
+ * The deletion time recorded when a file is destroyed, this kernel having no
+ * clock it can convert to the seconds since 1970 the field is defined as.
+ *
+ * The value is not arbitrary, because `i_dtime` means two things upon an EXT2
+ * volume. Of an inode that has been freed it is the time of the deletion, which
+ * is what it is defined as; of an inode upon the orphan list — files whose last
+ * name went while something still held them open — it is the *number of the next
+ * inode in that list*, the list being threaded through this field to avoid
+ * adding one. A check cannot ask which meaning is intended and therefore
+ * distinguishes them by magnitude: `e2fsck` reads a value below `s_inodes_count`
+ * as a link and anything above it as a time.
+ *
+ * A small constant is accordingly not a harmless placeholder. Recording 1 here
+ * caused `e2fsck` to report every inode this kernel had freed as the member of a
+ * corrupted orphan list naming inode 1, upon a volume that was in fact intact.
+ * UINT32_MAX cannot be read as a link, no volume having an inode numbered above
+ * `s_inodes_count`; and it is the last second the field can express, which is a
+ * defensible way of saying that the moment is not known.
+ */
+#define EXT2_DELETION_TIME_UNKNOWN UINT32_C(0xFFFFFFFF)
+
+/*
  * The greatest number of links a file may bear, and the reason there is one.
  *
  * i_links_count is sixteen bits, so the count saturates rather than wrapping;

@@ -63,7 +63,7 @@ complementary and neither replaces the other.
 
 ## 3. Present composition
 
-As of the completion of Phase 4, the system comprises
+As of the completion of Phase 5, the system comprises
 the following translation units.
 
 | Unit | Role |
@@ -79,7 +79,9 @@ the following translation units.
 | `kernel/mm/paging.c` | The permanent kernel paging hierarchy: its construction, activation, software translation and copy-on-write fault resolution. |
 | `kernel/mm/addrspace.c` | The address space: its creation, its cloning by the copy-on-write discipline, its activation and its destruction. |
 | `kernel/mm/pmm.c` | The physical frame allocator: a bitmap of every 4 KiB frame below the highest usable address. |
-| `kernel/fs/ext2.c` | The EXT2 volume: the reading, decoding and validation of a superblock, and the geometry derived from it. |
+| `kernel/fs/ext2.c` | The EXT2 volume: the reading, decoding and validation of its structures, the resolution of a path within it, the reading and writing of a file, and the creation and destruction of the names that reach one. |
+| `kernel/fs/vfs.c` | The virtual filesystem layer: the registry of filesystem types, the mount table that joins several volumes into one tree, the node cache that gives one file one identity, the resolution of a path across mount points, and the open file with a position that advances. |
+| `kernel/fs/ext2_vfs.c` | The binding of the EXT2 implementation to that layer: the operations vector, the translation between the format's mode and the layer's neutral node type, and the mark a mount leaves upon a volume it has open. |
 | `kernel/multiboot2.c` | The Multiboot2 parser, reducing the boot loader's structure to the neutral `BootInformation` description. |
 | `kernel/kernel.c` | `KernelMain`, which validates the boot loader handover, initialises the early output devices, presents the identification banner and halts. `KernelPanic`, the unrecoverable-error path. |
 | `drivers/vga/vga.c` | The VGA text-mode display driver: the control characters, the scrolling, the colour attributes, the hardware cursor and the erase limit that bounds a backspace. |
@@ -137,13 +139,17 @@ Phase 3 is installed. The dependency is resolved by implementing the memory
 management structures of sub-tasks 2.1 to 2.6 first, then Phase 3, and finally
 returning to sub-tasks 2.7 and 2.8.
 
-**Status.** Phases 2 and 3 are complete. The dependency
+**Status.** Phases 2 to 5 are complete. The dependency
 described above has been discharged: sub-task 3.4 supplied the fault handler,
 sub-task 2.7 the copy-on-write resolution beneath it, and sub-task 2.8 the
 address-space cloning that creates the shared pages the resolution acts upon.
 Sub-task 3.5 has since remapped the interrupt controllers, so that a device may
 be heard; sub-task 3.6 supplied the first device that speaks; and sub-task 3.7
-the first that a person operates. Work resumes at Phase 4.
+the first that a person operates. Phase 4 supplied the devices beneath a
+filesystem and Phase 5 the filesystem itself, which sub-task 5.8 completed by
+mounting an EXT2 volume through a virtual filesystem layer. Work resumes at
+Phase 6, whose system calls are the operations of that layer with a user's
+arguments copied in.
 
 ## 5. Privilege and address-space model
 

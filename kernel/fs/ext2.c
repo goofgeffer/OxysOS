@@ -2306,6 +2306,20 @@ bool Ext2WriteSuperblock(BlockDevice *device, const Ext2Superblock *superblock)
     Ext2WriteHalf(raw, EXT2_OFFSET_STATE, superblock->state);
     Ext2WriteWord(raw, EXT2_OFFSET_WRITE_TIME, superblock->write_time);
 
+    /*
+     * The mount count is written for the mount of sub-task 5.8, which is the
+     * only thing that alters it: an allocation writes the count back unchanged,
+     * this being one of the fields the parser reads and therefore one the
+     * read-modify-write above preserves rather than invents.
+     *
+     * It matters because it is half of what tells a check that a volume is due
+     * for one. `s_max_mnt_count` states how many mounts may pass between checks
+     * and this states how many have; a kernel that raised the count in memory
+     * and never wrote it would leave every volume it mounted claiming to have
+     * been mounted no times at all.
+     */
+    Ext2WriteHalf(raw, EXT2_OFFSET_MOUNT_COUNT, superblock->mount_count);
+
     return Ext2WriteBytes(device, superblock,
                           EXT2_SUPERBLOCK_OFFSET / superblock->block_size,
                           EXT2_SUPERBLOCK_OFFSET % superblock->block_size,
@@ -4092,7 +4106,7 @@ bool Ext2Unlink(BlockDevice *device, Ext2Superblock *superblock, Ext2Inode *dire
     }
 
     target.size = 0U;
-    target.delete_time = 1U;
+    target.delete_time = EXT2_DELETION_TIME_UNKNOWN;
 
     if (!Ext2WriteInode(device, superblock, &target) ||
         !Ext2FreeInode(device, superblock, target.number, false))
@@ -4161,7 +4175,7 @@ bool Ext2RemoveDirectory(BlockDevice *device, Ext2Superblock *superblock, Ext2In
 
     target.size = 0U;
     target.link_count = 0U;
-    target.delete_time = 1U;
+    target.delete_time = EXT2_DELETION_TIME_UNKNOWN;
 
     if (!Ext2WriteInode(device, superblock, &target) ||
         !Ext2FreeInode(device, superblock, target.number, true))

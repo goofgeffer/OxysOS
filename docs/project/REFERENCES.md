@@ -650,6 +650,46 @@ two tables will meet it.
 
 Used by: `kernel/fs/ext2.c`, `kernel/include/oxys/ext2.h`.
 
+### IEEE Std 1003.1-2017, the Portable Operating System Interface
+The Open Group and IEEE. Technical Standard Base Specifications, Issue 7,
+2018 edition.
+`https://pubs.opengroup.org/onlinepubs/9699919799/`
+
+Sections relied upon: **Section 4.13, Pathname Resolution** — a pathname
+beginning with a slash is resolved from the root directory; "multiple successive
+slashes are considered to be the same as one slash"; each component that is not
+the last "shall be resolved to a directory"; a symbolic link met in the pathname
+"shall be replaced by the contents of the symbolic link"; and an implementation
+shall support at least `SYMLOOP_MAX` links in one resolution, which the standard
+sets at a minimum of 8. **The System Interfaces** volume, `open()`, `read()`,
+`write()`, `lseek()`, `link()`, `unlink()`, `rmdir()`, `mkdir()`, `readlink()`
+and `stat()`: the shape and the outcomes of the operations, so that the system
+calls of Phase 6 map upon this layer without an intervening translation. From
+`lseek()` in particular: the file offset "may be set beyond the end of the
+existing data in the file. If data is later written at this point, subsequent
+reads of data in the gap shall return bytes with the value 0 until data is
+actually written into the gap", which is the hole this kernel already writes.
+And from `open()`: `O_APPEND` places each write at the end of the file "prior to
+each write", which is why an appending write here takes the size and not the
+position.
+
+Used by: `kernel/fs/vfs.c`, `kernel/include/oxys/vfs.h`.
+
+### The UNIX Time-Sharing System
+Ritchie, D. M., and Thompson, K. Communications of the ACM, volume 17, number 7,
+July 1974, pages 365 to 375.
+`https://dsf.berkeley.edu/cs262/unix.pdf`
+
+Section relied upon: **3.4, Removable file systems** — the mount, which "causes
+references to the [mount point] to refer instead to the root directory" of the
+mounted volume, so that "there is virtually no distinction between references to
+files on a removable volume and files on the permanent file system". Consulted
+for the concept and for the statement that the substitution is of a directory by
+a root, which is the design of Section 5 of
+[`../storage/VFS.md`](../storage/VFS.md); the implementation is original.
+
+Used by: `kernel/fs/vfs.c`.
+
 ### GNU GRUB Manual
 Free Software Foundation.
 `https://www.gnu.org/software/grub/manual/grub/grub.html`
@@ -666,6 +706,7 @@ Used by: `boot/grub/grub.cfg`, `Makefile`.
 | PCI Local Bus Specification 3.0 | 4 | Configuration space and device enumeration. |
 | ATA/ATAPI Command Set (ACS-3) | 4 | `IDENTIFY DEVICE`; 28-bit and 48-bit logical block addressing. |
 | Intel SDM, Volume 2B, `SYSCALL` and `SYSRET` | 6 | The fast system-call mechanism. |
+| IEEE Std 1003.1-2017, System Interfaces | 6, 7 | `fork()`, `exec()`, `wait()` and the file-descriptor semantics a fork imposes upon the open file table. |
 | Intel MultiProcessor Specification 1.4 | 6 | Application processor bring-up. |
 | ACPI Specification 6.5 | 6, 12 | The Multiple APIC Description Table; the Root System Description Pointer. |
 | VESA BIOS Extensions 3.0 | 9 | Linear framebuffer modes under legacy BIOS. |

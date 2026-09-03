@@ -58,6 +58,7 @@ complementary, and neither replaces the other.
 | [`BLOCK.md`](storage/BLOCK.md) | The generic block-device layer. | `drivers/block/block.c` |
 | [`BUFFER.md`](storage/BUFFER.md) | The buffer cache. | `drivers/block/buffer.c` |
 | [`EXT2.md`](storage/EXT2.md) | The EXT2 volume: its superblock, its group descriptors, its inodes, its directories, the resolution of a path, the reading and writing of a file, and the creation and destruction of files and directories. | `kernel/fs/ext2.c` |
+| [`VFS.md`](storage/VFS.md) | The virtual filesystem layer: the mount, the node, the open file, and the one tree that several volumes are joined into. | `kernel/fs/vfs.c`, `kernel/fs/ext2_vfs.c` |
 
 ## The form of a document
 

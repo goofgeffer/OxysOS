@@ -310,10 +310,99 @@ Note that breakpoints upon higher-half symbols cannot be serviced until paging
 has been enabled. A breakpoint at `_start`, whose address is physical, is the
 correct point at which to begin an examination of the boot sequence.
 
-## 12. Test record
+## 12. Verification of the virtual filesystem layer
+
+The layer is asserted at every boot against two volumes composed within two
+memory-backed block devices, which is what makes it verifiable upon a machine
+with no disk. The properties asserted, and the silent failure each would catch,
+are tabulated in [`../storage/VFS.md`](../storage/VFS.md), Section 10.
+
+The corroboration must come from a volume built by something else, and it is
+performed with four images and two boots of each.
+
+```sh
+# A volume with a directory, a file within it, a symbolic link, and a regular
+# file for the write probe to act upon. The probe never creates one, so an image
+# without it is left untouched.
+mkdir -p seed/sub
+printf 'corroboration' > seed/hello.txt
+printf 'placeholder'   > seed/oxys-write-test
+printf 'inner'         > seed/sub/inner.txt
+ln -sf sub seed/link
+
+mke2fs -q -t ext2 -b 1024 -L oxys-probe -d seed -F probe.img 16384
+mke2fs -q -t ext2 -b 4096 -L oxys-4k    -d seed -F big.img   16384
+
+qemu-system-x86_64 -machine pc -cpu qemu64 -smp cores=2 -m 512M \
+    -cdrom build/oxys.iso \
+    -drive file=probe.img,format=raw,if=ide,index=0,media=disk \
+    -display none -serial file:probe.log
+```
+
+The default GRUB entry mounts the volume **read-only**; the entry "Oxys-OS (EXT2
+write self-test)" mounts it for writing, performs the probe of Section 12.1, and
+then withdraws it and mounts it afresh read-only.
+
+What is compared, and against what:
+
+| The kernel reports | Compared against |
+| ------------------ | ---------------- |
+| The mount line: the device, the type, the block size and whether it is writable. | `dumpe2fs -h`, for the block size; the GRUB entry, for the writability. |
+| The listing of `/`: an inode number, a type and a name for each entry. | `debugfs -R "ls -l /"` upon the same image, which must agree in every column. |
+| The number of nodes held and descriptors open once the self-test has finished. | Must be exactly one and zero: the root node the mount holds, and nothing else. |
+
+And what is examined upon the image afterwards:
+
+| Examined | Expected |
+| -------- | -------- |
+| `dumpe2fs -h` after a **read-only** mount. | `Filesystem state: clean`, `Mount count: 0`. The volume is untouched, byte for byte. |
+| `dumpe2fs -h` after a **writable** mount that was never withdrawn. | `Filesystem state: not clean` — and *not* "with errors" — with `Mount count: 1`. This is the mark of Section 8 of `VFS.md`, and it persists precisely because the machine stopped while the volume was open. |
+| `dumpe2fs -h` after a writable mount that **was** withdrawn. | `Filesystem state: clean`, `Mount count: 1`. |
+| `e2fsck -fn` in every case. | No error through all five passes. |
+
+### 12.1 The write probe
+
+Under the write-permitting entry alone, and only where the volume already holds a
+regular file named `/oxys-write-test`, the kernel opens that file through the
+layer with a truncation, writes 5000 bytes derived from their own offsets, seeks
+back to the beginning of the same descriptor, reads the whole of it back and
+compares it. Five thousand bytes is deliberately more than one block of either
+block size, so the write and the read both cross a block boundary and the
+descriptor's position is carried across it — which is the whole of what the layer
+adds to the write of sub-task 5.6.
+
+It is then confirmed from outside:
+
+```sh
+debugfs -R "stat /oxys-write-test" probe.img     # size, block count, mode
+debugfs -R "dump /oxys-write-test out.bin" probe.img
+xxd out.bin | head                               # bytes are ((offset*31)+7) & 0xFF
+e2fsck -fn probe.img
+```
+
+The contents depend upon the offset rather than being a constant or a pattern
+repeating every block, so a file written from the wrong place is distinguishable
+from one written correctly when it is examined from outside — which a constant
+fill would not be.
+
+**This corroboration found a defect**, and it is the kind that only a tool
+outside the kernel can see: the operation reported success and the volume read
+back correctly, and `e2fsck` nevertheless reported every inode the kernel had
+freed as the member of a corrupted orphan list. It is recorded in
+[`../storage/VFS.md`](../storage/VFS.md), Section 11.1.
+
+## 13. Test record
 
 | Date | Test | Result |
 | ---- | ---- | ------ |
+| 2026-09-02 | `make verify` — sub-task 5.8, the filesystem self-test | Passed; some ninety assertions upon two composed volumes. A path resolves through components, repeated and trailing separators, `.`, `..` and both forms of symbolic link, and is refused for the reason that distinguishes each refusal; a descriptor reads a file whose contents depend upon their offsets, its position advancing by exactly what was transferred, and the end of the file is reported by the count; two descriptors upon one file have two positions and one identity; a directory is listed and what it lists is what resolves; a file is created, written, read back identically, appended to, truncated in both directions, given a second name and destroyed, and is refused destruction while something holds it; a new directory bears two links and its parent gains one, which is returned when it is removed. |
+| 2026-09-02 | `make verify` — sub-task 5.8, the mount | Passed; a second volume, identical to the first but for the owner of one file, is mounted upon a directory of it. The mount point becomes the second volume's root; a path crossing it reaches the second volume and one that does not reaches the first; what the mount covers is entirely unreachable; `..` from the mounted root leaves the volume and arrives at the parent of the mount point, and a path that returns and crosses again reaches the second volume once more; a read-only mount refuses a write and a creation; neither mount may be withdrawn while anything is held; and the covered directory reappears exactly as it was. No node was left held and no descriptor open. |
+| 2026-09-02 | `make verify` — sub-task 5.8, the mark a mount leaves | Passed; the state read back **out of the medium** after a writable mount has the clean bit clear and the error bit clear, with the mount count raised; after a clean withdrawal the clean bit is set again; and `Ext2VerifyGroupDescriptors` passes upon a superblock read afresh afterwards. |
+| 2026-09-02 | QEMU i440fx with an image from `mke2fs -d` — the root mount, read-only | Passed; the volume mounted at `/` as `ata0`, block size 1024, read-only, and its root listed as inodes 2, 2, 11, 12, 13, 14 with the types and names `debugfs -R "ls -l /"` gives for the same image. Afterwards `dumpe2fs -h` reported `clean` with a mount count of 0 — the volume untouched — and `e2fsck -fn` reported no error. |
+| 2026-09-02 | QEMU i440fx with `ext2-write-test` — the root mount, writable, never withdrawn | Passed; `dumpe2fs -h` afterwards reported `not clean` — and not "with errors" — with `Mount count: 1`, which is the mark persisting because the machine stopped while the volume was open. `e2fsck -fn` reported no structural error through all five passes. |
+| 2026-09-02 | QEMU i440fx with `ext2-write-test` — the write probe and the clean withdrawal | Passed; 5000 bytes were written to `/oxys-write-test` through a descriptor and read back identically through the same descriptor after a seek to the beginning, the volume was withdrawn and mounted afresh read-only, and `dumpe2fs -h` then reported `clean` with a mount count of 1. `debugfs` states the file is 5000 bytes with a block count of 10, and the extracted contents match `((offset * 31) + 7) & 0xFF` byte for byte at both ends. `e2fsck -fn` reported no error. |
+| 2026-09-02 | QEMU i440fx with a 4096-byte-block image — the same, at the other block size | Passed; mounted as block 4096, the root listed identically, the 5000-byte probe crossed a block boundary at that size also, and `e2fsck -fn` reported no error. |
+| 2026-09-02 | `e2fsck -fn` over a volume the layer had created and destroyed files upon — **a defect found** | Initially failed; `e2fsck` reported inodes 16 and 17 as "part of the orphaned inode list", the deletion time recorded for want of a clock being the constant 1 and `i_dtime` being overloaded as the orphan-list link. Corrected to `EXT2_DELETION_TIME_UNKNOWN`; re-run, all five passes clean. See `docs/storage/VFS.md`, Section 11.1. |
 | 2026-08-30 | `make all` — build with `-Wall -Wextra -Werror` | Passed; no diagnostics. |
 | 2026-08-30 | `grub-file --is-x86-multiboot2` | Passed; the image is Multiboot2 compliant. |
 | 2026-08-30 | `make iso` — ISO generation | Passed. |

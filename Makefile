@@ -111,6 +111,8 @@ C_SOURCES := kernel/kernel.c \
              kernel/cpu/interrupts.c \
              kernel/cpu/exceptions.c \
              kernel/fs/ext2.c \
+             kernel/fs/ext2_vfs.c \
+             kernel/fs/vfs.c \
              drivers/vga/vga.c \
              drivers/serial/serial.c \
              drivers/pic/pic.c \
