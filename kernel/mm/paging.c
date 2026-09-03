@@ -46,11 +46,10 @@
 #define KERNEL_FINE_MAP_LIMIT PAGE_SIZE_LARGE
 
 /*
- * The section boundaries defined by linker.ld, as virtual addresses. Only the
- * addresses of these symbols are meaningful; they have no storage.
+ * The read-only data boundaries defined by linker.ld, as virtual addresses. Only
+ * the addresses of these symbols are meaningful; they have no storage. The text
+ * boundaries are declared in <oxys/kernel.h>, three files now needing them.
  */
-extern char KernelTextStart[];
-extern char KernelTextEnd[];
 extern char KernelRodataStart[];
 extern char KernelRodataEnd[];
 

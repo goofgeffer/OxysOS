@@ -6,17 +6,28 @@ milestone to be bootable and testable under QEMU and VirtualBox.
 ## 1. Automated verification
 
 The `verify` target executes the ISO under QEMU without a display, directs the
-serial port to a file, and asserts that the string `initialisation complete.`
-appears in the captured output. The assertion is deliberately made upon that
-fragment rather than upon the whole line, the line naming the sub-task most
-recently completed and therefore changing with every advance of `PLAN.md`. It
-requires no operator observation and is therefore suitable for use as a
-regression test after every change.
+serial port to a file, and makes **two** assertions upon the captured output.
+Both are necessary, and either alone would pass a broken kernel.
 
-The captured output also carries the result of every boot-time self-test. A
-self-test that fails reports the fact but does not prevent the kernel from
-reaching completion, so the output must be read and not merely the exit status
-consulted: the string `FAILED` appearing anywhere within it denotes a regression.
+**That the kernel reached the end of its initialisation**, asserted by the string
+`initialisation complete.` appearing. The assertion is deliberately made upon
+that fragment rather than upon the whole line, the line naming the sub-task most
+recently completed and therefore changing with every advance of `PLAN.md`. This
+catches a machine that faulted, hung or reset on the way there.
+
+**That no boot-time self-test reported a failure**, asserted by the string
+`FAILED` appearing nowhere. A self-test that fails states so and allows the
+kernel to continue — there being no way to abandon a boot usefully and no harness
+to report to — so a kernel whose every assertion failed would still reach the
+banner, and the first assertion alone would call that a success. The self-tests
+are the substance of this project's testing, and until sub-task 6.1 this target
+could not see one fail.
+
+The word is grepped for rather than each test being named, so that a self-test
+added in a later phase is covered by this target on the day it is written. The
+kernel emits `FAILED` in no other context; every occurrence is a verdict. The
+target therefore requires no operator observation and no reading of its output,
+and its exit status may be relied upon.
 
 **From sub-task 3.7 the target always runs for the full 25 seconds.** The kernel
 no longer halts at the end of initialisation; where a keyboard is present it
@@ -45,6 +56,18 @@ VERIFICATION SUCCEEDED: the kernel booted and reported completion.
 The physical address and the total size of the Multiboot2 information structure
 are determined by GRUB and will vary between invocations and between versions of
 GRUB. Their exact values are not part of the assertion.
+
+### 1.1 Where the self-tests are
+
+The self-tests are part of the kernel image, there being no harness to run them
+in before Phase 7 and no userland to host one. They are implemented in
+`kernel/test/`, one file per subsystem, and declared by
+`kernel/include/oxys/verify.h`; `KernelMain` calls them in the order the
+subsystems are initialised, because a test cannot run before the thing it
+asserts exists.
+
+`kernel/test/README.md` records the arrangement, the distinction between a
+self-test and a diagnostic probe, and the limitations of both.
 
 ## 2. Interactive execution under QEMU
 

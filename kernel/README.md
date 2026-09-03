@@ -19,8 +19,10 @@ are separate.
 
 | Path | Description |
 | ---- | ----------- |
-| `kernel.c` | `KernelMain`, the C entry point: it validates the boot loader handover, initialises every subsystem of Phases 1 to 5 and the privilege apparatus of
-sub-task 6.1 in dependency order, runs the boot-time self-tests, mounts a volume the machine carries at the root, and enters the keyboard echo loop where a keyboard is present or halts where none is. `KernelPanic`, the unrecoverable-error path. `KernelHalt`, `KernelWriteString`, `KernelWriteDecimal` and `KernelWriteHexadecimal`. |
+| `kernel.c` | `KernelMain`, the C entry point: it validates the boot loader handover, initialises every subsystem of Phases 1 to 5 and the privilege apparatus of sub-task 6.1 in dependency order, runs the boot-time self-tests, mounts a volume the machine carries at the root, and enters the keyboard echo loop where a keyboard is present or halts where none is. `KernelPanic`, the unrecoverable-error path. `KernelHalt`, `KernelWriteString`, `KernelWriteDecimal`, `KernelWriteHexadecimal`, `KernelCommandLineHasOption` and `KernelMountRootVolume`. |
+| `test/` | The boot-time self-tests, one file per subsystem, and the composed volume they are conducted upon. Described by [`test/README.md`](test/README.md). |
+| `include/oxys/verify.h` | The self-test entry points `KernelMain` calls, in the order it calls them; the parsed boot information; and the reading of the boot loader's command line. |
+| `include/oxys/testvolume.h` | The fixture: the two memory-backed block devices, the geometry of the composed EXT2 volume, and the routines that address a field of it directly. |
 | `cpu/exceptions.c` | The exception handlers, the decoding of both error-code formats, `ExceptionInstallInterruptStacks`, which gives the double fault a stack of its own, and `ExceptionReportState`. |
 | `include/oxys/exceptions.h` | The error-code flags of both formats, the vector of the double fault, and the exception interface. |
 | `include/oxys/cpu.h` | Accessors for the control registers `CR0`, `CR2`, `CR3` and `CR4`, and for `RFLAGS`, by which a driver determines whether an interrupt it means to wait for could be delivered at all. |
@@ -121,6 +123,10 @@ Full citations are held in [`../docs/project/REFERENCES.md`](../docs/project/REF
    `docs/design/MEMORY-LAYOUT.md`, Section 9.2.
 2. There is no formatted output. `KernelWriteHexadecimal` is a deliberate
    minimum, to be superseded when the C library of Phase 7 exists.
+3. The boot-time self-tests are part of the kernel image and are never absent
+   from it. There is no configuration that omits them, and none is wanted before
+   there is a machine whose image size matters; `test/README.md` records the
+   consequences.
 4. The frame allocator is not yet safe against concurrent access; from sub-task
    6.9 its bitmap and search hint require a spinlock. Nothing here is yet safe
    against concurrent access. Every structure

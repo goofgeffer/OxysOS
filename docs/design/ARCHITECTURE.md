@@ -38,6 +38,7 @@ than as later additions, in accordance with `PROJECT_GUIDELINES.md`, Section 5:
 | `boot/` | The Multiboot2 header, the 32-bit entry point, the long-mode transition, and the GRUB configuration. | Phase 1 |
 | `kernel/` | The architecture-independent kernel core: entry, memory management, scheduling, system calls, and the virtual filesystem. | Phase 1 |
 | `kernel/include/oxys/` | The kernel's internal header corpus. | Phase 1 |
+| `kernel/test/` | The boot-time self-tests, one file per subsystem, and the composed volume they are conducted upon. | Phase 2 |
 | `drivers/` | Device drivers, one subdirectory per device class. | Phase 1 |
 | `libc/` | The minimal C library linked into user programs. | Phase 7 |
 | `userland/` | User programs: the utilities and the shell. | Phase 7 |
@@ -77,6 +78,14 @@ the following translation units.
 | `kernel/cpu/tss.c` | The task state segment: the stacks the processor loads when it needs one it can trust, its descriptor within the global descriptor table, and the loading of the task register. |
 | `kernel/cpu/syscall.c` | The configuration of the fast system-call mechanism: `IA32_STAR`, `IA32_LSTAR`, `IA32_FMASK` and the enabling bit of `IA32_EFER`. |
 | `kernel/cpu/syscall_entry.asm` | The entry point `IA32_LSTAR` names. Provisional in sub-task 6.1; replaced by the dispatch path of sub-task 6.2. |
+| `kernel/test/volume.c` | The test fixture: two block devices backed by memory, and an EXT2 volume composed within them. |
+| `kernel/test/verify_memory.c` | The self-tests of the frame allocator, the paging hierarchy, the allocators, reference counting, copy-on-write and address spaces. |
+| `kernel/test/verify_interrupts.c` | The self-tests of the descriptor table, the stubs and their trap frame, the dispatcher and the exception handlers. |
+| `kernel/test/verify_privilege.c` | The self-tests of the descriptors, the task state segment, the interrupt stack table and the system-call configuration. |
+| `kernel/test/verify_devices.c` | The self-tests of the interrupt controllers, the interval timer, the keyboard, the serial adapter, the display and the bus. |
+| `kernel/test/verify_storage.c` | The self-tests of the disk, the block layer and the buffer cache. |
+| `kernel/test/verify_ext2.c` | The self-tests of the EXT2 format, and the report upon a real volume. |
+| `kernel/test/verify_vfs.c` | The self-tests of the virtual filesystem layer, and the probe of a real volume through it. |
 | `kernel/mm/heap.c` | The kernel heap: a slab allocator of eight size classes over the kernel arena. |
 | `kernel/mm/vmm.c` | The kernel virtual address allocator, issuing ranges of the kernel arena backed by frames. |
 | `kernel/mm/paging.c` | The permanent kernel paging hierarchy: its construction, activation, software translation and copy-on-write fault resolution. |
@@ -86,7 +95,7 @@ the following translation units.
 | `kernel/fs/vfs.c` | The virtual filesystem layer: the registry of filesystem types, the mount table that joins several volumes into one tree, the node cache that gives one file one identity, the resolution of a path across mount points, and the open file with a position that advances. |
 | `kernel/fs/ext2_vfs.c` | The binding of the EXT2 implementation to that layer: the operations vector, the translation between the format's mode and the layer's neutral node type, and the mark a mount leaves upon a volume it has open. |
 | `kernel/multiboot2.c` | The Multiboot2 parser, reducing the boot loader's structure to the neutral `BootInformation` description. |
-| `kernel/kernel.c` | `KernelMain`, which validates the boot loader handover, initialises the early output devices, presents the identification banner and halts. `KernelPanic`, the unrecoverable-error path. |
+| `kernel/kernel.c` | `KernelMain`, which validates the boot loader handover, initialises every subsystem in the dependency order of Section 4, runs the self-tests, mounts a root volume and enters the echo loop. `KernelPanic`, the unrecoverable-error path. |
 | `drivers/vga/vga.c` | The VGA text-mode display driver: the control characters, the scrolling, the colour attributes, the hardware cursor and the erase limit that bounds a backspace. |
 | `drivers/serial/serial.c` | The interrupt-driven COM1 serial driver used for diagnostics and input. |
 | `drivers/pic/pic.c` | The pair of cascaded 8259A interrupt controllers: their remapping, the masking of request lines, the routing of a request to the driver that claims it, and the end-of-interrupt protocol. |

@@ -13,8 +13,9 @@
 #   run-qemu  - Executes the ISO under QEMU with legacy BIOS firmware.
 #   run-uefi  - Executes the ISO under QEMU with the OVMF UEFI firmware.
 #   run-vbox  - Registers and executes the ISO under VirtualBox.
-#   verify    - Executes the ISO under QEMU without a display and asserts that
-#               the expected banner is emitted upon the serial port.
+#   verify    - Executes the ISO under QEMU without a display, asserts that the
+#               expected banner is emitted upon the serial port, and asserts
+#               that no boot-time self-test reported a failure.
 #   toolcheck - Confirms that every required tool is present.
 #
 # References:
@@ -101,6 +102,14 @@ LDFLAGS := -n -T $(LINKER_SCRIPT) -Map $(KERNEL_MAP) -z max-page-size=0x1000
 
 C_SOURCES := kernel/kernel.c \
              kernel/multiboot2.c \
+             kernel/test/volume.c \
+             kernel/test/verify_memory.c \
+             kernel/test/verify_interrupts.c \
+             kernel/test/verify_privilege.c \
+             kernel/test/verify_devices.c \
+             kernel/test/verify_storage.c \
+             kernel/test/verify_ext2.c \
+             kernel/test/verify_vfs.c \
              kernel/mm/pmm.c \
              kernel/mm/paging.c \
              kernel/mm/addrspace.c \
@@ -212,8 +221,24 @@ run-vbox: $(ISO_IMAGE)
 # Automated verification.
 #
 # The kernel is executed without a display for a bounded interval, and its serial
-# output is examined for the expected banner. This provides a regression test
-# that requires no operator observation.
+# output is examined. This provides a regression test that requires no operator
+# observation.
+#
+# Two assertions are made, and both are necessary.
+#
+# The first is that the kernel reached the end of its initialisation, which
+# catches a machine that faulted, hung or reset on the way there.
+#
+# The second is that no boot-time self-test reported a failure. A self-test that
+# fails states so and allows the kernel to continue, there being no way to
+# abandon a boot usefully and no harness to report to; so a kernel whose every
+# assertion failed would still reach the banner, and an assertion upon the banner
+# alone would call that a success. The self-tests are the substance of this
+# project's testing, and a regression net that cannot see them fail is not one.
+#
+# The word is grepped for rather than each test being named, so that a self-test
+# added in a later phase is covered by this target on the day it is written. The
+# kernel emits FAILED in no other context; every occurrence is a verdict.
 # ------------------------------------------------------------------------------
 
 verify: $(ISO_IMAGE)
@@ -225,8 +250,13 @@ verify: $(ISO_IMAGE)
 	@cat $(BUILD_DIR)/serial.log || true
 	@echo "--- End of captured serial output ---"
 	@grep -q "initialisation complete." $(BUILD_DIR)/serial.log \
-		&& echo "VERIFICATION SUCCEEDED: the kernel booted and reported completion." \
 		|| (echo "VERIFICATION FAILED: the expected banner was not observed." && false)
+	@if grep -q "FAILED" $(BUILD_DIR)/serial.log; then \
+		echo "VERIFICATION FAILED: a boot-time self-test reported a failure."; \
+		grep -n "FAILED" $(BUILD_DIR)/serial.log; \
+		false; \
+	fi
+	@echo "VERIFICATION SUCCEEDED: the kernel booted, reported completion, and every self-test passed."
 
 # ------------------------------------------------------------------------------
 # Toolchain verification.

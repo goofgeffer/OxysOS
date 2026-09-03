@@ -3,7 +3,7 @@
  * Purpose: Declares the kernel entry point and the constants describing the
  *          kernel's position within the virtual address space.
  * Key definitions: KERNEL_VIRTUAL_BASE, PhysicalToVirtual, VirtualToPhysical,
- *          KernelMain, KernelPanic.
+ *          KernelTextStart, KernelTextEnd, KernelMain, KernelPanic.
  * References:
  *   - Intel 64 and IA-32 Architectures Software Developer's Manual, Volume 3A,
  *     Section 4.5 (Four-Level Paging) and Section 3.3.7.1 (Canonical Addressing).
@@ -21,6 +21,22 @@
  * and with KERNEL_VIRTUAL_BASE defined in boot/boot.asm.
  */
 #define KERNEL_VIRTUAL_BASE UINT64_C(0xFFFFFFFF80000000)
+
+/*
+ * The extents of the kernel text section, established by the link script.
+ *
+ * They are arrays of char because a linker symbol has an address and no value;
+ * taking the address of the array yields the address the linker assigned, and
+ * reading it would read whatever happens to be the first byte of the section.
+ *
+ * They are declared here rather than in each file that needs them because three
+ * now do: the paging hierarchy, which maps the section without write permission,
+ * and the interrupt self-test, which asserts that a trap frame's return address
+ * lies within it. A declaration repeated in three files is three places for the
+ * link script to be contradicted.
+ */
+extern char KernelTextStart[];
+extern char KernelTextEnd[];
 
 /*
  * The magic value that a Multiboot2-compliant boot loader places in EAX prior to
