@@ -14,7 +14,7 @@ complementary, and neither replaces the other.
 | Directory | Holds | Read it when |
 | --------- | ----- | ------------ |
 | [`project/`](project/) | How the work is conducted: the plan, the tests, the toolchain, the standards, the bibliography. | You are about to make a change, or want to know what is done and what is not. |
-| [`design/`](design/) | The kernel itself: its architecture, its boot, its address space, its interrupts, and the apparatus of a privilege transition. | You want to know how the machine is brought up and how it is arranged once it is. |
+| [`design/`](design/) | The kernel itself: its architecture, its boot, its address space, its interrupts, the apparatus of a privilege transition, and the framebuffer and the drawing upon it. | You want to know how the machine is brought up and how it is arranged once it is. |
 | [`devices/`](devices/) | The hardware the kernel drives, one document per device. | You are working upon a driver, or want to know what a device does and why the driver treats it so. |
 | [`storage/`](storage/) | The path from a medium to a caller: the disk, the block layer above it, the cache above that, and the filesystem above that. | You are working anywhere between a sector and a file. |
 
@@ -39,7 +39,7 @@ complementary, and neither replaces the other.
 | [`BOOT.md`](design/BOOT.md) | From the GRUB handover to `KernelMain`. |
 | [`MEMORY-LAYOUT.md`](design/MEMORY-LAYOUT.md) | The physical and virtual address spaces, the paging hierarchy, and the allocators above it. |
 | [`INTERRUPTS.md`](design/INTERRUPTS.md) | The descriptor table, the stubs, the dispatcher, the exceptions and the 8259A controllers. |
-| [`GRAPHICS.md`](design/GRAPHICS.md) | The framebuffer, its memory type, and the text console it displaces. |
+| [`GRAPHICS.md`](design/GRAPHICS.md) | The framebuffer, its memory type, the text console it displaces, and the primitives and clipping that draw upon it. |
 | [`PRIVILEGE.md`](design/PRIVILEGE.md) | The user-mode descriptors, the task state segment and its trusted stacks, and the registers that configure `SYSCALL`. |
 
 ### [`devices/`](devices/)
@@ -47,7 +47,7 @@ complementary, and neither replaces the other.
 | Document | Subject | Driver |
 | -------- | ------- | ------ |
 | [`TIME.md`](devices/TIME.md) | The interval timer and the system tick. | `drivers/pit/` |
-| [`DISPLAY.md`](devices/DISPLAY.md) | The VGA text-mode display. | `drivers/vga/` |
+| [`DISPLAY.md`](devices/DISPLAY.md) | The VGA text-mode display, and how sub-task 6.2 displaced it. | `drivers/vga/` |
 | [`SERIAL.md`](devices/SERIAL.md) | The 16550 serial adapter. | `drivers/serial/` |
 | [`KEYBOARD.md`](devices/KEYBOARD.md) | The 8042 controller and the PS/2 keyboard. | `drivers/keyboard/` |
 | [`PCI.md`](devices/PCI.md) | The PCI bus enumeration. | `drivers/pci/` |

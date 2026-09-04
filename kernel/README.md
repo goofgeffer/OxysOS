@@ -19,7 +19,7 @@ are separate.
 
 | Path | Description |
 | ---- | ----------- |
-| `kernel.c` | `KernelMain`, the C entry point: it validates the boot loader handover, initialises every subsystem of Phases 1 to 5 and the privilege apparatus of sub-task 6.1 in dependency order, runs the boot-time self-tests, mounts a volume the machine carries at the root, and enters the keyboard echo loop where a keyboard is present or halts where none is. `KernelPanic`, the unrecoverable-error path. `KernelHalt`, `KernelWriteString`, `KernelWriteDecimal`, `KernelWriteHexadecimal`, `KernelCommandLineHasOption` and `KernelMountRootVolume`. |
+| `kernel.c` | `KernelMain`, the C entry point: it validates the boot loader handover, initialises every subsystem of Phases 1 to 5, the privilege apparatus of sub-task 6.1 and the framebuffer of sub-task 6.2, in dependency order, runs the boot-time self-tests, mounts a volume the machine carries at the root, and enters the keyboard echo loop where a keyboard is present or halts where none is. `KernelPanic`, the unrecoverable-error path. `KernelHalt`, `KernelWriteString`, `KernelWriteDecimal`, `KernelWriteHexadecimal`, `KernelCommandLineHasOption` and `KernelMountRootVolume`. |
 | `test/` | The boot-time self-tests, one file per subsystem, and the composed volume they are conducted upon. Described by [`test/README.md`](test/README.md). |
 | `include/oxys/verify.h` | The self-test entry points `KernelMain` calls, in the order it calls them; the parsed boot information; and the reading of the boot loader's command line. |
 | `include/oxys/testvolume.h` | The fixture: the two memory-backed block devices, the geometry of the composed EXT2 volume, and the routines that address a field of it directly. |

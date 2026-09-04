@@ -289,7 +289,7 @@ records it.
 The backspace is echoed by `KernelEchoBackspace`, which composes an erasure
 rather than sending the character itself, and which tells the serial terminal
 about a movement into the row above that the display driver made on its own; see
-[`DISPLAY.md`](DISPLAY.md), Section 6.1. The erasure is the three-character
+[`DISPLAY.md`](DISPLAY.md), Section 7.1. The erasure is the three-character
 sequence `"\b \b"`. The backspace moves the cursor and erases nothing, upon the
 display and upon a serial terminal alike, so an echo that wrote it alone would
 leave the character the user meant to delete standing until something else was

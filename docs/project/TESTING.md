@@ -101,7 +101,7 @@ the backspace that crosses into the row above, the agreement between the driver'
 cursor position and the one read back out of the CRT controller, the refusal of a
 position outside the display and of an impossible cursor shape, the hiding and
 restoration of the hardware cursor, and a scroll that moves the display by
-exactly one row. The table in `docs/devices/DISPLAY.md`, Section 7.1, pairs each property
+exactly one row. The table in `docs/devices/DISPLAY.md`, Section 8.1, pairs each property
 with the failure it would catch.
 
 The scroll assertion reads the frame buffer back through `VgaCharacterAt` and

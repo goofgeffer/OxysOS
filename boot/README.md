@@ -20,7 +20,7 @@ is the reason it cannot simply be merged into `kernel/`.
 
 | File | Description |
 | ---- | ----------- |
-| `boot.asm` | The Multiboot2 header; the entry point `_start`; `CPUID` and long-mode feature detection; `BootBuildPageTables`; `BootEnableLongMode`; the 64-bit trampoline `BootLongModeEntry`; the higher-half entry point `KernelEntryHigh`; and, in `.boot.data`, the boot GDT and the boot-time paging structures. |
+| `boot.asm` | The Multiboot2 header, carrying the framebuffer request tag of sub-task 6.2 alongside the terminating tag; the entry point `_start`; `CPUID` and long-mode feature detection; `BootBuildPageTables`; `BootEnableLongMode`; the 64-bit trampoline `BootLongModeEntry`; the higher-half entry point `KernelEntryHigh`; and, in `.boot.data`, the boot GDT and the boot-time paging structures. |
 | `grub/grub.cfg` | The GRUB configuration embedded within the ISO image, defining the boot menu entries. Staged into the image by the `iso` target of the `Makefile`. |
 
 ## Sequence of execution
@@ -39,7 +39,7 @@ address space. `docs/design/BOOT.md`, Section 7, sets out the reasoning.
 
 | Specification | Sections | Applied to |
 | ------------- | -------- | ---------- |
-| Multiboot2 Specification 2.0 | 3.1.1, 3.1.2, 3.1.3 | The header layout, the magic fields and the terminating tag. |
+| Multiboot2 Specification 2.0 | 3.1.1, 3.1.2, 3.1.3, 3.1.10 | The header layout, the magic fields, the terminating tag, and the framebuffer request tag carried since sub-task 6.2. |
 | Multiboot2 Specification 2.0 | 3.3 | The machine state relied upon at entry: `EAX`, `EBX`, the segment registers, the A20 gate, `CR0` and `EFLAGS`. |
 | Intel SDM, Volume 2A, "CPUID" | — | Feature detection: `EFLAGS.ID`, and leaf `0x80000001` `EDX` bit 29. |
 | Intel SDM, Volume 3A | 4.1.2, Table 4-14 | The control-register sequence entering IA-32e mode. |

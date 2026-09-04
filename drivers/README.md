@@ -11,11 +11,17 @@ driver implements an interface declared in `kernel/include/oxys/`; it does not
 export declarations of its own. The kernel core therefore depends upon the
 interface and never upon a driver's location.
 
+The framebuffer is deliberately **not** here. It is in [`../graphics/`](../graphics/),
+because nothing programs it: the boot loader sets the mode and hands over an
+address, and everything above that is arithmetic upon memory rather than a
+conversation with hardware. The mouse of sub-task 6.5 will be here, being a real
+PS/2 device sharing the keyboard's controller.
+
 ## Contents
 
 | Path | Device | Interface | Phase |
 | ---- | ------ | --------- | ----- |
-| `vga/vga.c` | The VGA text-mode display, mode 3. | `<oxys/vga.h>` | 1, 4.2 |
+| `vga/vga.c` | The VGA text-mode display, mode 3. Displaced by the framebuffer of sub-task 6.2 wherever the boot loader leaves the adapter in a graphics mode; see `docs/devices/DISPLAY.md`, Section 1.1. | `<oxys/vga.h>` | 1, 4.2 |
 | `serial/serial.c` | The 16550-compatible UART at COM1, interrupt-driven. | `<oxys/serial.h>` | 1, 4.1 |
 | `pic/pic.c` | The pair of cascaded 8259A interrupt controllers. | `<oxys/pic.h>` | 3 |
 | `pit/pit.c` | Counter 0 of the 8253 interval timer, the system tick. | `<oxys/pit.h>` | 3 |
@@ -29,7 +35,7 @@ interface and never upon a driver's location.
 
 | Path | Device | Phase, sub-task |
 | ---- | ------ | --------------- |
-| `mouse/` | The PS/2 mouse. | 9.4 |
+| `mouse/` | The PS/2 mouse, upon the second port of the 8042 controller the keyboard driver already leaves alone. | 6.5 |
 | `net/` | The Ethernet controller. | 11.1 |
 
 ## The drivers presently implemented

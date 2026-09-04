@@ -36,7 +36,7 @@ than as later additions, in accordance with `PROJECT_GUIDELINES.md`, Section 5:
 | Directory | Contents | Introduced |
 | --------- | -------- | ---------- |
 | `boot/` | The Multiboot2 header, the 32-bit entry point, the long-mode transition, and the GRUB configuration. | Phase 1 |
-| `kernel/` | The architecture-independent kernel core: entry, memory management, scheduling, system calls, and the virtual filesystem. | Phase 1 |
+| `kernel/` | The architecture-independent kernel core: entry, memory management, the privilege apparatus, scheduling, system calls, and the virtual filesystem. | Phase 1 |
 | `kernel/include/oxys/` | The kernel's internal header corpus. | Phase 1 |
 | `kernel/test/` | The boot-time self-tests, one file per subsystem, and the composed volume they are conducted upon. | Phase 2 |
 | `drivers/` | Device drivers, one subdirectory per device class. | Phase 1 |
@@ -53,7 +53,7 @@ than as later additions, in accordance with `PROJECT_GUIDELINES.md`, Section 5:
 | Directory | Holds |
 | --------- | ----- |
 | `docs/project/` | How the work is conducted: the plan, the test procedure and record, the toolchain, the coding standards, the bibliography. |
-| `docs/design/` | The kernel itself: this document, the boot sequence, the address space, the interrupts. |
+| `docs/design/` | The kernel itself: this document, the boot sequence, the address space, the interrupts, the privilege transition, and the framebuffer with the drawing above it. |
 | `docs/devices/` | One document per device the kernel drives. |
 | `docs/storage/` | The stack from a medium to a caller: the disk, the block layer, the buffer cache. |
 
@@ -205,5 +205,20 @@ From sub-task 4.2 the display path is a formal driver equally. It is not the pat
 the tests read and not the path a panic can most be relied upon to reach; it is
 the path a person looking at the machine has, and the property it is built for is
 that the machine can verify what it displayed rather than merely that it wrote
-something. `docs/devices/DISPLAY.md`, Section 7, records why a display is unusually hard
+something. `docs/devices/DISPLAY.md`, Section 8, records why a display is unusually hard
 to test and what is asserted at each boot in consequence.
+
+**From sub-task 6.2 the operator-facing path is conditional, and the policy above
+must be read accordingly.** The kernel asks the boot loader for a linear
+framebuffer, and a boot loader that supplies one sets a graphics mode to do it;
+the display driver then writes to memory the adapter is not displaying. Every
+diagnostic message is still written to both paths, and the serial path is still
+complete, but until sub-task 6.4 supplies a console that can draw text upon a
+framebuffer, only one of the two can be read.
+
+The consequence is worth stating plainly because it bears upon what can be
+diagnosed: a machine with no serial adapter this kernel detects — VirtualBox is
+one — presently has **no readable diagnostic output at all**. That is the price of
+sub-task 6.2 and it is paid for two sub-tasks. `docs/design/GRAPHICS.md`,
+Section 7, records the position, and `docs/project/TESTING.md`, Section 9.1,
+records what it costs the VirtualBox procedure.

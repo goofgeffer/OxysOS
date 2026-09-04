@@ -14,6 +14,9 @@ updated.
 The design documentation resides in [`docs/`](docs/), grouped by subject into
 four directories. [`docs/README.md`](docs/README.md) is its index.
 
+`docs/project/PLAN.md` states what is done and what is not; it is the single
+source of truth for progress, and nothing below restates it.
+
 ### [`docs/project/`](docs/project/) — how the work is conducted
 
 | Document | Subject |
@@ -33,13 +36,15 @@ four directories. [`docs/README.md`](docs/README.md) is its index.
 | [`BOOT.md`](docs/design/BOOT.md) | The boot sequence, from the GRUB handover to the invocation of `KernelMain`. |
 | [`MEMORY-LAYOUT.md`](docs/design/MEMORY-LAYOUT.md) | The physical and virtual address space layout, the paging hierarchy, and the allocators above it. |
 | [`INTERRUPTS.md`](docs/design/INTERRUPTS.md) | The interrupt descriptor table, the stubs and the dispatcher, the exception handlers, and the 8259A interrupt controllers. |
+| [`GRAPHICS.md`](docs/design/GRAPHICS.md) | The framebuffer: how it is asked for, why its pages are write-combining, and the drawing primitives and clipping above it. |
+| [`PRIVILEGE.md`](docs/design/PRIVILEGE.md) | The apparatus of a privilege transition: the user-mode descriptors, the task state segment and its trusted stacks, and the registers that configure `SYSCALL`. |
 
 ### [`docs/devices/`](docs/devices/) — the hardware the kernel drives
 
 | Document | Subject |
 | -------- | ------- |
 | [`TIME.md`](docs/devices/TIME.md) | The kernel's time sources: the programmable interval timer, the system tick, and what remains to be added. |
-| [`DISPLAY.md`](docs/devices/DISPLAY.md) | The VGA text-mode display: the register configuration, the cursor, the attributes, the control characters and how far a backspace may retreat. |
+| [`DISPLAY.md`](docs/devices/DISPLAY.md) | The VGA text-mode display: the register configuration, the cursor, the attributes, the control characters, how far a backspace may retreat, and how sub-task 6.2 displaced it. |
 | [`SERIAL.md`](docs/devices/SERIAL.md) | The 16550 serial adapter: the line parameters, the two output modes, the buffering discipline and the interrupt service. |
 | [`KEYBOARD.md`](docs/devices/KEYBOARD.md) | The 8042 controller, scan code set 1 and its translation, the modifier discipline and the input buffer. |
 | [`PCI.md`](docs/devices/PCI.md) | The PCI bus: configuration space access mechanism one, the walk of buses and functions, and what the enumeration records. |
@@ -64,12 +69,14 @@ by subject. The two are complementary.
 | -------- | ------- |
 | [`boot/README.md`](boot/README.md) | The boot directory: the Multiboot2 header, the entry point and the GRUB configuration. |
 | [`kernel/README.md`](kernel/README.md) | The kernel core and its internal header corpus. |
+| [`kernel/test/README.md`](kernel/test/README.md) | The boot-time self-tests, one file per subsystem, and the composed volume they are conducted upon. |
 | [`drivers/README.md`](drivers/README.md) | The device drivers, one subdirectory per device class. |
+| [`graphics/README.md`](graphics/README.md) | The framebuffer and the drawing above it. |
 | [`docs/README.md`](docs/README.md) | The documentation corpus itself: what the four groups hold, and the form every document takes. Each group carries a `README.md` of its own. |
 
-The directories `libc/`, `userland/`, `graphics/`, `crypto/`, `net/` and `uefi/`
-are presently empty and acquire their documents when material is first placed
-within them.
+The directories `libc/`, `userland/`, `crypto/`, `net/` and `uefi/` are presently
+empty and acquire their documents when material is first placed within them.
+`graphics/` was among them until sub-task 6.2.
 
 ## Document conventions
 

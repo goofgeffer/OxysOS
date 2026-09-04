@@ -35,8 +35,10 @@ at line 8,797.
 
 The tests are now one file per subsystem, declared by
 [`../include/oxys/verify.h`](../include/oxys/verify.h), which is the only thing
-`kernel.c` needs to know about them. `kernel.c` is 708 lines and is again what its
-own header block says it is.
+`kernel.c` needs to know about them. `kernel.c` fell to 708 lines at that change
+and is again what its own header block says it is; it grows by a few lines per
+sub-task as subsystems are added to the initialisation, which is the only thing
+that ought to make it grow at all.
 
 Nothing was rewritten in the move: the assertions, their order and their wording
 are as they were, and the serial output after the change differs from the output

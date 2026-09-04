@@ -53,14 +53,23 @@ Its fields, in the order prescribed by Section 3.1.1, are as follows.
 | 4 | `architecture` | `0` (32-bit protected mode of i386) | Section 3.1.2 |
 | 8 | `header_length` | The length of the header in bytes, magic fields included | Section 3.1.2 |
 | 12 | `checksum` | The value which, added to the preceding three fields, yields an unsigned 32-bit sum of zero | Section 3.1.2 |
-| 16 | tags | The terminating tag alone: type `0`, flags `0`, size `8` | Section 3.1.3 |
+| 16 | framebuffer tag | Type `5`, flags `1`, size `20`, then width, height and depth all `0` | Section 3.1.10 |
+| 36 | padding | Four bytes, so that the tag below begins upon an 8-byte boundary | Section 3.1.3 |
+| 40 | terminating tag | Type `0`, flags `0`, size `8` | Section 3.1.3 |
 
 One optional request tag is emitted, since sub-task 6.2: the framebuffer tag of
-Section 3.1.10, at offset 16, with its optional bit **set** and width, height and
-depth all zero. Its presence is what causes the boot loader to supply the
-framebuffer information tag of Section 3.6.12; the optional bit is set because
-this kernel can boot without a framebuffer and must not claim otherwise. See
-[`GRAPHICS.md`](GRAPHICS.md), Section 2. The terminating tag follows it.
+Section 3.1.10, whose presence is what causes the boot loader to supply the
+framebuffer information tag of Section 3.6.12. Width, height and depth are all
+zero, which that section defines as no preference.
+
+Its **optional bit is set**, and that is a statement about this kernel rather
+than a formality: clearing it would declare that the image must not be loaded at
+all unless a framebuffer can be supplied, which is untrue — there is a text
+display driver, a serial port, and an initialisation written to return false and
+let the boot proceed. See [`GRAPHICS.md`](GRAPHICS.md), Section 2.
+
+The header is accordingly 48 bytes rather than 24, the four bytes at offset 36
+being the padding that returns the terminating tag to an 8-byte boundary.
 
 ## 3. The machine state at entry
 

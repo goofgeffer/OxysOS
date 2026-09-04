@@ -1,7 +1,8 @@
 # The Text-Mode Display
 
 **Phase**: 4, sub-task 4.2, of [`PLAN.md`](../project/PLAN.md). The routine upon which this
-driver was built belongs to Phase 1, sub-task 1.8.
+driver was built belongs to Phase 1, sub-task 1.8. Sub-task 6.2 displaced it; see
+Section 1.1.
 
 **Authority**: `PROJECT_GUIDELINES.md`, Sections 2, 3 and 6. Every assertion of
 hardware behaviour below carries a citation, and every specification named is
@@ -23,7 +24,48 @@ That distinction governs the whole of the design. The serial driver is written s
 that a machine in any condition can report; the display driver is written so that
 what it reports can be read, and so that the machine can check that what it
 displayed is what it meant to display. The second is harder than it sounds, and
-Section 7 explains why.
+Section 8 explains why.
+
+### 1.1 What sub-task 6.2 did to that
+
+**Since sub-task 6.2 the statement above is conditional.** The kernel asks the
+boot loader for a linear framebuffer, and a boot loader that supplies one sets a
+graphics mode to do it. In a graphics mode the memory this driver writes to is
+not the text buffer, so the driver goes on working correctly and **nothing it
+writes appears**.
+
+Nothing here has changed and nothing here is broken. What changed is which device
+is displaying the screen. The position is:
+
+| The boot loader left the adapter in | This driver | The screen shows |
+| ----------------------------------- | ----------- | ---------------- |
+| A text mode | Displays the console, exactly as below | The boot log |
+| A graphics mode | Writes to memory nothing displays | Whatever `graphics/` last drew |
+
+Two consequences follow, and both are recorded rather than worked around.
+
+The self-test of Section 8 is **skipped** in a graphics mode, and says so. Every
+assertion it makes reads a character cell back out of the text buffer, and in a
+graphics mode none of them means anything; a test that quietly asserted less
+would be worse than one that states plainly that it asserted nothing. It also had
+to move later in the boot, since which mode the machine is in is stated by the
+Multiboot2 boot information and nowhere else.
+
+**This is temporary.** Sub-task 6.4 supplies a console that draws text upon a
+framebuffer, and the operator's channel returns — through different machinery.
+Until then the serial adapter carries the whole boot log, which is the channel
+the automated tests read in any case. What is lost meanwhile is the screen of a
+machine with no serial adapter, and under VirtualBox — where this kernel detects
+none — that is every readable line; `../project/TESTING.md`, Section 9.1, records
+it.
+
+The framebuffer that displaced this driver never maps the text buffer, even where
+the boot loader reports one. That memory is this driver's, and two mappings of one
+device with different memory types and nothing to decide between them would be
+worse than either. See [`../design/GRAPHICS.md`](../design/GRAPHICS.md),
+Section 7.
+
+## 2. The mode, and the memory it occupies
 
 The mode is the standard VGA colour text mode, mode 3: eighty columns by
 twenty-five rows, each cell two bytes, the code point first and the attribute
@@ -32,7 +74,7 @@ reference). The buffer is reached at `PhysicalToVirtual(0xB8000)`, the boot-time
 paging hierarchy mapping the first gibibyte of physical memory into the higher
 half; see [`MEMORY-LAYOUT.md`](../design/MEMORY-LAYOUT.md).
 
-## 2. Which registers the adapter answers upon
+## 3. Which registers the adapter answers upon
 
 The adapter presents two register sets at two addresses, and which of the two is
 live is a matter of configuration rather than of assumption. The Miscellaneous
@@ -56,7 +98,7 @@ a driver that wrote the cursor location to `0x03D4` upon an adapter decoding
 report nothing at all about it. That failure is invisible to the machine, which
 is the class of failure this driver is built to eliminate.
 
-## 3. The cursor
+## 4. The cursor
 
 The hardware cursor is the block or underline the adapter draws over a cell. It
 is not the driver's record of where the next character goes; it is a property of
@@ -86,10 +128,10 @@ register, masks in bits 0 to 4 and writes the result back, so that it cannot
 disable the cursor by accident through bit 5, nor alter the skew.
 
 **The controller can be read back.** `VgaHardwareCursorPosition` reads the two
-location registers and reconstructs the position, which is what Section 7 uses to
+location registers and reconstructs the position, which is what Section 8 uses to
 establish that the driver is addressing the controller at all.
 
-## 4. The attributes, and the sixteenth background colour
+## 5. The attributes, and the sixteenth background colour
 
 The attribute byte holds a four-bit foreground index in bits 0 to 3 and a
 background index in bits 4 to 7. Bit 7 is ambiguous by design: in the Attribute
@@ -121,7 +163,7 @@ consequence of it is that the eight bright backgrounds blink instead of being
 bright, and a display driver that refused to start over such a thing would
 deprive the machine of its console to no purpose.
 
-## 5. The control characters
+## 6. The control characters
 
 `VgaPutCharacter` implements four control characters, and implements them as
 ANSI X3.4-1986 defines them and not as a caller might wish they behaved:
@@ -135,7 +177,7 @@ ANSI X3.4-1986 defines them and not as a caller might wish they behaved:
 
 The last of these deserves its own section.
 
-## 6. The backspace, and how far back it may go
+## 7. The backspace, and how far back it may go
 
 **The backspace does not erase.** ANSI X3.4-1986 defines it as a movement of the
 active position one character position backward, and no more. A caller that means
@@ -186,7 +228,7 @@ Within that constraint the backspace behaves as the standard describes:
 upon the first row, the text it protected has left the display altogether, and
 the limit collapses to the origin: nothing that remains was written before it.
 
-### 6.1 The same correction upon a serial terminal
+### 7.1 The same correction upon a serial terminal
 
 A terminal at the far end of a serial line will not cross a line boundary upon
 receiving a backspace, so the two devices would diverge the moment the display
@@ -205,9 +247,9 @@ line elsewhere and the correction will land upon the wrong column of it. The
 proper remedy is a line discipline that knows the width of its terminal, and it
 belongs to Phase 8.
 
-## 7. Verification
+## 8. Verification
 
-### 7.1 Why a display is unusually hard to test
+### 8.1 Why a display is unusually hard to test
 
 Every other driver in the kernel fails in ways the machine can notice. A display
 does not. A control character for which the driver has no case is written into
@@ -243,7 +285,7 @@ through `VgaCharacterAt`. It costs one row of the boot log, which leaves the
 display for the purpose; the record upon the serial line is unaffected, and that
 is the record `make verify` reads.
 
-### 7.2 What the self-test cannot establish
+### 8.2 What the self-test cannot establish
 
 It cannot establish that anything is legible. The frame buffer holding the code
 point `0x41` at the cell the driver believes the cursor to be at is the whole of
@@ -256,7 +298,7 @@ characters delivered over COM1, and the same characters delivered as scan codes
 by the QEMU monitor's `sendkey`. Both produced the identical echo, recorded in
 [`TESTING.md`](../project/TESTING.md).
 
-### 7.3 Observed state
+### 8.3 Observed state
 
 `VgaReport` prints the configuration and the accounting at the end of
 initialisation:
@@ -267,7 +309,7 @@ Display adapter: cursor displayed, attribute bit 7 selects a bright background.
 Display adapter: written 3344, scrolled 49, cursor at row 24, column 69.
 ```
 
-## 8. Limitations
+## 9. Limitations
 
 1. **Mode 3 only.** The driver does not set the mode; it uses the one the
    firmware left. Setting a mode requires programming the sequencer, the CRT
@@ -286,3 +328,15 @@ Display adapter: written 3344, scrolled 49, cursor at row 24, column 69.
    serving several terminals, which is Phase 8's problem.
 6. **No scrollback.** A row that leaves the top of the display is gone. The
    serial log is the record.
+7. **The driver may not be the thing displaying the screen.** Since sub-task 6.2
+   it writes to the text buffer whether or not the adapter is in a text mode, and
+   in a graphics mode that memory is not displayed. It does not detect this and
+   does not need to — the writes are harmless and become visible again if a text
+   mode is restored — but nothing here should be read as a promise that what it
+   writes can be seen. Section 1.1.
+8. **The driver cannot set a mode, so it cannot undo this.** Returning to text
+   from a graphics mode set by the boot loader means programming the sequencer,
+   the CRT controller, the graphics controller and the attribute controller as a
+   set, or a VESA BIOS call from real mode, which a long-mode kernel has no means
+   of making. Limitation 1 and this one are the same limitation seen from two
+   sides.
