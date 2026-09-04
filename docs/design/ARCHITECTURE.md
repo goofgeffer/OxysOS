@@ -64,7 +64,7 @@ complementary and neither replaces the other.
 
 ## 3. Present composition
 
-As of the completion of Phase 5 and of sub-tasks 6.1 to 6.3, the system comprises
+As of the completion of Phase 5 and of sub-tasks 6.1 to 6.4, the system comprises
 the following translation units.
 
 | Unit | Role |
@@ -80,11 +80,14 @@ the following translation units.
 | `kernel/cpu/syscall_entry.asm` | The entry point `IA32_LSTAR` names. Provisional in sub-task 6.1; replaced by the dispatch path of sub-task 6.7. |
 | `graphics/draw.c` | The two-dimensional primitives upon a surface: rectangle arithmetic and clipping, the pixel, the filled and outlined rectangle, the integer line, and the blit. |
 | `graphics/framebuffer.c` | The framebuffer the boot loader supplies: its validation, the write-combining memory type given to its pages, its mapping into the kernel arena, and the description every later phase draws through. |
+| `graphics/font.c` | The bitmap face — ninety-five glyphs of eight by eight, drawn for this project — and the drawing of one glyph upon a surface. |
+| `graphics/console.c` | The graphical console: a grid of character cells upon the framebuffer, the four control characters, a scroll performed by blitting the surface upon itself, and the replay of what was written before the framebuffer could be mapped. |
 | `kernel/test/volume.c` | The test fixture: two block devices backed by memory, and an EXT2 volume composed within them. |
 | `kernel/test/verify_memory.c` | The self-tests of the frame allocator, the paging hierarchy, the allocators, reference counting, copy-on-write and address spaces. |
 | `kernel/test/verify_interrupts.c` | The self-tests of the descriptor table, the stubs and their trap frame, the dispatcher and the exception handlers. |
 | `kernel/test/verify_graphics.c` | The self-tests of the drawing primitives, conducted upon a surface in memory. |
 | `kernel/test/verify_framebuffer.c` | The self-tests of the framebuffer's description, its mapping, its memory type, and the pattern a person judges. |
+| `kernel/test/verify_console.c` | The self-tests of the bitmap face against its own metrics, of a glyph drawn upon a surface against its own bytes, and of the four control characters upon the live console. |
 | `kernel/test/verify_privilege.c` | The self-tests of the descriptors, the task state segment, the interrupt stack table and the system-call configuration. |
 | `kernel/test/verify_devices.c` | The self-tests of the interrupt controllers, the interval timer, the keyboard, the serial adapter, the display and the bus. |
 | `kernel/test/verify_storage.c` | The self-tests of the disk, the block layer and the buffer cache. |
@@ -167,9 +170,11 @@ mounting an EXT2 volume through a virtual filesystem layer. Sub-task 6.1 has
 since established the apparatus a privilege transition is performed out of, and
 exercised it, and sub-task 6.2 has acquired the linear framebuffer the boot
 loader supplies and mapped it write-combining, and sub-task 6.3 has supplied the
-primitives that draw into it. Work continues at sub-task 6.4, the font and the
-console above it, and thence to sub-task 6.7, whose system calls are the
-operations of that layer with a user's arguments copied in.
+primitives that draw into it, and sub-task 6.4 the font and the console that draw
+the boot log upon it — which ends the blank screen the framebuffer had cost.
+Work continues at sub-task 6.5, the mouse, and thence to sub-task 6.7, whose
+system calls are the operations of the filesystem layer with a user's arguments
+copied in.
 
 ## 5. Privilege and address-space model
 
@@ -208,17 +213,24 @@ that the machine can verify what it displayed rather than merely that it wrote
 something. `docs/devices/DISPLAY.md`, Section 8, records why a display is unusually hard
 to test and what is asserted at each boot in consequence.
 
-**From sub-task 6.2 the operator-facing path is conditional, and the policy above
-must be read accordingly.** The kernel asks the boot loader for a linear
+**From sub-task 6.2 the operator-facing path is addressed two ways, and the policy
+above must be read accordingly.** The kernel asks the boot loader for a linear
 framebuffer, and a boot loader that supplies one sets a graphics mode to do it;
-the display driver then writes to memory the adapter is not displaying. Every
-diagnostic message is still written to both paths, and the serial path is still
-complete, but until sub-task 6.4 supplies a console that can draw text upon a
-framebuffer, only one of the two can be read.
+the display driver then writes to memory the adapter is not displaying. Sub-task
+6.4 supplies a console that draws text upon the framebuffer, so from that point
+there are **three** output paths and the operator can see whichever of the first
+two the boot loader's chosen mode makes visible.
 
-The consequence is worth stating plainly because it bears upon what can be
-diagnosed: a machine with no serial adapter this kernel detects — VirtualBox is
-one — presently has **no readable diagnostic output at all**. That is the price of
-sub-task 6.2 and it is paid for two sub-tasks. `docs/design/GRAPHICS.md`,
-Section 7, records the position, and `docs/project/TESTING.md`, Section 9.1,
-records what it costs the VirtualBox procedure.
+`KernelWriteString` writes to all three unconditionally and decides between none
+of them. Deciding there would put knowledge of the display mode into the one
+routine that must work before anything has established what the mode is, and the
+two screen paths do not know about each other. That routine is also **the only
+one permitted to name an output device**: the numeric routines named the display
+and the serial port themselves until sub-task 6.4, and the console was in
+consequence shown every word of the boot log and not one of its numbers.
+
+Between sub-tasks 6.2 and 6.4 the cost was real and is worth recording: a machine
+with no serial adapter this kernel detects — VirtualBox is one — had **no readable
+diagnostic output at all**. `docs/design/GRAPHICS.md`, Sections 7 and 19, records
+the position, and `docs/project/TESTING.md`, Section 9.1, what it cost the
+VirtualBox procedure.

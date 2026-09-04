@@ -1,7 +1,7 @@
 # `graphics/` — The Display
 
 **Phase**: 6, sub-tasks 6.2 to 6.6. This directory is created by sub-task 6.2 and
-grows through the four that follow it.
+grows through the four that follow it; 6.2, 6.3 and 6.4 are done.
 **Detailed design**: [`../docs/design/GRAPHICS.md`](../docs/design/GRAPHICS.md).
 
 ## Purpose
@@ -29,11 +29,15 @@ that shares its controller.
 | Path | Description |
 | ---- | ----------- |
 | `draw.c` | Sub-task 6.3. The two-dimensional primitives upon a surface: the rectangle arithmetic every one of them clips with, the pixel, the filled and outlined rectangle, Bresenham's line, and the blit — including the overlapping case a console scrolls with. `GraphicsRectangleIsEmpty`, `GraphicsRectangleIntersect`, `GraphicsRectangleContains`, `GraphicsSurfaceInitialise`, `GraphicsSurfaceFromFramebuffer`, `GraphicsSurfaceBounds`, `GraphicsSetClip`, `GraphicsResetClip`, `GraphicsClip`, `GraphicsPutPixel`, `GraphicsPixelAt`, `GraphicsFillRectangle`, `GraphicsDrawRectangle`, `GraphicsClear`, `GraphicsDrawLine`, `GraphicsBlit`, `GraphicsReport`. |
+| `font.c` | Sub-task 6.4. The bitmap face — ninety-five glyphs of eight by eight covering the printable ASCII range, **drawn for this project rather than obtained**, with a picture comment beside each — and the drawing of one glyph upon a surface, setting only the pixels the glyph defines. `FontCovers`, `FontGlyph`, `FontGlyphRow`, `FontDrawGlyph`. |
+| `console.c` | Sub-task 6.4. The graphical console: a grid of character cells upon the framebuffer, the four control characters of ANSI X3.4-1986 as the text-mode driver implements them, a scroll performed by blitting the surface upon itself, and a buffer that replays what was written before the framebuffer could be mapped. `ConsoleInitialise`, `ConsoleIsActive`, `ConsoleWriteCharacter`, `ConsoleWriteString`, `ConsoleSetColour`, `ConsoleColumns`, `ConsoleRows`, `ConsoleColumn`, `ConsoleRow`, `ConsoleSetEraseLimit`, `ConsoleReport`. |
 | `framebuffer.c` | Sub-task 6.2. Acquires the framebuffer described in the Multiboot2 boot information, gives its pages the write-combining memory type through the page attribute table, maps them into the kernel arena, and describes what was obtained. `FramebufferInitialise`, `FramebufferIsPresent`, `FramebufferIsGraphical`, `FramebufferAddress`, `FramebufferWidth`, `FramebufferHeight`, `FramebufferPitch`, `FramebufferBitsPerPixel`, `FramebufferBytesPerPixel`, `FramebufferByteCount`, `FramebufferFormat`, `FramebufferEncode`, `FramebufferWriteCombining`, `FramebufferReport`. |
 
 The interfaces are declared in
-[`../kernel/include/oxys/framebuffer.h`](../kernel/include/oxys/framebuffer.h) and
-[`../kernel/include/oxys/graphics.h`](../kernel/include/oxys/graphics.h), with the
+[`../kernel/include/oxys/framebuffer.h`](../kernel/include/oxys/framebuffer.h),
+[`../kernel/include/oxys/graphics.h`](../kernel/include/oxys/graphics.h),
+[`../kernel/include/oxys/font.h`](../kernel/include/oxys/font.h) and
+[`../kernel/include/oxys/console.h`](../kernel/include/oxys/console.h), with the
 rest of the kernel's header corpus, so that a consumer depends upon an interface
 and not upon this directory.
 
@@ -51,20 +55,22 @@ let sub-task 6.6 hand the same code a back buffer instead.
 | Intel SDM, Volume 3A | 11.12.2, 11.12.3, Tables 11-7, 11-10, 11-11 | The page attribute table: its eight entries, the index a page-table entry selects by `(PAT << 2) \| (PCD << 1) \| PWT`, the write-combining encoding, and the combination with the memory type range registers. |
 | Intel SDM, Volume 2A, `CPUID` | — | Leaf 1, EDX bit 16: whether the page attribute table exists at all. |
 | J. E. Bresenham, IBM Systems Journal 4(1), 1965 | — | The integer line algorithm of `draw.c`, which decides each step from an accumulated error and uses no division and no floating point. |
+| ANSI X3.4-1986 | — | The printable range `0x20` to `0x7E` the font of `font.c` covers, and the four control characters `console.c` interprets — the same four, given the same meanings, as the text-mode driver. |
 
 Full citations are held in
 [`../docs/project/REFERENCES.md`](../docs/project/REFERENCES.md).
 
 ## Present limitations
 
-The complete list is `docs/design/GRAPHICS.md`, Section 10. The three that govern
-what can be built next:
+The complete lists are `docs/design/GRAPHICS.md`, Sections 10, 17 and 20. The
+three that govern what can be built next:
 
-1. **There is no text.** The primitives draw shapes; the font that draws
-   characters is sub-task 6.4. There is also no blending, no clip stack, no
-   scaling blit and no curve.
-2. **There is no visible console until sub-task 6.4.** Requesting a framebuffer
-   puts the adapter in a graphics mode, so the VGA text driver writes to memory
-   nothing displays. The serial port carries the whole boot log meanwhile.
+1. **There is no blending, no clip stack, no scaling blit and no curve.** Every
+   colour is opaque and a pixel is written rather than combined; alpha belongs
+   with the compositing of sub-task 6.6.
+2. **The console is plain.** No cursor is drawn, there are no colours per
+   character, a scroll redraws the whole screen, and nothing is buffered
+   off-screen. All four are answered by sub-task 6.6 and none is felt at the rate
+   a boot log is written.
 3. **The mode cannot be chosen.** GRUB selects it and ignores what it is asked
    for; the kernel accepts whatever it is handed and asserts what it was.

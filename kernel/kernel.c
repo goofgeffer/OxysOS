@@ -67,6 +67,7 @@
 #include <oxys/vga.h>
 #include <oxys/framebuffer.h>
 #include <oxys/graphics.h>
+#include <oxys/console.h>
 #include <oxys/serial.h>
 #include <oxys/pci.h>
 #include <oxys/ata.h>
@@ -128,10 +129,18 @@ void KernelWriteHexadecimal(uint64_t value)
         value >>= 4;
     } while (value != 0U);
 
-    VgaWriteString("0x");
-    VgaWriteString(&buffer[index]);
-    SerialWriteString("0x");
-    SerialWriteString(&buffer[index]);
+    /*
+     * Emitted through KernelWriteString, which is the one place that knows how
+     * many output paths there are.
+     *
+     * This named the display and the serial port itself until sub-task 6.4, and
+     * the graphical console added there was therefore shown every word of the
+     * boot log and not one of its numbers — a fault that looked like a
+     * formatting error in the messages rather than like a missing output path.
+     * Nothing below this line may name an output device.
+     */
+    KernelWriteString("0x");
+    KernelWriteString(&buffer[index]);
 }
 
 /*
@@ -154,8 +163,7 @@ void KernelWriteDecimal(uint64_t value)
         value /= 10U;
     } while (value != 0U);
 
-    VgaWriteString(&buffer[index]);
-    SerialWriteString(&buffer[index]);
+    KernelWriteString(&buffer[index]);
 }
 
 /*
@@ -165,7 +173,22 @@ void KernelWriteDecimal(uint64_t value)
  */
 void KernelWriteString(const char *string)
 {
+    /*
+     * Three paths, of which the operator can see at most two.
+     *
+     * The text-mode display and the graphical console are the same channel
+     * addressed two ways: which of them is visible depends upon the mode the
+     * boot loader left the adapter in, and neither knows about the other. Both
+     * are written to unconditionally, because deciding between them here would
+     * put the knowledge of the display mode in the one routine that must work
+     * before anything has established what the mode is.
+     *
+     * The console records what it is given until it has a framebuffer to draw
+     * upon, and replays it then, so the screen shows the boot from its first
+     * line rather than from the middle.
+     */
     VgaWriteString(string);
+    ConsoleWriteString(string);
     SerialWriteString(string);
 }
 
@@ -341,6 +364,14 @@ static void KernelSerialCursorToColumn(size_t column)
  * the serial line: the driver may have refused to move, the cursor standing at
  * the erase limit, or it may have crossed into the row above, which is a
  * movement the serial terminal must be told about explicitly.
+ *
+ * The graphical console is given the same three characters and left to reach its
+ * own conclusion. It implements the same rules and keeps its own erase limit, so
+ * it needs no direction from here; and it must not be given the serial
+ * terminal's escape sequences, which are a property of a terminal and not of a
+ * display. Its geometry differs from the text display's in any case, so the row
+ * and column below are not its rows and columns and could not be used to steer
+ * it if one wanted to.
  */
 static void KernelEchoBackspace(void)
 {
@@ -352,6 +383,8 @@ static void KernelEchoBackspace(void)
     VgaCursorPosition(&row, &column);
     VgaWriteString("\b \b");
     VgaCursorPosition(&resulting_row, &resulting_column);
+
+    ConsoleWriteString("\b \b");
 
     if ((resulting_row == row) && (resulting_column == column))
     {
@@ -410,6 +443,7 @@ static _Noreturn void KernelEchoLoop(void)
      * the log a character at a time.
      */
     VgaSetEraseLimit();
+    ConsoleSetEraseLimit();
 
     for (;;)
     {
@@ -556,6 +590,28 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
      */
     GraphicsReport();
     KernelVerifyGraphics();
+
+    /*
+     * Phase 6, sub-task 6.4. The console, which takes the screen.
+     *
+     * It is started after the drawing self-tests and not before, because it
+     * clears the framebuffer and replays the boot log over it: started first, it
+     * would be drawn upon by the figures those tests paint, and the log would be
+     * unreadable. Started here, it erases them.
+     *
+     * That the two cannot coexist is why the figures are drawn only when the
+     * boot loader's command line asks for them, and why this is then not started
+     * at all. Whoever wants to look at the figures of sub-tasks 6.2 and 6.3 asks
+     * for them and gives up the console for that boot; everybody else gets the
+     * console, which is what a screen is for.
+     */
+    if (!KernelCommandLineHasOption("graphics-figure"))
+    {
+        (void)ConsoleInitialise();
+    }
+
+    ConsoleReport();
+    KernelVerifyConsole();
 
     FrameReferenceInitialise();
     KernelVerifyReferenceCounting();

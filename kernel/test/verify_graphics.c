@@ -707,6 +707,11 @@ static void KernelVerifyGraphicsBlit(void)
  * the framebuffer may not exist, and reading it back through a write-combining
  * mapping proves less than reading an array. What this produces is the figure a
  * person judges, described in docs/project/TESTING.md, Section 16.
+ *
+ * It is drawn only when the boot loader's command line asks for it. From
+ * sub-task 6.4 the console owns the screen and erases whatever stands upon it,
+ * so the figure and the boot log are exclusive and the command line is where the
+ * choice between them is made.
  */
 static void KernelVerifyGraphicsUponTheScreen(void)
 {
@@ -715,7 +720,8 @@ static void KernelVerifyGraphicsUponTheScreen(void)
     int32_t width;
     int32_t height;
 
-    if (!GraphicsSurfaceFromFramebuffer(&screen))
+    if (!GraphicsSurfaceFromFramebuffer(&screen) ||
+        !KernelCommandLineHasOption("graphics-figure"))
     {
         return;
     }

@@ -349,12 +349,22 @@ static void KernelVerifyFramebufferAccess(void)
      * The pattern the operator judges: a band of red, green and blue across the
      * top of the screen, in that order, each a sixteenth of the height.
      *
+     * It is drawn only when the boot loader's command line asks for it. From
+     * sub-task 6.4 the console owns the screen and would erase this within the
+     * same boot, so the two are exclusive and the command line is where the
+     * choice is made; see docs/project/TESTING.md, Section 15.1.
+     *
      * Its purpose is to be looked at, and it is composed so that looking at it
      * establishes something. If the channel positions were misread, the bands
      * appear in the wrong order or in the wrong colours. If the pitch were
      * wrong, the bands skew rather than lying flat. If the extent were wrong,
      * they stop short of the right-hand edge.
      */
+    if (!KernelCommandLineHasOption("graphics-figure"))
+    {
+        return;
+    }
+
     for (uint32_t row = 0U; row < (height / 16U); ++row)
     {
         for (uint32_t column = 0U; column < width; ++column)

@@ -40,9 +40,9 @@ is displaying the screen. The position is:
 | The boot loader left the adapter in | This driver | The screen shows |
 | ----------------------------------- | ----------- | ---------------- |
 | A text mode | Displays the console, exactly as below | The boot log |
-| A graphics mode | Writes to memory nothing displays | Whatever `graphics/` last drew |
+| A graphics mode | Writes to memory nothing displays | The same boot log, drawn by the graphical console of sub-task 6.4 — or the drawing figures, where the command line asked for them |
 
-Two consequences follow, and both are recorded rather than worked around.
+One consequence follows, and it is recorded rather than worked around.
 
 The self-test of Section 8 is **skipped** in a graphics mode, and says so. Every
 assertion it makes reads a character cell back out of the text buffer, and in a
@@ -51,13 +51,22 @@ would be worse than one that states plainly that it asserted nothing. It also ha
 to move later in the boot, since which mode the machine is in is stated by the
 Multiboot2 boot information and nowhere else.
 
-**This is temporary.** Sub-task 6.4 supplies a console that draws text upon a
-framebuffer, and the operator's channel returns — through different machinery.
-Until then the serial adapter carries the whole boot log, which is the channel
-the automated tests read in any case. What is lost meanwhile is the screen of a
-machine with no serial adapter, and under VirtualBox — where this kernel detects
-none — that is every readable line; `../project/TESTING.md`, Section 9.1, records
-it.
+**It was temporary, and sub-task 6.4 ended it.** There is now a console that
+draws text upon a framebuffer, so the operator's channel has returned through
+different machinery. `KernelWriteString` writes to this driver, to that console
+and to the serial port, unconditionally and without deciding between them; which
+of the first two the operator can see is decided by the mode the boot loader left
+the adapter in, and neither knows about the other.
+
+The two are deliberately alike where it counts. The console implements the same
+four control characters this driver does, with the same meanings and the same
+erase limit, so that one diagnostic path does not behave differently upon two
+displays — Sections 6 and 7 below are the specification of both. See
+[`../design/GRAPHICS.md`](../design/GRAPHICS.md), Section 19.
+
+What was lost between sub-tasks 6.2 and 6.4 was the screen of a machine with no
+serial adapter, and under VirtualBox — where this kernel detects none — that was
+every readable line; `../project/TESTING.md`, Section 9.1, records it.
 
 The framebuffer that displaced this driver never maps the text buffer, even where
 the boot loader reports one. That memory is this driver's, and two mappings of one

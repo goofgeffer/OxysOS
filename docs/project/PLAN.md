@@ -90,9 +90,9 @@ wrong and then, for no reason connected to anything, right. And **the mode is
 the boot loader's to choose**: GRUB 2.12 ignores `gfxpayload` for a multiboot2
 image, which was established rather than assumed, so the kernel accepts whatever
 it is handed and asserts what it was. The cost is that the adapter is now in a
-graphics mode with no console upon it: the screen shows the self-test's colour
-bands until sub-task 6.4, and the serial port carries the boot log as it always
-did.
+graphics mode with no console upon it: for two sub-tasks the screen showed the
+self-test's colour bands and the serial port carried the boot log alone, until
+sub-task 6.4 supplied a console that draws upon a framebuffer.
 
 **Sub-task 6.3 is complete.** The primitives draw upon a `GraphicsSurface` and
 not upon the framebuffer, which is one surface among them: blit has no meaning
@@ -107,8 +107,32 @@ Bresenham's and is clipped **per pixel rather than at its endpoints**, which is
 slower and is the only way to keep the promise that a clipped line lights exactly
 the pixels the unclipped line would: the algorithm accumulates its error from the
 start, so moving the start moves the line by a pixel here and there, and that
-shows as a kink where two clipped regions meet along a seam. The next work is
-sub-task 6.4, the font and the console that ends the blank screen. See
+shows as a kink where two clipped regions meet along a seam.
+
+**Sub-task 6.4 is complete**, and it ends the blank screen. A bitmap face of
+ninety-five glyphs, eight by eight, **drawn for this project rather than
+obtained** — a font being exactly the kind of asset that is easy to lift, and
+`PROJECT_GUIDELINES.md` Section 2 prohibiting it — and a console of character
+cells above it, which clears the framebuffer and replays the boot log over it.
+Three things are worth stating. The console **records what it is given until it
+has a framebuffer to draw upon**, because the mapping comes out of the kernel
+arena and nineteen hundred bytes of log precede it, and a screen that began part
+way through the boot would omit exactly the messages worth having when a machine
+will not boot. Scrolling is **one blit of the surface upon itself**, which is the
+overlapping case sub-task 6.3 chose a copy direction for and the whole of the
+payment for it. And the console and the figures those earlier self-tests paint
+**cannot share the screen**, so the figures are drawn only when the command line
+asks for them and the console stands down for that boot; a screen is for reading.
+One fault found in the doing is recorded because of how it read: the numeric
+output routines named the display and the serial port themselves, so the console
+was shown every word of the log and not one of its addresses — which looks like a
+formatting error and is a missing output path. `KernelWriteString` is now the
+only routine permitted to name an output device.
+
+VirtualBox is the result this sub-task was for. It has no serial adapter this
+kernel detects and, since sub-task 6.2, no text mode either, so it had no
+readable diagnostic output at all; it now draws the log upon its own framebuffer,
+and being too short to hold it, scrolls. See
 [`../design/PRIVILEGE.md`](../design/PRIVILEGE.md) and
 [`../design/GRAPHICS.md`](../design/GRAPHICS.md).
 
@@ -239,7 +263,7 @@ Section 3.6.12 (framebuffer information tag); VESA BIOS Extensions 3.0.
 - [x] 6.1 Install the GDT and TSS required for privilege transition; configure IA32_STAR, IA32_LSTAR and IA32_FMASK. *(The kernel GDT and its null, code and data descriptors were established early, in Phase 3; what remained was the user-mode descriptors, the task state segment and the system-call MSRs. Designed in `docs/design/PRIVILEGE.md`.)*
 - [x] 6.2 Request a linear framebuffer by the Multiboot2 framebuffer tag and map it into kernel space. *(Designed in `docs/design/GRAPHICS.md`. The mode is the boot loader's to choose and GRUB ignores what it is asked for, so the kernel accepts whatever it is handed; the pages are given the write-combining memory type through entry 4 of `IA32_PAT`.)*
 - [x] 6.3 Implement 2D primitives: pixel, line, rectangle, blit and clipping. *(Upon a surface rather than upon the framebuffer, so that they may be asserted in memory upon a machine with no display. Clipping is treated as the memory-safety boundary it is; the line is clipped per pixel so that clipping does not move it. Designed in `docs/design/GRAPHICS.md`, Sections 11 to 17.)*
-- [ ] 6.4 Implement a bitmap font renderer, and a graphical console above it that the diagnostic path may write to.
+- [x] 6.4 Implement a bitmap font renderer, and a graphical console above it that the diagnostic path may write to. *(The face is ninety-five glyphs of eight by eight, drawn for this project rather than obtained. The console replays what was written before the framebuffer could be mapped, scrolls by blitting the surface upon itself, and gives up the screen to the drawing figures when the command line asks for them. Designed in `docs/design/GRAPHICS.md`, Sections 18 to 22.)*
 - [ ] 6.5 Implement a PS/2 mouse driver upon the second device port of the 8042, and a cursor.
 - [ ] 6.6 Implement a compositing surface abstraction and double buffering.
 - [ ] 6.7 Implement the `SYSCALL` entry path, the system-call dispatch table and argument validation.
@@ -456,9 +480,10 @@ copies of an argument do not agree with each other for long.
 
 | Date | Phase | Change | Commit | Design |
 | ---- | ----- | ------ | ------ | ------ |
+| 2026-09-04 | Phase 6 | Sub-task 6.4: the bitmap font and the graphical console, which end the blank screen sub-task 6.2 left. Ninety-five glyphs drawn for this project, not obtained. The console replays what was written before the framebuffer could be mapped, scrolls by blitting the surface upon itself, and stands down when the command line asks for the drawing figures. `KernelWriteString` becomes the only routine permitted to name an output device. | *(this change)* | [`../design/GRAPHICS.md`](../design/GRAPHICS.md), Sections 18 to 22 |
 | 2026-09-03 | Phase 6 | Sub-task 6.3: the 2D primitives — pixel, line, rectangle, blit and clipping — upon a surface rather than upon the framebuffer, so that they are asserted in memory against a surface whose pitch exceeds its width and whose padding holds a sentinel. Clipping is the memory-safety boundary and is implemented once; the line is clipped per pixel so that clipping cannot displace it. | `7bcbc98` | [`../design/GRAPHICS.md`](../design/GRAPHICS.md), Sections 11 to 17 |
 | 2026-09-03 | Phase 6 | Sub-task 6.2: the linear framebuffer. The image carries the Multiboot2 request tag, optional bit set because the kernel can boot without one; what is supplied is validated, mapped by a new `KernelDeviceMap` that allocates no frame, and given the write-combining memory type through entry 4 of `IA32_PAT`, an entry no existing mapping selects. GRUB ignores `gfxpayload`, so the mode is accepted rather than chosen, and the text console is displaced until sub-task 6.4. | `cdf74b0` | [`../design/GRAPHICS.md`](../design/GRAPHICS.md) |
-| 2026-09-03 | Phases 6, 9 | Phase 9 split at the project owner's decision. Its first five sub-tasks — the framebuffer, the primitives, the font, the mouse and the compositing surface — become sub-tasks 6.2 to 6.6, none of them needing a process to exist; the window manager, the client protocol and the desktop services they support remain in Phase 9, which is now the desktop rather than graphics. Old 6.2 to 6.10 renumbered to 6.7 to 6.15, and every reference across 35 files with them. `PROJECT_GUIDELINES.md` §5 amended accordingly. | *(this change)* | [`PLAN.md`](PLAN.md), Phases 6 and 9 |
+| 2026-09-03 | Phases 6, 9 | Phase 9 split at the project owner's decision. Its first five sub-tasks — the framebuffer, the primitives, the font, the mouse and the compositing surface — become sub-tasks 6.2 to 6.6, none of them needing a process to exist; the window manager, the client protocol and the desktop services they support remain in Phase 9, which is now the desktop rather than graphics. Old 6.2 to 6.10 renumbered to 6.7 to 6.15, and every reference across 35 files with them. `PROJECT_GUIDELINES.md` §5 amended accordingly. | `1a42a8a` | [`PLAN.md`](PLAN.md), Phases 6 and 9 |
 | 2026-09-03 | Phase 6 | Sub-tasks 6.8 and 6.9 exchanged — their numbers that day; they are 6.13 and 6.14 since the renumbering above — so that spinlocks and per-CPU data precede the application-processor bring-up rather than following it. In the old order a milestone started processors against a kernel whose every shared structure was unsynchronised, and could be neither demonstrated nor asserted. Every reference to either number, in code and documentation alike, updated with it. | `c3befd8` | [`PLAN.md`](PLAN.md), Phase 6 |
 | 2026-09-03 | All | The boot-time self-tests moved out of `kernel.c` into `kernel/test/`, one file per subsystem. `kernel.c` fell from 9,050 lines to 708. `make verify` now fails when a self-test reports a failure, which it previously could not see. This revision history rewritten as an index rather than a third account of each change. | `8e778e2` | [`../../kernel/test/README.md`](../../kernel/test/README.md), [`TESTING.md`](TESTING.md) §1 |
 | 2026-09-03 | Phase 6 | Sub-task 6.1: the apparatus of a privilege transition. User-mode descriptors ordered by the arithmetic `SYSCALL` and `SYSRET` derive their selectors by; a task state segment with a stack for the double fault; `IA32_STAR`, `IA32_LSTAR` and `IA32_FMASK`. The interrupt stack table and the transition are exercised, not merely inspected. | `1903603` | [`../design/PRIVILEGE.md`](../design/PRIVILEGE.md) |

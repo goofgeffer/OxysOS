@@ -108,6 +108,7 @@ C_SOURCES := kernel/kernel.c \
              kernel/test/verify_privilege.c \
              kernel/test/verify_framebuffer.c \
              kernel/test/verify_graphics.c \
+             kernel/test/verify_console.c \
              kernel/test/verify_devices.c \
              kernel/test/verify_storage.c \
              kernel/test/verify_ext2.c \
@@ -136,7 +137,9 @@ C_SOURCES := kernel/kernel.c \
              drivers/block/block.c \
              drivers/block/buffer.c \
              graphics/framebuffer.c \
-             graphics/draw.c
+             graphics/draw.c \
+             graphics/font.c \
+             graphics/console.c
 
 ASM_SOURCES := boot/boot.asm \
                kernel/cpu/interrupt_stubs.asm \

@@ -499,15 +499,22 @@ Used by: `drivers/vga/vga.c`, `kernel/include/oxys/vga.h`, `boot/boot.asm`.
 American National Standards Institute. Republished, with the same repertoire of
 control characters, as ISO/IEC 646.
 
-The definitions of the control characters relied upon by the display driver:
-**BS** (`0x08`) moves the active position one character position backward;
-**HT** (`0x09`) advances it to the next horizontal tabulation stop; **LF**
-(`0x0A`) moves it one line down; **CR** (`0x0D`) moves it to the first character
-position of the line. None of the four erases the character it moves over, which
-is why erasure upon the display and upon a terminal alike is expressed as the
-sequence `BS`, `SP`, `BS`.
+The definitions of the control characters relied upon by the display driver and,
+from sub-task 6.4, by the graphical console that must agree with it: **BS**
+(`0x08`) moves the active position one character position backward; **HT**
+(`0x09`) advances it to the next horizontal tabulation stop; **LF** (`0x0A`)
+moves it one line down; **CR** (`0x0D`) moves it to the first character position
+of the line. None of the four erases the character it moves over, which is why
+erasure upon the display and upon a terminal alike is expressed as the sequence
+`BS`, `SP`, `BS`.
 
-Used by: `drivers/vga/vga.c`, `kernel/include/oxys/vga.h`, `kernel/kernel.c`.
+Also the repertoire the bitmap font of sub-task 6.4 covers: the printable
+characters `0x20` to `0x7E`, and the names given to them, which are the comments
+beside the glyphs in `graphics/font.c`.
+
+Used by: `drivers/vga/vga.c`, `kernel/include/oxys/vga.h`, `kernel/kernel.c`,
+`graphics/font.c`, `graphics/console.c`, `kernel/include/oxys/font.h`,
+`kernel/include/oxys/console.h`.
 
 ### ECMA-48, Control Functions for Coded Character Sets
 European Computer Manufacturers Association, fifth edition.

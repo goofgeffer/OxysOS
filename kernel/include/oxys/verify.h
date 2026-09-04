@@ -87,6 +87,9 @@ void KernelVerifyExceptions(void);
  * and the memory type of that mapping. */
 void KernelVerifyFramebuffer(void);
 
+/* Phase 6, sub-task 6.4: the bitmap font and the console drawn with it. */
+void KernelVerifyConsole(void);
+
 /* Phase 6, sub-task 6.3: the two-dimensional primitives, asserted against a
  * surface composed in memory so that they hold upon a machine with no display. */
 void KernelVerifyGraphics(void);

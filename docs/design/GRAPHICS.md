@@ -1,26 +1,33 @@
-# The Framebuffer
+# The Framebuffer, the Primitives and the Console
 
-**Corresponding phase**: 6, sub-tasks 6.2 and 6.3, which open the graphical work.
-Sections 1 to 10 concern the framebuffer; Sections 11 to 17 the primitives that
-draw upon it.
+**Corresponding phase**: 6, sub-tasks 6.2, 6.3 and 6.4, which open the graphical
+work. Sections 1 to 10 concern the framebuffer; Sections 11 to 17 the primitives
+that draw upon it; Sections 18 to 22 the font and the console drawn with them.
 **Authority**: `PROJECT_GUIDELINES.md`, Sections 2 and 4.
 **Implemented by**: [`../../graphics/framebuffer.c`](../../graphics/framebuffer.c),
 [`../../graphics/draw.c`](../../graphics/draw.c),
+[`../../graphics/font.c`](../../graphics/font.c),
+[`../../graphics/console.c`](../../graphics/console.c),
 [`../../kernel/include/oxys/graphics.h`](../../kernel/include/oxys/graphics.h),
 [`../../kernel/include/oxys/framebuffer.h`](../../kernel/include/oxys/framebuffer.h),
+[`../../kernel/include/oxys/font.h`](../../kernel/include/oxys/font.h),
+[`../../kernel/include/oxys/console.h`](../../kernel/include/oxys/console.h),
 [`../../kernel/multiboot2.c`](../../kernel/multiboot2.c),
 [`../../boot/boot.asm`](../../boot/boot.asm),
 [`../../kernel/mm/vmm.c`](../../kernel/mm/vmm.c).
 **Asserted by**: `KernelVerifyFramebuffer` in
 [`../../kernel/test/verify_framebuffer.c`](../../kernel/test/verify_framebuffer.c),
-and `KernelVerifyGraphics` in
-[`../../kernel/test/verify_graphics.c`](../../kernel/test/verify_graphics.c).
+`KernelVerifyGraphics` in
+[`../../kernel/test/verify_graphics.c`](../../kernel/test/verify_graphics.c),
+and `KernelVerifyConsole` in
+[`../../kernel/test/verify_console.c`](../../kernel/test/verify_console.c).
 
 **Specifications**: Multiboot2 Specification 2.0, Sections 3.1.10 and 3.6.12;
 Intel 64 and IA-32 Architectures Software Developer's Manual, Volume 3A,
 Sections 11.12.2 and 11.12.3, and Tables 11-7, 11-10 and 11-11; Volume 2A,
 `CPUID`; J. E. Bresenham, "Algorithm for computer control of a digital plotter",
-IBM Systems Journal 4(1), pages 25 to 30, 1965.
+IBM Systems Journal 4(1), pages 25 to 30, 1965; ANSI X3.4-1986, the printable
+range and the four control characters the console interprets.
 
 ---
 
@@ -235,9 +242,9 @@ Requesting a framebuffer causes GRUB to set a graphics mode, and in a graphics
 mode the memory at `0xB8000` is no longer the text buffer. The VGA driver of
 sub-task 4.2 goes on writing to it and nothing appears.
 
-This is a real cost and it is not disguised. **Until sub-task 6.4 supplies a
-console that can draw text upon a framebuffer, the screen shows the colour bands
-the self-test paints and nothing else.** The whole boot log continues to be
+This is a real cost and it is not disguised. **For two sub-tasks the screen
+showed the colour bands the self-test paints and nothing else**, until sub-task
+6.4 supplied a console that draws text upon the framebuffer; see Section 19. The whole boot log continues to be
 carried by the serial port, which is the path the automated tests read in any
 case, so nothing is lost to verification — only to a person looking at the
 machine.
@@ -338,10 +345,11 @@ diagnostic output at all — it has no serial adapter this kernel detects, and n
 no console either — which is recorded in `docs/project/TESTING.md`, Section 9.1,
 and which sub-task 6.4 ends.
 
-## 10. Present limitations
+## 10. Limitations of the framebuffer
 
-1. **There is no visible console until sub-task 6.4.** See Section 7. The serial
-   port carries everything; the screen carries the test pattern.
+1. **There was no visible console until sub-task 6.4.** See Section 7: for two
+   sub-tasks the serial port carried everything and the screen carried the test
+   pattern. Section 19 ends that.
 2. **`IA32_PAT` is written upon one processor.** Every processor holds its own,
    and a mapping made here would be write-back upon any processor that had not
    performed the write. Sub-task 6.14 must repeat it upon each application
@@ -363,9 +371,9 @@ and which sub-task 6.4 ends.
 6. **The framebuffer is never unmapped.** It exists for the life of the machine,
    so `KernelDeviceUnmap` is exercised by nothing here. It is written and
    declared because the facility is general and Phase 11 will need the pair.
-7. **Nothing is drawn but the test pattern**, and the pattern is written by the
-   self-test rather than by any interface a caller could use. That interface is
-   sub-task 6.3.
+7. **Nothing was drawn but the test pattern**, and the pattern was written by
+   the self-test rather than by any interface a caller could use. That interface
+   is sub-task 6.3, in Section 11.
 
 ---
 
@@ -573,3 +581,331 @@ written into the row padding. The edit was then reverted.
    bytes rather than one word. It is correct at every depth and slower than it
    needs to be at the common one; the measurement that would justify specialising
    it does not exist yet.
+
+---
+
+## 18. The face (sub-task 6.4)
+
+A framebuffer is pixels, and a boot log is text. Something has to turn one into
+the other, and this is it: ninety-five glyphs covering the printable range of
+ANSI X3.4-1986, `0x20` to `0x7E`, compiled into the image as `graphics/font.c`.
+
+### 18.1 Why it was drawn rather than obtained
+
+`PROJECT_GUIDELINES.md`, Section 2, prohibits transcribing anybody else's source,
+and a font is exactly the kind of asset that is easy to lift and hard to notice
+having lifted. The IBM code page 437 face is in a hundred repositories and would
+have been quicker to copy than to draw. It was drawn instead, pixel by pixel, and
+that is why the face is a plain one.
+
+The alternative that would have been original — reading the font the firmware
+loaded into plane 2 of the VGA character generator, which is the machine's own
+data rather than anybody's source — was considered and rejected for two reasons.
+The boot loader has already set a graphics mode by the time this kernel runs, so
+the planes may no longer hold it; and Phase 12 boots under UEFI, where there is
+no VGA character generator at all. A font compiled into the image works in both
+cases and in every case after them.
+
+### 18.2 The cell, and why it is eight wide
+
+Eight columns by eight rows. The width is eight because a row of a glyph is then
+exactly one byte: a wider cell needs either two bytes to the row or a bit field
+spanning bytes, and neither buys a console anything.
+
+The metrics the whole table is drawn to:
+
+| | |
+| --- | --- |
+| Ink | columns 0 to 5 |
+| Spacing | columns 6 and 7, always clear |
+| Capitals and digits | rows 0 to 6, baseline at row 6 |
+| Lowercase | rows 2 to 6 |
+| Descenders (`g j p q y`) | reach row 7 |
+
+The two clear columns are the whole of the spacing between one character and the
+next. A console therefore draws at a stride of exactly `FONT_WIDTH` and has no
+gap of its own to manage, and a glyph that used those columns would touch the
+character beside it. That is an assertion, not a convention; see Section 21.
+
+Each glyph is eight bytes, one to a row, **most significant bit leftmost**, so a
+row of pixels reads left to right exactly as the picture comment beside it is
+drawn. The pictures are what make the table legible and they are comments:
+nothing checks that a picture agrees with the bytes beside it. Change one and you
+must change the other. The self-test asserts the bytes, and no test can tell you
+that a letter looks wrong.
+
+### 18.3 The replacement glyph
+
+Every code outside the covered range yields a hollow box rather than nothing.
+`FontGlyph` is therefore never `NULL` and its caller dereferences it without
+checking, which is the point of it.
+
+A font that drew a blank for a code it did not know would make a run of unmapped
+characters indistinguishable from a run of spaces, and the fault would read as
+missing output rather than as an unmapped character. The console relies upon this
+for the control characters it does not implement: one that nothing meant to emit
+appears as a box in the log, where it can be found.
+
+### 18.4 Drawing, and what is not drawn
+
+`FontDrawGlyph` sets only the pixels the glyph defines and leaves the rest of the
+cell as it was. The background is the caller's business — a console fills the
+cell before calling this; a caller drawing text over an image does not, and gets
+the character stencilled upon what was already there. Drawing the background here
+would be one pass instead of two and would make it impossible to draw a character
+over anything, which is what a cursor does and what sub-task 6.6 will want.
+
+Every pixel goes through `GraphicsPutPixel`, so every pixel is clipped by
+Section 13's boundary. A glyph at the edge of a surface is cut off rather than
+wrapped or refused, and one wholly outside the clip costs sixty-four rejected
+writes and touches nothing. That is the slow way to draw text and it is the
+correct one; the fast way needs a clipped span, which is sub-task 6.6's problem
+when there is something to measure.
+
+## 19. The console
+
+`graphics/console.c` is a grid of character cells drawn upon the framebuffer:
+`width / FONT_WIDTH` columns by `height / FONT_HEIGHT` rows, taken from a
+`GraphicsSurface` describing the framebuffer, and nothing else. It is what ends
+the cost Section 7 recorded — that for two sub-tasks the screen showed a test
+pattern and the boot log went to the serial port alone.
+
+It does not supersede the text-mode driver of sub-task 4.2. `KernelWriteString`
+writes to the display, the console and the serial port unconditionally, and which
+of the first two the operator can see is decided by the mode the boot loader left
+the adapter in. Deciding between them in that routine would put knowledge of the
+display mode in the one function that must work before anything has established
+what the mode is.
+
+### 19.1 The fault that made the fan-out one place
+
+`KernelWriteHexadecimal` and `KernelWriteDecimal` named `VgaWriteString` and
+`SerialWriteString` themselves until this sub-task. The console was therefore
+shown every word of the boot log and not one of its numbers — every address,
+count and size simply absent from the screen while the same lines on the serial
+port were complete.
+
+It read as a formatting error in the messages rather than as a missing output
+path, which is why it is written down. Both now emit through `KernelWriteString`,
+and that is the only routine in the kernel permitted to name an output device.
+
+### 19.2 The control characters
+
+The four of ANSI X3.4-1986 that the text-mode driver implements, given the same
+meanings deliberately, so that one diagnostic path does not behave differently
+upon two displays. `docs/devices/DISPLAY.md`, Sections 6 and 7, is the other half
+of this.
+
+| | |
+| --- | --- |
+| LF | to the first column of the following row, scrolling upon the last |
+| CR | to the first column of the current row |
+| HT | to the next multiple of eight columns — to a multiple, not by eight |
+| BS | one position backward; **does not erase**, and will not pass the erase limit |
+
+The tabulation is the one worth stating twice. Columns of text separated by
+tabulations line up only if every one of them lands upon the same grid, whatever
+the length of what preceded it; advancing by eight lines nothing up with
+anything.
+
+The backspace does not erase because an erasure is composed by its caller from
+backspace, space, backspace — which is what it must be upon a serial terminal, so
+it is what it is here. The erase limit is the position a backspace may not
+retreat past, and it exists for the reason the text-mode driver has one: an echo
+loop must not let a person backspace over the prompt, or over output the kernel
+wrote and they did not type.
+
+**The limit moves with a scroll.** A limit left at a fixed row would come to mark
+a different character once the text beneath it had moved, and a backspace would
+then be permitted to erase output it was meant to protect — or refused where it
+should have been allowed.
+
+Every other control character is drawn as the replacement glyph rather than
+discarded, per Section 18.3.
+
+### 19.3 The scroll, which is the blit paying for itself
+
+Scrolling is one `GraphicsBlit` of the surface upon itself, followed by a fill of
+the row exposed at the bottom.
+
+This is the overlapping case that Section 15 chose a copy direction for. The
+destination lies above the source, so the rows are taken from the top and nothing
+reads a byte the copy has already overwritten. A console scroll is the reason
+that direction logic was written, and this is the whole of the payment.
+
+### 19.4 The replay buffer
+
+The framebuffer cannot be acquired until the kernel virtual arena exists, because
+the mapping comes out of it, and by then some nineteen hundred bytes of boot log
+have already been written. A console started at that point would begin part way
+through the boot, and the messages it dropped — the handover, the memory map —
+are exactly the ones worth seeing when a machine will not boot.
+
+So `ConsoleWriteCharacter` records into a fixed 4 KiB `.bss` buffer until there is
+something to draw upon, and `ConsoleInitialise` replays it. The capacity is fixed
+and what does not fit is dropped **with the drop counted and reported**: a replay
+that silently began part way through would look exactly like a boot that began
+part way through. A buffer that reallocated would need the heap, which does not
+exist that early either.
+
+The replay cannot re-enter the buffer, and the reason is the order of two
+statements rather than a flag: `ConsoleActive` is set true before the replay loop,
+and the buffer is appended to only while it is false.
+
+### 19.5 The screen has one owner
+
+The console clears the framebuffer and replays the log over it. The figures the
+self-tests of sub-tasks 6.2 and 6.3 paint live on that same framebuffer. They
+cannot both have it.
+
+The console wins by default, because a screen is for reading. The figures are
+drawn only when the boot loader's command line carries `graphics-figure`, and the
+console is then not started at all — whoever wants to look at the figures asks for
+them and gives up the log for that boot. `boot/grub/grub.cfg` carries a second
+entry, **Oxys-OS (graphics figures)**, that passes it.
+
+This is also why the console is started *after* the drawing self-tests rather
+than before: started first, it would be drawn over by the figures and the log
+would be unreadable. Started after, it erases them.
+
+`ConsoleReport` distinguishes the two silences accordingly. "Not started; the
+command line asked for the drawing figures" is not the same statement as "none;
+the adapter is in a text mode", and reporting the second in both cases would have
+the kernel deny having a framebuffer three lines after describing one in detail.
+
+## 20. Limitations of the font and the console
+
+1. **The face covers ASCII and nothing else.** No accented letters, no box
+   drawing, no code point above `0x7E`. Everything outside the range is a hollow
+   box. A wider repertoire is a larger table and a different lookup, and nothing
+   yet emits anything outside it.
+2. **The cell is fixed at eight by eight** and cannot be scaled. At 1280 by 800
+   that is 160 by 100 characters, which is small on a large display; a doubled
+   cell is a different drawing routine, not a parameter.
+3. **There is no cursor drawn.** The position is tracked and reported, and
+   nothing marks it upon the screen. The echo loop of sub-task 4.5 is legible
+   without one; a shell will want one, and that belongs with sub-task 6.6, which
+   has the compositing needed to remove it again.
+4. **There are no colours per character.** `ConsoleSetColour` sets the pair used
+   from that point onward; there is no attribute stored with a cell, so a scroll
+   cannot repaint what it moved and does not need to.
+5. **A scroll redraws the whole screen.** Four megabytes are moved through the
+   write-combining mapping for every line past the last row. It is not felt at
+   the rate a boot log is written and would be felt by a program producing
+   output; a dirty-region scheme belongs with sub-task 6.6.
+6. **Nothing is buffered off-screen**, so drawing is visible as it happens. There
+   is no tearing to see at this rate, and double buffering is again 6.6.
+7. **There is no lock**, and no second thread of control writes here: the
+   interrupt handlers do not print save through the panic path, which does not
+   return. From sub-task 6.13 that ceases to be true and this must take that
+   sub-task's lock — the whole of a character, not one pixel of it, being the
+   thing that must not interleave.
+8. **The picture comments are unchecked.** Nothing asserts that the art beside a
+   glyph agrees with its bytes. See Section 18.2.
+
+## 21. Verification of the font and the console
+
+`KernelVerifyConsole` makes twenty-seven assertions in three groups. The font and
+its drawing are asserted against a surface composed in memory, as the primitives
+of Section 16 are, so that the whole of that holds upon a machine with no display.
+The control characters are asserted upon the live console, because the position
+they move is the console's own and there is no second one to make.
+
+### 21.1 The face
+
+These are assertions upon a table authored by hand, which is exactly why they are
+worth making: a font is data, so the compiler checks nothing about it, and the
+plausible faults all produce a font that is merely wrong to look at.
+
+| Assertion | What its failure would mean |
+| --------- | --------------------------- |
+| The font covers its first and last code and neither neighbour | The range and the table have drifted apart; the last glyph is unreachable or one past the end is read. |
+| `FontGlyph` is never `NULL`, for `0x00` and `0xFF` | The drawing routine dereferences it without checking. This is the assertion that it need not. |
+| The replacement glyph is **not** blank | A run of unmapped characters would be indistinguishable from a run of spaces, and the fault would read as missing output. |
+| The space **is** blank | Ink in the space streaks every gap between words — the one glyph whose fault is visible everywhere at once. |
+| No glyph draws into columns 6 or 7 | It touches the character beside it, and a console drawing at a stride of the cell width has nowhere to put a gap of its own. |
+| Exactly one glyph is blank | A glyph omitted from the table is a blank cell where a character should be, and is otherwise reported by nothing. |
+| **No two glyphs are identical** | What a copy-and-paste leaves behind. It is invisible in a picture comment that was pasted along with it, and its consequence is that one letter is silently drawn as another — which a reader reads straight past. |
+
+### 21.2 Drawing a glyph
+
+A 16 by 16 surface with the glyph drawn at (4, 4), so that ink escaping the cell
+in any direction lands in the margin rather than off the surface, where clipping
+would hide it from the assertion.
+
+| Assertion | What its failure would mean |
+| --------- | --------------------------- |
+| Every pixel of `'A'` matches the glyph's own bytes | The bit order or the row order is wrong. |
+| The margin around the cell is untouched | Reversed bit order would still light eight pixels a row and would still be a picture — merely a mirrored one, which is invisible in the symmetric letters. This is what catches it. |
+| A pixel the glyph does not set keeps the background it was given | The glyph filled its own cell, and text can no longer be drawn over an image. |
+| An unmapped code lights pixels | It drew nothing rather than the replacement glyph. |
+| A glyph drawn off the surface does not appear on the far side of it | The clip was applied to the cell rather than to each pixel, or not at all. |
+
+### 21.3 The control characters, upon the live console
+
+Only characters that draw nothing are used — CR, HT and BS — so the boot log this
+is written into is not disturbed by the test of it, and the position is left at
+the first column of a fresh line afterwards.
+
+| Assertion | What its failure would mean |
+| --------- | --------------------------- |
+| The console's extent fits within the framebuffer, and is not zero | A row or column past the end of the mapping; or a division by zero at the first tabulation. |
+| CR returns to column 0 and does not change the row | It was implemented as a line feed, which is what a terminal setting hides. |
+| HT from column 0 lands on column 8, **and from column 8 lands on 16** | The second is the case a careless implementation gets wrong by standing still, or by advancing *by* eight from an arbitrary column so that nothing lines up. |
+| BS moves exactly one position | It erased as well, or moved two. |
+| BS at the erase limit does not move | An echo loop can erase the prompt, or output the kernel wrote. |
+| BS at column 0 with the limit there does not cross to the row above | The limit is not consulted on the row-crossing path — the path that would eat the previous line of the log. |
+
+### 21.4 What a person judges
+
+That the log is legible is not something the kernel can assert. The procedure is
+in `docs/project/TESTING.md`, Section 17: the whole boot log rendered on the
+screen from its first line, **including every number**, which is what Section 19.1
+is about.
+
+### 21.5 The negative test
+
+Glyph `0x4F`, `'O'`, was overwritten with the bytes of glyph `0x30`, `'0'` —
+precisely the copy-and-paste this is meant to catch, and one that leaves a
+perfectly plausible-looking table because the picture comment beside it was left
+alone. The run reported
+
+```
+  two glyphs are identical, at codes 0x30 and 0x4F
+Console self-test FAILED.
+```
+
+and `make verify` failed on it. The edit was then reverted.
+
+## 22. Observed state of the console
+
+Under QEMU with the q35 machine and the standard VGA adapter, at 1280 by 800:
+
+```
+Console: 160 by 100 characters of 8 by 8 pixels.
+Console: written 1932, scrolled 0, cursor at row 37, column 60.
+Console: 1903 bytes replayed from before the console existed.
+Console self-test passed.
+```
+
+Nineteen hundred bytes replayed and nothing dropped, against a capacity of four
+kibibytes. The log has not reached a hundred rows by the time the console reports
+itself, so nothing has scrolled at that point.
+
+Under VirtualBox, whose boot loader chooses 640 by 480:
+
+```
+Console: 80 by 60 characters of 8 by 8 pixels.
+Console: written 1875, scrolled 0, cursor at row 41, column 60.
+Console: 1847 bytes replayed from before the console existed.
+Console self-test passed.
+```
+
+Eighty by sixty does not hold the boot log, so that machine scrolls where QEMU
+does not, and the screen at the end of the boot is the evidence that Section
+19.3's copy direction is right: text that had been moved up dozens of times was
+legible and unsmeared.
+
+That is the result worth having from VirtualBox. It had **no readable diagnostic
+output at all** — no serial adapter this kernel detects, and since sub-task 6.2 no
+text mode either — and it now shows the boot log on the screen.

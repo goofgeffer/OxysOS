@@ -314,7 +314,7 @@ cp build/oxys.iso /mnt/c/Users/<user>/oxys-vbox/oxys.iso
 The ISO must be staged upon the Windows filesystem and named by a Windows path;
 the same applies to any file the machine is asked to write.
 
-### 9.1 There is no serial channel under VirtualBox, and from sub-task 6.2 no console either
+### 9.1 There is no serial channel under VirtualBox
 
 The serial port is omitted from the commands above deliberately. The kernel does
 not detect VirtualBox's 16550A: it reports `Serial self-test skipped; no adapter
@@ -328,16 +328,15 @@ them.
 The consequence is that **the automated assertion of Section 1 cannot be
 performed under VirtualBox**, that assertion being made upon the serial output.
 
-Until sub-task 6.2 what could be read instead was the VGA console, and since the
-kernel emits more of it than 25 rows hold, the procedure of Section 9.2 was
-needed to catch a particular line before it scrolled away. From sub-task 6.2 even
-that is gone: requesting a framebuffer puts the adapter in a graphics mode, and
-there is no console upon a framebuffer until sub-task 6.4. **VirtualBox can
-presently show the framebuffer test pattern and nothing else.**
+What can be read instead is the screen. Until sub-task 6.2 that was the VGA text
+console; between sub-tasks 6.2 and 6.4 it was nothing at all, requesting a
+framebuffer having put the adapter in a graphics mode with no console upon it;
+and from sub-task 6.4 it is the graphical console, which draws the boot log upon
+the framebuffer.
 
-The procedure below is therefore inapplicable between sub-tasks 6.2 and 6.4, and
-is retained because it applies again afterwards, and applies now upon any machine
-whose boot loader leaves the adapter in a text mode.
+The kernel emits more of the log than the screen holds in any of those states —
+80 by 60 characters at VirtualBox's 640 by 480 — so the procedure below is needed
+to catch a particular line before it scrolls away.
 
 ### 9.2 Reading a self-test verdict that has scrolled away
 
@@ -521,10 +520,13 @@ not say so" from "the processor did not do so":
 Privilege self-test FAILED.
 ```
 
-Restore the file afterwards. Note that `make verify` still reports
-`VERIFICATION SUCCEEDED`: it greps for the completion banner and knows nothing of
-any self-test's verdict, which is a limitation of the harness recorded in
-Section 1 and not a fault of this test.
+Restore the file afterwards.
+
+`make verify` reports `VERIFICATION FAILED` and names the offending line. That
+was not so when this test was first performed: the harness then asserted only the
+completion banner and knew nothing of any self-test's verdict, so a run in which
+every assertion failed still succeeded. Section 1 records the second assertion
+that closed it.
 
 ## 15. Verification of the framebuffer
 
@@ -542,9 +544,28 @@ white pixel in the very last position of the last row.
 
 ### 15.1 Capturing the pattern
 
+**The second menu entry must be selected.** From sub-task 6.4 the console owns
+the screen and would erase the pattern within the same boot, so the figures are
+painted only when the command line carries `graphics-figure` — which the entry
+**Oxys-OS (graphics figures)** passes, and which suppresses the console for that
+boot. The assertions of both self-tests run either way; it is only the drawing
+that this governs. See [`../design/GRAPHICS.md`](../design/GRAPHICS.md),
+Section 19.5.
+
+The entry is reached by sending a keystroke to the boot menu through the QEMU
+monitor:
+
 ```sh
-( sleep 11; echo "screendump /tmp/oxys-fb.ppm"; sleep 3; echo "quit" )   | qemu-system-x86_64 -machine q35 -cpu qemu64 -smp cores=2 -m 512M       -cdrom build/oxys.iso -display none -monitor stdio -serial null
+( sleep 2;  echo "sendkey down"; sleep 0.3; echo "sendkey ret"; \
+  sleep 12; echo "screendump /tmp/oxys-fb.ppm"; \
+  sleep 3;  echo "quit" ) \
+  | qemu-system-x86_64 -machine q35 -cpu qemu64 -smp cores=2 -m 512M \
+      -cdrom build/oxys.iso -display none -monitor stdio -serial null
 ```
+
+A capture that shows text rather than the figures is a capture of the default
+entry: the keystroke arrived before the menu was drawn, or after the three-second
+timeout had elapsed.
 
 The image is a binary PPM, whose header states the mode the boot loader chose.
 Four things are read from it, and each establishes something the kernel cannot
@@ -611,8 +632,9 @@ drawing upon the framebuffer by name.
 ### 16.1 The figure a person judges
 
 The self-test also draws upon the framebuffer, and that part is judged by eye.
-Capture it as in Section 15.1. Four things are drawn, and each shows something
-different:
+Capture it as in Section 15.1, **which from sub-task 6.4 means booting the
+Oxys-OS (graphics figures) entry**; the default entry gives the screen to the
+console instead. Four things are drawn, and each shows something different:
 
 | What to look for | What its absence would mean |
 | ---------------- | --------------------------- |
@@ -641,10 +663,82 @@ The run must report `wrote into the row padding` from **six** independent
 primitives — the fill, the clipped fill, the clear, the line, the blit and the
 trimmed blit — and end `Graphics self-test FAILED.` Restore the file afterwards.
 
-## 17. Test record
+## 17. Verification of the font and the console
+
+The font and the console of sub-task 6.4 are asserted at every boot by
+`KernelVerifyConsole` — twenty-seven assertions in three groups, each tabulated
+against the silent failure it catches in
+[`../design/GRAPHICS.md`](../design/GRAPHICS.md), Section 21.
+
+The face and its drawing are asserted **against a surface composed in memory**,
+as the primitives of Section 16 are, so that the whole of that holds upon a
+machine with no display. The four control characters are asserted upon the live
+console, because the position they move is the console's own and there is no
+second one to make; only characters that draw nothing are used — CR, HT and BS —
+so the boot log the test is written into is not disturbed by the test of it.
+
+The assertions worth naming here are the ones a compiler cannot make about a
+table authored by hand: that **no two glyphs are identical**, that exactly one
+glyph is blank, and that no glyph draws into the two columns reserved for the
+spacing between characters.
+
+### 17.1 The half a person judges
+
+That the log is legible is not something the kernel can assert, for the reason
+Section 15 gives: a framebuffer written correctly may be scanned out by nothing.
+Boot the **default** menu entry — the console owns the screen there — and look at
+it:
+
+| What to look for | What its absence would mean |
+| ---------------- | --------------------------- |
+| The log begins at its **first line**, `Oxys-OS`, at the top of the screen | The replay buffer is not being replayed, and the screen begins part way through the boot. |
+| **Every number is present** — addresses, counts, sizes | `KernelWriteHexadecimal` or `KernelWriteDecimal` is naming an output device itself rather than emitting through `KernelWriteString`. This reads as a formatting error in the messages and is a missing output path; see [`../design/GRAPHICS.md`](../design/GRAPHICS.md), Section 19.1. |
+| Letters are upright and not mirrored, and words have gaps between them | The bit order is reversed, or a glyph draws into its spacing columns. |
+| Text that has **scrolled** is unsmeared | The blit copied in the wrong direction and read bytes it had already overwritten. Visible only upon a display too short to hold the log, which is VirtualBox's 640 by 480 and not QEMU's 1280 by 800. |
+| The echo loop's backspace stops at the prompt | The erase limit is not set, or did not move with a scroll. |
+
+A screendump serves for the first four:
+
+```sh
+( sleep 11; echo "screendump /tmp/oxys-console.ppm"; sleep 3; echo "quit" ) \
+  | qemu-system-x86_64 -machine q35 -cpu qemu64 -smp cores=2 -m 512M \
+      -cdrom build/oxys.iso -display none -monitor stdio -serial null
+```
+
+### 17.2 The negative test
+
+To confirm the self-test can fail, duplicate a glyph — precisely the
+copy-and-paste the assertion exists for, and one that leaves a plausible-looking
+table because the picture comment beside it is not touched:
+
+```sh
+# Give 'O' (0x4F) the bytes of '0' (0x30).
+sed -i "/0x4F  'O'/{n;s/.*/    { 0x78, 0x84, 0x8C, 0x94, 0xA4, 0xC4, 0x78, 0x00 },/}" \
+    graphics/font.c
+make verify
+```
+
+The run must report
+
+```
+  two glyphs are identical, at codes 0x30 and 0x4F
+Console self-test FAILED.
+```
+
+and `make verify` must itself fail, the harness having gained the assertion upon
+`FAILED` recorded in Section 1. Restore the file afterwards — the correct bytes
+for `'O'` are `0x78, 0x84, 0x84, 0x84, 0x84, 0x84, 0x78, 0x00`, and the picture
+comment beneath the line states them.
+
+## 18. Test record
 
 | Date | Test | Result |
 | ---- | ---- | ------ |
+| 2026-09-04 | `make verify` — sub-task 6.4, the font and the console | Passed; twenty-seven assertions. The face is asserted against the metrics it was drawn to — no glyph draws into the two columns reserved for spacing, exactly one glyph (the space) is blank, the replacement glyph is not blank, and **no two of the ninety-five glyphs are identical**, which is the assertion worth having in a table authored by hand. A glyph drawn upon a 16 by 16 surface at (4, 4) matches its own bytes pixel for pixel and leaves the margin around its cell untouched, which is what catches a reversed bit order — mirroring being invisible in the symmetric letters. A pixel the glyph does not set keeps the background it was given, so text can be drawn over an image. The four control characters were asserted upon the live console: CR returns to column 0 without changing the row; HT lands on column 8 from column 0 and on 16 from 8, so it advances to a multiple and not by eight; BS moves exactly one position, and does not move at the erase limit, nor cross to the row above when the limit stands at column 0. |
+| 2026-09-04 | QEMU screendump — sub-task 6.4, **the half a person judges** | Passed at 1280 by 800, 160 by 100 characters. The log is rendered from its first line, `Oxys-OS`, at the top of the screen — the replay buffer having carried 1903 bytes written before the framebuffer could be mapped, with nothing dropped against its 4 KiB capacity. Every number is present, which is the assertion this capture exists for: `KernelWriteHexadecimal` and `KernelWriteDecimal` named the display and the serial port themselves until this sub-task, so the console was shown every word of the log and not one of its addresses, counts or sizes. Letters are upright, words are separated, and the echo loop's backspace stops at the prompt. |
+| 2026-09-04 | `make verify` — sub-task 6.4, **the negative test** | Passed; glyph `0x4F` (`'O'`) was given the bytes of glyph `0x30` (`'0'`), the picture comment beside it left alone so that the table still looked correct. The run reported `two glyphs are identical, at codes 0x30 and 0x4F`, ended `Console self-test FAILED.`, and **`make verify` itself failed**, the harness's second assertion — the one upon the word `FAILED`, described in Section 1 — naming the offending line. The edit was reverted and the run repeated, reporting `Console self-test passed.` The procedure is Section 17.2. |
+| 2026-09-04 | VirtualBox 7, headless, 512 MiB, legacy BIOS — sub-task 6.4 | Passed, and it is the result this sub-task was for. VirtualBox had **no readable diagnostic output at all**: no serial adapter this kernel detects (Section 9.1), and since sub-task 6.2 no text mode either. It now draws the boot log upon its 640 by 480 framebuffer as 80 by 60 characters, reporting `Console: 80 by 60 characters of 8 by 8 pixels` and `1847 bytes replayed from before the console existed`, with nothing dropped. Eighty by sixty does not hold the log, so this machine **scrolls where QEMU does not**, and the screen at the end of the boot was legible and unsmeared after dozens of scrolls — which is the copy direction of the blit, chosen in sub-task 6.3 for exactly this case, being exercised for the first time by the thing it was written for. The screen was decoded pixel by pixel rather than eyeballed: rows fall exactly eight pixels apart, with descenders occupying row 7 as the metrics say. |
+| 2026-09-04 | QEMU screendump — sub-tasks 6.2 and 6.3, the figures, **through the new menu entry** | Passed. From sub-task 6.4 the console erases the figures within the same boot, so they are painted only when the command line carries `graphics-figure`. Selecting the second menu entry by `sendkey down` and `sendkey ret` through the QEMU monitor produced a capture holding the bands `(200,30,30)`, `(30,200,30)`, `(30,30,200)`, a white pixel at (1279, 799), white at all four corners of the frame, and **no console text whatsoever** — so the option reaches the kernel, the figures are drawn, and the console is suppressed. The procedure is Section 15.1. |
 | 2026-09-03 | `make verify` — sub-task 6.3, the drawing primitives | Passed; sixty-five assertions against a surface composed in memory, so the whole of it holds upon a machine with no display. The rectangle arithmetic treats touching edges as disjoint and an empty intersection as non-negative; a clip of `{-1000, -1000, 100000, 100000}` is confined to the surface, so no argument can widen it; a fill straddling a corner leaves exactly the 5 by 5 that remains; an outline of 6 by 4 is exactly 16 pixels, so no corner is written twice; a line drawn backwards lights the same pixels as one drawn forwards; a blit trimmed by the clip takes the right half of a source whose halves differ, so it is cropped and not shifted; and rows moved up and down within one surface move rather than smear. After every operation the row padding still holds its sentinel. |
 | 2026-09-03 | `make verify` — sub-task 6.3, **the assertion that clipping does not move a line** | Passed. The unclipped line is drawn and the pixels it lights inside a region recorded; the surface is then cleared entirely and the same line drawn with the clip set to that region. The two sets coincide pixel for pixel. An implementation that clipped by moving the endpoints would pass a count and fail this, the error accumulating from a different start and lighting a neighbouring pixel here and there — which is invisible until two clipped regions meet along a seam and the line through them has a kink. |
 | 2026-09-03 | QEMU screendump — sub-task 6.3, the figure a person judges | Passed at 1280 by 800. The frame reaches all four edges, sampled white at every corner and at the midpoint of each side; the panel's diagonals cross at its centre; the second panel's fill and line stop dead at the clip boundary with the line's slope unchanged; and the blitted copy is identical to its original and in the position asked for. The frame is one pixel wide and is lost to a scaled-down view, so the corners were sampled rather than eyeballed. |
