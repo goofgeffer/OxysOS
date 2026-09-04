@@ -87,6 +87,10 @@ void KernelVerifyExceptions(void);
  * and the memory type of that mapping. */
 void KernelVerifyFramebuffer(void);
 
+/* Phase 6, sub-task 6.3: the two-dimensional primitives, asserted against a
+ * surface composed in memory so that they hold upon a machine with no display. */
+void KernelVerifyGraphics(void);
+
 /* Phase 6, sub-task 6.1: the descriptors, the task state segment, the interrupt
  * stack table and the three registers that configure SYSCALL. */
 void KernelVerifyPrivilege(void);

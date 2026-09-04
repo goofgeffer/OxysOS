@@ -208,6 +208,25 @@ Used by: `boot/boot.asm`, `linker.ld`, `Makefile`, `kernel/include/oxys/io.h`,
 `docs/design/MEMORY-LAYOUT.md`, `docs/design/INTERRUPTS.md`,
 `docs/design/PRIVILEGE.md`, `docs/design/GRAPHICS.md`.
 
+### Algorithm for computer control of a digital plotter
+J. E. Bresenham, IBM Systems Journal, volume 4, number 1, pages 25 to 30, 1965.
+
+Sections relied upon:
+
+- The line algorithm entire: each step is chosen by comparing an error
+  accumulated in integers against the deltas of the two axes, so the line is
+  drawn without division and without floating point — the latter being prohibited
+  in this kernel by `PROJECT_GUIDELINES.md`, Section 8.
+
+The consequence this project depends upon, which the paper states and which is
+easily forgotten: the choice at each step depends upon the error accumulated
+*since the start*. A line begun at a different point is therefore a different
+line, which is why `graphics/draw.c` clips per pixel rather than by moving the
+endpoints. See `docs/design/GRAPHICS.md`, Section 14.
+
+Used by: `graphics/draw.c`, `kernel/test/verify_graphics.c`,
+`docs/design/GRAPHICS.md`.
+
 ### AMD64 Architecture Programmer's Manual, Volume 2: System Programming
 Advanced Micro Devices, publication 24593.
 

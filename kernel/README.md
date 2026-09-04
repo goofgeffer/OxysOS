@@ -43,6 +43,7 @@ are separate.
 | `mm/vmm.c` | The kernel virtual address allocator. `KernelPagesAllocate` and `KernelPagesFree`. |
 | `include/oxys/heap.h` | The interface of the kernel heap. |
 | `include/oxys/vmm.h` | The kernel arena constants, the interface of the virtual address allocator, and the mapping of memory the kernel does not own: `KernelDeviceMap` and `KernelDeviceUnmap`. |
+| `include/oxys/graphics.h` | The interface of the drawing primitives implemented in `graphics/`: the rectangle, the surface and its clip, and the pixel, line, rectangle and blit operations upon them. |
 | `include/oxys/framebuffer.h` | The interface of the framebuffer implemented in `graphics/`: whether a display was supplied and whether it can be drawn upon, its address, extent, pitch and pixel layout, the encoding of a colour into that layout, and whether the mapping is write-combining. |
 | `mm/paging.c` | The permanent kernel paging hierarchy and copy-on-write. `PagingInitialise`, `PagingTranslate`, `PagingAddressIsWritable`, `PagingMarkCopyOnWrite`, `PagingResolveCopyOnWriteFault` and the reporting routines. |
 | `include/oxys/paging.h` | The paging-structure entry flags and the interface of the paging subsystem. |

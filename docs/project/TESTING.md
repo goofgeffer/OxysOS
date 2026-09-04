@@ -590,10 +590,65 @@ adapter in a text mode, and the display test then applies as it always did. Both
 are correct; which occurs is the boot loader's decision. See
 [`../design/GRAPHICS.md`](../design/GRAPHICS.md), Sections 2.1 and 7.
 
-## 16. Test record
+## 16. Verification of the drawing primitives
+
+The primitives of sub-task 6.3 are asserted at every boot by
+`KernelVerifyGraphics`, **against a surface composed in memory and not against
+the framebuffer**. Every assertion, and the silent failure it catches, is
+tabulated in [`../design/GRAPHICS.md`](../design/GRAPHICS.md), Section 16.
+
+The test surface is 32 by 16 pixels of four bytes in rows of 40. The pitch
+exceeds the width deliberately: a primitive that stepped from row to row by the
+width rather than the pitch would still write inside the array, merely writing
+the wrong pixels, so the eight pixels of padding on each row hold a sentinel that
+no test ever writes and the padding is checked after each operation. A failure
+therefore names the operation that caused it.
+
+Because the surface is in memory, **all of this holds upon a machine with no
+display at all**, which is the reason the primitives take a surface rather than
+drawing upon the framebuffer by name.
+
+### 16.1 The figure a person judges
+
+The self-test also draws upon the framebuffer, and that part is judged by eye.
+Capture it as in Section 15.1. Four things are drawn, and each shows something
+different:
+
+| What to look for | What its absence would mean |
+| ---------------- | --------------------------- |
+| A one-pixel frame around the **whole** screen, on all four edges | The extent or the pitch is wrong. A wrong pitch makes the vertical edges lean rather than run straight. |
+| A panel with its two diagonals **crossing exactly at its centre** | The line is not exact; an error accumulated wrongly puts the crossing off-centre. |
+| The second panel's fill and line **stopping dead at the clip boundary**, with the line's slope unchanged where it stops | Clipping is not confining the fill, or — the subtler fault — the line was clipped by moving its endpoints, which meets the boundary at a slightly different height. |
+| The first panel **copied below itself, identically** | The blit is displaced, or takes the wrong part of the source. |
+
+The frame is one pixel wide, so it is easily lost when a captured image is
+scaled down; sample the corner pixels rather than trusting the eye at reduced
+size.
+
+### 16.2 The negative test
+
+To confirm the self-test can fail, make the primitives address a row by the
+surface's width instead of its pitch — the fault the padding sentinel exists to
+catch:
+
+```sh
+sed -i 's/(uint64_t)(uint32_t)y \* surface->pitch/(uint64_t)(uint32_t)y * surface->width * surface->bytes_per_pixel/' \
+    graphics/draw.c
+make verify
+```
+
+The run must report `wrote into the row padding` from **six** independent
+primitives — the fill, the clipped fill, the clear, the line, the blit and the
+trimmed blit — and end `Graphics self-test FAILED.` Restore the file afterwards.
+
+## 17. Test record
 
 | Date | Test | Result |
 | ---- | ---- | ------ |
+| 2026-09-03 | `make verify` — sub-task 6.3, the drawing primitives | Passed; sixty-five assertions against a surface composed in memory, so the whole of it holds upon a machine with no display. The rectangle arithmetic treats touching edges as disjoint and an empty intersection as non-negative; a clip of `{-1000, -1000, 100000, 100000}` is confined to the surface, so no argument can widen it; a fill straddling a corner leaves exactly the 5 by 5 that remains; an outline of 6 by 4 is exactly 16 pixels, so no corner is written twice; a line drawn backwards lights the same pixels as one drawn forwards; a blit trimmed by the clip takes the right half of a source whose halves differ, so it is cropped and not shifted; and rows moved up and down within one surface move rather than smear. After every operation the row padding still holds its sentinel. |
+| 2026-09-03 | `make verify` — sub-task 6.3, **the assertion that clipping does not move a line** | Passed. The unclipped line is drawn and the pixels it lights inside a region recorded; the surface is then cleared entirely and the same line drawn with the clip set to that region. The two sets coincide pixel for pixel. An implementation that clipped by moving the endpoints would pass a count and fail this, the error accumulating from a different start and lighting a neighbouring pixel here and there — which is invisible until two clipped regions meet along a seam and the line through them has a kink. |
+| 2026-09-03 | QEMU screendump — sub-task 6.3, the figure a person judges | Passed at 1280 by 800. The frame reaches all four edges, sampled white at every corner and at the midpoint of each side; the panel's diagonals cross at its centre; the second panel's fill and line stop dead at the clip boundary with the line's slope unchanged; and the blitted copy is identical to its original and in the position asked for. The frame is one pixel wide and is lost to a scaled-down view, so the corners were sampled rather than eyeballed. |
+| 2026-09-03 | `make verify` — sub-task 6.3, **the negative test** | Passed; with rows addressed by the surface's width instead of its pitch, `wrote into the row padding` was reported by six independent primitives — the fill, the clipped fill, the clear, the line, the blit and the trimmed blit — and the run ended `Graphics self-test FAILED.` That six operations report it separately is the point of checking the padding after each rather than once at the end: the failure names its cause. The edit was reverted. The procedure is Section 16.2. |
 | 2026-09-03 | `make verify` — sub-task 6.2, the framebuffer self-test | Passed. GRUB supplied an RGB framebuffer of 1280 by 800 at 32 bits, pitch 5120, at physical `0xFD000000`; it was mapped at `0xFFFFC00000004000`, 4000 KiB, write-combining. Both ends of the mapping translate to the reported physical range, so it is contiguous and not a single frame repeated; the page-table entry sets PAT and clears PCD and PWT; entry 4 of `IA32_PAT` holds `0x01` and entries 0 to 3 are still `0x06`, `0x04`, `0x07`, `0x00`, so no existing mapping had its memory type changed beneath it; black encodes as zero and white as non-zero; and a pixel written to the last position of the last row read back. |
 | 2026-09-03 | QEMU screendump — sub-task 6.2, **the half a kernel cannot assert** | Passed; the captured image is 1280 by 800. The bands read red `(200,30,30)`, green `(30,200,30)`, blue `(30,30,200)` left to right, so the channel positions were read correctly and not assumed; they are flat across every row of the band, so the pitch is right; they reach column 1279; and the pixel at (1279, 799) is `(255,255,255)`, so the mapping covers its whole declared extent. |
 | 2026-09-03 | `make verify` — sub-task 6.2, **the negative test** | Passed; with the page attribute table given write-back instead of write-combining, the run reported `entry 4 of IA32_PAT does not hold write-combining` and ended `Framebuffer self-test FAILED.` The edit was reverted and the run repeated, reporting `Framebuffer self-test passed.` The procedure is Section 15.2. |

@@ -64,7 +64,7 @@ complementary and neither replaces the other.
 
 ## 3. Present composition
 
-As of the completion of Phase 5 and of sub-tasks 6.1 and 6.2, the system comprises
+As of the completion of Phase 5 and of sub-tasks 6.1 to 6.3, the system comprises
 the following translation units.
 
 | Unit | Role |
@@ -78,10 +78,12 @@ the following translation units.
 | `kernel/cpu/tss.c` | The task state segment: the stacks the processor loads when it needs one it can trust, its descriptor within the global descriptor table, and the loading of the task register. |
 | `kernel/cpu/syscall.c` | The configuration of the fast system-call mechanism: `IA32_STAR`, `IA32_LSTAR`, `IA32_FMASK` and the enabling bit of `IA32_EFER`. |
 | `kernel/cpu/syscall_entry.asm` | The entry point `IA32_LSTAR` names. Provisional in sub-task 6.1; replaced by the dispatch path of sub-task 6.7. |
+| `graphics/draw.c` | The two-dimensional primitives upon a surface: rectangle arithmetic and clipping, the pixel, the filled and outlined rectangle, the integer line, and the blit. |
 | `graphics/framebuffer.c` | The framebuffer the boot loader supplies: its validation, the write-combining memory type given to its pages, its mapping into the kernel arena, and the description every later phase draws through. |
 | `kernel/test/volume.c` | The test fixture: two block devices backed by memory, and an EXT2 volume composed within them. |
 | `kernel/test/verify_memory.c` | The self-tests of the frame allocator, the paging hierarchy, the allocators, reference counting, copy-on-write and address spaces. |
 | `kernel/test/verify_interrupts.c` | The self-tests of the descriptor table, the stubs and their trap frame, the dispatcher and the exception handlers. |
+| `kernel/test/verify_graphics.c` | The self-tests of the drawing primitives, conducted upon a surface in memory. |
 | `kernel/test/verify_framebuffer.c` | The self-tests of the framebuffer's description, its mapping, its memory type, and the pattern a person judges. |
 | `kernel/test/verify_privilege.c` | The self-tests of the descriptors, the task state segment, the interrupt stack table and the system-call configuration. |
 | `kernel/test/verify_devices.c` | The self-tests of the interrupt controllers, the interval timer, the keyboard, the serial adapter, the display and the bus. |
@@ -164,9 +166,10 @@ filesystem and Phase 5 the filesystem itself, which sub-task 5.8 completed by
 mounting an EXT2 volume through a virtual filesystem layer. Sub-task 6.1 has
 since established the apparatus a privilege transition is performed out of, and
 exercised it, and sub-task 6.2 has acquired the linear framebuffer the boot
-loader supplies and mapped it write-combining. Work continues at sub-task 6.3,
-the primitives that draw into it, and thence to sub-task 6.7, whose system calls
-are the operations of that layer with a user's arguments copied in.
+loader supplies and mapped it write-combining, and sub-task 6.3 has supplied the
+primitives that draw into it. Work continues at sub-task 6.4, the font and the
+console above it, and thence to sub-task 6.7, whose system calls are the
+operations of that layer with a user's arguments copied in.
 
 ## 5. Privilege and address-space model
 

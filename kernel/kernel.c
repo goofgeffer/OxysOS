@@ -66,6 +66,7 @@
 #include <oxys/keyboard.h>
 #include <oxys/vga.h>
 #include <oxys/framebuffer.h>
+#include <oxys/graphics.h>
 #include <oxys/serial.h>
 #include <oxys/pci.h>
 #include <oxys/ata.h>
@@ -544,6 +545,17 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
     (void)FramebufferInitialise(&KernelBootInformation);
     FramebufferReport();
     KernelVerifyFramebuffer();
+
+    /*
+     * Phase 6, sub-task 6.3. The primitives that draw upon it.
+     *
+     * They need nothing but the framebuffer above, and the greater part of what
+     * they are asserted against is a surface composed in memory, so this runs
+     * here rather than later: a fault in the arithmetic that computes a byte
+     * offset into a surface is better found before anything else has drawn.
+     */
+    GraphicsReport();
+    KernelVerifyGraphics();
 
     FrameReferenceInitialise();
     KernelVerifyReferenceCounting();
