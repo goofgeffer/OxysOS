@@ -30,6 +30,13 @@
 #include <oxys/types.h>
 
 /* The extended feature enable register. */
+/*
+ * The page attribute table, Intel SDM, Volume 3A, Section 11.12. Eight entries
+ * of eight bits, of which each page-table entry selects one through its PAT, PCD
+ * and PWT bits.
+ */
+#define IA32_PAT  UINT32_C(0x00000277)
+
 #define IA32_EFER UINT32_C(0xC0000080)
 
 /*

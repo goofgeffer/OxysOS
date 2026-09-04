@@ -50,6 +50,7 @@ between runs.
 | `volume.c` | The fixture. Two block devices backed by arrays in `.bss`, and a complete EXT2 volume composed within them byte by byte, so that every storage and filesystem assertion holds upon a machine with no disk. The second volume is a copy of the first with the owner of one file altered, so that an assertion can state which volume a path reached. |
 | `verify_memory.c` | Phase 2: the physical frame allocator, the paging hierarchy, the virtual address allocator and the heap, per-frame reference counting, the resolution of a copy-on-write fault, and the cloning of an address space. |
 | `verify_interrupts.c` | Phase 3: the descriptor table and its gates, the 256 stubs and the uniform trap frame they construct, the dispatcher's routing, and the exception handlers. |
+| `verify_framebuffer.c` | Phase 6, sub-task 6.2: that the boot loader honoured the framebuffer request tag, that what it described is self-consistent, that the mapping reaches both ends of the physical memory the adapter scans out of, and that entry 4 of `IA32_PAT` holds write-combining while entries 0 to 3 are untouched. It also paints the pattern a person judges. |
 | `verify_privilege.c` | Phase 6, sub-task 6.1: the user-mode descriptors and their ordering, the task state segment, the interrupt stack table exercised rather than inspected, and the `SYSCALL` configuration exercised by executing it. |
 | `verify_devices.c` | Phases 3 and 4: the 8259A controllers, the interval timer, the PS/2 keyboard, the 16550 serial adapter, the VGA display, and PCI enumeration. |
 | `verify_storage.c` | Phase 4: the ATA driver, the generic block layer, and the buffer cache. |
@@ -75,6 +76,15 @@ Two routines here are not self-tests and are named so that they cannot be
 mistaken for one: `KernelReportVolumes` and `KernelVfsProbeVolume`. They examine
 whatever volume the machine actually carries and **assert nothing**, there being
 nothing to assert about a disk this kernel did not write.
+
+There is a third thing a self-test cannot do, and sub-task 6.2 met it: **nothing
+here can establish that anything appeared upon the screen.** A kernel cannot read
+its own display back through the eye of whoever is looking at it. The framebuffer
+test therefore paints a pattern composed so that looking at it establishes
+something — misread channel positions put the bands in the wrong colours, a wrong
+pitch skews them, a wrong extent stops them short — and
+`docs/project/TESTING.md`, Section 15, records the procedure by which a person
+judges it.
 
 Their value is the one thing a composed fixture cannot supply. The composed
 volume shares this kernel's understanding of the format, so a misreading of the

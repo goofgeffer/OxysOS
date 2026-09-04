@@ -205,6 +205,116 @@ static void Multiboot2ParseMemoryMap(const Multiboot2MemoryMapTag *tag,
  * KernelPhysicalStart and KernelPhysicalEnd, which are correct by construction,
  * and this tag is parsed for validation and reporting alone.
  */
+/*
+ * Reduces the framebuffer tag of Section 3.6.12 to the neutral description.
+ *
+ * Every field the boot loader supplies is validated before it is recorded, and
+ * the description is left BOOT_FRAMEBUFFER_NONE where any check fails. This is
+ * not defensive habit: the values here become a base address and a stride that
+ * a later phase will write through in a loop, and a pitch smaller than a row or
+ * a height of zero would be discovered as a fault in the middle of drawing,
+ * a long way from the boot loader that supplied it.
+ *
+ * The tag is addressed as bytes rather than through the structure alone because
+ * the colour description that follows the common fields belongs to one kind of
+ * framebuffer only; see <oxys/multiboot2.h>.
+ */
+static void Multiboot2ParseFramebuffer(const uint8_t *raw, BootInformation *information)
+{
+    const Multiboot2FramebufferTag *tag = (const Multiboot2FramebufferTag *)raw;
+    BootFramebuffer *framebuffer = &information->framebuffer;
+    uint64_t row_bits;
+
+    framebuffer->format = BOOT_FRAMEBUFFER_NONE;
+
+    if (tag->size < MULTIBOOT2_FRAMEBUFFER_SIZE_COMMON)
+    {
+        KernelWriteString("The framebuffer tag is shorter than its own common fields.\n");
+        return;
+    }
+
+    if (tag->framebuffer_address == 0U || tag->width == 0U || tag->height == 0U ||
+        tag->pitch == 0U || tag->bits_per_pixel == 0U)
+    {
+        KernelWriteString("The framebuffer tag describes a display of no extent.\n");
+        return;
+    }
+
+    /*
+     * The pitch must cover a row. It may exceed one, a boot loader being free to
+     * pad, but a pitch below the occupied width would make the second row begin
+     * inside the first, and every row after it drift further.
+     *
+     * The product is formed in 64 bits from 32-bit operands, so it cannot wrap:
+     * the widest display the tag can express multiplied by the deepest pixel it
+     * can express is far below 2^64.
+     */
+    row_bits = (uint64_t)tag->width * (uint64_t)tag->bits_per_pixel;
+
+    if (((uint64_t)tag->pitch * 8U) < row_bits)
+    {
+        KernelWriteString("The framebuffer pitch is narrower than one row.\n");
+        return;
+    }
+
+    framebuffer->address = (PhysicalAddress)tag->framebuffer_address;
+    framebuffer->pitch = tag->pitch;
+    framebuffer->width = tag->width;
+    framebuffer->height = tag->height;
+    framebuffer->bits_per_pixel = tag->bits_per_pixel;
+
+    switch (tag->framebuffer_type)
+    {
+    case MULTIBOOT2_FRAMEBUFFER_TYPE_RGB:
+        if (tag->size < MULTIBOOT2_FRAMEBUFFER_SIZE_RGB)
+        {
+            KernelWriteString("The framebuffer tag claims RGB and omits the colour "
+                              "description.\n");
+            return;
+        }
+
+        framebuffer->red_position = raw[MULTIBOOT2_FRAMEBUFFER_RED_POSITION];
+        framebuffer->red_size = raw[MULTIBOOT2_FRAMEBUFFER_RED_SIZE];
+        framebuffer->green_position = raw[MULTIBOOT2_FRAMEBUFFER_GREEN_POSITION];
+        framebuffer->green_size = raw[MULTIBOOT2_FRAMEBUFFER_GREEN_SIZE];
+        framebuffer->blue_position = raw[MULTIBOOT2_FRAMEBUFFER_BLUE_POSITION];
+        framebuffer->blue_size = raw[MULTIBOOT2_FRAMEBUFFER_BLUE_SIZE];
+
+        /*
+         * A channel must lie within a pixel. A description placing one beyond the
+         * depth would have a shift discard every bit it wrote, so the channel
+         * would be silently absent from the image rather than wrong in it.
+         */
+        if (((uint32_t)framebuffer->red_position + framebuffer->red_size) >
+                tag->bits_per_pixel ||
+            ((uint32_t)framebuffer->green_position + framebuffer->green_size) >
+                tag->bits_per_pixel ||
+            ((uint32_t)framebuffer->blue_position + framebuffer->blue_size) >
+                tag->bits_per_pixel)
+        {
+            KernelWriteString("The framebuffer colour description places a channel "
+                              "outside the pixel.\n");
+            return;
+        }
+
+        framebuffer->format = BOOT_FRAMEBUFFER_RGB;
+        break;
+
+    case MULTIBOOT2_FRAMEBUFFER_TYPE_EGA_TEXT:
+        framebuffer->format = BOOT_FRAMEBUFFER_EGA_TEXT;
+        break;
+
+    case MULTIBOOT2_FRAMEBUFFER_TYPE_INDEXED:
+        framebuffer->format = BOOT_FRAMEBUFFER_INDEXED;
+        break;
+
+    default:
+        KernelWriteString("The framebuffer tag states a kind this kernel does not "
+                          "recognise.\n");
+        break;
+    }
+}
+
 static void Multiboot2ParseElfSections(const Multiboot2ElfSectionsTag *tag,
                                        BootInformation *information)
 {
@@ -297,6 +407,10 @@ bool BootInformationParseMultiboot2(uint32_t information_address,
             memory_map_found = true;
             break;
 
+        case MULTIBOOT2_TAG_TYPE_FRAMEBUFFER:
+            Multiboot2ParseFramebuffer((const uint8_t *)tag, information);
+            break;
+
         case MULTIBOOT2_TAG_TYPE_ELF_SECTIONS:
             Multiboot2ParseElfSections((const Multiboot2ElfSectionsTag *)tag, information);
             break;
@@ -328,6 +442,22 @@ bool BootInformationParseMultiboot2(uint32_t information_address,
     }
 
     return true;
+}
+
+const char *BootFramebufferFormatName(BootFramebufferFormat format)
+{
+    switch (format)
+    {
+    case BOOT_FRAMEBUFFER_INDEXED:
+        return "indexed";
+    case BOOT_FRAMEBUFFER_RGB:
+        return "RGB";
+    case BOOT_FRAMEBUFFER_EGA_TEXT:
+        return "EGA text";
+    case BOOT_FRAMEBUFFER_NONE:
+    default:
+        return "none";
+    }
 }
 
 void BootInformationReport(const BootInformation *information)

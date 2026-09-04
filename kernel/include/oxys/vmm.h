@@ -52,6 +52,37 @@ void *KernelPagesAllocate(size_t page_count);
  */
 void KernelPagesFree(void *address, size_t page_count);
 
+/*
+ * Maps a range of physical memory the kernel did not allocate — the registers or
+ * the memory of a device — into the arena, and returns the address of its first
+ * byte. Returns NULL where the arena is exhausted or the request is impossible.
+ *
+ * This differs from KernelPagesAllocate in the one way that matters: no frame is
+ * allocated and none is freed, because the memory already exists and belongs to
+ * a device. The frame allocator must never be told of it — a framebuffer handed
+ * out as ordinary memory would be written by whoever received it and displayed
+ * by the adapter at the same time.
+ *
+ * The physical address need not be page-aligned. The mapping is made from the
+ * page containing it, and the returned pointer carries the offset within that
+ * page forward, so the caller addresses exactly the bytes it asked for.
+ *
+ * `flags` are those of Table 4-15 and are applied to every page of the range.
+ * PAGE_ENTRY_PRESENT is supplied by the implementation; PAGE_ENTRY_WRITABLE is
+ * not, so a read-only device mapping is expressed by omitting it.
+ */
+void *KernelDeviceMap(PhysicalAddress physical_address, uint64_t length, uint64_t flags);
+
+/*
+ * Withdraws a mapping made by KernelDeviceMap. The address and length must be
+ * those given to and returned by the mapping call. No frame is freed.
+ */
+void KernelDeviceUnmap(void *address, uint64_t length);
+
+/* The number of pages presently mapped to device memory. Counted apart from the
+ * allocated pages because no frame stands behind them. */
+size_t KernelVirtualDevicePagesInUse(void);
+
 /* The number of pages presently allocated from the arena. */
 size_t KernelVirtualPagesInUse(void);
 

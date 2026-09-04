@@ -65,6 +65,7 @@
 #include <oxys/pit.h>
 #include <oxys/keyboard.h>
 #include <oxys/vga.h>
+#include <oxys/framebuffer.h>
 #include <oxys/serial.h>
 #include <oxys/pci.h>
 #include <oxys/ata.h>
@@ -484,13 +485,6 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
     KernelWriteString("Multiboot2 magic value verified.\n");
 
     /*
-     * The display is tested first because it is the instrument through which
-     * every later test reports, and because it needs nothing that is not already
-     * established at this point.
-     */
-    KernelVerifyVga();
-
-    /*
      * Reduce the Multiboot2 structure to the neutral description upon which the
      * remainder of the kernel depends. A failure here is unrecoverable: without a
      * memory map the physical frame allocator cannot be constructed, and without
@@ -501,6 +495,20 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
     {
         KernelPanic("The Multiboot2 boot information structure could not be parsed.");
     }
+
+    /*
+     * The display is tested next, because it is the instrument through which
+     * every later test reports.
+     *
+     * It was tested before the parse until sub-task 6.2, needing nothing the
+     * handover had not already supplied. It cannot be any longer: from that
+     * sub-task the boot loader may leave the adapter in a graphics mode, and
+     * then the memory this test reads character cells back out of is not the
+     * text buffer and nothing it asserts means anything. Which mode the machine
+     * is in is stated by the boot information and nowhere else, so the test must
+     * follow the parse in order to know whether to run at all.
+     */
+    KernelVerifyVga();
 
     BootInformationReport(&KernelBootInformation);
 
@@ -517,6 +525,25 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
     KernelVerifyAllocators();
     KernelVirtualReport();
     KernelHeapReport();
+
+    /*
+     * Phase 6, sub-task 6.2. The framebuffer the boot loader left the machine
+     * with.
+     *
+     * It is acquired here, after the arena exists and before anything else
+     * competes for it, because it is mapped out of the arena and its extent is
+     * fixed by the hardware rather than chosen: a display of 1024 by 768 at four
+     * bytes a pixel is three mebibytes of contiguous virtual address space, and
+     * taking it first means taking it from a region nothing has fragmented.
+     *
+     * A false return is not a failure. It means the boot loader left the adapter
+     * in a text mode, or described no display at all, and in either case the
+     * VGA driver of sub-task 4.2 continues to own the screen. The report states
+     * which it was.
+     */
+    (void)FramebufferInitialise(&KernelBootInformation);
+    FramebufferReport();
+    KernelVerifyFramebuffer();
 
     FrameReferenceInitialise();
     KernelVerifyReferenceCounting();

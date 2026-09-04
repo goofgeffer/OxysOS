@@ -42,7 +42,8 @@ are separate.
 | `mm/heap.c` | The kernel heap. `KernelAllocate`, `KernelAllocateZeroed` and `KernelFree`. |
 | `mm/vmm.c` | The kernel virtual address allocator. `KernelPagesAllocate` and `KernelPagesFree`. |
 | `include/oxys/heap.h` | The interface of the kernel heap. |
-| `include/oxys/vmm.h` | The kernel arena constants and the interface of the virtual address allocator. |
+| `include/oxys/vmm.h` | The kernel arena constants, the interface of the virtual address allocator, and the mapping of memory the kernel does not own: `KernelDeviceMap` and `KernelDeviceUnmap`. |
+| `include/oxys/framebuffer.h` | The interface of the framebuffer implemented in `graphics/`: whether a display was supplied and whether it can be drawn upon, its address, extent, pitch and pixel layout, the encoding of a colour into that layout, and whether the mapping is write-combining. |
 | `mm/paging.c` | The permanent kernel paging hierarchy and copy-on-write. `PagingInitialise`, `PagingTranslate`, `PagingAddressIsWritable`, `PagingMarkCopyOnWrite`, `PagingResolveCopyOnWriteFault` and the reporting routines. |
 | `include/oxys/paging.h` | The paging-structure entry flags and the interface of the paging subsystem. |
 | `mm/addrspace.c` | The address space: creation, cloning by copy-on-write, activation and destruction. `AddressSpaceCreate`, `AddressSpaceClone`, `AddressSpaceDestroy`, `AddressSpaceSwitch`, `AddressSpaceMapPage` and the accounting accessors. |
@@ -107,6 +108,8 @@ processor permanently.
 | ISO/IEC 9899:2011 | 4 ¶6, 6.7.9 ¶4, 7.18, 7.20 | The freestanding environment, constant initialisers, and the fixed-width and boolean types. |
 | Intel SDM, Volume 1 | 18.3 | The programmed input/output address space. |
 | Intel SDM, Volume 2B, "HLT" | — | The halt instruction and the conditions that resume it. |
+| Multiboot2 Specification 2.0 | 3.1.10, 3.6.12 | The framebuffer request tag carried in the image header, and the information tag describing what the boot loader supplied. |
+| Intel SDM, Volume 3A | 11.12 | The page attribute table, by which the framebuffer's pages are made write-combining. |
 | Intel SDM, Volume 3A | 3.3.7.1, 4.5 | Canonical addressing, and the higher-half translation helpers. |
 | Intel SDM, Volume 3A | 3.4.5, 5.8.8, 6.14.4, 8.2.3, 8.7, 20.5.2, Table 2-1 | The segment descriptor format; the selectors `SYSCALL` and `SYSRET` derive from `IA32_STAR`; the unconditional loading of an interrupt stack table entry; the sixteen-byte task state segment descriptor; the 64-bit task state segment; the I/O map base beyond the limit; and `IA32_EFER.SCE`. |
 | Intel SDM, Volume 2A, `LTR`, `CPUID` | — | The loading of the task register, and the establishment of processor support for the mechanism. |

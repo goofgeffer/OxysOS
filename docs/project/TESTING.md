@@ -314,7 +314,7 @@ cp build/oxys.iso /mnt/c/Users/<user>/oxys-vbox/oxys.iso
 The ISO must be staged upon the Windows filesystem and named by a Windows path;
 the same applies to any file the machine is asked to write.
 
-### 9.1 There is no serial channel under VirtualBox
+### 9.1 There is no serial channel under VirtualBox, and from sub-task 6.2 no console either
 
 The serial port is omitted from the commands above deliberately. The kernel does
 not detect VirtualBox's 16550A: it reports `Serial self-test skipped; no adapter
@@ -327,8 +327,17 @@ them.
 
 The consequence is that **the automated assertion of Section 1 cannot be
 performed under VirtualBox**, that assertion being made upon the serial output.
-What can be read is the VGA console, and the kernel emits more of it than the
-25 rows hold, so the completed screen shows only the last of the self-tests.
+
+Until sub-task 6.2 what could be read instead was the VGA console, and since the
+kernel emits more of it than 25 rows hold, the procedure of Section 9.2 was
+needed to catch a particular line before it scrolled away. From sub-task 6.2 even
+that is gone: requesting a framebuffer puts the adapter in a graphics mode, and
+there is no console upon a framebuffer until sub-task 6.4. **VirtualBox can
+presently show the framebuffer test pattern and nothing else.**
+
+The procedure below is therefore inapplicable between sub-tasks 6.2 and 6.4, and
+is retained because it applies again afterwards, and applies now upon any machine
+whose boot loader leaves the adapter in a text mode.
 
 ### 9.2 Reading a self-test verdict that has scrolled away
 
@@ -517,10 +526,81 @@ Restore the file afterwards. Note that `make verify` still reports
 any self-test's verdict, which is a limitation of the harness recorded in
 Section 1 and not a fault of this test.
 
-## 14. Test record
+## 15. Verification of the framebuffer
+
+The description, the mapping and the memory type of the framebuffer acquired by
+sub-task 6.2 are asserted at every boot by `KernelVerifyFramebuffer`. Each
+assertion, and the silent failure it catches, is tabulated in
+[`../design/GRAPHICS.md`](../design/GRAPHICS.md), Section 8.
+
+**One thing the kernel cannot assert about a display is that anything appeared
+upon it.** A framebuffer that is mapped, written and read back correctly may
+still be scanned out by nothing at all. That half of the verification is
+performed by a person, and the self-test paints a pattern for them to judge:
+bands of red, green and blue across the top sixteenth of the screen, and a single
+white pixel in the very last position of the last row.
+
+### 15.1 Capturing the pattern
+
+```sh
+( sleep 11; echo "screendump /tmp/oxys-fb.ppm"; sleep 3; echo "quit" )   | qemu-system-x86_64 -machine q35 -cpu qemu64 -smp cores=2 -m 512M       -cdrom build/oxys.iso -display none -monitor stdio -serial null
+```
+
+The image is a binary PPM, whose header states the mode the boot loader chose.
+Four things are read from it, and each establishes something the kernel cannot
+establish for itself:
+
+| What to look for | What its absence would mean |
+| ---------------- | --------------------------- |
+| The bands are **red, then green, then blue**, left to right | The channel positions or widths were misread; the kernel would be writing blue where it meant red, with nothing to report it. |
+| They are **flat**, not sloping | The pitch is wrong. A traversal stepping by the occupied width rather than the pitch shears the image progressively down the screen. |
+| They reach the **right-hand edge** | The width or the pitch is short. |
+| The **last pixel of the last row is white** | The mapping is short by less than a page — an amount every assertion made upon the start of the range would pass. |
+
+The bands occupy the top sixteenth of the screen; the remainder is black, being
+memory nothing has written.
+
+### 15.2 The negative test
+
+To confirm the self-test can fail, change the memory type written into the page
+attribute table from write-combining to write-back:
+
+```sh
+sed -i 's/FRAMEBUFFER_PAT_ENTRY_WC   UINT64_C(0x01)/FRAMEBUFFER_PAT_ENTRY_WC   UINT64_C(0x06)/'     graphics/framebuffer.c
+make verify
+```
+
+The run must report `entry 4 of IA32_PAT does not hold write-combining, so the
+framebuffer is write-back and the display may lag the memory indefinitely` and
+end `Framebuffer self-test FAILED.` Restore the file afterwards.
+
+### 15.3 What the display self-test does now
+
+It is skipped. Requesting a framebuffer causes the boot loader to set a graphics
+mode, and every assertion the display test makes reads a character cell back out
+of the text buffer at `0xB8000`, which in a graphics mode is not the text buffer.
+The expected line is:
+
+```
+Display self-test skipped; the adapter is in a graphics mode, which the framebuffer owns.
+```
+
+A run in which it is *not* skipped is a run in which the boot loader left the
+adapter in a text mode, and the display test then applies as it always did. Both
+are correct; which occurs is the boot loader's decision. See
+[`../design/GRAPHICS.md`](../design/GRAPHICS.md), Sections 2.1 and 7.
+
+## 16. Test record
 
 | Date | Test | Result |
 | ---- | ---- | ------ |
+| 2026-09-03 | `make verify` — sub-task 6.2, the framebuffer self-test | Passed. GRUB supplied an RGB framebuffer of 1280 by 800 at 32 bits, pitch 5120, at physical `0xFD000000`; it was mapped at `0xFFFFC00000004000`, 4000 KiB, write-combining. Both ends of the mapping translate to the reported physical range, so it is contiguous and not a single frame repeated; the page-table entry sets PAT and clears PCD and PWT; entry 4 of `IA32_PAT` holds `0x01` and entries 0 to 3 are still `0x06`, `0x04`, `0x07`, `0x00`, so no existing mapping had its memory type changed beneath it; black encodes as zero and white as non-zero; and a pixel written to the last position of the last row read back. |
+| 2026-09-03 | QEMU screendump — sub-task 6.2, **the half a kernel cannot assert** | Passed; the captured image is 1280 by 800. The bands read red `(200,30,30)`, green `(30,200,30)`, blue `(30,30,200)` left to right, so the channel positions were read correctly and not assumed; they are flat across every row of the band, so the pitch is right; they reach column 1279; and the pixel at (1279, 799) is `(255,255,255)`, so the mapping covers its whole declared extent. |
+| 2026-09-03 | `make verify` — sub-task 6.2, **the negative test** | Passed; with the page attribute table given write-back instead of write-combining, the run reported `entry 4 of IA32_PAT does not hold write-combining` and ended `Framebuffer self-test FAILED.` The edit was reverted and the run repeated, reporting `Framebuffer self-test passed.` The procedure is Section 15.2. |
+| 2026-09-03 | VirtualBox 7, headless, 512 MiB, legacy BIOS — sub-task 6.2 | Passed, upon a hypervisor whose boot loader chose a different mode entirely: **640 by 480**, against QEMU's 1280 by 800. The bands appear in the right order, flat, and reach the right-hand edge, so the tag was parsed, the mapping reaches the adapter, the channel positions were read rather than assumed, and the pitch is right — upon a display this kernel had never seen. That the mode differs is the result, not an inconvenience: it is the evidence that nothing was hard-coded to what QEMU happens to supply. |
+| 2026-09-03 | VirtualBox — the diagnostic path, after sub-task 6.2 | **Nothing readable remains.** The serial adapter is not detected under VirtualBox (Section 9.1, established in sub-task 6.1) and the adapter is now in a graphics mode with no console upon it, so no line of the boot log can be read there at all until sub-task 6.4. The pattern is the whole of what VirtualBox can now show, and the pause-and-photograph procedure of Section 9.2 has nothing to catch. This is recorded rather than remedied: QEMU carries the assertions, and the console returns two sub-tasks from now. |
+| 2026-09-03 | GRUB `gfxpayload` — **a claim disproved rather than a test passed** | GRUB 2.12 ignores `gfxpayload` for a multiboot2 image. Asking for `1024x768x32` yielded 1280 by 800 at 32 bits; asking for `text` yielded a graphics mode likewise; and `insmod all_video` changed the outcome to 800 by 600 at 24 bits by changing which driver GRUB chose from, not by honouring anything. Established with a purpose-built ISO whose default entry was the one under test, so that the result could not be a mis-selected menu entry. The directives were removed rather than left to look as though they worked; `boot/grub/grub.cfg` records the position. |
+| 2026-09-03 | `make verify` — the display self-test, after sub-task 6.2 | Skipped, as intended, the adapter being in a graphics mode. It is reported as skipped rather than passed, and the test was moved to run after the Multiboot2 parse, that being the only place the mode is known. See Section 15.3. |
 | 2026-09-03 | VirtualBox 7, headless, 512 MiB, two processors, legacy BIOS — sub-task 6.1 | Passed; the machine reached `Phase 6 initialisation complete` and the echo loop. The privilege report read identically to QEMU's upon a different hypervisor's descriptor tables and a different memory map: task state segment at `0xFFFFFFFF80186960` with limit 103 and task register `0x30`, `RSP0` `0xFFFFFFFF80186960`, `IST1` `0xFFFFFFFF80182960`, I/O map base 104 beyond the limit, `IA32_STAR` `0x18000800000000` deriving `CS 0x8`/`SS 0x10` and `CS 0x2B`/`SS 0x23`, and `IA32_FMASK` `0x47700`. `Privilege self-test passed.` was read from the console by the pause procedure of Section 9.2. That the machine reached the banner at all is itself evidence, `LTR`, `int $200` upon an interrupt stack and two executions of `SYSCALL` all occurring before it and each failing as a fault rather than as a message. |
 | 2026-09-03 | VirtualBox — the serial channel | Not available; the kernel reports `Serial adapter: absent; no diagnostic channel.` and transmits nothing, so `make verify`'s assertion cannot be made under this hypervisor. Pre-existing and unrelated to sub-task 6.1; recorded in Section 9.1. |
 | 2026-09-03 | `make verify` — sub-task 6.1, the privilege self-test | Passed; forty-eight assertions. The table's limit covers the eight slots and `GDTR` names this table; each user descriptor is decoded field by field and says what it must — present, DPL 3, and 64-bit code, compatibility-mode code or writable data respectively; and the three descriptors stand at the displacements `SYSCALL` and `SYSRET` derive their selectors by, which is asserted as an ordering because every descriptor may be individually perfect and the transition still fail. The task state segment descriptor's base and limit name the segment exactly, and its type is **11 and not 9**, which only the processor writes and is therefore the sole evidence that `LTR` was accepted; the task register holds `0x30`; `RSP0` is non-zero and sixteen-byte aligned; the double fault's stack is non-zero and distinct from it; and the I/O map base lies beyond the limit, so no port is permitted to user mode. `IA32_EFER.SCE` is set and `IA32_LSTAR` holds the entry point, both read back from the processor; the four selectors the processor will derive are computed by its own arithmetic and are `0x08`, `0x10`, `0x2B` and `0x23`; and `IA32_FMASK` clears `IF`, `DF`, `TF`, `NT` and `AC`. |

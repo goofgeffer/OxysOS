@@ -39,6 +39,17 @@ Sections relied upon:
   `kernel/include/oxys/multiboot2.h`: the prose of this section and the reference
   C header in the same document disagree upon the widths of the `num`, `entsize`
   and `shndx` fields.
+- **3.1.10**, the framebuffer request tag placed in the image header: type 5,
+  size 20, a flags field whose bit 0 marks the request optional, and width,
+  height and depth of which zero means no preference. Its presence is what
+  obliges the boot loader to emit the tag below.
+- **3.6.12**, the framebuffer information tag, type 8: the 64-bit address, the
+  pitch, the width, the height, the bits per pixel, the framebuffer kind
+  (0 indexed, 1 RGB, 2 EGA text), and the **sixteen-bit** reserved field, after
+  which the colour description begins at offset 32. The width of the reserved
+  field is settled by the reference implementation's
+  `struct multiboot_tag_framebuffer_common`, the prose diagram being ambiguous
+  upon it.
 - **3.6.8**, the memory map tag, type 6: the `entry_size` and `entry_version`
   fields; the guarantee that `entry_size` is a multiple of eight; the entry
   layout of `base_addr`, `length`, `type` and `reserved`; the region type values,
@@ -166,7 +177,24 @@ Sections relied upon:
 - **Volume 2A, "CPUID"**, leaf `0x80000000` reporting the highest extended leaf
   implemented, and bit 11 of `EDX` from leaf `0x80000001` reporting the
   availability of `SYSCALL` and `SYSRET`.
-- **Volume 4**, the model-specific registers `IA32_EFER` (`0xC0000080`),
+- **Volume 3A, Section 11.12.2 and Table 11-11**, the page attribute table:
+  `IA32_PAT` holds eight memory-type entries of eight bits, and a page-table
+  entry selects one of them by the index `(PAT << 2) | (PCD << 1) | PWT`, where
+  PAT is bit 7 of a 4-KByte page-table entry.
+- **Volume 3A, Table 11-10**, the memory-type encodings, of which `0x00` is
+  uncacheable, `0x01` write-combining, `0x04` write-through, `0x06` write-back
+  and `0x07` uncacheable-minus. The processor's defaults for the eight entries
+  are `0x06`, `0x04`, `0x07`, `0x00` and those four again.
+- **Volume 3A, Table 11-7**, the effective memory type: what the page attribute
+  table selects is combined with what the memory type range registers say, and
+  the more conservative of the two prevails.
+- **Volume 3A, Section 4.5 and Table 4-19**, bit 7 of a page-table entry is PAT,
+  whereas bit 7 of a directory entry is PS. The two meanings share one bit and
+  are distinguished only by the level at which the entry stands.
+- **Volume 2A, "CPUID"**, leaf 1, EDX bit 16: whether the page attribute table is
+  present at all.
+- **Volume 4**, the model-specific registers `IA32_PAT` (`0x277`),
+  `IA32_EFER` (`0xC0000080`),
   `IA32_STAR` (`0xC0000081`), `IA32_LSTAR` (`0xC0000082`), `IA32_CSTAR`
   (`0xC0000083`), `IA32_FMASK` (`0xC0000084`), `IA32_FS_BASE` (`0xC0000100`),
   `IA32_GS_BASE` (`0xC0000101`) and `IA32_KERNEL_GS_BASE` (`0xC0000102`).
@@ -176,8 +204,9 @@ Used by: `boot/boot.asm`, `linker.ld`, `Makefile`, `kernel/include/oxys/io.h`,
 `kernel/cpu/gdt.c`, `kernel/cpu/tss.c`, `kernel/cpu/syscall.c`,
 `kernel/cpu/syscall_entry.asm`, `kernel/include/oxys/tss.h`,
 `kernel/include/oxys/syscall.h`, `kernel/include/oxys/msr.h`,
+`graphics/framebuffer.c`, `kernel/include/oxys/framebuffer.h`,
 `docs/design/MEMORY-LAYOUT.md`, `docs/design/INTERRUPTS.md`,
-`docs/design/PRIVILEGE.md`.
+`docs/design/PRIVILEGE.md`, `docs/design/GRAPHICS.md`.
 
 ### AMD64 Architecture Programmer's Manual, Volume 2: System Programming
 Advanced Micro Devices, publication 24593.
@@ -776,7 +805,7 @@ Used by: `boot/grub/grub.cfg`, `Makefile`.
 | Intel MultiProcessor Specification 1.4 | 6 | Application processor bring-up. |
 | Intel SDM, Volume 3A, Chapter 11 | 6 | The Local APIC and the I/O APIC, which retire the 8259A. |
 | ACPI Specification 6.5 | 6, 12 | The Multiple APIC Description Table; the Root System Description Pointer. |
-| VESA BIOS Extensions 3.0 | 9 | Linear framebuffer modes under legacy BIOS. |
+| VESA BIOS Extensions 3.0 | 6 | Linear framebuffer modes under legacy BIOS, should this kernel ever need to set one for itself rather than accept what the boot loader chose. |
 | UEFI Specification 2.10, Section 12.9 | 9, 12 | The Graphics Output Protocol. |
 | FIPS 180-4 | 10 | SHA-256. |
 | FIPS 197 | 10 | The Advanced Encryption Standard. |

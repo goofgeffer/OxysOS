@@ -36,6 +36,20 @@
 #define PAGE_ENTRY_GLOBAL    UINT64_C(0x100) /* Not invalidated by a CR3 write. */
 
 /*
+ * Bit 7 of a page-table entry, where it selects the upper half of the page
+ * attribute table: the memory type of the page becomes entry (PAT<<2)|(PCD<<1)|
+ * PWT of IA32_PAT rather than one of the first four.
+ *
+ * It is the same bit as PAGE_ENTRY_LARGE above, and that is not a mistake in
+ * either. Bit 7 means PS in a directory entry, where it says the entry maps a
+ * large page, and PAT in a table entry, where it selects a memory type; the two
+ * names exist because the levels are different and a reader of one should not
+ * have to know the other. In a large-page directory entry the PAT bit moves to
+ * bit 12, which this kernel has no present use for and does not name.
+ */
+#define PAGE_ENTRY_PAT       UINT64_C(0x080)
+
+/*
  * A flag reserved to software, marking a page as copy-on-write.
  *
  * Intel SDM, Volume 3A, Table 4-19 ("Format of a Page-Table Entry that Maps a

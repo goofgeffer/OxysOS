@@ -34,7 +34,24 @@
 #define MULTIBOOT2_TAG_TYPE_BOOT_LOADER   UINT32_C(2)
 #define MULTIBOOT2_TAG_TYPE_BASIC_MEMORY  UINT32_C(4)
 #define MULTIBOOT2_TAG_TYPE_MEMORY_MAP    UINT32_C(6)
+#define MULTIBOOT2_TAG_TYPE_FRAMEBUFFER   UINT32_C(8)
 #define MULTIBOOT2_TAG_TYPE_ELF_SECTIONS  UINT32_C(9)
+
+/*
+ * The framebuffer kinds of Section 3.6.12, which decide how the bytes of the
+ * framebuffer are to be read and what, if anything, follows the common fields.
+ *
+ *   0  Indexed. Each pixel is an index into a palette that follows the tag.
+ *   1  RGB. Each pixel holds red, green and blue at the positions and widths
+ *      the tag states. This is the only kind this kernel can draw upon.
+ *   2  EGA text. Not a framebuffer of pixels at all: the address is that of the
+ *      VGA text buffer, and width and height are in characters rather than
+ *      pixels. A boot loader reports this when it has left the adapter in a
+ *      text mode.
+ */
+#define MULTIBOOT2_FRAMEBUFFER_TYPE_INDEXED   UINT32_C(0)
+#define MULTIBOOT2_FRAMEBUFFER_TYPE_RGB       UINT32_C(1)
+#define MULTIBOOT2_FRAMEBUFFER_TYPE_EGA_TEXT  UINT32_C(2)
 
 /*
  * The memory region types of Section 3.6.8. A value of 1 denotes available
@@ -126,6 +143,53 @@ typedef struct Multiboot2ElfSectionsTag
     uint32_t string_table_index;
     /* The section headers follow, contiguously, each of entry_size bytes. */
 } Multiboot2ElfSectionsTag;
+
+/*
+ * The framebuffer information tag, per Section 3.6.12.
+ *
+ * The fields through `reserved` are common to every framebuffer kind; what
+ * follows depends upon `framebuffer_type` and is not declared here. The six
+ * bytes of an RGB description begin immediately after `reserved`, at offset 32,
+ * and are read through the displacements below rather than through a further
+ * structure: a union would oblige every reader to name a member of it even where
+ * the kind makes that member meaningless.
+ *
+ * `reserved` is sixteen bits and not eight. The prose diagram of Section 3.6.12
+ * is ambiguous upon the point; the reference implementation's
+ * `struct multiboot_tag_framebuffer_common` settles it, and settles with it that
+ * the colour description begins at offset 32 and is naturally aligned. A kernel
+ * that read the description at offset 31 would find the red position in the
+ * upper byte of the reserved field and every channel after it displaced by one.
+ */
+typedef struct Multiboot2FramebufferTag
+{
+    uint32_t type;
+    uint32_t size;
+    uint64_t framebuffer_address;
+    uint32_t pitch;
+    uint32_t width;
+    uint32_t height;
+    uint8_t bits_per_pixel;
+    uint8_t framebuffer_type;
+    uint16_t reserved;
+} Multiboot2FramebufferTag;
+
+/*
+ * The six bytes of an RGB colour description, as displacements from the start of
+ * the tag. Each position is the index of the channel's least significant bit
+ * within a pixel, and each size the number of bits the channel occupies.
+ */
+#define MULTIBOOT2_FRAMEBUFFER_RED_POSITION    32U
+#define MULTIBOOT2_FRAMEBUFFER_RED_SIZE        33U
+#define MULTIBOOT2_FRAMEBUFFER_GREEN_POSITION  34U
+#define MULTIBOOT2_FRAMEBUFFER_GREEN_SIZE      35U
+#define MULTIBOOT2_FRAMEBUFFER_BLUE_POSITION   36U
+#define MULTIBOOT2_FRAMEBUFFER_BLUE_SIZE       37U
+
+/* The least a tag must measure to carry the common fields, and to carry an RGB
+ * description as well. */
+#define MULTIBOOT2_FRAMEBUFFER_SIZE_COMMON 32U
+#define MULTIBOOT2_FRAMEBUFFER_SIZE_RGB    38U
 
 /* A tag whose payload is a null-terminated string: types 1 and 2. */
 typedef struct Multiboot2StringTag

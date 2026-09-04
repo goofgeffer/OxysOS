@@ -30,7 +30,7 @@ not conflict when they are introduced.
 | Base | Extent | Region | Introduced |
 | ---- | ------ | ------ | ---------- |
 | `0xFFFF800000000000` | 64 TiB | The direct map of all physical memory. | Phase 2, sub-task 2.4 (established) |
-| `0xFFFFC00000000000` | 32 TiB | The kernel virtual allocator arena, comprising the kernel heap and device mappings. | Phase 2, sub-task 2.5 (established) |
+| `0xFFFFC00000000000` | 32 TiB | The kernel virtual allocator arena, comprising the kernel heap and device mappings. The first device mapping is the framebuffer of sub-task 6.2; see [`GRAPHICS.md`](GRAPHICS.md), Section 5. | Phase 2, sub-task 2.5 (established) |
 | `0xFFFFFFFF80000000` | 2 GiB | The kernel image: text, read-only data, data and BSS. | Phase 1 |
 
 The kernel image is placed within the topmost 2 GiB so that every kernel symbol

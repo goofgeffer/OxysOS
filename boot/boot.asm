@@ -59,6 +59,13 @@ MULTIBOOT2_BOOTLOADER_MAGIC equ 0x36D76289  ; Expected in EAX at entry.
 MULTIBOOT2_TAG_TYPE_END     equ 0           ; Terminating tag type.
 MULTIBOOT2_TAG_SIZE_END     equ 8           ; Terminating tag size, in bytes.
 
+; The framebuffer request tag, Multiboot2 Specification, Section 3.1.10. Its
+; presence tells the boot loader that this image is prepared to be handed a
+; linear framebuffer, and is what makes GRUB honour its own gfxpayload setting
+; and emit the framebuffer information tag of Section 3.6.12.
+MULTIBOOT2_HEADER_TAG_FRAMEBUFFER equ 5
+MULTIBOOT2_HEADER_TAG_SIZE_FRAMEBUFFER equ 20
+
 KERNEL_VIRTUAL_BASE         equ 0xFFFFFFFF80000000
 
 CR4_PAE_BIT                 equ 5           ; Physical Address Extension.
@@ -111,6 +118,39 @@ MultibootHeaderStart:
     ; The checksum is chosen such that the unsigned 32-bit sum of the four magic
     ; fields is zero. The subtraction from 2^32 performs the negation.
     dd  0x100000000 - (MULTIBOOT2_HEADER_MAGIC + MULTIBOOT2_ARCHITECTURE_I386 + (MultibootHeaderEnd - MultibootHeaderStart))
+
+    ; The framebuffer request tag.
+    ;
+    ; Width, height and depth are all zero, which Section 3.1.10 defines as "no
+    ; preference": the boot loader chooses. That is deliberate and is not
+    ; laziness. This kernel has no display it must have, and a hard-coded mode
+    ; would be refused outright by firmware that cannot set it, whereas no
+    ; preference is a request every boot loader can satisfy with something. The
+    ; mode is chosen instead in boot/grub/grub.cfg, per menu entry, by GRUB's
+    ; gfxpayload setting — which the presence of this tag is what enables.
+    ;
+    ; Bit 0 of the flags field is the "optional" bit, and it is SET.
+    ;
+    ; Clearing it would declare that this image must not be loaded at all unless
+    ; a framebuffer can be supplied, and that is untrue of this kernel: it has a
+    ; text-mode display driver and a serial port, and FramebufferInitialise is
+    ; written to return false and let the boot proceed. Declaring a requirement
+    ; the kernel does not have would refuse to boot upon firmware that can only
+    ; offer text, for the sake of a display the kernel does not need.
+    ;
+    ; It has a second and immediate consequence. GRUB takes a required
+    ; framebuffer as an instruction to set a graphics mode whatever gfxpayload
+    ; says, so with the bit clear the text entries of boot/grub/grub.cfg were
+    ; overridden and every boot came up in graphics — which, before sub-task 6.4
+    ; supplies a console that can draw text, means a blank screen. With the bit
+    ; set, gfxpayload decides, and the entries mean what they say.
+align 8
+    dw  MULTIBOOT2_HEADER_TAG_FRAMEBUFFER
+    dw  1                                   ; Flags; bit 0 (optional) is set.
+    dd  MULTIBOOT2_HEADER_TAG_SIZE_FRAMEBUFFER
+    dd  0                                   ; Width:  no preference.
+    dd  0                                   ; Height: no preference.
+    dd  0                                   ; Depth:  no preference.
 
     ; The terminating tag, of type 0 and size 8, aligned on an 8-byte boundary.
 align 8

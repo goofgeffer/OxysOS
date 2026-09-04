@@ -39,6 +39,7 @@ complementary, and neither replaces the other.
 | [`BOOT.md`](design/BOOT.md) | From the GRUB handover to `KernelMain`. |
 | [`MEMORY-LAYOUT.md`](design/MEMORY-LAYOUT.md) | The physical and virtual address spaces, the paging hierarchy, and the allocators above it. |
 | [`INTERRUPTS.md`](design/INTERRUPTS.md) | The descriptor table, the stubs, the dispatcher, the exceptions and the 8259A controllers. |
+| [`GRAPHICS.md`](design/GRAPHICS.md) | The framebuffer, its memory type, and the text console it displaces. |
 | [`PRIVILEGE.md`](design/PRIVILEGE.md) | The user-mode descriptors, the task state segment and its trusted stacks, and the registers that configure `SYSCALL`. |
 
 ### [`devices/`](devices/)

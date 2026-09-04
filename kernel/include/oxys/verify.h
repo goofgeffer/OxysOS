@@ -83,6 +83,10 @@ void KernelVerifyInterruptStubs(void);
 void KernelVerifyDispatcher(void);
 void KernelVerifyExceptions(void);
 
+/* Phase 6, sub-task 6.2: the framebuffer the boot loader supplied, its mapping
+ * and the memory type of that mapping. */
+void KernelVerifyFramebuffer(void);
+
 /* Phase 6, sub-task 6.1: the descriptors, the task state segment, the interrupt
  * stack table and the three registers that configure SYSCALL. */
 void KernelVerifyPrivilege(void);

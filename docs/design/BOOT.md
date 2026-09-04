@@ -55,8 +55,12 @@ Its fields, in the order prescribed by Section 3.1.1, are as follows.
 | 12 | `checksum` | The value which, added to the preceding three fields, yields an unsigned 32-bit sum of zero | Section 3.1.2 |
 | 16 | tags | The terminating tag alone: type `0`, flags `0`, size `8` | Section 3.1.3 |
 
-No optional request tags are presently emitted. The framebuffer tag will be
-added in Phase 6, sub-task 6.2.
+One optional request tag is emitted, since sub-task 6.2: the framebuffer tag of
+Section 3.1.10, at offset 16, with its optional bit **set** and width, height and
+depth all zero. Its presence is what causes the boot loader to supply the
+framebuffer information tag of Section 3.6.12; the optional bit is set because
+this kernel can boot without a framebuffer and must not claim otherwise. See
+[`GRAPHICS.md`](GRAPHICS.md), Section 2. The terminating tag follows it.
 
 ## 3. The machine state at entry
 

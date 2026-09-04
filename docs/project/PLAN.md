@@ -76,13 +76,25 @@ beyond the segment limit, which is what denies every port to user mode.
 set. Both the interrupt stack table and the transition itself are exercised —
 `SYSCALL` being executable from privilege level 0, where it raises no privilege
 but performs every other part of the transition — so the mechanism is proved with
-no user program in existence. The next work is sub-task 6.2, the linear
-framebuffer, and the drawing that stands upon it through sub-task 6.6 — moved
-here from Phase 9 because none of it needs a process, and because every phase
-after it reports through the console it provides. The system calls follow at
-sub-task 6.7, and are the operations of the Phase 5 filesystem layer with a
-user's arguments copied in. See
-[`../design/PRIVILEGE.md`](../design/PRIVILEGE.md).
+no user program in existence.
+
+**Sub-task 6.2 is complete.** The image asks the boot loader for a linear
+framebuffer, and what it is given is validated, mapped and described. Two
+decisions are the substance of it. The pages are **write-combining and not
+write-back**, through entry 4 of `IA32_PAT` — an entry chosen because every
+existing mapping in the kernel selects one of the first four, so taking it
+changes the memory type of nothing already in use. Write-back would have been
+the default and is the one type that is wrong here: a cached write may sit in a
+line while the adapter displays what memory held before it, so the image is
+wrong and then, for no reason connected to anything, right. And **the mode is
+the boot loader's to choose**: GRUB 2.12 ignores `gfxpayload` for a multiboot2
+image, which was established rather than assumed, so the kernel accepts whatever
+it is handed and asserts what it was. The cost is that the adapter is now in a
+graphics mode with no console upon it: the screen shows the self-test's colour
+bands until sub-task 6.4, and the serial port carries the boot log as it always
+did. The next work is sub-task 6.3, the primitives that draw. See
+[`../design/PRIVILEGE.md`](../design/PRIVILEGE.md) and
+[`../design/GRAPHICS.md`](../design/GRAPHICS.md).
 
 **The testing arrangement**, which is not a phase and governs every one of them:
 there is no test harness and there will be none before Phase 7, so the kernel
@@ -209,7 +221,7 @@ Specification 1.4; ACPI Specification 6.5 (MADT); Multiboot2 Specification,
 Section 3.6.12 (framebuffer information tag); VESA BIOS Extensions 3.0.
 
 - [x] 6.1 Install the GDT and TSS required for privilege transition; configure IA32_STAR, IA32_LSTAR and IA32_FMASK. *(The kernel GDT and its null, code and data descriptors were established early, in Phase 3; what remained was the user-mode descriptors, the task state segment and the system-call MSRs. Designed in `docs/design/PRIVILEGE.md`.)*
-- [ ] 6.2 Request a linear framebuffer by the Multiboot2 framebuffer tag and map it into kernel space.
+- [x] 6.2 Request a linear framebuffer by the Multiboot2 framebuffer tag and map it into kernel space. *(Designed in `docs/design/GRAPHICS.md`. The mode is the boot loader's to choose and GRUB ignores what it is asked for, so the kernel accepts whatever it is handed; the pages are given the write-combining memory type through entry 4 of `IA32_PAT`.)*
 - [ ] 6.3 Implement 2D primitives: pixel, line, rectangle, blit and clipping.
 - [ ] 6.4 Implement a bitmap font renderer, and a graphical console above it that the diagnostic path may write to.
 - [ ] 6.5 Implement a PS/2 mouse driver upon the second device port of the 8042, and a cursor.
@@ -428,6 +440,7 @@ copies of an argument do not agree with each other for long.
 
 | Date | Phase | Change | Commit | Design |
 | ---- | ----- | ------ | ------ | ------ |
+| 2026-09-03 | Phase 6 | Sub-task 6.2: the linear framebuffer. The image carries the Multiboot2 request tag, optional bit set because the kernel can boot without one; what is supplied is validated, mapped by a new `KernelDeviceMap` that allocates no frame, and given the write-combining memory type through entry 4 of `IA32_PAT`, an entry no existing mapping selects. GRUB ignores `gfxpayload`, so the mode is accepted rather than chosen, and the text console is displaced until sub-task 6.4. | *(this change)* | [`../design/GRAPHICS.md`](../design/GRAPHICS.md) |
 | 2026-09-03 | Phases 6, 9 | Phase 9 split at the project owner's decision. Its first five sub-tasks — the framebuffer, the primitives, the font, the mouse and the compositing surface — become sub-tasks 6.2 to 6.6, none of them needing a process to exist; the window manager, the client protocol and the desktop services they support remain in Phase 9, which is now the desktop rather than graphics. Old 6.2 to 6.10 renumbered to 6.7 to 6.15, and every reference across 35 files with them. `PROJECT_GUIDELINES.md` §5 amended accordingly. | *(this change)* | [`PLAN.md`](PLAN.md), Phases 6 and 9 |
 | 2026-09-03 | Phase 6 | Sub-tasks 6.8 and 6.9 exchanged — their numbers that day; they are 6.13 and 6.14 since the renumbering above — so that spinlocks and per-CPU data precede the application-processor bring-up rather than following it. In the old order a milestone started processors against a kernel whose every shared structure was unsynchronised, and could be neither demonstrated nor asserted. Every reference to either number, in code and documentation alike, updated with it. | `c3befd8` | [`PLAN.md`](PLAN.md), Phase 6 |
 | 2026-09-03 | All | The boot-time self-tests moved out of `kernel.c` into `kernel/test/`, one file per subsystem. `kernel.c` fell from 9,050 lines to 708. `make verify` now fails when a self-test reports a failure, which it previously could not see. This revision history rewritten as an index rather than a third account of each change. | `8e778e2` | [`../../kernel/test/README.md`](../../kernel/test/README.md), [`TESTING.md`](TESTING.md) §1 |

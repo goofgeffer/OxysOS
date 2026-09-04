@@ -72,6 +72,12 @@ static VirtualAddress ArenaBumpPointer;
 /* The number of pages presently allocated, and the greatest number ever
  * allocated, for reporting. */
 static size_t ArenaPagesInUse;
+
+/* Pages of the arena presently mapped to memory the kernel does not own. They
+ * are counted apart from the allocated pages because no frame stands behind
+ * them, and a report that conflated the two would suggest the frame allocator
+ * had issued memory it never issued. */
+static size_t ArenaDevicePagesInUse;
 static size_t ArenaPagesHighWaterMark;
 
 /* The number of ranges lost because the free list was full when they were
@@ -83,6 +89,7 @@ void KernelVirtualInitialise(void)
     ArenaBumpPointer = KERNEL_ARENA_BASE;
     ArenaFreeListCount = 0U;
     ArenaPagesInUse = 0U;
+    ArenaDevicePagesInUse = 0U;
     ArenaPagesHighWaterMark = 0U;
     ArenaRangesForfeited = 0U;
 }
@@ -342,6 +349,101 @@ void KernelPagesFree(void *address, size_t page_count)
 
     ArenaPagesInUse -= page_count;
     ArenaFreeListInsert(base, page_count);
+}
+
+void *KernelDeviceMap(PhysicalAddress physical_address, uint64_t length, uint64_t flags)
+{
+    const uint64_t page_offset = physical_address % PAGE_SIZE;
+    PhysicalAddress first_page;
+    uint64_t span;
+    size_t page_count;
+    VirtualAddress base;
+
+    if (length == 0U)
+    {
+        return NULL;
+    }
+
+    /*
+     * The mapping begins at the page containing the address, so the bytes before
+     * it within that page are covered as well and the span grows by that much.
+     * The sum is formed before it is bounded, and both operands are checked
+     * against the arena's capacity first, so it cannot wrap: an offset is below
+     * PAGE_SIZE and a length that survives the bound below is far under 2^63.
+     */
+    if (length > (KERNEL_ARENA_SIZE - PAGE_SIZE))
+    {
+        return NULL;
+    }
+
+    first_page = physical_address - page_offset;
+    span = length + page_offset;
+    page_count = (size_t)((span + (PAGE_SIZE - 1U)) / PAGE_SIZE);
+
+    if (page_count == 0U || page_count > ARENA_PAGE_CAPACITY)
+    {
+        return NULL;
+    }
+
+    base = ArenaFreeListTake(page_count);
+
+    if (base == 0U)
+    {
+        if ((ArenaBumpPointer + (page_count * PAGE_SIZE)) >
+            (KERNEL_ARENA_BASE + KERNEL_ARENA_SIZE))
+        {
+            return NULL;
+        }
+
+        base = ArenaBumpPointer;
+        ArenaBumpPointer += page_count * PAGE_SIZE;
+    }
+
+    /*
+     * There is no unwinding path here, and none is needed: PagingMapKernelPage
+     * allocates a paging structure only where one is absent, and the only way it
+     * can fail is by exhausting physical memory, which it treats as fatal. That
+     * is a different position from KernelPagesAllocate, which must obtain a frame
+     * per page and can therefore run out partway through a request it had every
+     * reason to believe it could satisfy.
+     */
+    for (size_t index = 0U; index < page_count; ++index)
+    {
+        PagingMapKernelPage(base + (index * PAGE_SIZE),
+                            first_page + (index * PAGE_SIZE), flags);
+    }
+
+    ArenaDevicePagesInUse += page_count;
+
+    return (void *)(uintptr_t)(base + page_offset);
+}
+
+void KernelDeviceUnmap(void *address, uint64_t length)
+{
+    const VirtualAddress supplied = (VirtualAddress)(uintptr_t)address;
+    const uint64_t page_offset = supplied % PAGE_SIZE;
+    const VirtualAddress base = supplied - page_offset;
+    size_t page_count;
+
+    if (address == NULL || length == 0U)
+    {
+        return;
+    }
+
+    page_count = (size_t)((length + page_offset + (PAGE_SIZE - 1U)) / PAGE_SIZE);
+
+    for (size_t index = 0U; index < page_count; ++index)
+    {
+        PagingUnmapKernelPage(base + (index * PAGE_SIZE));
+    }
+
+    ArenaFreeListInsert(base, page_count);
+    ArenaDevicePagesInUse -= page_count;
+}
+
+size_t KernelVirtualDevicePagesInUse(void)
+{
+    return ArenaDevicePagesInUse;
 }
 
 size_t KernelVirtualPagesInUse(void)

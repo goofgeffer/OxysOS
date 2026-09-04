@@ -64,6 +64,56 @@ typedef struct BootMemoryRegion
  * memory the boot loader used is itself reclaimable once the kernel has
  * finished with it, and a retained pointer would become a defect at that moment.
  */
+/*
+ * How the bytes of a framebuffer are to be read.
+ *
+ * This is the boot loader's classification reduced to what the kernel acts
+ * upon. BOOT_FRAMEBUFFER_NONE is not a value any boot loader reports: it is what
+ * this description holds when no framebuffer tag was supplied, or when one was
+ * supplied and refused, so that a single field distinguishes "absent" from
+ * "present and of a kind this kernel cannot use".
+ */
+typedef enum BootFramebufferFormat
+{
+    BOOT_FRAMEBUFFER_NONE = 0,
+    BOOT_FRAMEBUFFER_INDEXED,
+    BOOT_FRAMEBUFFER_RGB,
+    BOOT_FRAMEBUFFER_EGA_TEXT
+} BootFramebufferFormat;
+
+/*
+ * The display the boot loader left the machine in.
+ *
+ * `pitch` is the number of bytes from the start of one row to the start of the
+ * next, and is not width multiplied by the pixel size: a boot loader may pad a
+ * row to an alignment the hardware prefers. Every traversal of the framebuffer
+ * must step by the pitch, and a kernel that stepped by the row's occupied width
+ * would shear the image progressively down the screen.
+ *
+ * The channel positions and sizes are meaningful only for BOOT_FRAMEBUFFER_RGB
+ * and are zero otherwise. A position is the index of the channel's least
+ * significant bit within a pixel; a size is the number of bits it occupies. They
+ * are recorded rather than assumed because 0x00RRGGBB is a convention and not a
+ * rule, and a kernel that assumed it would write blue where it meant red upon
+ * the hardware that orders them otherwise.
+ */
+typedef struct BootFramebuffer
+{
+    BootFramebufferFormat format;
+    PhysicalAddress address;
+    uint32_t pitch;
+    uint32_t width;
+    uint32_t height;
+    uint8_t bits_per_pixel;
+
+    uint8_t red_position;
+    uint8_t red_size;
+    uint8_t green_position;
+    uint8_t green_size;
+    uint8_t blue_position;
+    uint8_t blue_size;
+} BootFramebuffer;
+
 typedef struct BootInformation
 {
     BootMemoryRegion memory_regions[BOOT_MEMORY_REGION_MAXIMUM];
@@ -99,6 +149,11 @@ typedef struct BootInformation
 
     char boot_loader_name[BOOT_STRING_MAXIMUM];
     char command_line[BOOT_STRING_MAXIMUM];
+
+    /* The display the boot loader left the machine in. Its format is
+     * BOOT_FRAMEBUFFER_NONE where none was reported or where what was reported
+     * did not survive validation. */
+    BootFramebuffer framebuffer;
 } BootInformation;
 
 /*
@@ -118,5 +173,8 @@ void BootInformationReport(const BootInformation *information);
 
 /* Returns a constant, human-readable name for a memory region classification. */
 const char *BootMemoryTypeName(BootMemoryType type);
+
+/* The name of a framebuffer format, for reporting. */
+const char *BootFramebufferFormatName(BootFramebufferFormat format);
 
 #endif /* OXYS_BOOTINFO_H */

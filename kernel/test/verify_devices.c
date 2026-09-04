@@ -24,6 +24,7 @@
 #include <oxys/pit.h>
 #include <oxys/keyboard.h>
 #include <oxys/vga.h>
+#include <oxys/framebuffer.h>
 #include <oxys/serial.h>
 #include <oxys/pci.h>
 #include <oxys/interrupts.h>
@@ -961,6 +962,26 @@ void KernelVerifyVga(void)
     size_t limit_column;
     uint64_t scroll_marker;
     bool succeeded = true;
+
+    /*
+     * From sub-task 6.2 the machine may be in a graphics mode, and then this
+     * test cannot be conducted at all: every assertion below reads a character
+     * cell back out of the text buffer at 0xB8000, and in a graphics mode that
+     * memory is not the text buffer. The adapter has not failed and the driver
+     * has not changed; it is simply not the thing displaying the screen.
+     *
+     * The test is skipped rather than adapted, and says so, which is the
+     * treatment the serial and disk tests already give a device that is absent.
+     * A test that quietly asserted less would be worse than one stating plainly
+     * that it asserted nothing.
+     */
+    if (KernelBootInformation.framebuffer.format == BOOT_FRAMEBUFFER_RGB ||
+        KernelBootInformation.framebuffer.format == BOOT_FRAMEBUFFER_INDEXED)
+    {
+        KernelWriteString("Display self-test skipped; the adapter is in a graphics "
+                          "mode, which the framebuffer owns.\n");
+        return;
+    }
 
     /* The adapter's configuration governs every register access that follows. */
     if (!VgaIsColourAdapter() || (VgaCrtcIndexPort() != 0x03D4U))
