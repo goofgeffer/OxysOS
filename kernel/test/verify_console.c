@@ -47,8 +47,28 @@ static void KernelConsoleRequire(bool condition, const char *statement)
 #define KERNEL_GLYPH_SURFACE_HEIGHT 16U
 #define KERNEL_GLYPH_SURFACE_PITCH  (KERNEL_GLYPH_SURFACE_WIDTH * 4U)
 
-static uint8_t KernelGlyphStore[KERNEL_GLYPH_SURFACE_PITCH * KERNEL_GLYPH_SURFACE_HEIGHT];
+/*
+ * The store is declared as words and not as bytes, and that is a correctness
+ * matter rather than a convenience.
+ *
+ * From the optimisation of sub-task 6.4 the primitives write a four-byte pixel
+ * as one 32-bit store where the surface permits it. An object declared as an
+ * array of `uint8_t` has that as its type for the whole of its life, and writing
+ * through a `uint32_t` lvalue into it is undefined however well it appears to
+ * work; declared as words, both accesses are sound — a word through its own
+ * type, and a byte through a character type, which may alias anything.
+ *
+ * It also guarantees the four-byte alignment the word path requires, which a
+ * byte array does not.
+ */
+static uint32_t
+    KernelGlyphStore[(KERNEL_GLYPH_SURFACE_PITCH * KERNEL_GLYPH_SURFACE_HEIGHT) / 4U];
 static GraphicsSurface KernelGlyphSurface;
+
+/* Where the ink of one glyph is recorded so that the two drawing routines may be
+ * compared cell for cell. It is a file-scope object rather than a local because
+ * the stack of the early boot is not the place for one, small as it is. */
+static bool KernelOpaqueExpected[FONT_HEIGHT][FONT_WIDTH];
 
 /*
  * Asserts the face against the metrics it is documented to be drawn to.
@@ -299,6 +319,76 @@ static void KernelVerifyGlyphDrawing(void)
     FontDrawGlyph(&KernelGlyphSurface, 100, 100, (uint8_t)'A', ink);
     KernelConsoleRequire(GraphicsPixelAt(&KernelGlyphSurface, 15, 15) == 0U,
                          "a glyph drawn off the surface wrapped to the far side of it");
+
+    /*
+     * The transparent glyph and the opaque one must light **the same ink
+     * pixels**, for every glyph in the face.
+     *
+     * This is the assertion the optimisation of Section 23 required. The console
+     * was changed from filling a cell and drawing a glyph over it to drawing both
+     * in one pass, and the two routines now stand side by side: the transparent
+     * one is what the earlier tests above assert against the font's own bytes,
+     * and the opaque one is what every character of the boot log actually goes
+     * through. A difference between them would be a difference no other test
+     * here could see, because no other test uses the path the console uses.
+     *
+     * Every code is checked rather than a sample, the whole face costing two
+     * hundred drawings upon a surface in memory and the fault being of exactly
+     * the kind that afflicts one character and no other.
+     */
+    {
+        bool agreed = true;
+
+        for (uint32_t code = FONT_FIRST_CODE; code <= FONT_LAST_CODE && agreed; ++code)
+        {
+            GraphicsClear(&KernelGlyphSurface, 0U);
+            FontDrawGlyph(&KernelGlyphSurface, 4, 4, (uint8_t)code, ink);
+
+            for (int32_t y = 4; y < (4 + (int32_t)FONT_HEIGHT); ++y)
+            {
+                for (int32_t x = 4; x < (4 + (int32_t)FONT_WIDTH); ++x)
+                {
+                    KernelOpaqueExpected[y - 4][x - 4] =
+                        GraphicsPixelAt(&KernelGlyphSurface, x, y) == ink;
+                }
+            }
+
+            GraphicsClear(&KernelGlyphSurface, 0U);
+            FontDrawGlyphOpaque(&KernelGlyphSurface, 4, 4, (uint8_t)code, ink, 0x00303030U);
+
+            for (int32_t y = 4; y < (4 + (int32_t)FONT_HEIGHT); ++y)
+            {
+                for (int32_t x = 4; x < (4 + (int32_t)FONT_WIDTH); ++x)
+                {
+                    const uint32_t got = GraphicsPixelAt(&KernelGlyphSurface, x, y);
+                    const bool wanted = KernelOpaqueExpected[y - 4][x - 4];
+
+                    if (got != (wanted ? ink : 0x00303030U))
+                    {
+                        agreed = false;
+                    }
+                }
+            }
+
+            if (!agreed)
+            {
+                KernelWriteString("  the two glyph routines disagree, at code ");
+                KernelWriteHexadecimal(code);
+                KernelWriteString("\n");
+                KernelConsoleSucceeded = false;
+            }
+        }
+    }
+
+    /* The opaque glyph is clipped as the transparent one is. The console draws
+     * every character through it, so a cell at the edge of a screen whose extent
+     * is not a whole number of cells must be cut off and not wrapped. */
+    GraphicsClear(&KernelGlyphSurface, 0U);
+    FontDrawGlyphOpaque(&KernelGlyphSurface, -4, -4, (uint8_t)'A', ink, 0x00303030U);
+    FontDrawGlyphOpaque(&KernelGlyphSurface, 100, 100, (uint8_t)'A', ink, 0x00303030U);
+    KernelConsoleRequire(GraphicsPixelAt(&KernelGlyphSurface, 15, 15) == 0U,
+                         "an opaque glyph drawn off the surface wrapped to the far side "
+                         "of it");
 }
 
 /*

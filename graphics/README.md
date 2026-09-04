@@ -28,16 +28,19 @@ that shares its controller.
 
 | Path | Description |
 | ---- | ----------- |
-| `draw.c` | Sub-task 6.3. The two-dimensional primitives upon a surface: the rectangle arithmetic every one of them clips with, the pixel, the filled and outlined rectangle, Bresenham's line, and the blit — including the overlapping case a console scrolls with. `GraphicsRectangleIsEmpty`, `GraphicsRectangleIntersect`, `GraphicsRectangleContains`, `GraphicsSurfaceInitialise`, `GraphicsSurfaceFromFramebuffer`, `GraphicsSurfaceBounds`, `GraphicsSetClip`, `GraphicsResetClip`, `GraphicsClip`, `GraphicsPutPixel`, `GraphicsPixelAt`, `GraphicsFillRectangle`, `GraphicsDrawRectangle`, `GraphicsClear`, `GraphicsDrawLine`, `GraphicsBlit`, `GraphicsReport`. |
-| `font.c` | Sub-task 6.4. The bitmap face — ninety-five glyphs of eight by eight covering the printable ASCII range, **drawn for this project rather than obtained**, with a picture comment beside each — and the drawing of one glyph upon a surface, setting only the pixels the glyph defines. `FontCovers`, `FontGlyph`, `FontGlyphRow`, `FontDrawGlyph`. |
+| `draw.c` | Sub-task 6.3. The two-dimensional primitives upon a surface: the rectangle arithmetic every one of them clips with, the pixel, the filled and outlined rectangle, Bresenham's line, and the blit — including the overlapping case a console scrolls with. `GraphicsRectangleIsEmpty`, `GraphicsRectangleIntersect`, `GraphicsRectangleContains`, `GraphicsSurfaceInitialise`, `GraphicsSurfaceFromFramebuffer`, `GraphicsSurfaceBounds`, `GraphicsSetClip`, `GraphicsResetClip`, `GraphicsClip`, `GraphicsPutPixel`, `GraphicsPixelAt`, `GraphicsFillRectangle`, `GraphicsDrawRectangle`, `GraphicsClear`, `GraphicsPatternBlock`, `GraphicsDrawLine`, `GraphicsBlit`, `GraphicsReport`. |
+| `font.c` | Sub-task 6.4. The bitmap face — ninety-five glyphs of eight by eight covering the printable ASCII range, **drawn for this project rather than obtained**, with a picture comment beside each — and three ways of drawing one: transparent, opaque, and enlarged for a banner. `FontCovers`, `FontGlyph`, `FontGlyphRow`, `FontDrawGlyph`, `FontDrawGlyphOpaque`, `FontDrawGlyphScaled`. |
 | `console.c` | Sub-task 6.4. The graphical console: a grid of character cells upon the framebuffer, the four control characters of ANSI X3.4-1986 as the text-mode driver implements them, a scroll performed by blitting the surface upon itself, and a buffer that replays what was written before the framebuffer could be mapped. `ConsoleInitialise`, `ConsoleIsActive`, `ConsoleWriteCharacter`, `ConsoleWriteString`, `ConsoleSetColour`, `ConsoleColumns`, `ConsoleRows`, `ConsoleColumn`, `ConsoleRow`, `ConsoleSetEraseLimit`, `ConsoleReport`. |
+| `faultscreen.c` | Sub-task 6.4. The full-screen page a severe fault produces: a table of screens, one for each fault, each with its own title, colour, account of what the processor is reporting, direction as to what to examine first, and evidence panels chosen for that fault. Runs inside a fault handler, so it allocates nothing, reads no address without asking the paging hierarchy, and draws once. `FaultScreenShowException`, `FaultScreenShowPanic`, `FaultScreenDemonstrate`, `FaultScreenWasDrawn`, `FaultScreenEntryCount`, `FaultScreenEntryAt`. |
 | `framebuffer.c` | Sub-task 6.2. Acquires the framebuffer described in the Multiboot2 boot information, gives its pages the write-combining memory type through the page attribute table, maps them into the kernel arena, and describes what was obtained. `FramebufferInitialise`, `FramebufferIsPresent`, `FramebufferIsGraphical`, `FramebufferAddress`, `FramebufferWidth`, `FramebufferHeight`, `FramebufferPitch`, `FramebufferBitsPerPixel`, `FramebufferBytesPerPixel`, `FramebufferByteCount`, `FramebufferFormat`, `FramebufferEncode`, `FramebufferWriteCombining`, `FramebufferReport`. |
 
 The interfaces are declared in
 [`../kernel/include/oxys/framebuffer.h`](../kernel/include/oxys/framebuffer.h),
 [`../kernel/include/oxys/graphics.h`](../kernel/include/oxys/graphics.h),
 [`../kernel/include/oxys/font.h`](../kernel/include/oxys/font.h) and
-[`../kernel/include/oxys/console.h`](../kernel/include/oxys/console.h), with the
+[`../kernel/include/oxys/console.h`](../kernel/include/oxys/console.h) and
+[`../kernel/include/oxys/faultscreen.h`](../kernel/include/oxys/faultscreen.h),
+with the
 rest of the kernel's header corpus, so that a consumer depends upon an interface
 and not upon this directory.
 
@@ -74,3 +77,11 @@ three that govern what can be built next:
    a boot log is written.
 3. **The mode cannot be chosen.** GRUB selects it and ignores what it is asked
    for; the kernel accepts whatever it is handed and asserts what it was.
+
+## What was measured
+
+The console was measured, after it worked, at **15.2% of the whole boot**, and
+the cause was not where it had been guessed at. Section 23 of the design document
+records the figures, what was actually wrong, and the three changes that brought
+it to 4.5%. The remaining factor is the framebuffer read a scroll performs, and
+removing it needs the back buffer of sub-task 6.6.

@@ -33,6 +33,7 @@
 #include <oxys/idt.h>
 #include <oxys/tss.h>
 #include <oxys/kernel.h>
+#include <oxys/faultscreen.h>
 
 /* The number of quadwords of stack reproduced in a diagnostic report. */
 #define EXCEPTION_STACK_WORDS 8U
@@ -254,6 +255,16 @@ void ExceptionReportState(const TrapFrame *frame, uint64_t fault_address)
 static void ExceptionFatalHandler(TrapFrame *frame)
 {
     ExceptionReportState(frame, ReadCr2());
+
+    /*
+     * The screen is drawn after the report and not instead of it. The report is
+     * the record and goes to every diagnostic path; the screen is a summary
+     * composed for this particular exception, for a person standing at a machine
+     * whose adapter the boot loader put into a graphics mode and who can
+     * therefore read neither the text console nor a serial port they do not
+     * have. Where there is no framebuffer this does nothing at all.
+     */
+    FaultScreenShowException(frame, ReadCr2());
     KernelPanic("An unrecoverable processor exception was raised.");
 }
 
@@ -287,6 +298,7 @@ static void ExceptionPageFaultHandler(TrapFrame *frame)
     }
 
     ExceptionReportState(frame, fault_address);
+    FaultScreenShowException(frame, fault_address);
     KernelPanic("An unresolved page fault was raised.");
 }
 

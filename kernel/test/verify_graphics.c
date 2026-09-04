@@ -63,8 +63,22 @@ static void KernelGraphicsRequire(bool condition, const char *statement)
  * and finding anything else in the padding proves something did. */
 #define KERNEL_SURFACE_SENTINEL UINT32_C(0xA5A5A5A5)
 
-static uint8_t KernelSurfaceStore[KERNEL_SURFACE_PITCH * KERNEL_SURFACE_HEIGHT];
-static uint8_t KernelSecondStore[KERNEL_SURFACE_PITCH * KERNEL_SURFACE_HEIGHT];
+/*
+ * The store is declared as words and not as bytes, and that is a correctness
+ * matter rather than a convenience.
+ *
+ * From the optimisation of sub-task 6.4 the primitives write a four-byte pixel
+ * as one 32-bit store where the surface permits it. An object declared as an
+ * array of `uint8_t` has that as its type for the whole of its life, and writing
+ * through a `uint32_t` lvalue into it is undefined however well it appears to
+ * work; declared as words, both accesses are sound — a word through its own
+ * type, and a byte through a character type, which may alias anything.
+ *
+ * It also guarantees the four-byte alignment the word path requires, which a
+ * byte array does not.
+ */
+static uint32_t KernelSurfaceStore[(KERNEL_SURFACE_PITCH * KERNEL_SURFACE_HEIGHT) / 4U];
+static uint32_t KernelSecondStore[(KERNEL_SURFACE_PITCH * KERNEL_SURFACE_HEIGHT) / 4U];
 
 static GraphicsSurface KernelSurface;
 static GraphicsSurface KernelSecondSurface;
@@ -231,7 +245,7 @@ static void KernelVerifyGraphicsSurface(void)
                               "a clip wholly outside the surface is not empty");
 
         /* Drawing against an empty clip must do nothing at all. */
-        KernelSurfaceReset(KernelSurfaceStore);
+        KernelSurfaceReset((uint8_t *)KernelSurfaceStore);
         GraphicsClear(&KernelSurface, 0x111111U);
         GraphicsDrawLine(&KernelSurface, 0, 0, 31, 15, 0x111111U);
         GraphicsPutPixel(&KernelSurface, 5, 5, 0x111111U);
@@ -246,13 +260,190 @@ static void KernelVerifyGraphicsSurface(void)
                           "the clip was not restored to the whole surface");
 }
 
+/*
+ * Asserts the word-wide fast path of sub-task 6.4's optimisation, and the
+ * pattern block that draws a glyph.
+ *
+ * A fast path is the most dangerous kind of code to leave unasserted. It runs
+ * only when its own precondition holds, so a fault in it is invisible upon every
+ * surface that does not meet the condition — and the surface the self-tests use
+ * and the surface a person looks at are not the same surface. Both paths are
+ * therefore exercised here, upon two surfaces that differ in nothing but their
+ * alignment, and required to produce identical results.
+ */
+static void KernelVerifyGraphicsWordPath(void)
+{
+    GraphicsSurface aligned;
+    GraphicsSurface unaligned;
+    static const uint8_t pattern[4] = { 0xF0U, 0x0FU, 0xAAU, 0x00U };
+
+    /*
+     * The unaligned surface is placed one byte into a store of its own, with a
+     * pitch that is not a multiple of four. Either of those alone denies the word
+     * path; both are varied so that neither condition is relied upon by accident.
+     *
+     * They are given **separate stores**. The first arrangement of this test put
+     * both upon one, one byte apart, and each drawing then overwrote the other's
+     * pixels — which failed, and failed for a reason that had nothing to do with
+     * the thing being asserted.
+     */
+    KernelGraphicsRequire(GraphicsSurfaceInitialise(&aligned, KernelSurfaceStore, 8U, 4U,
+                                                    8U * 4U, 4U),
+                          "the aligned surface could not be described");
+    KernelGraphicsRequire(GraphicsSurfaceInitialise(&unaligned,
+                                                    ((uint8_t *)KernelSecondStore) + 1,
+                                                    8U, 4U, (8U * 4U) + 1U, 4U),
+                          "the unaligned surface could not be described");
+
+    KernelGraphicsRequire(aligned.whole_words,
+                          "a four-byte surface upon a word boundary with a word-multiple "
+                          "pitch was not marked as addressable by words");
+    KernelGraphicsRequire(!unaligned.whole_words,
+                          "a surface whose base and pitch are both odd was marked as "
+                          "addressable by words, so every row would be written misaligned");
+
+    /*
+     * A three-byte pixel can never take the word path, whatever its alignment.
+     * This is the case that would corrupt the pixel beside the one written, and
+     * it is asserted separately because it is a property of the depth and not of
+     * the address.
+     */
+    {
+        GraphicsSurface narrow;
+
+        KernelGraphicsRequire(GraphicsSurfaceInitialise(&narrow, KernelSecondStore, 8U, 4U,
+                                                        8U * 3U, 3U),
+                              "the three-byte surface could not be described");
+        KernelGraphicsRequire(!narrow.whole_words,
+                              "a three-byte pixel was marked as addressable by words, so a "
+                              "write would spill into the pixel beside it");
+    }
+
+    /*
+     * The two paths must agree pixel for pixel. Each surface is filled, then
+     * drawn upon with a block, and every pixel of the two compared: the whole
+     * point of the fast path is that it is not a different drawing.
+     */
+    {
+        bool identical = true;
+
+        GraphicsResetClip(&aligned);
+        GraphicsResetClip(&unaligned);
+        GraphicsClear(&aligned, 0x00222222U);
+        GraphicsClear(&unaligned, 0x00222222U);
+        GraphicsPatternBlock(&aligned, 0, 0, pattern, 4, 0x00FFFFFFU, 0x00222222U);
+        GraphicsPatternBlock(&unaligned, 0, 0, pattern, 4, 0x00FFFFFFU, 0x00222222U);
+
+        for (int32_t y = 0; y < 4; ++y)
+        {
+            for (int32_t x = 0; x < 8; ++x)
+            {
+                if (GraphicsPixelAt(&aligned, x, y) != GraphicsPixelAt(&unaligned, x, y))
+                {
+                    identical = false;
+                }
+            }
+        }
+
+        KernelGraphicsRequire(identical,
+                              "the word path and the byte path drew different pixels, so "
+                              "one of them is wrong and the tests see only the other");
+    }
+
+    /* The block reproduces its own pattern, most significant bit leftmost. That
+     * is the bit order the font table is stored in, and a block that reversed it
+     * would mirror every character. */
+    {
+        bool matched = true;
+
+        GraphicsClear(&aligned, 0U);
+        GraphicsPatternBlock(&aligned, 0, 0, pattern, 4, 0x00FFFFFFU, 0x00111111U);
+
+        for (int32_t y = 0; y < 4; ++y)
+        {
+            for (int32_t x = 0; x < 8; ++x)
+            {
+                const bool set = (pattern[y] & (uint8_t)(0x80U >> (uint32_t)x)) != 0U;
+                const uint32_t got = GraphicsPixelAt(&aligned, x, y);
+
+                if (got != (set ? 0x00FFFFFFU : 0x00111111U))
+                {
+                    matched = false;
+                }
+            }
+        }
+
+        KernelGraphicsRequire(matched,
+                              "a pattern block does not reproduce its own bits, so the bit "
+                              "order or the row order is wrong");
+    }
+
+    /*
+     * The block writes the paper as well as the ink. This is what distinguishes
+     * it from the transparent glyph, and a block that skipped its clear bits
+     * would leave a console cell holding the character that stood there before.
+     */
+    {
+        GraphicsClear(&aligned, 0x00ABCDEFU);
+        GraphicsPatternBlock(&aligned, 0, 0, pattern, 4, 0x00FFFFFFU, 0x00111111U);
+        KernelGraphicsRequire(GraphicsPixelAt(&aligned, 7, 0) == 0x00111111U,
+                              "a pattern block left a clear bit untouched, so a console "
+                              "cell would keep the character drawn there before it");
+    }
+
+    /*
+     * The block is clipped, and clipped in the right place: a block trimmed on
+     * its left must draw the bits that survive, not the bits from the start of
+     * the pattern shifted over.
+     */
+    {
+        const GraphicsRectangle right = { 4, 0, 4, 4 };
+
+        GraphicsClear(&aligned, 0U);
+        GraphicsSetClip(&aligned, right);
+        GraphicsPatternBlock(&aligned, 0, 0, pattern, 4, 0x00FFFFFFU, 0x00111111U);
+        GraphicsResetClip(&aligned);
+
+        KernelGraphicsRequire(GraphicsPixelAt(&aligned, 0, 0) == 0U,
+                              "a pattern block wrote outside its clip");
+
+        /* Row 0 is 0xF0: bits 0 to 3 set, 4 to 7 clear. Columns 4 to 7 survive
+         * the clip and must therefore all be paper. Ink there would mean the
+         * pattern had been shifted to the clip rather than trimmed by it. */
+        KernelGraphicsRequire(GraphicsPixelAt(&aligned, 4, 0) == 0x00111111U,
+                              "a clipped pattern block drew the wrong bits, so it was "
+                              "shifted to the clip rather than trimmed by it");
+
+        /* Row 1 is 0x0F: bits 4 to 7 set, so the surviving columns are all ink. */
+        KernelGraphicsRequire(GraphicsPixelAt(&aligned, 4, 1) == 0x00FFFFFFU,
+                              "a clipped pattern block lost the bits that should have "
+                              "survived the trim");
+    }
+
+    /* A block wholly outside the clip writes nothing, and one with no rows is
+     * refused rather than read from. */
+    {
+        GraphicsClear(&aligned, 0U);
+        GraphicsPatternBlock(&aligned, 100, 100, pattern, 4, 0x00FFFFFFU, 0x00111111U);
+        GraphicsPatternBlock(&aligned, 0, 0, pattern, 0, 0x00FFFFFFU, 0x00111111U);
+        GraphicsPatternBlock(&aligned, 0, 0, NULL, 4, 0x00FFFFFFU, 0x00111111U);
+        KernelGraphicsRequire(KernelCountColour(&aligned, 0x00FFFFFFU) == 0U,
+                              "a block outside the clip, or one of no rows, or one with no "
+                              "pattern, wrote pixels");
+    }
+
+    /* The stores are left as the later tests expect to find them. */
+    KernelSurfaceReset((uint8_t *)KernelSurfaceStore);
+    KernelSurfaceReset((uint8_t *)KernelSecondStore);
+}
+
 /* Asserts the pixel, the fill and the outline. */
 static void KernelVerifyGraphicsRectangleDrawing(void)
 {
     const uint32_t ink = 0x00FF00U;
     const uint32_t ground = 0x000010U;
 
-    KernelSurfaceReset(KernelSurfaceStore);
+    KernelSurfaceReset((uint8_t *)KernelSurfaceStore);
     GraphicsResetClip(&KernelSurface);
 
     /* A pixel is set where it is asked for and nowhere else. */
@@ -261,7 +452,7 @@ static void KernelVerifyGraphicsRectangleDrawing(void)
                           "a pixel was not set where it was asked for");
     KernelGraphicsRequire(KernelCountColour(&KernelSurface, ink) == 1U,
                           "setting one pixel changed more than one");
-    KernelGraphicsRequire(KernelPaddingIsIntact(KernelSurfaceStore),
+    KernelGraphicsRequire(KernelPaddingIsIntact((const uint8_t *)KernelSurfaceStore),
                           "setting a pixel wrote into the row padding, so the address was "
                           "computed from the width and not the pitch");
 
@@ -273,11 +464,11 @@ static void KernelVerifyGraphicsRectangleDrawing(void)
                           "a pixel outside the surface was written");
     KernelGraphicsRequire(GraphicsPixelAt(&KernelSurface, -1, 3) == 0U,
                           "a pixel outside the surface read as something");
-    KernelGraphicsRequire(KernelPaddingIsIntact(KernelSurfaceStore),
+    KernelGraphicsRequire(KernelPaddingIsIntact((const uint8_t *)KernelSurfaceStore),
                           "a pixel outside the surface wrote into the padding");
 
     /* A fill covers exactly its own area. */
-    KernelSurfaceReset(KernelSurfaceStore);
+    KernelSurfaceReset((uint8_t *)KernelSurfaceStore);
     {
         const GraphicsRectangle box = { 4, 2, 10, 5 };
 
@@ -290,7 +481,7 @@ static void KernelVerifyGraphicsRectangleDrawing(void)
         KernelGraphicsRequire(GraphicsPixelAt(&KernelSurface, 14, 6) != ground &&
                                   GraphicsPixelAt(&KernelSurface, 4, 7) != ground,
                               "a filled rectangle extends one pixel past its extent");
-        KernelGraphicsRequire(KernelPaddingIsIntact(KernelSurfaceStore),
+        KernelGraphicsRequire(KernelPaddingIsIntact((const uint8_t *)KernelSurfaceStore),
                               "a filled rectangle wrote into the row padding");
     }
 
@@ -300,7 +491,7 @@ static void KernelVerifyGraphicsRectangleDrawing(void)
      * dropped the whole rectangle because part of it was outside would look the
      * same as one that clipped correctly, from the point of view of memory.
      */
-    KernelSurfaceReset(KernelSurfaceStore);
+    KernelSurfaceReset((uint8_t *)KernelSurfaceStore);
     {
         const GraphicsRectangle straddling = { -5, -5, 10, 10 };
 
@@ -312,12 +503,12 @@ static void KernelVerifyGraphicsRectangleDrawing(void)
                                   GraphicsPixelAt(&KernelSurface, 4, 4) == ink &&
                                   GraphicsPixelAt(&KernelSurface, 5, 5) != ink,
                               "the clipped rectangle is in the wrong place");
-        KernelGraphicsRequire(KernelPaddingIsIntact(KernelSurfaceStore),
+        KernelGraphicsRequire(KernelPaddingIsIntact((const uint8_t *)KernelSurfaceStore),
                               "a clipped fill wrote into the row padding");
     }
 
     /* The outline is hollow, and its corners are present. */
-    KernelSurfaceReset(KernelSurfaceStore);
+    KernelSurfaceReset((uint8_t *)KernelSurfaceStore);
     {
         const GraphicsRectangle box = { 2, 2, 6, 4 };
 
@@ -334,13 +525,13 @@ static void KernelVerifyGraphicsRectangleDrawing(void)
                               "an outlined rectangle is missing a corner");
         KernelGraphicsRequire(GraphicsPixelAt(&KernelSurface, 4, 3) != ink,
                               "an outlined rectangle is filled");
-        KernelGraphicsRequire(KernelPaddingIsIntact(KernelSurfaceStore),
+        KernelGraphicsRequire(KernelPaddingIsIntact((const uint8_t *)KernelSurfaceStore),
                               "an outlined rectangle wrote into the row padding");
     }
 
     /* A clear fills the clip and not the surface, which is what makes it usable
      * for erasing one region of a screen. */
-    KernelSurfaceReset(KernelSurfaceStore);
+    KernelSurfaceReset((uint8_t *)KernelSurfaceStore);
     {
         const GraphicsRectangle region = { 8, 4, 4, 4 };
 
@@ -350,7 +541,7 @@ static void KernelVerifyGraphicsRectangleDrawing(void)
 
         KernelGraphicsRequire(KernelCountColour(&KernelSurface, ink) == 16U,
                               "a clear filled something other than the clip");
-        KernelGraphicsRequire(KernelPaddingIsIntact(KernelSurfaceStore),
+        KernelGraphicsRequire(KernelPaddingIsIntact((const uint8_t *)KernelSurfaceStore),
                               "a clear wrote into the row padding");
     }
 }
@@ -360,7 +551,7 @@ static void KernelVerifyGraphicsLine(void)
 {
     const uint32_t ink = 0xFF00FFU;
 
-    KernelSurfaceReset(KernelSurfaceStore);
+    KernelSurfaceReset((uint8_t *)KernelSurfaceStore);
     GraphicsResetClip(&KernelSurface);
 
     /* A horizontal line covers exactly the span it names, inclusive of both
@@ -374,18 +565,18 @@ static void KernelVerifyGraphicsLine(void)
                           "a horizontal line is displaced");
 
     /* A single point is a line of one pixel, not of none. */
-    KernelSurfaceReset(KernelSurfaceStore);
+    KernelSurfaceReset((uint8_t *)KernelSurfaceStore);
     GraphicsDrawLine(&KernelSurface, 5, 5, 5, 5, ink);
     KernelGraphicsRequire(KernelCountColour(&KernelSurface, ink) == 1U,
                           "a line between one point and itself is not one pixel");
 
     /* A vertical line, and a diagonal, whose length is its longer axis. */
-    KernelSurfaceReset(KernelSurfaceStore);
+    KernelSurfaceReset((uint8_t *)KernelSurfaceStore);
     GraphicsDrawLine(&KernelSurface, 6, 1, 6, 14, ink);
     KernelGraphicsRequire(KernelCountColour(&KernelSurface, ink) == 14U,
                           "a vertical line has the wrong length");
 
-    KernelSurfaceReset(KernelSurfaceStore);
+    KernelSurfaceReset((uint8_t *)KernelSurfaceStore);
     GraphicsDrawLine(&KernelSurface, 0, 0, 9, 9, ink);
     KernelGraphicsRequire(KernelCountColour(&KernelSurface, ink) == 10U,
                           "a diagonal line has the wrong length");
@@ -399,7 +590,7 @@ static void KernelVerifyGraphicsLine(void)
         uint32_t backwards;
         bool identical = true;
 
-        KernelSurfaceReset(KernelSurfaceStore);
+        KernelSurfaceReset((uint8_t *)KernelSurfaceStore);
         GraphicsDrawLine(&KernelSurface, 1, 2, 30, 13, ink);
         forwards = KernelCountColour(&KernelSurface, ink);
 
@@ -466,7 +657,7 @@ static void KernelVerifyGraphicsLine(void)
          * leave the first line's pixels outside the region standing, and they
          * would be counted against the second.
          */
-        KernelSurfaceReset(KernelSurfaceStore);
+        KernelSurfaceReset((uint8_t *)KernelSurfaceStore);
         GraphicsResetClip(&KernelSurface);
         GraphicsDrawLine(&KernelSurface, -4, -2, 34, 17, ink);
 
@@ -486,7 +677,7 @@ static void KernelVerifyGraphicsLine(void)
             }
         }
 
-        KernelSurfaceReset(KernelSurfaceStore);
+        KernelSurfaceReset((uint8_t *)KernelSurfaceStore);
         GraphicsSetClip(&KernelSurface, region);
         GraphicsDrawLine(&KernelSurface, -4, -2, 34, 17, ink);
         GraphicsResetClip(&KernelSurface);
@@ -518,13 +709,13 @@ static void KernelVerifyGraphicsLine(void)
         KernelGraphicsRequire(coincide,
                               "a clipped line lights different pixels than the unclipped "
                               "line does, so clipping moved the line");
-        KernelGraphicsRequire(KernelPaddingIsIntact(KernelSurfaceStore),
+        KernelGraphicsRequire(KernelPaddingIsIntact((const uint8_t *)KernelSurfaceStore),
                               "a line wrote into the row padding");
     }
 
     /* A line whose coordinates exceed the bound is refused rather than drawn,
      * an unbounded loop being worse than a refusal. */
-    KernelSurfaceReset(KernelSurfaceStore);
+    KernelSurfaceReset((uint8_t *)KernelSurfaceStore);
     GraphicsDrawLine(&KernelSurface, 0, 0, GRAPHICS_COORDINATE_LIMIT + 1, 8, ink);
     KernelGraphicsRequire(KernelCountColour(&KernelSurface, ink) == 0U,
                           "a line with a coordinate beyond the limit was drawn");
@@ -537,8 +728,8 @@ static void KernelVerifyGraphicsBlit(void)
     const GraphicsRectangle whole = { 0, 0, (int32_t)KERNEL_SURFACE_WIDTH,
                                       (int32_t)KERNEL_SURFACE_HEIGHT };
 
-    KernelSurfaceReset(KernelSurfaceStore);
-    KernelSurfaceReset(KernelSecondStore);
+    KernelSurfaceReset((uint8_t *)KernelSurfaceStore);
+    KernelSurfaceReset((uint8_t *)KernelSecondStore);
     GraphicsResetClip(&KernelSurface);
     GraphicsResetClip(&KernelSecondSurface);
 
@@ -569,8 +760,8 @@ static void KernelVerifyGraphicsBlit(void)
                                   GraphicsPixelAt(&KernelSurface, 13, 8) == ink &&
                                   GraphicsPixelAt(&KernelSurface, 14, 8) != ink,
                               "a blit placed the rectangle in the wrong position");
-        KernelGraphicsRequire(KernelPaddingIsIntact(KernelSurfaceStore) &&
-                                  KernelPaddingIsIntact(KernelSecondStore),
+        KernelGraphicsRequire(KernelPaddingIsIntact((const uint8_t *)KernelSurfaceStore) &&
+                                  KernelPaddingIsIntact((const uint8_t *)KernelSecondStore),
                               "a blit wrote into the row padding");
     }
 
@@ -583,8 +774,8 @@ static void KernelVerifyGraphicsBlit(void)
      * adjusting the source would copy the correct number of pixels from the
      * wrong place, which is a shifted image rather than a missing one.
      */
-    KernelSurfaceReset(KernelSurfaceStore);
-    KernelSurfaceReset(KernelSecondStore);
+    KernelSurfaceReset((uint8_t *)KernelSurfaceStore);
+    KernelSurfaceReset((uint8_t *)KernelSecondStore);
     {
         const GraphicsRectangle source_box = { 0, 0, 8, 8 };
 
@@ -609,7 +800,7 @@ static void KernelVerifyGraphicsBlit(void)
         KernelGraphicsRequire(GraphicsPixelAt(&KernelSurface, 0, 2) == 0x222222U,
                               "a trimmed blit took the wrong part of the source, so the "
                               "image is shifted rather than cropped");
-        KernelGraphicsRequire(KernelPaddingIsIntact(KernelSurfaceStore),
+        KernelGraphicsRequire(KernelPaddingIsIntact((const uint8_t *)KernelSurfaceStore),
                               "a trimmed blit wrote into the row padding");
     }
 
@@ -622,7 +813,7 @@ static void KernelVerifyGraphicsBlit(void)
      * would smear the first row it read down the whole region, and the assertion
      * that catches that is the one upon a row well below the top.
      */
-    KernelSurfaceReset(KernelSurfaceStore);
+    KernelSurfaceReset((uint8_t *)KernelSurfaceStore);
     GraphicsResetClip(&KernelSurface);
     {
         bool moved = true;
@@ -657,7 +848,7 @@ static void KernelVerifyGraphicsBlit(void)
 
     /* The same downward, which is the direction that fails if the row order is
      * not reversed. */
-    KernelSurfaceReset(KernelSurfaceStore);
+    KernelSurfaceReset((uint8_t *)KernelSurfaceStore);
     {
         bool moved = true;
 
@@ -686,16 +877,16 @@ static void KernelVerifyGraphicsBlit(void)
         KernelGraphicsRequire(moved,
                               "an overlapping blit downward smeared, so the rows were not "
                               "copied from the bottom");
-        KernelGraphicsRequire(KernelPaddingIsIntact(KernelSurfaceStore),
+        KernelGraphicsRequire(KernelPaddingIsIntact((const uint8_t *)KernelSurfaceStore),
                               "an overlapping blit wrote into the row padding");
     }
 
     /* A blit wholly outside the destination is not an error; it copies nothing
      * and reports success, having done what was asked. */
-    KernelSurfaceReset(KernelSurfaceStore);
+    KernelSurfaceReset((uint8_t *)KernelSurfaceStore);
     KernelGraphicsRequire(GraphicsBlit(&KernelSurface, 500, 500, &KernelSecondSurface, whole),
                           "a blit clipped away entirely was reported as a refusal");
-    KernelGraphicsRequire(KernelPaddingIsIntact(KernelSurfaceStore),
+    KernelGraphicsRequire(KernelPaddingIsIntact((const uint8_t *)KernelSurfaceStore),
                           "a blit clipped away entirely wrote something");
 }
 
@@ -802,6 +993,7 @@ void KernelVerifyGraphics(void)
 
     KernelVerifyGraphicsRectangles();
     KernelVerifyGraphicsSurface();
+    KernelVerifyGraphicsWordPath();
     KernelVerifyGraphicsRectangleDrawing();
     KernelVerifyGraphicsLine();
     KernelVerifyGraphicsBlit();

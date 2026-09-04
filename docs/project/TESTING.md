@@ -730,10 +730,131 @@ and `make verify` must itself fail, the harness having gained the assertion upon
 for `'O'` are `0x78, 0x84, 0x84, 0x84, 0x84, 0x84, 0x78, 0x00`, and the picture
 comment beneath the line states them.
 
-## 18. Test record
+## 18. Verification of the drawing optimisation
+
+The primitives gained a path that writes a four-byte pixel as one 32-bit store,
+and the console gained one that draws a character cell and its glyph in a single
+pass. Both are asserted by `KernelVerifyGraphics` and `KernelVerifyConsole`, and
+both are tabulated in [`../design/GRAPHICS.md`](../design/GRAPHICS.md),
+Sections 25.1 and 25.2.
+
+**A fast path is the most dangerous kind of code to leave unasserted.** It runs
+only when its own precondition holds, so a fault in it is invisible upon every
+surface that does not meet the condition — and the surface the self-tests use is
+not the surface a person looks at. The test therefore draws upon **two surfaces
+differing in nothing but their alignment** and requires them to produce identical
+pixels, and it compares the two glyph routines for every glyph in the face.
+
+### 18.1 Measuring it again
+
+The figures in Section 23.1 of the design document were obtained with `RDTSC`,
+not with the interval timer: interrupts are disabled for most of the boot and
+only seventeen ticks elapse in the whole of it. To repeat the measurement, time
+the operations from `KernelMain` after `PitInitialise` and read the counter
+directly; the ratios are what matter, QEMU's interpreter making the absolute
+figures proportional to instructions executed rather than to cycles.
+
+### 18.2 The negative tests
+
+Two, because the optimisation has two halves.
+
+```sh
+# The alignment conditions removed, so every four-byte surface claims the fast path.
+sed -i 's/    surface->whole_words = (bytes_per_pixel == 4U) \&\&/    surface->whole_words = (bytes_per_pixel == 4U); \/\//' \
+    graphics/draw.c
+```
+
+The run must report `a surface whose base and pitch are both odd was marked as
+addressable by words, so every row would be written misaligned` and end
+`Graphics self-test FAILED.`
+
+The second is applied by hand: make `GraphicsPatternBlock` skip its clear bits,
+as the transparent glyph does, by replacing the word store in its inner loop with
+`if ((bits & bit) != 0U) { word[column] = ink; }`. Three assertions must fire in
+the graphics self-test and a fourth in the console self-test, the last naming the
+code point at which the two glyph routines first disagree. Restore the file
+afterwards.
+
+## 19. Verification of the fault screens
+
+`KernelVerifyFaultScreen` asserts the table of fault screens at every boot — that
+every severe fault has a screen of its own, that **no two of them share a title
+or a colour**, and that every title will fit a 640-pixel display. Each assertion
+and the silent failure it catches is tabulated in
+[`../design/GRAPHICS.md`](../design/GRAPHICS.md), Section 25.3.
+
+It asserts the table and not the drawing, for the reason Section 15 gives about
+the display generally. **Nothing in it draws**, deliberately: drawing would set
+the flag that records a screen as having been shown, and a real fault later in
+the same boot would then find the display taken and draw nothing.
+
+### 19.1 Looking at the screens
+
+Two GRUB entries, which prove different things and must not be confused.
+
+**Oxys-OS (fault screen demonstration)** composes a trap frame and draws one
+vector's page, then halts. It proves the page — that its text fits, that its
+panels lay out, that its colour and title are its own — and nothing about the
+processor. The frame holds values no machine would produce, so a photograph of it
+cannot be mistaken for a real report. Press `e` at the menu to change
+`fault-screen=14` to another vector: 0, 6, 8, 10, 11, 12, 13, 14, 17, 18, or 256
+for a panic the kernel raises itself.
+
+**Oxys-OS (raise a genuine page fault)** writes to an unmapped address. It proves
+the wiring — handler, report upon the serial port, screen upon the framebuffer,
+end to end. A page fault is used because it is the one severe fault that can be
+raised deliberately without endangering the machine.
+
+Capture either as in Section 15.1, counting the keystrokes to the entry wanted:
+
+```sh
+( sleep 2;  echo "sendkey down"; sleep 0.25; echo "sendkey down"; sleep 0.25; \
+  echo "sendkey ret"; \
+  sleep 13; echo "screendump /tmp/oxys-fault.ppm"; \
+  sleep 3;  echo "quit" ) \
+  | qemu-system-x86_64 -machine q35 -cpu qemu64 -smp cores=2 -m 512M \
+      -cdrom build/oxys.iso -display none -monitor stdio -serial null
+```
+
+What to look for:
+
+| What to look for | What its absence would mean |
+| ---------------- | --------------------------- |
+| A coloured banner with the fault's title at several times life size, **not clipped at the top** | The banner is shorter than the title, or something scrolled the framebuffer after the screen was drawn. This is exactly the fault Section 24.3 of the design document records. |
+| The mnemonic and vector beneath the title | The general screen was drawn, meaning the table has no entry for this vector. |
+| Panels that differ **between faults** — an address for a page fault, a decoded selector for a general protection fault, instruction bytes for an invalid opcode | The evidence flags are not being consulted, and every fault is being given the same page. |
+| The instruction bytes reproduced as real values, or an explicit statement that the address is unmapped | The bytes are being read without asking the paging hierarchy, which would raise a second fault. |
+| Nothing written over the page afterwards | The console was not suspended. |
+| At **640 by 480**: the title still fits, paragraphs re-wrap, and the footer is still on the screen | The layout was fitted to 1280 pixels. |
+
+### 19.2 The negative tests
+
+```sh
+# Two screens given the same identity, as a copied row would be.
+sed -i 's/{ 11U, "SEGMENT NOT PRESENT", "#NP, vector 11",/{ 11U, "INVALID TASK STATE SEGMENT", "#NP, vector 11",/' \
+    graphics/faultscreen.c
+make verify
+```
+
+The run must report `two fault screens share a title, at vectors 0xA and 0xB` and
+end `Fault screen self-test FAILED.`
+
+For the second, delete the `{ 18U, "MACHINE CHECK", ... }` row from the table.
+The run must report `a severe fault has no screen of its own, at vector 0x12` —
+the fault this catches being the one that would otherwise look like nothing at
+all, the general screen still naming the vector. Restore the file afterwards.
+
+## 20. Test record
 
 | Date | Test | Result |
 | ---- | ---- | ------ |
+| 2026-09-04 | `make verify` — the drawing optimisation | Passed. The console had been measured at **15.2% of the whole boot**; it is now 4.5%, and the four operations that matter are 3.6 to 7.9 times faster. The assertions that guard it are the ones a fast path needs: a four-byte surface on a word boundary with a word-multiple pitch is marked word-addressable and one whose base and pitch are both odd is not, a three-byte pixel never is whatever its alignment, and — the assertion the rest rests upon — **two surfaces differing in nothing but their alignment are drawn upon and compared pixel for pixel**, so the fast path cannot quietly draw something different from the path the other tests exercise. The two glyph routines are compared for every one of the ninety-five glyphs, the console having changed which one it goes through. |
+| 2026-09-04 | `make verify` — the drawing optimisation, **the negative tests** | Passed, both. With the alignment conditions removed from `whole_words`, the run reported `a surface whose base and pitch are both odd was marked as addressable by words`. With `GraphicsPatternBlock` made to skip its clear bits, three assertions fired in the graphics self-test and a fourth in the console self-test — `the two glyph routines disagree, at code 0x20` — which is the assertion that exists because no other test uses the path the console uses. Both edits were reverted. The procedure is Section 18.2. |
+| 2026-09-04 | `make verify` — the fault screen table | Passed. Every severe vector has a screen of its own; no two share a title, a colour or a vector; every title fits a 640-pixel display at the scale used there; the evidence flags name only panels that exist; and no screen had been drawn when the test ran, which is itself an assertion — a screen drawn early would leave a real fault later in the boot with nothing to display. |
+| 2026-09-04 | QEMU screendump — the fault screens, **a person's judgement** | Passed at 1280 by 800 for the page fault, general protection fault, double fault, divide error and kernel panic. Each carries its own banner colour and title, and — the point of the exercise — **its own evidence**: the page fault decodes its address and states that no translation existed; the general protection fault decodes error code `0x43` into selector index `0x0008` in the interrupt descriptor table, raised externally; the double fault shows the stack and says in as many words that the fault to pursue is the one before it; the divide error shows its operands. The instruction panels reproduced real bytes read from the instruction pointer. |
+| 2026-09-04 | QEMU — the fault screens, **the wiring, end to end** | Passed. A write to an unmapped address raised a genuine page fault; the handler reported it in full upon the serial port, the screen was drawn upon the framebuffer, and the run ended `KERNEL PANIC: An unresolved page fault was raised.` The screen showed the real faulting address `0xFFFF900000000000`, `No translation existed for this address.` and `The access was a write.` — all three read from the actual fault and not composed. |
+| 2026-09-04 | QEMU screendump — **a fault found by looking**, not by asserting | The first correct-looking screen was displayed wrongly: its banner was clipped and its whole layout shifted up by three character rows. The cause was not in the drawing. `KernelPanic` follows every fatal exception and writes to the diagnostic path, which includes the console, which is upon the same framebuffer — and its cursor stood at the foot of a screen of boot log, so each newline of the panic message scrolled the framebuffer up by eight pixels. `ConsoleSuspend` was added and the fault screen now takes the display. Recorded because no assertion available would have found it: every pixel was drawn where it was asked for. |
+| 2026-09-04 | VirtualBox 7, headless, 512 MiB, legacy BIOS — the fault screens at 640 by 480 | Passed. The title fits at twice life size where it is drawn at three times upon QEMU, the paragraphs re-wrap to the narrower line, and the footer — which wraps to two lines at this width — is still upon the screen. This is the assertion `KernelVerifyFaultScreen` makes about title length made good in practice, and it is the machine the person judging these screens would not have used. |
 | 2026-09-04 | `make verify` — sub-task 6.4, the font and the console | Passed; twenty-seven assertions. The face is asserted against the metrics it was drawn to — no glyph draws into the two columns reserved for spacing, exactly one glyph (the space) is blank, the replacement glyph is not blank, and **no two of the ninety-five glyphs are identical**, which is the assertion worth having in a table authored by hand. A glyph drawn upon a 16 by 16 surface at (4, 4) matches its own bytes pixel for pixel and leaves the margin around its cell untouched, which is what catches a reversed bit order — mirroring being invisible in the symmetric letters. A pixel the glyph does not set keeps the background it was given, so text can be drawn over an image. The four control characters were asserted upon the live console: CR returns to column 0 without changing the row; HT lands on column 8 from column 0 and on 16 from 8, so it advances to a multiple and not by eight; BS moves exactly one position, and does not move at the erase limit, nor cross to the row above when the limit stands at column 0. |
 | 2026-09-04 | QEMU screendump — sub-task 6.4, **the half a person judges** | Passed at 1280 by 800, 160 by 100 characters. The log is rendered from its first line, `Oxys-OS`, at the top of the screen — the replay buffer having carried 1903 bytes written before the framebuffer could be mapped, with nothing dropped against its 4 KiB capacity. Every number is present, which is the assertion this capture exists for: `KernelWriteHexadecimal` and `KernelWriteDecimal` named the display and the serial port themselves until this sub-task, so the console was shown every word of the log and not one of its addresses, counts or sizes. Letters are upright, words are separated, and the echo loop's backspace stops at the prompt. |
 | 2026-09-04 | `make verify` — sub-task 6.4, **the negative test** | Passed; glyph `0x4F` (`'O'`) was given the bytes of glyph `0x30` (`'0'`), the picture comment beside it left alone so that the table still looked correct. The run reported `two glyphs are identical, at codes 0x30 and 0x4F`, ended `Console self-test FAILED.`, and **`make verify` itself failed**, the harness's second assertion — the one upon the word `FAILED`, described in Section 1 — naming the offending line. The edit was reverted and the run repeated, reporting `Console self-test passed.` The procedure is Section 17.2. |

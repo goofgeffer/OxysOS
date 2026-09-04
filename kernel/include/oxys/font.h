@@ -3,7 +3,8 @@
  * Purpose: Declares the bitmap font: its metrics, the range of code points it
  *          covers, and the drawing of one glyph upon a surface.
  * Key definitions: FONT_WIDTH, FONT_HEIGHT, FONT_FIRST_CODE, FONT_LAST_CODE,
- *          FONT_GLYPH_COUNT, FontCovers, FontGlyph, FontGlyphRow, FontDrawGlyph.
+ *          FONT_GLYPH_COUNT, FontCovers, FontGlyph, FontGlyphRow, FontDrawGlyph,
+ *          FontDrawGlyphOpaque, FontDrawGlyphScaled.
  * References:
  *   - ANSI X3.4-1986: the printable range 0x20 to 0x7E the font covers.
  *   - docs/design/GRAPHICS.md, Section 18: the face, its metrics, and why it was
@@ -67,5 +68,41 @@ uint8_t FontGlyphRow(uint8_t code, uint8_t row);
  */
 void FontDrawGlyph(GraphicsSurface *surface, int32_t x, int32_t y, uint8_t code,
                    uint32_t colour);
+
+/*
+ * Draws the glyph and the whole of its cell in one pass: every pixel of the
+ * eight by eight becomes either the ink or the paper.
+ *
+ * This is what a console wants and FontDrawGlyph is not. A console fills the
+ * cell and then draws the glyph over it, which writes every pixel of the cell
+ * twice and clips each of them separately; measured, that was the greater part
+ * of what a character cost. Here the cell is clipped a row at a time and each
+ * pixel is written once.
+ *
+ * Both exist because they answer different questions. Use this where the cell
+ * has a background of its own — a console, a menu, a label upon a solid panel.
+ * Use FontDrawGlyph where what is behind the character must show through, which
+ * is text over an image and is what a cursor is drawn with.
+ */
+void FontDrawGlyphOpaque(GraphicsSurface *surface, int32_t x, int32_t y, uint8_t code,
+                         uint32_t ink, uint32_t paper);
+
+/*
+ * Draws the glyph with each of its pixels enlarged to a square of `scale` by
+ * `scale`, so that a face of one size can title a page as well as fill a line
+ * of it.
+ *
+ * There is no second face and no attempt to smooth what enlarging produces: a
+ * pixel becomes a square and the letter becomes a blocky version of itself. That
+ * is the honest result of having one bitmap face, and it is legible, which is
+ * the whole requirement — this exists for the banner of a fault screen, read
+ * once by somebody whose machine has just stopped.
+ *
+ * A scale of one is the same drawing as FontDrawGlyphOpaque and is permitted, so
+ * that a caller may compute the scale from the width of the display without
+ * having to branch upon the result.
+ */
+void FontDrawGlyphScaled(GraphicsSurface *surface, int32_t x, int32_t y, uint8_t code,
+                         uint32_t ink, uint32_t paper, int32_t scale);
 
 #endif /* OXYS_FONT_H */

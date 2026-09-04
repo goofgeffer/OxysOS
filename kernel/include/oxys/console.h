@@ -5,7 +5,8 @@
  *          sub-task 6.2 took away.
  * Key definitions: ConsoleInitialise, ConsoleWriteCharacter, ConsoleWriteString,
  *          ConsoleIsActive, ConsoleSetColour, ConsoleColumns, ConsoleRows,
- *          ConsoleColumn, ConsoleRow, ConsoleSetEraseLimit, ConsoleReport.
+ *          ConsoleColumn, ConsoleRow, ConsoleSetEraseLimit, ConsoleSuspend,
+ *          ConsoleReport.
  * References:
  *   - ANSI X3.4-1986: the four control characters implemented, and the meaning
  *     each is given.
@@ -115,6 +116,25 @@ uint32_t ConsoleRow(void);
  * docs/devices/DISPLAY.md, Section 7.
  */
 void ConsoleSetEraseLimit(void);
+
+/*
+ * Stops the console drawing, permanently, and gives the framebuffer to whoever
+ * asked. Subsequent writes are discarded here; the display driver and the serial
+ * port continue to receive everything.
+ *
+ * This exists for the fault screens of sub-task 6.4, and the reason is a fault
+ * that was found by looking at one. A fault screen is drawn from within a fault
+ * handler, and the panic that follows goes on writing to the diagnostic path —
+ * which is this console, upon the same framebuffer. Its cursor was at the foot
+ * of a screen full of boot log, so each newline of "KERNEL PANIC: ..." scrolled
+ * the framebuffer up by a row of pixels: the fault screen's banner was carried
+ * off the top of the display and its whole layout was shifted by three character
+ * rows. The screen was correct and what was displayed was not.
+ *
+ * There is no resumption. A machine that has drawn a fault screen is halting,
+ * and a console that could be restarted would be a mechanism with no caller.
+ */
+void ConsoleSuspend(void);
 
 /* Emits a summary upon the diagnostic path. */
 void ConsoleReport(void);

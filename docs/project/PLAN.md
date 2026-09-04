@@ -132,7 +132,37 @@ only routine permitted to name an output device.
 VirtualBox is the result this sub-task was for. It has no serial adapter this
 kernel detects and, since sub-task 6.2, no text mode either, so it had no
 readable diagnostic output at all; it now draws the log upon its own framebuffer,
-and being too short to hold it, scrolls. See
+and being too short to hold it, scrolls.
+
+**Two things followed from having a console, and both are part of 6.4.**
+
+It was slow, and what was measured was not what had been guessed at. `RDTSC` had
+to be used at all because the interval timer is useless here — interrupts are
+disabled for most of the boot and seventeen ticks elapse in the whole of it — and
+the measurement put the console at **15.2% of the entire boot**. The cause was
+that a four-byte pixel was written as four separate bytes, a glyph was clipped
+sixty-four times instead of eight, and a console cell was written twice: once
+filled and once drawn over. The console is now 4.5% of the boot and the
+operations that matter are between three and eight times faster. The remaining
+factor is the framebuffer read that a scroll performs, and removing that needs
+the back buffer of sub-task 6.6.
+
+And the screen could show the boot log but not the one thing a person most needs,
+which is what happened when the machine stopped. There are now **fault screens:
+one for each severe fault, not one for all of them**, because the faults are not
+one thing — a page fault names an address, a general-protection fault names a
+selector or names nothing and is then about the instruction, and a double fault's
+own registers are the wrong ones to read, the fault worth finding being the one
+before it. Each screen carries its own title, colour, account, direction and
+evidence. The self-test asserts what a person reading one screen would not
+notice: that no two of them share a title or a colour, that every severe vector
+has one, and that every title fits the 640-pixel display the person judging them
+was probably not using.
+
+One fault there was found only by looking, and no assertion available would have
+caught it: the screens were drawn correctly and displayed wrongly, `KernelPanic`
+writing to a console that was still upon the same framebuffer and scrolling the
+finished page up by three character rows. See
 [`../design/PRIVILEGE.md`](../design/PRIVILEGE.md) and
 [`../design/GRAPHICS.md`](../design/GRAPHICS.md).
 
@@ -263,7 +293,7 @@ Section 3.6.12 (framebuffer information tag); VESA BIOS Extensions 3.0.
 - [x] 6.1 Install the GDT and TSS required for privilege transition; configure IA32_STAR, IA32_LSTAR and IA32_FMASK. *(The kernel GDT and its null, code and data descriptors were established early, in Phase 3; what remained was the user-mode descriptors, the task state segment and the system-call MSRs. Designed in `docs/design/PRIVILEGE.md`.)*
 - [x] 6.2 Request a linear framebuffer by the Multiboot2 framebuffer tag and map it into kernel space. *(Designed in `docs/design/GRAPHICS.md`. The mode is the boot loader's to choose and GRUB ignores what it is asked for, so the kernel accepts whatever it is handed; the pages are given the write-combining memory type through entry 4 of `IA32_PAT`.)*
 - [x] 6.3 Implement 2D primitives: pixel, line, rectangle, blit and clipping. *(Upon a surface rather than upon the framebuffer, so that they may be asserted in memory upon a machine with no display. Clipping is treated as the memory-safety boundary it is; the line is clipped per pixel so that clipping does not move it. Designed in `docs/design/GRAPHICS.md`, Sections 11 to 17.)*
-- [x] 6.4 Implement a bitmap font renderer, and a graphical console above it that the diagnostic path may write to. *(The face is ninety-five glyphs of eight by eight, drawn for this project rather than obtained. The console replays what was written before the framebuffer could be mapped, scrolls by blitting the surface upon itself, and gives up the screen to the drawing figures when the command line asks for them. Designed in `docs/design/GRAPHICS.md`, Sections 18 to 22.)*
+- [x] 6.4 Implement a bitmap font renderer, and a graphical console above it that the diagnostic path may write to. *(The face is ninety-five glyphs of eight by eight, drawn for this project rather than obtained. The console replays what was written before the framebuffer could be mapped, scrolls by blitting the surface upon itself, and gives up the screen to the drawing figures when the command line asks for them. Measured afterwards at 15.2% of the whole boot and reduced to 4.5%; and given fault screens, one for each severe fault rather than one for all of them. Designed in `docs/design/GRAPHICS.md`, Sections 18 to 25.)*
 - [ ] 6.5 Implement a PS/2 mouse driver upon the second device port of the 8042, and a cursor.
 - [ ] 6.6 Implement a compositing surface abstraction and double buffering.
 - [ ] 6.7 Implement the `SYSCALL` entry path, the system-call dispatch table and argument validation.
@@ -480,6 +510,7 @@ copies of an argument do not agree with each other for long.
 
 | Date | Phase | Change | Commit | Design |
 | ---- | ----- | ------ | ------ | ------ |
+| 2026-09-04 | Phase 6 | Sub-task 6.4 continued: the console made fast, and given fault screens. Measurement by `RDTSC` — the interval timer being useless, seventeen ticks elapsing in the whole boot — put the console at 15.2% of it; a word-wide pixel path, a pattern block that clips a glyph once instead of sixty-four times, and a cell drawn in one pass rather than two bring it to 4.5%. The fault screens are one for each severe fault, each with its own colour, account and evidence, and the self-test requires that no two are alike. | *(this change)* | [`../design/GRAPHICS.md`](../design/GRAPHICS.md), Sections 23 to 25 |
 | 2026-09-04 | Phase 6 | Sub-task 6.4: the bitmap font and the graphical console, which end the blank screen sub-task 6.2 left. Ninety-five glyphs drawn for this project, not obtained. The console replays what was written before the framebuffer could be mapped, scrolls by blitting the surface upon itself, and stands down when the command line asks for the drawing figures. `KernelWriteString` becomes the only routine permitted to name an output device. | `5a755c9` | [`../design/GRAPHICS.md`](../design/GRAPHICS.md), Sections 18 to 22 |
 | 2026-09-03 | Phase 6 | Sub-task 6.3: the 2D primitives — pixel, line, rectangle, blit and clipping — upon a surface rather than upon the framebuffer, so that they are asserted in memory against a surface whose pitch exceeds its width and whose padding holds a sentinel. Clipping is the memory-safety boundary and is implemented once; the line is clipped per pixel so that clipping cannot displace it. | `7bcbc98` | [`../design/GRAPHICS.md`](../design/GRAPHICS.md), Sections 11 to 17 |
 | 2026-09-03 | Phase 6 | Sub-task 6.2: the linear framebuffer. The image carries the Multiboot2 request tag, optional bit set because the kernel can boot without one; what is supplied is validated, mapped by a new `KernelDeviceMap` that allocates no frame, and given the write-combining memory type through entry 4 of `IA32_PAT`, an entry no existing mapping selects. GRUB ignores `gfxpayload`, so the mode is accepted rather than chosen, and the text console is displaced until sub-task 6.4. | `cdf74b0` | [`../design/GRAPHICS.md`](../design/GRAPHICS.md) |

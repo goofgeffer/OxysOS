@@ -68,6 +68,7 @@
 #include <oxys/framebuffer.h>
 #include <oxys/graphics.h>
 #include <oxys/console.h>
+#include <oxys/faultscreen.h>
 #include <oxys/serial.h>
 #include <oxys/pci.h>
 #include <oxys/ata.h>
@@ -199,6 +200,21 @@ void KernelPanic(const char *message)
     KernelWriteString(message);
     KernelWriteString("\nThe system has been halted.\n");
 
+    /*
+     * The screen for a panic the kernel raised itself, and only where an
+     * exception has not already drawn one of its own.
+     *
+     * Every fatal exception ends here, having first drawn the screen composed
+     * for it. Drawing the general panic screen over that would replace an
+     * account of the actual fault — its address, its selector, its instruction
+     * bytes — with the sentence "an unrecoverable processor exception was
+     * raised", which is the one thing the reader already knows.
+     */
+    if (!FaultScreenWasDrawn())
+    {
+        FaultScreenShowPanic(message);
+    }
+
     KernelHalt();
 }
 
@@ -225,6 +241,68 @@ BootInformation KernelBootInformation;
  * decision the operator made, and a decision must not be triggered by a longer
  * word that happens to contain it.
  */
+bool KernelCommandLineOptionNumber(const char *option, uint64_t *value)
+{
+    const char *const line = KernelBootInformation.command_line;
+    size_t position = 0U;
+
+    if ((option == NULL) || (value == NULL))
+    {
+        return false;
+    }
+
+    while (line[position] != '\0')
+    {
+        size_t length = 0U;
+
+        while ((line[position] == ' ') || (line[position] == '\t'))
+        {
+            ++position;
+        }
+
+        while ((option[length] != '\0') && (line[position + length] == option[length]))
+        {
+            ++length;
+        }
+
+        if ((option[length] == '\0') && (line[position + length] == '='))
+        {
+            size_t digit = position + length + 1U;
+            uint64_t accumulated = 0U;
+            bool any = false;
+
+            while ((line[digit] >= '0') && (line[digit] <= '9'))
+            {
+                accumulated = (accumulated * 10U) + (uint64_t)(line[digit] - '0');
+                any = true;
+                ++digit;
+            }
+
+            /*
+             * The value must end where the word does. "fault-screen=13x" is a
+             * mistake, and reading it as thirteen would act upon a command line
+             * its author did not write.
+             */
+            if (any && ((line[digit] == '\0') || (line[digit] == ' ') ||
+                        (line[digit] == '\t')))
+            {
+                *value = accumulated;
+                return true;
+            }
+
+            return false;
+        }
+
+        while ((line[position] != '\0') && (line[position] != ' ') &&
+               (line[position] != '\t'))
+        {
+            ++position;
+        }
+    }
+
+    return false;
+}
+
 bool KernelCommandLineHasOption(const char *option)
 {
     const char *const line = KernelBootInformation.command_line;
@@ -612,6 +690,7 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
 
     ConsoleReport();
     KernelVerifyConsole();
+    KernelVerifyFaultScreen();
 
     FrameReferenceInitialise();
     KernelVerifyReferenceCounting();
@@ -786,6 +865,47 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
                       "privilege transition stands and has been exercised.\n");
 
     VgaSetColour(VGA_COLOUR_LIGHT_GREY, VGA_COLOUR_BLACK);
+
+    /*
+     * The fault screens of sub-task 6.4, upon request.
+     *
+     * Two options, because there are two different things to establish and one
+     * of them cannot be established safely.
+     *
+     * `fault-screen=<vector>` composes a trap frame and draws that vector's
+     * page. It proves the page: that its text fits the display, that its panels
+     * lay out one beneath another, that its colour and title are its own. It
+     * proves nothing about the processor, and the frame it draws from is filled
+     * with values no machine would produce so that a photograph of it cannot be
+     * mistaken for a real report.
+     *
+     * `fault-raise` writes to an address that is not mapped, which raises a
+     * genuine page fault. That proves the wiring — handler, report, screen — end
+     * to end, and it is chosen because it is the one severe fault that can be
+     * raised deliberately without endangering the machine. A double fault is
+     * raised by destroying the stack, and a machine check cannot be asked for at
+     * all.
+     */
+    {
+        uint64_t demonstration = 0U;
+
+        if (KernelCommandLineOptionNumber("fault-screen", &demonstration))
+        {
+            KernelWriteString("Fault screen demonstration for vector ");
+            KernelWriteDecimal(demonstration);
+            KernelWriteString(". No fault has occurred.\n");
+            FaultScreenDemonstrate(demonstration);
+            KernelHalt();
+        }
+    }
+
+    if (KernelCommandLineHasOption("fault-raise"))
+    {
+        volatile uint64_t *const unmapped = (volatile uint64_t *)UINT64_C(0xFFFF900000000000);
+
+        KernelWriteString("Raising a page fault deliberately, upon request.\n");
+        *unmapped = 1U;
+    }
 
     /*
      * With a keyboard the kernel has something to wait for, and waiting for it

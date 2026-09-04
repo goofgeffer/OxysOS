@@ -82,12 +82,14 @@ the following translation units.
 | `graphics/framebuffer.c` | The framebuffer the boot loader supplies: its validation, the write-combining memory type given to its pages, its mapping into the kernel arena, and the description every later phase draws through. |
 | `graphics/font.c` | The bitmap face — ninety-five glyphs of eight by eight, drawn for this project — and the drawing of one glyph upon a surface. |
 | `graphics/console.c` | The graphical console: a grid of character cells upon the framebuffer, the four control characters, a scroll performed by blitting the surface upon itself, and the replay of what was written before the framebuffer could be mapped. |
+| `graphics/faultscreen.c` | The full-screen page a severe fault produces: one screen for each fault, with its own title, colour, account and evidence. |
 | `kernel/test/volume.c` | The test fixture: two block devices backed by memory, and an EXT2 volume composed within them. |
 | `kernel/test/verify_memory.c` | The self-tests of the frame allocator, the paging hierarchy, the allocators, reference counting, copy-on-write and address spaces. |
 | `kernel/test/verify_interrupts.c` | The self-tests of the descriptor table, the stubs and their trap frame, the dispatcher and the exception handlers. |
 | `kernel/test/verify_graphics.c` | The self-tests of the drawing primitives, conducted upon a surface in memory. |
 | `kernel/test/verify_framebuffer.c` | The self-tests of the framebuffer's description, its mapping, its memory type, and the pattern a person judges. |
 | `kernel/test/verify_console.c` | The self-tests of the bitmap face against its own metrics, of a glyph drawn upon a surface against its own bytes, and of the four control characters upon the live console. |
+| `kernel/test/verify_faultscreen.c` | The self-tests of the fault screen table: that every severe fault has a screen of its own and that no two of them are alike. |
 | `kernel/test/verify_privilege.c` | The self-tests of the descriptors, the task state segment, the interrupt stack table and the system-call configuration. |
 | `kernel/test/verify_devices.c` | The self-tests of the interrupt controllers, the interval timer, the keyboard, the serial adapter, the display and the bus. |
 | `kernel/test/verify_storage.c` | The self-tests of the disk, the block layer and the buffer cache. |
@@ -234,3 +236,12 @@ with no serial adapter this kernel detects — VirtualBox is one — had **no re
 diagnostic output at all**. `docs/design/GRAPHICS.md`, Sections 7 and 19, records
 the position, and `docs/project/TESTING.md`, Section 9.1, what it cost the
 VirtualBox procedure.
+
+**A fatal fault leaves the ordinary paths and takes the display.** From sub-task
+6.4 a severe fault draws a full-screen page composed for that fault — its own
+title, colour, account of what the processor is reporting, and the evidence that
+bears upon it rather than upon the others — and the console is suspended for good
+when it does. That is not a duplicate of the report: the report goes to every
+path and remains the record; the screen is a summary for a person standing at a
+machine that has stopped, who may have no other channel at all.
+`docs/design/GRAPHICS.md`, Sections 24 and 25.

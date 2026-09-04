@@ -5,7 +5,7 @@
  *          performed by blitting the surface upon itself, and a buffer that
  *          replays what was written before the console existed.
  * Key functions: ConsoleInitialise, ConsoleWriteCharacter, ConsoleWriteString,
- *          ConsoleSetColour, ConsoleSetEraseLimit, ConsoleReport.
+ *          ConsoleSetColour, ConsoleSetEraseLimit, ConsoleSuspend, ConsoleReport.
  * References:
  *   - ANSI X3.4-1986: LF, CR, HT and BS, and the meaning each is given.
  *   - docs/devices/DISPLAY.md, Sections 6 and 7: the same four characters as the
@@ -37,6 +37,7 @@
 
 static GraphicsSurface ConsoleSurface;
 static bool ConsoleActive;
+static bool ConsoleSuspended;
 
 static uint32_t ConsoleColumnCount;
 static uint32_t ConsoleRowCount;
@@ -62,16 +63,6 @@ static uint64_t ConsoleScrollCount;
 static char ConsoleEarlyBuffer[CONSOLE_EARLY_CAPACITY];
 static size_t ConsoleEarlyLength;
 static size_t ConsoleEarlyDropped;
-
-/* Fills the cell at a position with the background colour. */
-static void ConsoleFillCell(uint32_t column, uint32_t row)
-{
-    const GraphicsRectangle cell = { (int32_t)(column * FONT_WIDTH),
-                                     (int32_t)(row * FONT_HEIGHT), (int32_t)FONT_WIDTH,
-                                     (int32_t)FONT_HEIGHT };
-
-    GraphicsFillRectangle(&ConsoleSurface, cell, ConsoleBackground);
-}
 
 /*
  * Moves every row up by one and clears the row exposed at the bottom.
@@ -226,9 +217,25 @@ void ConsoleSetEraseLimit(void)
     ConsoleLimitRow = ConsoleCursorRow;
 }
 
+void ConsoleSuspend(void)
+{
+    ConsoleSuspended = true;
+}
+
 void ConsoleWriteCharacter(char character)
 {
     const uint8_t code = (uint8_t)character;
+
+    /*
+     * Tested before the early buffer and before anything else, so that a
+     * suspended console neither draws nor records. Recording would be worse than
+     * useless: the buffer exists to be replayed upon a console that is about to
+     * start, and this one never will.
+     */
+    if (ConsoleSuspended)
+    {
+        return;
+    }
 
     /*
      * Before the console exists, everything is recorded for replay. The
@@ -316,10 +323,16 @@ void ConsoleWriteCharacter(char character)
      * any code it does not cover. A control character nothing meant to emit
      * therefore appears as a hollow box rather than vanishing, which is the
      * behaviour that makes such a character findable.
+     *
+     * The cell and its glyph are drawn together, in one pass. Filling the cell
+     * and then drawing the glyph over it was the first arrangement and was
+     * replaced: it wrote every pixel of the cell twice and clipped each of them
+     * separately, and it was the greater part of what a character cost. See
+     * docs/design/GRAPHICS.md, Section 23.
      */
-    ConsoleFillCell(ConsoleCursorColumn, ConsoleCursorRow);
-    FontDrawGlyph(&ConsoleSurface, (int32_t)(ConsoleCursorColumn * FONT_WIDTH),
-                  (int32_t)(ConsoleCursorRow * FONT_HEIGHT), code, ConsoleForeground);
+    FontDrawGlyphOpaque(&ConsoleSurface, (int32_t)(ConsoleCursorColumn * FONT_WIDTH),
+                        (int32_t)(ConsoleCursorRow * FONT_HEIGHT), code, ConsoleForeground,
+                        ConsoleBackground);
 
     ++ConsoleCharactersWritten;
     ConsoleAdvance();

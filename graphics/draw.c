@@ -163,6 +163,26 @@ bool GraphicsSurfaceInitialise(GraphicsSurface *surface, void *pixels, uint32_t 
     surface->bytes_per_pixel = bytes_per_pixel;
     surface->clip = GraphicsSurfaceBounds(surface);
 
+    /*
+     * Whether this surface may be addressed a word at a time.
+     *
+     * Three things must hold together, and each of them separately: the pixel
+     * must be four bytes, so that one word is one pixel; the base must be
+     * word-aligned, so that the first pixel of the first row is; and the pitch
+     * must be a multiple of four, so that the first pixel of *every* row is. A
+     * base that is aligned and a pitch that is not would put every odd row out
+     * of alignment, which is exactly the case that is hard to see in a test and
+     * that faults or runs slowly upon the machines that care.
+     *
+     * The alignment is established rather than assumed. A framebuffer's pitch is
+     * the boot loader's to choose and is not obliged to be a multiple of
+     * anything; docs/design/GRAPHICS.md, Section 3, records that it is read and
+     * not computed.
+     */
+    surface->whole_words = (bytes_per_pixel == 4U) &&
+                           ((((uintptr_t)surface->pixels) % 4U) == 0U) &&
+                           ((pitch % 4U) == 0U);
+
     return true;
 }
 
@@ -203,11 +223,31 @@ static volatile uint8_t *GraphicsPixelAddress(const GraphicsSurface *surface, in
            ((uint64_t)(uint32_t)x * surface->bytes_per_pixel);
 }
 
-/* Writes one pixel of the surface's depth. The bytes are written in increasing
- * order, which is the order the little-endian pixel is stored in. */
+/*
+ * Writes one pixel of the surface's depth. The bytes are written in increasing
+ * order, which is the order the little-endian pixel is stored in.
+ *
+ * The four-byte case is written as one word rather than four bytes. That is not
+ * a micro-optimisation of the kind that is guessed at: writing pixels a byte at
+ * a time was measured at some nineteen cycles a byte and was the greater part of
+ * what the console of sub-task 6.4 cost. Section 23 of the design document
+ * records the measurement.
+ *
+ * `whole_words` is what makes the word store legitimate, and it is a property of
+ * the surface rather than of this call — the pixel is four bytes, the base is
+ * word-aligned, and the pitch is a multiple of four, so every pixel of the
+ * surface begins upon a word boundary. Where it does not hold the loop below
+ * runs and the result is identical.
+ */
 static void GraphicsStorePixel(const GraphicsSurface *surface, volatile uint8_t *at,
                                uint32_t colour)
 {
+    if (surface->whole_words)
+    {
+        *(volatile uint32_t *)(void *)at = colour;
+        return;
+    }
+
     for (uint8_t index = 0U; index < surface->bytes_per_pixel; ++index)
     {
         at[index] = (uint8_t)((colour >> (index * 8U)) & 0xFFU);
@@ -264,6 +304,24 @@ void GraphicsFillRectangle(GraphicsSurface *surface, GraphicsRectangle rectangle
     {
         volatile uint8_t *at = GraphicsPixelAddress(surface, area.x, area.y + row);
 
+        /*
+         * The word path is a separate loop rather than a test inside one loop.
+         * The test is invariant across a whole row — across the whole surface,
+         * in fact — and leaving it in the loop is asking the processor to decide
+         * the same question a thousand times a row.
+         */
+        if (surface->whole_words)
+        {
+            volatile uint32_t *word = (volatile uint32_t *)(void *)at;
+
+            for (int32_t column = 0; column < area.width; ++column)
+            {
+                word[column] = colour;
+            }
+
+            continue;
+        }
+
         for (int32_t column = 0; column < area.width; ++column)
         {
             GraphicsStorePixel(surface, at, colour);
@@ -275,6 +333,83 @@ void GraphicsFillRectangle(GraphicsSurface *surface, GraphicsRectangle rectangle
 void GraphicsClear(GraphicsSurface *surface, uint32_t colour)
 {
     GraphicsFillRectangle(surface, surface->clip, colour);
+}
+
+void GraphicsPatternBlock(GraphicsSurface *surface, int32_t x, int32_t y,
+                          const uint8_t *pattern, int32_t rows, uint32_t ink,
+                          uint32_t paper)
+{
+    GraphicsRectangle block;
+    GraphicsRectangle area;
+    int32_t first_bit;
+
+    if ((pattern == NULL) || (rows <= 0))
+    {
+        return;
+    }
+
+    if (!GraphicsCoordinateIsSound(x) || !GraphicsCoordinateIsSound(y) ||
+        !GraphicsCoordinateIsSound((int64_t)x + 8) ||
+        !GraphicsCoordinateIsSound((int64_t)y + rows))
+    {
+        return;
+    }
+
+    block.x = x;
+    block.y = y;
+    block.width = 8;
+    block.height = rows;
+
+    /*
+     * The clip is applied here, once, and nothing below tests a coordinate
+     * again. This is the whole of the difference between this and drawing the
+     * same pixels through GraphicsPutPixel: the loops below produce only
+     * coordinates the intersection has already proved to lie within the surface.
+     */
+    area = GraphicsRectangleIntersect(block, surface->clip);
+
+    if (GraphicsRectangleIsEmpty(area))
+    {
+        return;
+    }
+
+    /* Which bit of the byte the first surviving column corresponds to. Where the
+     * block was trimmed on its left, the leftmost bits were trimmed with it. */
+    first_bit = area.x - x;
+
+    for (int32_t row = 0; row < area.height; ++row)
+    {
+        const uint8_t bits = pattern[(area.y - y) + row];
+        volatile uint8_t *at = GraphicsPixelAddress(surface, area.x, area.y + row);
+
+        /*
+         * Two loops rather than one with a test inside it. Whether a surface may
+         * be addressed a word at a time is invariant across the surface's whole
+         * life, and deciding it afresh for every pixel of every character is the
+         * arrangement this replaced.
+         */
+        if (surface->whole_words)
+        {
+            volatile uint32_t *word = (volatile uint32_t *)(void *)at;
+
+            for (int32_t column = 0; column < area.width; ++column)
+            {
+                const uint8_t bit = (uint8_t)(0x80U >> (uint32_t)(first_bit + column));
+
+                word[column] = ((bits & bit) != 0U) ? ink : paper;
+            }
+
+            continue;
+        }
+
+        for (int32_t column = 0; column < area.width; ++column)
+        {
+            const uint8_t bit = (uint8_t)(0x80U >> (uint32_t)(first_bit + column));
+
+            GraphicsStorePixel(surface, at, ((bits & bit) != 0U) ? ink : paper);
+            at += surface->bytes_per_pixel;
+        }
+    }
 }
 
 void GraphicsDrawRectangle(GraphicsSurface *surface, GraphicsRectangle rectangle,
@@ -505,6 +640,48 @@ bool GraphicsBlit(GraphicsSurface *destination, int32_t x, int32_t y,
         volatile uint8_t *to =
             GraphicsPixelAddress(destination, placed.x, placed.y + source_row);
         const uint64_t span = (uint64_t)placed.width * destination->bytes_per_pixel;
+
+        /*
+         * A row is copied a word at a time where both surfaces permit it.
+         *
+         * Both must, and the reason is that this is one copy with two ends: a
+         * word-aligned destination reached from a source that is not would need
+         * the bytes reassembled across word boundaries, which is more work than
+         * the byte loop it was meant to replace. Where either end is unaligned,
+         * the byte loop below runs.
+         *
+         * A scroll is the operation this pays for. It reads the whole
+         * framebuffer back, and a framebuffer is write-combining, where reads
+         * are uncached — so the read is the expensive half and a quarter as many
+         * of them is the whole of the gain. Removing the read altogether needs
+         * the back buffer of sub-task 6.6; see docs/design/GRAPHICS.md,
+         * Section 23.3.
+         */
+        const bool by_words = destination->whole_words && source->whole_words;
+
+        if (by_words)
+        {
+            volatile uint32_t *to_word = (volatile uint32_t *)(void *)to;
+            const volatile uint32_t *from_word = (const volatile uint32_t *)(const void *)from;
+            const uint64_t words = span / 4U;
+
+            if (backwards_columns)
+            {
+                for (uint64_t index = words; index > 0U; --index)
+                {
+                    to_word[index - 1U] = from_word[index - 1U];
+                }
+            }
+            else
+            {
+                for (uint64_t index = 0U; index < words; ++index)
+                {
+                    to_word[index] = from_word[index];
+                }
+            }
+
+            continue;
+        }
 
         if (backwards_columns)
         {

@@ -12,7 +12,7 @@
  *          KernelVerifyVga, KernelVerifyPci, KernelVerifyAta, KernelVerifyBlock,
  *          KernelVerifyBuffer, KernelVerifyExt2, KernelVerifyVfs,
  *          KernelReportVolumes, KernelVfsProbeVolume, KernelBootInformation,
- *          KernelCommandLineHasOption.
+ *          KernelCommandLineHasOption, KernelCommandLineOptionNumber.
  * References:
  *   - PROJECT_GUIDELINES.md, Section 2, the testing mandate: every milestone
  *     must be bootable and testable.
@@ -64,6 +64,19 @@ extern BootInformation KernelBootInformation;
  */
 bool KernelCommandLineHasOption(const char *option);
 
+/*
+ * Reads the decimal value of an option written `name=digits` upon the command
+ * line, and reports whether one was found.
+ *
+ * The boolean form above cannot express this, and the fault-screen gallery of
+ * sub-task 6.4 needs it: a screen is chosen by vector number, and thirty-two
+ * menu entries to select among thirty-two vectors would be a worse arrangement
+ * than one entry whose number a person edits. Anything that is not a run of
+ * decimal digits ending where the word ends is refused rather than interpreted,
+ * so a mistyped option produces no demonstration instead of an arbitrary one.
+ */
+bool KernelCommandLineOptionNumber(const char *option, uint64_t *value);
+
 /* Phase 2: the physical frame allocator, the paging hierarchy, the virtual
  * address allocator and the heap above it, and per-frame reference counting. */
 void KernelVerifyFrameAllocator(void);
@@ -89,6 +102,10 @@ void KernelVerifyFramebuffer(void);
 
 /* Phase 6, sub-task 6.4: the bitmap font and the console drawn with it. */
 void KernelVerifyConsole(void);
+
+/* Phase 6, sub-task 6.4: the table of fault screens — that every severe fault
+ * has one of its own, and that no two of them are the same. */
+void KernelVerifyFaultScreen(void);
 
 /* Phase 6, sub-task 6.3: the two-dimensional primitives, asserted against a
  * surface composed in memory so that they hold upon a machine with no display. */

@@ -1,17 +1,21 @@
-# The Framebuffer, the Primitives and the Console
+# The Framebuffer, the Primitives, the Console and the Fault Screens
 
 **Corresponding phase**: 6, sub-tasks 6.2, 6.3 and 6.4, which open the graphical
 work. Sections 1 to 10 concern the framebuffer; Sections 11 to 17 the primitives
-that draw upon it; Sections 18 to 22 the font and the console drawn with them.
+that draw upon it; Sections 18 to 22 the font and the console drawn with them;
+Section 23 the measurement that made the console fast enough and what it
+directed; Sections 24 and 25 the fault screens.
 **Authority**: `PROJECT_GUIDELINES.md`, Sections 2 and 4.
 **Implemented by**: [`../../graphics/framebuffer.c`](../../graphics/framebuffer.c),
 [`../../graphics/draw.c`](../../graphics/draw.c),
 [`../../graphics/font.c`](../../graphics/font.c),
 [`../../graphics/console.c`](../../graphics/console.c),
+[`../../graphics/faultscreen.c`](../../graphics/faultscreen.c),
 [`../../kernel/include/oxys/graphics.h`](../../kernel/include/oxys/graphics.h),
 [`../../kernel/include/oxys/framebuffer.h`](../../kernel/include/oxys/framebuffer.h),
 [`../../kernel/include/oxys/font.h`](../../kernel/include/oxys/font.h),
 [`../../kernel/include/oxys/console.h`](../../kernel/include/oxys/console.h),
+[`../../kernel/include/oxys/faultscreen.h`](../../kernel/include/oxys/faultscreen.h),
 [`../../kernel/multiboot2.c`](../../kernel/multiboot2.c),
 [`../../boot/boot.asm`](../../boot/boot.asm),
 [`../../kernel/mm/vmm.c`](../../kernel/mm/vmm.c).
@@ -19,15 +23,20 @@ that draw upon it; Sections 18 to 22 the font and the console drawn with them.
 [`../../kernel/test/verify_framebuffer.c`](../../kernel/test/verify_framebuffer.c),
 `KernelVerifyGraphics` in
 [`../../kernel/test/verify_graphics.c`](../../kernel/test/verify_graphics.c),
-and `KernelVerifyConsole` in
-[`../../kernel/test/verify_console.c`](../../kernel/test/verify_console.c).
+`KernelVerifyConsole` in
+[`../../kernel/test/verify_console.c`](../../kernel/test/verify_console.c),
+and `KernelVerifyFaultScreen` in
+[`../../kernel/test/verify_faultscreen.c`](../../kernel/test/verify_faultscreen.c).
 
 **Specifications**: Multiboot2 Specification 2.0, Sections 3.1.10 and 3.6.12;
 Intel 64 and IA-32 Architectures Software Developer's Manual, Volume 3A,
 Sections 11.12.2 and 11.12.3, and Tables 11-7, 11-10 and 11-11; Volume 2A,
 `CPUID`; J. E. Bresenham, "Algorithm for computer control of a digital plotter",
 IBM Systems Journal 4(1), pages 25 to 30, 1965; ANSI X3.4-1986, the printable
-range and the four control characters the console interprets.
+range and the four control characters the console interprets; Intel SDM,
+Volume 3A, Chapter 6 and Table 6-1, Sections 6.13 and 6.15 with Figures 6-6 and
+6-9: the exceptions each fault screen accounts for, and the two forms of error
+code they decode.
 
 ---
 
@@ -909,3 +918,293 @@ legible and unsmeared.
 That is the result worth having from VirtualBox. It had **no readable diagnostic
 output at all** — no serial adapter this kernel detects, and since sub-task 6.2 no
 text mode either — and it now shows the boot log on the screen.
+
+---
+
+## 23. The optimisation, and the measurement that directed it
+
+The console of Section 19 worked and was slow. This section is what was done
+about that, and it begins with the measurement rather than with the change,
+because the first two things that looked worth optimising were not the things
+that cost.
+
+### 23.1 Measuring it
+
+The interval timer is useless here: interrupts are disabled for most of the
+boot, and **seventeen ticks elapse in the whole of it**. `RDTSC` was used
+instead. The figures below are from QEMU's interpreter, so they are proportional
+to instructions executed rather than to cycles on any real processor; that is the
+right measure for this, the fault being instruction count and not memory latency.
+
+| | Before | After | |
+| --- | ---: | ---: | ---: |
+| The console, over the whole boot log (9,001 characters) | 952,248 | 254,245 | **3.7×** |
+| One full-screen clear, 1280 × 800 × 4 | 77,647 | 9,884 | **7.9×** |
+| One full-screen scroll | 40,398 | 11,086 | **3.6×** |
+| Four thousand characters | 1,059,136 | 283,243 | **3.7×** |
+| The whole boot | 6,254,178 | 5,588,320 | 11% |
+
+*(Thousands of `RDTSC` units.)*
+
+The console was **15.2% of the entire boot** and is now 4.5%.
+
+### 23.2 What was actually wrong
+
+Three things, and all three were the same thing: the primitives were written for
+clarity at the pixel, and a console addresses pixels a quarter of a million times
+a second.
+
+**A four-byte pixel was written as four bytes.** `GraphicsStorePixel` looped
+`bytes_per_pixel` times, shifting and masking a byte out of the colour each time.
+That is four stores and a loop where one 32-bit store would do, and it is the
+innermost operation in the system: it was measured at some nineteen cycles a
+byte.
+
+**A glyph was drawn one pixel at a time.** `FontDrawGlyph` called
+`GraphicsPutPixel` sixty-four times, and each call tested the clip and recomputed
+the address from the row and the pitch. The whole eight-by-eight cell shares one
+clip test and one address per row.
+
+**A console cell was written twice.** The console filled the cell with the
+background and then drew the glyph over it — 256 byte-stores for the fill, and
+then up to 64 pixels written again. Every pixel of every character was addressed
+twice and clipped twice.
+
+### 23.3 What was done
+
+**`GraphicsSurface` gained `whole_words`.** It records that a surface may be
+addressed a 32-bit word at a time: the pixel is four bytes, the base address is a
+multiple of four, and **the pitch is a multiple of four**. All three are
+required, and the third is the one that is easy to forget — a base that is
+aligned and a pitch that is not puts every odd row out of alignment, which is
+hard to see in a test and which the machines that care about alignment will care
+about. It is computed once by `GraphicsSurfaceInitialise`, because it is a
+property of the surface and a test made once is not a test made in an inner loop.
+
+Where it holds, the fill, the blit and the pattern block below run word-wide
+loops. Where it does not, the byte loops run and the result is identical; nothing
+depends upon the fast path for correctness, which is what Section 25.1 asserts.
+
+**`GraphicsPatternBlock` replaced sixty-four clip tests with one.** It draws a
+block eight pixels wide and any number of rows high, taking each pixel's colour
+from one of two by a bit of a pattern — one byte to a row, most significant bit
+leftmost. That is exactly the shape of a bitmap glyph, so the font table is
+handed over as it stands, with no copying and no transformation.
+
+**`FontDrawGlyphOpaque` draws the cell and the glyph in one pass.** The console
+uses it; `FontDrawGlyph` remains for text drawn over an image, where what is
+behind the character must show through. The two must light the same ink pixels
+and Section 25.2 asserts that they do, for every glyph in the face — the console
+having changed which of them it goes through, and no other test using the path
+the console uses.
+
+**The blit copies words.** Both surfaces must permit it, because a word-aligned
+destination reached from an unaligned source would need the bytes reassembled
+across word boundaries, which is more work than the byte loop it replaced. A
+scroll is what this pays for: it reads the whole framebuffer back, and a
+framebuffer is write-combining, where **reads are uncached**, so the read is the
+expensive half and a quarter as many of them is the whole of the gain.
+
+Removing the read altogether needs a back buffer, which is sub-task 6.6. That is
+the remaining factor and it is a larger one than anything here; it is not
+attempted now because a back buffer is a compositing decision and not an
+optimisation.
+
+### 23.4 The strict-aliasing question, and why the test surfaces changed type
+
+Writing a four-byte pixel as one `uint32_t` store means accessing memory through
+an lvalue of a type it may not have. For the framebuffer this is sound: the
+mapping has no declared type, and reading it back through `uint8_t` — which
+`GraphicsPixelAt` does — is permitted for a character type whatever the object.
+
+The **test surfaces** were the problem. They were declared `static uint8_t[]`,
+which fixes their type for their whole life, and writing a `uint32_t` into one is
+undefined however well it appears to work at `-O2`. They are now declared as
+arrays of `uint32_t` and cast where a byte-wise helper wants them, which is sound
+in both directions and which also guarantees the four-byte alignment the word
+path requires. A byte array guarantees neither.
+
+## 24. The fault screens
+
+A framebuffer took the operator's view away in sub-task 6.2 and Section 19 gave
+it back for the boot log. It did not give it back for the thing a person most
+needs to see, which is what happened when the machine stopped.
+
+Every fatal fault has always been reported in full, upon the serial port and upon
+the text display. In a graphics mode the text display is not shown, and a serial
+adapter is not something most machines have — VirtualBox does not. Such a person
+saw the boot log stop, and nothing else.
+
+### 24.1 Why there is more than one screen
+
+Because the faults are not one thing.
+
+A page fault names an address and asks what was meant to be mapped there. A
+general-protection fault names a selector, or names nothing at all and is then
+about the instruction. An invalid opcode asks what the bytes at the instruction
+pointer are. A double fault says that the processor could not deliver something
+else, and that **the earlier fault is the one worth finding** — the screen for it
+says so in those words, because a reader looking at a double fault's registers is
+looking at the wrong fault.
+
+One screen carrying one register dump would present all of that identically and
+would tell the reader nothing about which question to ask. So each severe fault
+has its own title, its own colour, a sentence saying what the processor is
+reporting, a sentence saying what to examine first, and **the evidence that bears
+upon that fault and not upon the others**.
+
+| Vector | Screen | Evidence it carries |
+| --- | --- | --- |
+| 0 `#DE` | Divide error | The operands, and the instruction bytes |
+| 6 `#UD` | Invalid opcode | The instruction bytes, and the stack |
+| 8 `#DF` | Double fault | The stack, and the control registers |
+| 10 `#TS` | Invalid task state segment | The selector |
+| 11 `#NP` | Segment not present | The selector |
+| 12 `#SS` | Stack-segment fault | The selector, and the stack |
+| 13 `#GP` | General protection fault | The selector, and the instruction bytes |
+| 14 `#PF` | Page fault | The faulting address and its cause, and the control registers |
+| 17 `#AC` | Alignment check | The faulting address, and the instruction bytes |
+| 18 `#MC` | Machine check | The control registers |
+| — | Kernel panic | The message naming the check that failed |
+
+A vector outside that table still receives a screen, and that screen still names
+the vector from the dispatcher's own mnemonics. It carries the general evidence
+and says plainly that this kernel has no account written for that exception,
+which is the honest presentation of one nobody has thought about.
+
+The panic is separate from all of them deliberately. An exception is the machine
+saying something went wrong; a panic is this kernel saying it has found the world
+in a state it does not know how to continue from, and the message names the check
+that failed rather than any register.
+
+### 24.2 What it must survive
+
+Every routine runs inside a fault handler, upon a machine that has already gone
+wrong, and the one thing it must not do is go wrong itself: a fault raised while
+drawing a fault screen is a double fault, and one raised while handling that
+resets the machine with nothing written anywhere.
+
+**It allocates nothing.** The heap is a thing the fault may have corrupted.
+
+**It reads nothing without asking the paging hierarchy first.** The instruction
+bytes and the stack words both go through `PagingTranslate`, and a word that does
+not translate is reported as absent rather than fetched. That report is often the
+most useful thing on the page: "the stack pointer names memory that is not
+mapped" *is* the diagnosis.
+
+**It draws once.** A second call means a fault occurred while the first screen
+was being drawn, and overwriting the first would destroy the only account of the
+original failure.
+
+**It draws nothing where there is no framebuffer**, that being the case in which
+the display driver is already showing the report.
+
+### 24.3 The screen changes hands
+
+The console is suspended when a fault screen begins, and this was not foreseen —
+it was found by looking at a screen that had been drawn correctly and displayed
+wrongly.
+
+`KernelPanic` follows every fatal exception, and it writes to the diagnostic
+path, and the diagnostic path includes the console, and the console is upon this
+framebuffer. Its cursor stood at the foot of a screen full of boot log, so each
+newline of `KERNEL PANIC: ...` **scrolled the whole framebuffer up by eight
+pixels**. Three newlines carried the banner off the top of the display and
+shifted the entire layout by three character rows.
+
+`ConsoleSuspend` ends it: the console stops drawing and stops recording, and the
+display driver and the serial port go on receiving everything. There is no
+resumption, a machine that has drawn a fault screen being one that is halting.
+
+### 24.4 The two demonstrations, which prove different things
+
+`fault-screen=<vector>` composes a trap frame and draws that vector's page. It
+proves **the page**: that its text fits the display, that its panels lay out one
+beneath another, that its colour and title are its own. It proves nothing about
+the processor, and the frame is filled with values no machine would produce —
+repeated nibbles, and an obviously artificial address — so that a photograph of
+it cannot be filed as evidence of a fault that occurred.
+
+`fault-raise` writes to an unmapped address, which raises a genuine page fault.
+That proves **the wiring**: handler, report, screen, end to end. A page fault is
+used because it is the one severe fault that can be raised deliberately without
+endangering the machine — a double fault is raised by destroying the stack, and a
+machine check cannot be asked for at all.
+
+The two are kept apart because they answer different questions and because
+confusing them would let a broken handler pass a test of the drawing.
+
+## 25. Verification of the optimisation and the fault screens
+
+### 25.1 The word path
+
+A fast path is the most dangerous kind of code to leave unasserted: it runs only
+when its own precondition holds, so a fault in it is invisible upon every surface
+that does not meet the condition — and the surface the self-tests use and the
+surface a person looks at are not the same surface.
+
+| Assertion | What its failure would mean |
+| --------- | --------------------------- |
+| A four-byte surface on a word boundary with a word-multiple pitch **is** marked word-addressable | The fast path never runs, and the measurement above was of nothing. |
+| A surface whose base and pitch are both odd is **not** | Every row would be written misaligned. |
+| A three-byte pixel is **not**, whatever its alignment | A write would spill into the pixel beside it. |
+| **The word path and the byte path draw identical pixels** | One of them is wrong and the tests see only the other. Two surfaces differing in nothing but alignment are drawn upon and compared pixel for pixel. |
+| A pattern block reproduces its own bits, most significant leftmost | The bit order or the row order is wrong; every character would be mirrored. |
+| A pattern block writes the **paper** as well as the ink | A console cell would keep the character drawn there before it. |
+| A clipped block draws the bits that survive, not the bits from the start of the pattern | It was shifted to the clip rather than trimmed by it. |
+| A block outside the clip, of no rows, or with no pattern writes nothing | The cheapest rejections are broken. |
+
+### 25.2 The two glyph routines agree
+
+For **every glyph in the face**, `FontDrawGlyph` and `FontDrawGlyphOpaque` must
+light the same ink pixels. The console changed from one to the other, so no other
+test here uses the path every character of the boot log actually goes through; a
+difference between them would be a difference nothing else could see. The whole
+face is checked rather than a sample, the fault being of exactly the kind that
+afflicts one character and no other.
+
+### 25.3 The fault screen table
+
+This asserts the table and not the drawing, for the reason Section 8.1 gives
+about the display generally: whether a page reads well is not something a kernel
+can determine about itself. What is asserted is everything a person reading one
+screen would not notice.
+
+| Assertion | What its failure would mean |
+| --------- | --------------------------- |
+| Every entry has a title, an account and a direction | A screen draws a blank space where the one thing the page was for should be. |
+| **No two entries share a title** | A copied row with the vector changed and the identity not. The reader cannot tell the faults apart, which is the whole purpose of having more than one screen. |
+| **No two entries share a colour** | The same, at a glance rather than on reading. |
+| No two entries claim the same vector | One of them is unreachable. |
+| Every severe vector has an entry of its own | A deleted entry falls back to the general screen, which still names the vector and so does not look broken — it is merely less useful than it was, silently. |
+| There is an entry for a panic the kernel raises itself | It would be shown a screen written for a processor exception that did not occur. |
+| Every title fits a **640-pixel** display at the scale used there | The title runs off the edge upon VirtualBox and not upon QEMU, so whichever machine the person judging the screens did not use is where it is broken. |
+| The evidence flags name only panels that exist | A screen carries no evidence and looks exactly like one meant to carry none. |
+| No screen has been drawn when the self-test runs | A real fault later in the boot would find the display taken and draw nothing — invisible precisely when it matters. |
+| An index past the end yields nothing | The table is read past its own end. |
+
+Nothing here draws, and that is deliberate: drawing would set the flag recording
+a screen as shown, and a real fault later in the same boot would then be refused
+the display by the test meant to protect it.
+
+### 25.4 The negative tests
+
+**The word path.** The alignment conditions were removed from `whole_words`, so
+that every four-byte surface claimed the fast path. The run reported `a surface
+whose base and pitch are both odd was marked as addressable by words, so every
+row would be written misaligned` and ended `Graphics self-test FAILED.`
+
+**The pattern block.** It was made to skip its clear bits, as the transparent
+glyph does. Three assertions fired in the graphics self-test and a fourth in the
+console self-test, the last naming the code point at which the two glyph routines
+first disagreed — `the two glyph routines disagree, at code 0x20`.
+
+**A duplicated screen.** Two entries were given the same title and colour, as a
+copied row would be. The run reported `two fault screens share a title, at vectors
+0xA and 0xB` and `two fault screens share a colour, at vectors 0xA and 0xB`.
+
+**A deleted screen.** The machine-check entry was removed. The run reported `a
+severe fault has no screen of its own, at vector 0x12` — the fault this catches
+being precisely the one that would otherwise look like nothing at all.
+
+Every edit was reverted.

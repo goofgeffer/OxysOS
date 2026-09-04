@@ -131,7 +131,13 @@ Sections relied upon:
   further fault can occur; and the provision that supervisor-mode writes to a
   read-only page fault only when CR0.WP is set.
 - **Volume 3A, Table 6-1**, the architecturally defined exceptions, their
-  mnemonics, their classification, and whether each pushes an error code.
+  mnemonics, their classification, and whether each pushes an error code. From
+  sub-task 6.4 this table also fixes which faults receive a graphical fault
+  screen written for them, and what each of those screens says the processor is
+  reporting.
+- **Volume 2A, Section 2.3.11**, the fifteen-byte limit upon the length of an
+  instruction, which is how many bytes a fault screen reproduces from the
+  instruction pointer: fewer could stop short of the instruction that faulted.
 - **Volume 2A, "IRET/IRETQ"** and **"RET"** (far form), the return from a handler
   and the far return used to reload CS.
 - **Volume 2A, "LGDT/LIDT" and "SGDT/SIDT"**, the instructions that load and
@@ -205,8 +211,10 @@ Used by: `boot/boot.asm`, `linker.ld`, `Makefile`, `kernel/include/oxys/io.h`,
 `kernel/cpu/syscall_entry.asm`, `kernel/include/oxys/tss.h`,
 `kernel/include/oxys/syscall.h`, `kernel/include/oxys/msr.h`,
 `graphics/framebuffer.c`, `kernel/include/oxys/framebuffer.h`,
-`docs/design/MEMORY-LAYOUT.md`, `docs/design/INTERRUPTS.md`,
-`docs/design/PRIVILEGE.md`, `docs/design/GRAPHICS.md`.
+`graphics/faultscreen.c`, `kernel/include/oxys/faultscreen.h`,
+`kernel/test/verify_faultscreen.c`, `docs/design/MEMORY-LAYOUT.md`,
+`docs/design/INTERRUPTS.md`, `docs/design/PRIVILEGE.md`,
+`docs/design/GRAPHICS.md`.
 
 ### Algorithm for computer control of a digital plotter
 J. E. Bresenham, IBM Systems Journal, volume 4, number 1, pages 25 to 30, 1965.

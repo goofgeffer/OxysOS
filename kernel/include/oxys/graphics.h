@@ -6,7 +6,8 @@
  * Key definitions: GraphicsRectangle, GraphicsSurface, GraphicsSurfaceInitialise,
  *          GraphicsSurfaceFromFramebuffer, GraphicsSetClip, GraphicsResetClip,
  *          GraphicsPutPixel, GraphicsPixelAt, GraphicsFillRectangle,
- *          GraphicsDrawRectangle, GraphicsDrawLine, GraphicsBlit, GraphicsClear.
+ *          GraphicsDrawRectangle, GraphicsDrawLine, GraphicsBlit, GraphicsClear,
+ *          GraphicsPatternBlock.
  * References:
  *   - J. E. Bresenham, "Algorithm for computer control of a digital plotter",
  *     IBM Systems Journal 4(1), 1965: the integer line algorithm implemented in
@@ -85,6 +86,19 @@ typedef struct GraphicsRectangle
  * memory a device reads independently of this kernel. Nothing here is safe
  * against concurrent drawing upon one surface; from sub-task 6.13 that requires
  * the lock which that sub-task introduces.
+ *
+ * `whole_words` records that this surface may be addressed a 32-bit word at a
+ * time: its pixels are four bytes, and its base address and its pitch are both
+ * multiples of four, so every pixel of it begins upon a word boundary. It is
+ * computed once, by GraphicsSurfaceInitialise, because it is a property of the
+ * surface and not of any drawing operation, and because a test made once is not
+ * a test made in an inner loop.
+ *
+ * It exists because writing a four-byte pixel as four bytes costs four stores
+ * and the loop that generates them, and that was measured to be the greater part
+ * of what the console spent — see docs/design/GRAPHICS.md, Section 23. Where it
+ * is false every primitive still works, byte at a time; nothing depends upon it
+ * for correctness.
  */
 typedef struct GraphicsSurface
 {
@@ -93,6 +107,7 @@ typedef struct GraphicsSurface
     uint32_t height;
     uint32_t pitch;
     uint8_t bytes_per_pixel;
+    bool whole_words;
     GraphicsRectangle clip;
 } GraphicsSurface;
 
@@ -190,6 +205,24 @@ void GraphicsDrawRectangle(GraphicsSurface *surface, GraphicsRectangle rectangle
 
 /* Fills the whole clip. */
 void GraphicsClear(GraphicsSurface *surface, uint32_t colour);
+
+/*
+ * Writes a block eight pixels wide and `rows` high, each pixel taking one of two
+ * colours according to a bit of `pattern` — one byte to a row, bit 7 leftmost.
+ *
+ * That is exactly the shape of a bitmap glyph, and it is what this is for.
+ * Drawing text a pixel at a time was measured to be the greater part of what the
+ * console cost: sixty-four clip tests and sixty-four address computations to the
+ * character, where the whole block shares one of each. The clip is applied once,
+ * to the block, and nothing inside the loops tests anything.
+ *
+ * Eight wide is fixed because the pattern is a byte and there is no second
+ * definition of what a ninth bit would be. `rows` is not fixed, a face of a
+ * different height being a table of a different length and nothing else.
+ */
+void GraphicsPatternBlock(GraphicsSurface *surface, int32_t x, int32_t y,
+                          const uint8_t *pattern, int32_t rows, uint32_t ink,
+                          uint32_t paper);
 
 /*
  * Draws the line between the two points inclusive, clipped.

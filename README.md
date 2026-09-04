@@ -36,7 +36,7 @@ source of truth for progress, and nothing below restates it.
 | [`BOOT.md`](docs/design/BOOT.md) | The boot sequence, from the GRUB handover to the invocation of `KernelMain`. |
 | [`MEMORY-LAYOUT.md`](docs/design/MEMORY-LAYOUT.md) | The physical and virtual address space layout, the paging hierarchy, and the allocators above it. |
 | [`INTERRUPTS.md`](docs/design/INTERRUPTS.md) | The interrupt descriptor table, the stubs and the dispatcher, the exception handlers, and the 8259A interrupt controllers. |
-| [`GRAPHICS.md`](docs/design/GRAPHICS.md) | The framebuffer: how it is asked for, why its pages are write-combining, the drawing primitives and clipping above it, and the font and console that draw the boot log upon it. |
+| [`GRAPHICS.md`](docs/design/GRAPHICS.md) | The framebuffer: how it is asked for, why its pages are write-combining, the drawing primitives above it, the font and console that draw the boot log upon it, and the screen each severe fault draws when the machine stops. |
 | [`PRIVILEGE.md`](docs/design/PRIVILEGE.md) | The apparatus of a privilege transition: the user-mode descriptors, the task state segment and its trusted stacks, and the registers that configure `SYSCALL`. |
 
 ### [`docs/devices/`](docs/devices/) — the hardware the kernel drives

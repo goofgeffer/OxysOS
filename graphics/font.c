@@ -3,7 +3,8 @@
  * Purpose: Holds the bitmap font and draws a glyph of it upon a surface. Eight
  *          columns by eight rows to the character, covering the printable
  *          ASCII range, with one replacement glyph for every code outside it.
- * Key functions: FontGlyph, FontGlyphRow, FontDrawGlyph, FontCovers.
+ * Key functions: FontGlyph, FontGlyphRow, FontDrawGlyph, FontDrawGlyphOpaque,
+ *          FontDrawGlyphScaled, FontCovers.
  * References:
  *   - ANSI X3.4-1986: the code points 0x20 to 0x7E this font covers, and their
  *     names, which are the comments beside each glyph below.
@@ -1185,6 +1186,73 @@ void FontDrawGlyph(GraphicsSurface *surface, int32_t x, int32_t y, uint8_t code,
             {
                 GraphicsPutPixel(surface, x + (int32_t)column, y + (int32_t)row, colour);
             }
+        }
+    }
+}
+
+void FontDrawGlyphOpaque(GraphicsSurface *surface, int32_t x, int32_t y, uint8_t code,
+                         uint32_t ink, uint32_t paper)
+{
+    const uint8_t *glyph = FontGlyph(code);
+
+    /*
+     * The whole cell in one call, and nothing here tests a pixel.
+     *
+     * A glyph is precisely what GraphicsPatternBlock draws — eight columns wide,
+     * one byte to a row, most significant bit leftmost, which is how this table
+     * is stored — so the table is handed over as it stands, with no copying and
+     * no transformation. The clip is applied once to the cell rather than once
+     * to each of its sixty-four pixels, which is the whole of the difference
+     * between this and FontDrawGlyph.
+     *
+     * A row of zero is not skipped as it is in FontDrawGlyph. There it is worth
+     * skipping, the glyph leaving what is beneath it untouched; here every pixel
+     * of the cell must be written whether the glyph lights it or not, and an
+     * empty row is a run of eight paper pixels like any other.
+     */
+    GraphicsPatternBlock(surface, x, y, glyph, (int32_t)FONT_HEIGHT, ink, paper);
+}
+
+void FontDrawGlyphScaled(GraphicsSurface *surface, int32_t x, int32_t y, uint8_t code,
+                         uint32_t ink, uint32_t paper, int32_t scale)
+{
+    const uint8_t *glyph;
+
+    if (scale <= 0)
+    {
+        return;
+    }
+
+    if (scale == 1)
+    {
+        FontDrawGlyphOpaque(surface, x, y, code, ink, paper);
+        return;
+    }
+
+    glyph = FontGlyph(code);
+
+    /*
+     * A rectangle to the pixel, which is as slow as it sounds and is the right
+     * arrangement here.
+     *
+     * The fast paths above exist because the console draws thousands of
+     * characters a second. This draws the title of a fault screen: some twenty
+     * characters, once, upon a machine that is about to halt. Optimising it
+     * would be optimising the one drawing in this kernel whose cost nobody will
+     * ever measure, and the fill it calls is clipped, which is what matters when
+     * the caller is a fault handler.
+     */
+    for (int32_t row = 0; row < (int32_t)FONT_HEIGHT; ++row)
+    {
+        const uint8_t bits = glyph[row];
+
+        for (int32_t column = 0; column < (int32_t)FONT_WIDTH; ++column)
+        {
+            const uint8_t bit = (uint8_t)(0x80U >> (uint32_t)column);
+            const GraphicsRectangle square = { x + (column * scale), y + (row * scale),
+                                               scale, scale };
+
+            GraphicsFillRectangle(surface, square, ((bits & bit) != 0U) ? ink : paper);
         }
     }
 }
