@@ -237,8 +237,15 @@ diagnostic output at all**. `docs/design/GRAPHICS.md`, Sections 7 and 19, record
 the position, and `docs/project/TESTING.md`, Section 9.1, what it cost the
 VirtualBox procedure.
 
-**A fatal fault leaves the ordinary paths and takes the display.** From sub-task
-6.4 a severe fault draws a full-screen page composed for that fault — its own
+**A fault that the kernel cannot survive leaves the ordinary paths and takes the
+display.** Which faults those are is decided by `ExceptionDispositionOf` and set
+out in `INTERRUPTS.md`, Section 8.1: an abort, a non-maskable interrupt, a
+malformed descriptor table, or any fault the kernel raised within itself. A
+divide by zero or an unresolved page fault raised by a program belongs to that
+program, costs it alone, and draws nothing — announcing the end of the machine
+for one would be a false account of what happened.
+
+Such a fault draws a full-screen page composed for it — its own
 title, colour, account of what the processor is reporting, and the evidence that
 bears upon it rather than upon the others — and the console is suspended for good
 when it does. That is not a duplicate of the report: the report goes to every

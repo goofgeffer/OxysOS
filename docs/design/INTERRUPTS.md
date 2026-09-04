@@ -249,12 +249,72 @@ Sub-task 3.4 registers a handler for every architecture-defined vector.
 
 ### 8.1 Disposition
 
-| Vectors | Handler | Disposition |
-| ------- | ------- | ----------- |
-| 3 `#BP` | Breakpoint | Reports and resumes. A trap, so returning does not re-enter. |
-| 4 `#OF` | Overflow | Reports and resumes. Likewise a trap. |
-| 14 `#PF` | Page fault | Attempts copy-on-write resolution; failing that, reports, decodes the error code and `CR2`, and halts. |
-| All others 0–31 | Fatal | Reports and halts. |
+Every architecture-defined exception has one of three dispositions, and
+`ExceptionDispositionOf` decides which from **the vector and the privilege level
+together**. It is a pure function of those two, which is what lets the whole of
+it be asserted without raising a single exception — including the half that
+concerns a privilege level this kernel does not yet run code at.
+
+| Disposition | Meaning |
+| ----------- | ------- |
+| `RESUME` | The cause was removed, or there was never one. Execution continues. |
+| `TERMINATE` | The fault belongs to the program that raised it. That program ends; the machine does not. |
+| `FATAL` | The kernel cannot continue. The machine halts, and **only this draws a fault screen**. |
+
+| Vectors | Raised at privilege level 3 | Raised at privilege level 0 |
+| ------- | --------------------------- | --------------------------- |
+| 3 `#BP`, 4 `#OF` | `RESUME` | `RESUME` |
+| 14 `#PF`, resolvable by copy-on-write | `RESUME` | `RESUME` |
+| 2 NMI, 8 `#DF`, 18 `#MC` | `FATAL` | `FATAL` |
+| 10 `#TS`, 11 `#NP` | `FATAL` | `FATAL` |
+| 0 `#DE`, 6 `#UD`, 12 `#SS`, 13 `#GP`, 14 `#PF` unresolved, 17 `#AC`, and every other vector | `TERMINATE` | `FATAL` |
+
+### 8.1.1 Why the privilege level decides it
+
+**This was wrong until sub-task 6.4 and the correction is worth recording.**
+Every exception was treated as fatal to the machine, so a divide by zero — the
+plainest mistake a program can make, and one that must cost that program and
+nothing else — would have halted the system and drawn a full-screen page saying
+so. That is not a missing feature; it is a false statement about what happened.
+
+The vector alone cannot decide it. The same page fault is a program to be
+destroyed when it comes from privilege level 3 and a kernel that cannot continue
+when it comes from privilege level 0. What separates them is the low two bits of
+the code segment selector the processor pushed, which are the privilege level the
+faulting code was actually running at.
+
+Three sets do not depend upon the privilege level, and each for its own reason:
+
+**The aborts**, `#DF` and `#MC`. Intel SDM, Volume 3A, Section 6.5: an abort
+permits no reliable resumption and the state it reports may not describe where
+the error occurred. A double fault says the processor could not deliver an
+earlier exception, which is a statement about the machine; a machine check is the
+hardware reporting a fault in itself.
+
+**The non-maskable interrupt.** Memory parity, a watchdog, a bus error. Nothing a
+program did caused it, and terminating whatever happened to be running when it
+arrived would blame the wrong thing.
+
+**The descriptor-table faults**, `#TS` and `#NP`. The descriptor tables are the
+kernel's own data. Whoever tripped over a malformed one, terminating them would
+leave the same malformed descriptor in place for the next program to meet.
+
+### 8.1.2 Nothing can yet be terminated
+
+There are no programs. Until sub-task 6.10 runs code at privilege level 3 there
+is nothing outside the kernel to raise such a fault and nothing to destroy, so
+`TERMINATE` is at present unreachable — and a fault that did reach it would mean
+the machine is at a privilege level this kernel does not know it has, which is
+reported as such rather than ignored.
+
+The classification is made now regardless, because it is what decides whether a
+fault screen is drawn, and because it can be asserted now: the self-test asks
+`ExceptionDispositionOf` about every vector at both privilege levels. That is the
+same idiom sub-task 6.1 used to exercise `SYSCALL` from privilege level 0 —
+exercising a mechanism where the condition it exists for has not yet arrived.
+
+From Phase 7 the `TERMINATE` path becomes ordinary: the process is destroyed, its
+address space released, the scheduler picks another, and no screen is drawn.
 
 ### 8.2 The two error-code formats
 

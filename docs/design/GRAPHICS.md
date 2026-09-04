@@ -1035,7 +1035,41 @@ the text display. In a graphics mode the text display is not shown, and a serial
 adapter is not something most machines have — VirtualBox does not. Such a person
 saw the boot log stop, and nothing else.
 
-### 24.1 Why there is more than one screen
+### 24.1 What draws one, and what does not
+
+**A fault screen is drawn for a fault the kernel cannot survive, and for no
+other.** That decision is not made here; it is made by `ExceptionDispositionOf`,
+and `docs/design/INTERRUPTS.md`, Section 8.1, is where it is set out.
+
+The distinction was got wrong first and the correction matters. Every exception
+was treated as fatal, so a divide by zero — the plainest mistake a program can
+make, and one that must cost that program and nothing else — would have halted
+the machine and drawn a full-screen page announcing it. A screen that says the
+system has stopped, shown for a fault that ought to have ended one program, is
+not a cosmetic error: it is a false account of what happened, given to the person
+least able to check it.
+
+What reaches this file is therefore only:
+
+- an **abort** — a double fault or a machine check — which the architecture
+  permits no resumption from, whatever raised it;
+- a **non-maskable interrupt**, which is hardware announcing a condition rather
+  than a program erring;
+- a **malformed descriptor table**, `#TS` or `#NP`, whose faulty structure is the
+  kernel's own however it was reached;
+- **any fault the kernel raised within itself**, where there is no program to
+  blame and nothing smaller than the machine to abandon;
+- a **panic** the kernel raised by its own check.
+
+A divide by zero, an invalid opcode, an unresolved page fault or an alignment
+check raised by a program draws nothing here at all. From Phase 7 the program
+ends and the machine carries on.
+
+The titles say so. They are `KERNEL PAGE FAULT` and `KERNEL PROTECTION FAULT`,
+not `PAGE FAULT` and `GENERAL PROTECTION FAULT`, because by the time one is on
+the screen that is what it is.
+
+### 24.2 Why there is more than one screen
 
 Because the faults are not one thing.
 
@@ -1055,29 +1089,38 @@ upon that fault and not upon the others**.
 
 | Vector | Screen | Evidence it carries |
 | --- | --- | --- |
-| 0 `#DE` | Divide error | The operands, and the instruction bytes |
-| 6 `#UD` | Invalid opcode | The instruction bytes, and the stack |
+| 2 NMI | Non-maskable interrupt | The control registers |
+| 6 `#UD` | Bad instruction in kernel | The instruction bytes, and the stack |
 | 8 `#DF` | Double fault | The stack, and the control registers |
-| 10 `#TS` | Invalid task state segment | The selector |
-| 11 `#NP` | Segment not present | The selector |
-| 12 `#SS` | Stack-segment fault | The selector, and the stack |
-| 13 `#GP` | General protection fault | The selector, and the instruction bytes |
-| 14 `#PF` | Page fault | The faulting address and its cause, and the control registers |
-| 17 `#AC` | Alignment check | The faulting address, and the instruction bytes |
+| 10 `#TS` | Malformed task state segment | The selector |
+| 11 `#NP` | Descriptor not present | The selector |
+| 12 `#SS` | Kernel stack fault | The selector, and the stack |
+| 13 `#GP` | Kernel protection fault | The selector, and the instruction bytes |
+| 14 `#PF` | Kernel page fault | The faulting address and its cause, and the control registers |
 | 18 `#MC` | Machine check | The control registers |
 | — | Kernel panic | The message naming the check that failed |
 
-A vector outside that table still receives a screen, and that screen still names
-the vector from the dispatcher's own mnemonics. It carries the general evidence
-and says plainly that this kernel has no account written for that exception,
-which is the honest presentation of one nobody has thought about.
+A vector outside that table which is nevertheless fatal receives the general
+screen, `UNEXPECTED KERNEL FAULT`. It names the exception from the dispatcher's
+own mnemonics, carries the general evidence, and says plainly that this kernel
+has no account written for it — adding that most exceptions reaching it are
+ordinary mistakes of a program, so arriving there means the kernel made one. That
+is what a divide by zero within the kernel gets, and it is the right treatment: a
+kernel that divides by zero has a bug, and the useful facts are the instruction,
+the stack and the registers, not a lecture about arithmetic.
+
+**`#AC` has no screen and must not have one.** Intel SDM, Volume 3A, Section
+6.15: an alignment check requires privilege level 3, `CR0.AM` and `RFLAGS.AC`
+together, so kernel code cannot raise one however it is written. A screen for it
+would be a page nobody could ever see and a claim that the kernel treats a
+program's mistake as the end of the machine. Section 25.3 refuses one.
 
 The panic is separate from all of them deliberately. An exception is the machine
 saying something went wrong; a panic is this kernel saying it has found the world
 in a state it does not know how to continue from, and the message names the check
 that failed rather than any register.
 
-### 24.2 What it must survive
+### 24.3 What it must survive
 
 Every routine runs inside a fault handler, upon a machine that has already gone
 wrong, and the one thing it must not do is go wrong itself: a fault raised while
@@ -1099,7 +1142,7 @@ original failure.
 **It draws nothing where there is no framebuffer**, that being the case in which
 the display driver is already showing the report.
 
-### 24.3 The screen changes hands
+### 24.4 The screen changes hands
 
 The console is suspended when a fault screen begins, and this was not foreseen —
 it was found by looking at a screen that had been drawn correctly and displayed
@@ -1116,7 +1159,7 @@ shifted the entire layout by three character rows.
 display driver and the serial port go on receiving everything. There is no
 resumption, a machine that has drawn a fault screen being one that is halting.
 
-### 24.4 The two demonstrations, which prove different things
+### 24.5 The two demonstrations, which prove different things
 
 `fault-screen=<vector>` composes a trap frame and draws that vector's page. It
 proves **the page**: that its text fits the display, that its panels lay out one
@@ -1134,7 +1177,7 @@ machine check cannot be asked for at all.
 The two are kept apart because they answer different questions and because
 confusing them would let a broken handler pass a test of the drawing.
 
-## 25. Verification of the optimisation and the fault screens
+## 25. Verification of the optimisation, the disposition and the fault screens
 
 ### 25.1 The word path
 
@@ -1163,7 +1206,27 @@ difference between them would be a difference nothing else could see. The whole
 face is checked rather than a sample, the fault being of exactly the kind that
 afflicts one character and no other.
 
-### 25.3 The fault screen table
+### 25.3 The disposition
+
+The disposition is asserted first, because the screens depend upon it and because
+it cannot be exercised any other way: half of it concerns faults raised at
+privilege level 3, and there is no code outside the kernel to raise one until
+sub-task 6.10. `ExceptionDispositionOf` is a pure function of a vector and a code
+segment selector, so it can be asked the question for a privilege level that does
+not yet exist.
+
+| Assertion | What its failure would mean |
+| --------- | --------------------------- |
+| A privilege level 3 selector is recognised as outside the kernel, and a privilege level 0 one is not | Every kernel fault would be blamed upon a program, or every program's fault upon the kernel. |
+| `#BP` and `#OF` resume | A trap would halt the machine, and `INT3` would cease to be usable as a marker. |
+| NMI, `#DF`, `#MC`, `#TS`, `#NP` are fatal at **both** privilege levels | An abort or a corrupt descriptor table would be treated as one program's problem, leaving the machine running on a structure known to be wrong. |
+| `#DE`, `#BR`, `#UD`, `#SS`, `#GP`, `#PF` and `#AC` **terminate** the program at privilege level 3 | **This is the assertion this section exists for.** Its failure is the machine halting for a mistake that should have cost one program — the fault this kernel actually had. |
+| The same seven are **fatal** at privilege level 0 | A fault the kernel raised within itself would be blamed upon a program that does not exist. |
+| No vector is treated more leniently within the kernel than outside it | The kernel would survive something a program would not, which is backwards. |
+| Every vector has one of the three dispositions | A vector falls through the classification entirely. |
+| `#AC` is recognised as raisable only outside the kernel, and `#PF` is not | The rule below would forbid a screen that is needed, or permit one that can never be drawn. |
+
+### 25.4 The fault screen table
 
 This asserts the table and not the drawing, for the reason Section 8.1 gives
 about the display generally: whether a page reads well is not something a kernel
@@ -1176,7 +1239,10 @@ screen would not notice.
 | **No two entries share a title** | A copied row with the vector changed and the identity not. The reader cannot tell the faults apart, which is the whole purpose of having more than one screen. |
 | **No two entries share a colour** | The same, at a glance rather than on reading. |
 | No two entries claim the same vector | One of them is unreachable. |
-| Every severe vector has an entry of its own | A deleted entry falls back to the general screen, which still names the vector and so does not look broken — it is merely less useful than it was, silently. |
+| Every vector that is fatal **whatever raised it** has an entry of its own | A deleted entry falls back to the general screen, which still names the vector and so does not look broken — it is merely less useful than it was, silently. |
+| **No screen exists for a fault that is never fatal** | A page nobody could ever see, and a claim that the kernel treats as the end of the machine something that costs one program. |
+| **No screen exists for a fault the processor raises only outside the kernel** | The same, argued from the architecture rather than from the disposition: `#AC` needs all of privilege level 3, `CR0.AM` and `RFLAGS.AC`, so it can never be the kernel's. |
+| Every character of every sentence is one the font can draw | Text that renders as replacement boxes. This caught a real fault: an em dash reached a string literal, which in UTF-8 is three bytes none of which the face covers, and the sentence rendered with three boxes in the middle of it — visible only to somebody looking at the page, at the worst possible moment. |
 | There is an entry for a panic the kernel raises itself | It would be shown a screen written for a processor exception that did not occur. |
 | Every title fits a **640-pixel** display at the scale used there | The title runs off the edge upon VirtualBox and not upon QEMU, so whichever machine the person judging the screens did not use is where it is broken. |
 | The evidence flags name only panels that exist | A screen carries no evidence and looks exactly like one meant to carry none. |
@@ -1187,7 +1253,7 @@ Nothing here draws, and that is deliberate: drawing would set the flag recording
 a screen as shown, and a real fault later in the same boot would then be refused
 the display by the test meant to protect it.
 
-### 25.4 The negative tests
+### 25.5 The negative tests
 
 **The word path.** The alignment conditions were removed from `whole_words`, so
 that every four-byte surface claimed the fast path. The run reported `a surface
@@ -1204,7 +1270,26 @@ copied row would be. The run reported `two fault screens share a title, at vecto
 0xA and 0xB` and `two fault screens share a colour, at vectors 0xA and 0xB`.
 
 **A deleted screen.** The machine-check entry was removed. The run reported `a
-severe fault has no screen of its own, at vector 0x12` — the fault this catches
-being precisely the one that would otherwise look like nothing at all.
+fault that threatens the kernel has no screen of its own, at vector 0x12` — the
+fault this catches being precisely the one that would otherwise look like nothing
+at all.
+
+**Every fault made fatal**, which is what this kernel did before the disposition
+existed. The privilege-level test was removed from `ExceptionDispositionOf`. The
+run named all seven vectors in turn — `a program's own fault would halt the
+machine rather than the program, at vector 0x0`, and the same for `0x5`, `0x6`,
+`0xC`, `0xD`, `0xE` and `0x11`. Vector 0 is the divide by zero, which is the
+example the fault was reported with.
+
+**A screen for a fault that can never be the kernel's.** The alignment check was
+given an entry again. The run reported `a screen exists for a fault the processor
+raises only outside the kernel, at vector 0x11`. Worth recording that the weaker
+form of this rule — asking merely whether the vector is ever fatal — did **not**
+catch it, `#AC` being nominally fatal from a kernel selector; the architectural
+fact had to be stated before the assertion had any force.
+
+**An undrawable character.** An em dash was put back into one screen's text. The
+run reported `a fault screen's text holds a character the font cannot draw, at
+vector 0x8, code 0xE2` — the first byte of its UTF-8 encoding.
 
 Every edit was reverted.

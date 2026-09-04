@@ -23,7 +23,14 @@
  * not something most machines have. Such a person previously saw the boot log
  * stop, and nothing else.
  *
- * They are one screen for each severe fault and not one screen for all of them
+ * A screen is drawn for a fault the kernel cannot survive, and for no other.
+ * `ExceptionDispositionOf` makes that decision, not this file: a divide by zero
+ * or an unresolved page fault raised by a program belongs to that program and
+ * costs it alone, and announcing the end of the machine for one would be a lie
+ * about what happened. What reaches here is an abort, a non-maskable interrupt,
+ * a malformed descriptor table, or a fault the kernel raised within itself.
+ *
+ * They are one screen for each such fault and not one screen for all of them
  * because the faults are not one thing. A page fault names an address and asks
  * what was expected to be mapped there; a general-protection fault names a
  * selector; an invalid opcode asks what the bytes at the instruction pointer

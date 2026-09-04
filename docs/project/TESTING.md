@@ -777,11 +777,26 @@ afterwards.
 
 ## 19. Verification of the fault screens
 
-`KernelVerifyFaultScreen` asserts the table of fault screens at every boot — that
-every severe fault has a screen of its own, that **no two of them share a title
-or a colour**, and that every title will fit a 640-pixel display. Each assertion
-and the silent failure it catches is tabulated in
-[`../design/GRAPHICS.md`](../design/GRAPHICS.md), Section 25.3.
+`KernelVerifyFaultScreen` asserts two things at every boot, and the first governs
+the second.
+
+**What is to be done about each exception.** `ExceptionDispositionOf` classifies
+every vector, at both privilege levels, as resumed, terminating the program that
+raised it, or fatal to the kernel — and **only the last draws a screen**. A
+divide by zero raised by a program must cost that program and nothing else; the
+kernel treated every exception as fatal until sub-task 6.4, so it would have
+halted the machine and announced it, which is a false account of what happened
+given to the person least able to check it. The classification is asserted rather
+than the behaviour because half of it concerns privilege level 3, where no code
+runs until sub-task 6.10, and `ExceptionDispositionOf` is a pure function that
+can be asked about a privilege level that does not yet exist.
+
+**The table of screens**: that every fault which threatens the kernel whatever
+raised it has a screen of its own, that **no two share a title or a colour**,
+that every title fits a 640-pixel display, that every character is one the font
+can draw, and that **no screen exists for a fault that can never be the
+kernel's**. Each assertion and the silent failure it catches is tabulated in
+[`../design/GRAPHICS.md`](../design/GRAPHICS.md), Sections 25.3 and 25.4.
 
 It asserts the table and not the drawing, for the reason Section 15 gives about
 the display generally. **Nothing in it draws**, deliberately: drawing would set
@@ -797,8 +812,9 @@ vector's page, then halts. It proves the page — that its text fits, that its
 panels lay out, that its colour and title are its own — and nothing about the
 processor. The frame holds values no machine would produce, so a photograph of it
 cannot be mistaken for a real report. Press `e` at the menu to change
-`fault-screen=14` to another vector: 0, 6, 8, 10, 11, 12, 13, 14, 17, 18, or 256
-for a panic the kernel raises itself.
+`fault-screen=14` to another vector: 2, 6, 8, 10, 11, 12, 13, 14, 18, or 256 for
+a panic the kernel raises itself. Any other vector draws the general screen,
+which is what a divide by zero within the kernel gets.
 
 **Oxys-OS (raise a genuine page fault)** writes to an unmapped address. It proves
 the wiring — handler, report upon the serial port, screen upon the framebuffer,
@@ -825,29 +841,54 @@ What to look for:
 | Panels that differ **between faults** — an address for a page fault, a decoded selector for a general protection fault, instruction bytes for an invalid opcode | The evidence flags are not being consulted, and every fault is being given the same page. |
 | The instruction bytes reproduced as real values, or an explicit statement that the address is unmapped | The bytes are being read without asking the paging hierarchy, which would raise a second fault. |
 | Nothing written over the page afterwards | The console was not suspended. |
+| Every character drawn, with **no replacement boxes** in the prose | Text outside the printable ASCII the face covers. An em dash in a string literal is three UTF-8 bytes and renders as three boxes. |
 | At **640 by 480**: the title still fits, paragraphs re-wrap, and the footer is still on the screen | The layout was fitted to 1280 pixels. |
 
 ### 19.2 The negative tests
 
+Four, and the first is the one that matters most: it reproduces the fault this
+section was written because of.
+
+**Every fault made fatal.** Remove the privilege-level test from
+`ExceptionDispositionOf` in `kernel/cpu/exceptions.c`, so that everything falls
+through to `EXCEPTION_DISPOSITION_FATAL`. The run must name all seven program
+faults in turn, beginning `a program's own fault would halt the machine rather
+than the program, at vector 0x0` — vector 0 being the divide by zero.
+
+**A duplicated identity.**
+
 ```sh
-# Two screens given the same identity, as a copied row would be.
-sed -i 's/{ 11U, "SEGMENT NOT PRESENT", "#NP, vector 11",/{ 11U, "INVALID TASK STATE SEGMENT", "#NP, vector 11",/' \
+sed -i 's/{ 11U, "DESCRIPTOR NOT PRESENT",/{ 11U, "MALFORMED TASK STATE SEGMENT",/' \
     graphics/faultscreen.c
 make verify
 ```
 
-The run must report `two fault screens share a title, at vectors 0xA and 0xB` and
-end `Fault screen self-test FAILED.`
+The run must report `two fault screens share a title, at vectors 0xA and 0xB`.
 
-For the second, delete the `{ 18U, "MACHINE CHECK", ... }` row from the table.
-The run must report `a severe fault has no screen of its own, at vector 0x12` —
-the fault this catches being the one that would otherwise look like nothing at
-all, the general screen still naming the vector. Restore the file afterwards.
+**A deleted screen.** Delete the `{ 18U, "MACHINE CHECK", ... }` row. The run
+must report `a fault that threatens the kernel has no screen of its own, at
+vector 0x12` — the fault this catches being the one that would otherwise look
+like nothing at all, the general screen still naming the vector.
+
+**A screen that can never be drawn.** Add an entry for vector 17, the alignment
+check. The run must report `a screen exists for a fault the processor raises only
+outside the kernel, at vector 0x11`. Note that the weaker rule — asking merely
+whether the vector is ever fatal — does not catch this, `#AC` being nominally
+fatal from a kernel selector; the architectural fact that it requires privilege
+level 3 has to be stated before the assertion has any force.
+
+Restore the files afterwards. Each run must end `Fault disposition and screen
+self-test FAILED.`
 
 ## 20. Test record
 
 | Date | Test | Result |
 | ---- | ---- | ------ |
+| 2026-09-04 | `make verify` — **the disposition of every exception** | Passed, and it corrects a real fault rather than adding a feature. Every exception was treated as fatal to the machine, so a divide by zero — the plainest mistake a program can make — would have halted the system and drawn a page saying so. The classification now depends upon the vector **and the privilege level together**: the aborts, the non-maskable interrupt and the two descriptor-table faults are fatal whatever raised them, and everything else terminates the program at privilege level 3 and is fatal only at privilege level 0. All of it is asserted at both privilege levels without raising an exception, `ExceptionDispositionOf` being a pure function — which is the only way the privilege level 3 half can be tested before any privilege level 3 code exists. |
+| 2026-09-04 | `make verify` — the disposition, **the negative test** | Passed. With the privilege-level test removed, so that every fault fell through to fatal as it did before this change, the run named all seven program faults in turn: `a program's own fault would halt the machine rather than the program`, at vectors `0x0`, `0x5`, `0x6`, `0xC`, `0xD`, `0xE` and `0x11`. Vector 0 is the divide by zero the fault was reported with. |
+| 2026-09-04 | `make verify` — the fault screen table, narrowed | Passed. The screens are now ten and are reserved for what the kernel cannot survive; `#DE` and `#AC` no longer have one. Two new assertions guard that: no screen may exist for a fault that is never fatal, and none for a fault the processor raises **only** outside the kernel. The second was needed because the first does not catch `#AC` — it is nominally fatal from a kernel selector, and only the architectural fact that it requires privilege level 3, `CR0.AM` and `RFLAGS.AC` together gives the rule any force. Confirmed by restoring the `#AC` entry: `a screen exists for a fault the processor raises only outside the kernel, at vector 0x11`. |
+| 2026-09-04 | QEMU screendump — **a fault the font found** | The general screen rendered with three replacement boxes in the middle of a sentence. An em dash had reached a string literal instead of staying in a comment, and in UTF-8 that is three bytes, none of them within the printable ASCII the face covers. The font was behaving exactly as designed, which is why nothing failed. Every screen's text is now asserted to be drawable, and the assertion was confirmed by putting an em dash back: `a fault screen's text holds a character the font cannot draw, at vector 0x8, code 0xE2`. |
+| 2026-09-04 | QEMU screendump — the narrowed screens | Passed. A divide error now draws `UNEXPECTED KERNEL FAULT` naming `#DE Divide Error`, with the instruction, the stack and the control registers, and states that most exceptions reaching that page are ordinary mistakes of a program — so arriving there means the kernel made one. The non-maskable interrupt screen is new and distinct. The rest were re-titled to say what they are: `KERNEL PAGE FAULT`, `KERNEL PROTECTION FAULT`, `KERNEL STACK FAULT`, `BAD INSTRUCTION IN KERNEL`. |
 | 2026-09-04 | `make verify` — the drawing optimisation | Passed. The console had been measured at **15.2% of the whole boot**; it is now 4.5%, and the four operations that matter are 3.6 to 7.9 times faster. The assertions that guard it are the ones a fast path needs: a four-byte surface on a word boundary with a word-multiple pitch is marked word-addressable and one whose base and pitch are both odd is not, a three-byte pixel never is whatever its alignment, and — the assertion the rest rests upon — **two surfaces differing in nothing but their alignment are drawn upon and compared pixel for pixel**, so the fast path cannot quietly draw something different from the path the other tests exercise. The two glyph routines are compared for every one of the ninety-five glyphs, the console having changed which one it goes through. |
 | 2026-09-04 | `make verify` — the drawing optimisation, **the negative tests** | Passed, both. With the alignment conditions removed from `whole_words`, the run reported `a surface whose base and pitch are both odd was marked as addressable by words`. With `GraphicsPatternBlock` made to skip its clear bits, three assertions fired in the graphics self-test and a fourth in the console self-test — `the two glyph routines disagree, at code 0x20` — which is the assertion that exists because no other test uses the path the console uses. Both edits were reverted. The procedure is Section 18.2. |
 | 2026-09-04 | `make verify` — the fault screen table | Passed. Every severe vector has a screen of its own; no two share a title, a colour or a vector; every title fits a 640-pixel display at the scale used there; the evidence flags name only panels that exist; and no screen had been drawn when the test ran, which is itself an assertion — a screen drawn early would leave a real fault later in the boot with nothing to display. |

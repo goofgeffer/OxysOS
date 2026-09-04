@@ -162,7 +162,24 @@ was probably not using.
 One fault there was found only by looking, and no assertion available would have
 caught it: the screens were drawn correctly and displayed wrongly, `KernelPanic`
 writing to a console that was still upon the same framebuffer and scrolling the
-finished page up by three character rows. See
+finished page up by three character rows.
+
+**A second fault, and a more serious one, was found by being told about it.**
+Every exception was treated as fatal to the machine, so a divide by zero — the
+plainest mistake a program can make, and one that must cost that program and
+nothing else — would have halted the system and drawn a full-screen page
+announcing it. That is not a missing feature; it is a false account of what
+happened, given to the person least able to check it. Exceptions now have a
+**disposition**, decided by the vector and the privilege level together: resume,
+terminate the program that raised it, or fatal to the kernel — and only the last
+draws a screen. The aborts, the non-maskable interrupt and the two
+descriptor-table faults are fatal whatever raised them, for reasons of their own;
+everything else belongs to whoever raised it. Nothing can reach the terminating
+path until sub-task 6.10 runs code at privilege level 3, so the classification is
+asserted rather than exercised — `ExceptionDispositionOf` being a pure function,
+it can be asked about a privilege level that does not yet exist, which is the
+idiom sub-task 6.1 used for `SYSCALL`. The screens were narrowed to ten and
+re-titled to say what they are. See
 [`../design/PRIVILEGE.md`](../design/PRIVILEGE.md) and
 [`../design/GRAPHICS.md`](../design/GRAPHICS.md).
 
@@ -510,6 +527,7 @@ copies of an argument do not agree with each other for long.
 
 | Date | Phase | Change | Commit | Design |
 | ---- | ----- | ------ | ------ | ------ |
+| 2026-09-04 | Phase 6 | Exceptions given a disposition, at the project owner's report that faults which threaten no more than one program were halting the machine. Resume, terminate the program, or fatal to the kernel, decided by the vector and the privilege level together; only the last draws a fault screen. The screens were narrowed from eleven to ten, re-titled as kernel faults, and given two assertions that no screen may exist for a fault that can never be the kernel's. | *(this change)* | [`../design/INTERRUPTS.md`](../design/INTERRUPTS.md), Section 8.1; [`../design/GRAPHICS.md`](../design/GRAPHICS.md), Sections 24 and 25 |
 | 2026-09-04 | Phase 6 | Sub-task 6.4 continued: the console made fast, and given fault screens. Measurement by `RDTSC` — the interval timer being useless, seventeen ticks elapsing in the whole boot — put the console at 15.2% of it; a word-wide pixel path, a pattern block that clips a glyph once instead of sixty-four times, and a cell drawn in one pass rather than two bring it to 4.5%. The fault screens are one for each severe fault, each with its own colour, account and evidence, and the self-test requires that no two are alike. | `a75a965` | [`../design/GRAPHICS.md`](../design/GRAPHICS.md), Sections 23 to 25 |
 | 2026-09-04 | Phase 6 | Sub-task 6.4: the bitmap font and the graphical console, which end the blank screen sub-task 6.2 left. Ninety-five glyphs drawn for this project, not obtained. The console replays what was written before the framebuffer could be mapped, scrolls by blitting the surface upon itself, and stands down when the command line asks for the drawing figures. `KernelWriteString` becomes the only routine permitted to name an output device. | `5a755c9` | [`../design/GRAPHICS.md`](../design/GRAPHICS.md), Sections 18 to 22 |
 | 2026-09-03 | Phase 6 | Sub-task 6.3: the 2D primitives — pixel, line, rectangle, blit and clipping — upon a surface rather than upon the framebuffer, so that they are asserted in memory against a surface whose pitch exceeds its width and whose padding holds a sentinel. Clipping is the memory-safety boundary and is implemented once; the line is clipped per pixel so that clipping cannot displace it. | `7bcbc98` | [`../design/GRAPHICS.md`](../design/GRAPHICS.md), Sections 11 to 17 |

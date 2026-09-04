@@ -1,7 +1,9 @@
 /*
  * File: graphics/faultscreen.c
- * Purpose: Draws the full-screen page that a severe fault produces, composed
- *          for the fault in hand: its own title, colour, account and evidence.
+ * Purpose: Draws the full-screen page that a fault the kernel cannot survive
+ *          produces, composed for the fault in hand: its own title, colour,
+ *          account and evidence. Faults belonging to a program draw nothing
+ *          here; ExceptionDispositionOf decides which is which.
  * Key functions: FaultScreenShowException, FaultScreenShowPanic,
  *          FaultScreenWasDrawn, FaultScreenEntryCount, FaultScreenEntryAt.
  * References:
@@ -70,11 +72,18 @@ static uint32_t FaultAccent;
 /*
  * The screens.
  *
- * One row for each fault that has something of its own to say. A vector absent
- * from this table still receives a screen — the general one below names it from
- * the dispatcher's own mnemonic table — but it receives no account and no
- * evidence chosen for it, and that is the honest presentation of an exception
- * this kernel has not thought about.
+ * One row for each fault the kernel cannot survive and that has something of its
+ * own to say. **What reaches this file at all is decided elsewhere**, by
+ * ExceptionDispositionOf: a divide by zero, an invalid opcode or an unresolved
+ * page fault raised by a program belongs to that program and costs it alone, and
+ * a full-screen page announcing the end of the machine for one would be a lie
+ * about what happened. What arrives here is an abort, a non-maskable interrupt,
+ * a malformed descriptor table, or a fault the kernel raised within itself.
+ *
+ * A vector absent from this table still receives a screen — the general one
+ * below names it from the dispatcher's own mnemonic table — but it receives no
+ * account and no evidence chosen for it, and that is the honest presentation of
+ * an exception this kernel has not thought about.
  *
  * The colours are held as channel intensities and not as encoded pixels because
  * the encoding depends upon the framebuffer's channel positions, which are read
@@ -84,20 +93,20 @@ static uint32_t FaultAccent;
  * before should know which fault it is before reading a word.
  */
 static const FaultScreenEntry FaultScreens[] = {
-    { 0U, "DIVIDE ERROR", "#DE, vector 0",
-      "An integer division had a divisor of zero, or a quotient too large to be "
-      "represented.",
-      "The operands above, and the instruction bytes. A divisor of zero is a value that "
-      "was never checked; an overflowing quotient is a signed division of the most "
-      "negative value by minus one.",
-      230U, 170U, 40U, FAULT_EVIDENCE_OPERANDS | FAULT_EVIDENCE_OPCODE },
+    { 2U, "NON-MASKABLE INTERRUPT", "NMI, vector 2",
+      "The platform raised a condition it could not defer. This is hardware announcing "
+      "something, not a program making a mistake.",
+      "The machine, not this kernel. A non-maskable interrupt is memory parity, a "
+      "watchdog, or a bus error; nothing a program did can cause one, and nothing this "
+      "kernel could have done differently would have prevented it.",
+      230U, 60U, 190U, FAULT_EVIDENCE_CONTROL },
 
-    { 6U, "INVALID OPCODE", "#UD, vector 6",
-      "The processor could not decode the instruction at the address below, or the "
-      "instruction is not permitted in the present mode.",
-      "The instruction bytes. Bytes that are not an instruction mean control reached "
-      "somewhere that holds no code — a corrupt function pointer, or a return to a "
-      "damaged stack.",
+    { 6U, "BAD INSTRUCTION IN KERNEL", "#UD, vector 6",
+      "The processor could not decode the instruction at the address below. Control "
+      "within the kernel reached something that is not code.",
+      "The instruction bytes. Bytes that are not an instruction mean control arrived "
+      "somewhere that holds no code: a function pointer that was overwritten, or a "
+      "return through a damaged stack. The stack below is the second place to look.",
       170U, 120U, 230U, FAULT_EVIDENCE_OPCODE | FAULT_EVIDENCE_STACK },
 
     { 8U, "DOUBLE FAULT", "#DF, vector 8",
@@ -108,48 +117,45 @@ static const FaultScreenEntry FaultScreens[] = {
       "push its frame.",
       220U, 40U, 40U, FAULT_EVIDENCE_STACK | FAULT_EVIDENCE_CONTROL },
 
-    { 10U, "INVALID TASK STATE SEGMENT", "#TS, vector 10",
+    { 10U, "MALFORMED TASK STATE SEGMENT", "#TS, vector 10",
       "A task state segment named by the selector below is malformed, or its descriptor "
-      "is not of the type the processor requires.",
+      "is not of the type the processor requires. The descriptor tables are the kernel's "
+      "own, so this is fatal whatever raised it.",
       "The selector above, against the descriptors the global descriptor table actually "
       "holds. The report upon the serial port lists them.",
       200U, 150U, 60U, FAULT_EVIDENCE_SELECTOR },
 
-    { 11U, "SEGMENT NOT PRESENT", "#NP, vector 11",
-      "A descriptor was loaded whose present flag is clear. The segment it names does not "
-      "exist as far as the processor is concerned.",
+    { 11U, "DESCRIPTOR NOT PRESENT", "#NP, vector 11",
+      "A descriptor was loaded whose present flag is clear. As with the segment above, "
+      "the table it came from is the kernel's own, so terminating whatever reached it "
+      "would leave the same descriptor for the next thing to meet.",
       "The selector above. Either the descriptor was never written, or a selector was "
       "computed that names a slot beyond the ones that were.",
       60U, 180U, 180U, FAULT_EVIDENCE_SELECTOR },
 
-    { 12U, "STACK-SEGMENT FAULT", "#SS, vector 12",
-      "A stack operation went outside its segment, or the stack segment named by the "
-      "selector below is not present.",
-      "The stack pointer, and whether the memory beneath it is mapped. A stack that has "
-      "run past what was reserved for it produces this before it produces anything else.",
+    { 12U, "KERNEL STACK FAULT", "#SS, vector 12",
+      "A stack operation within the kernel went outside its segment, or the stack "
+      "segment named by the selector below is not present.",
+      "The stack pointer, and whether the memory beneath it is mapped. A kernel stack "
+      "that has run past what was reserved for it produces this before it produces "
+      "anything else, and a double fault shortly afterwards.",
       210U, 100U, 30U, FAULT_EVIDENCE_SELECTOR | FAULT_EVIDENCE_STACK },
 
-    { 13U, "GENERAL PROTECTION FAULT", "#GP, vector 13",
-      "An operation was attempted that the processor's protection rules forbid: a "
+    { 13U, "KERNEL PROTECTION FAULT", "#GP, vector 13",
+      "The kernel attempted an operation the processor's protection rules forbid: a "
       "privileged instruction, a non-canonical address, or a segment used wrongly.",
       "The error code. Where it is not zero it names the selector at fault; where it is "
       "zero the instruction bytes are the evidence, the fault being about what was done "
       "rather than to what.",
       240U, 120U, 30U, FAULT_EVIDENCE_SELECTOR | FAULT_EVIDENCE_OPCODE },
 
-    { 14U, "PAGE FAULT", "#PF, vector 14",
-      "A memory access could not be translated, or violated the permissions of the "
-      "translation it found. The address it named is below.",
+    { 14U, "KERNEL PAGE FAULT", "#PF, vector 14",
+      "The kernel touched memory that has no translation, or violated the permissions of "
+      "the translation it found. The address it named is below.",
       "The faulting address, and whether a translation existed for it. A page that is "
-      "not present is a mapping never made; a protection violation is a mapping made "
-      "with the wrong permissions.",
+      "not present is a mapping this kernel never made; a protection violation is one it "
+      "made with the wrong permissions.",
       70U, 130U, 240U, FAULT_EVIDENCE_FAULT_ADDRESS | FAULT_EVIDENCE_CONTROL },
-
-    { 17U, "ALIGNMENT CHECK", "#AC, vector 17",
-      "An unaligned memory access was made while alignment checking is enabled.",
-      "The faulting address and the instruction bytes. This is raised only at privilege "
-      "level 3 with both CR0.AM and RFLAGS.AC set, so reaching it at all is unusual.",
-      150U, 190U, 90U, FAULT_EVIDENCE_FAULT_ADDRESS | FAULT_EVIDENCE_OPCODE },
 
     { 18U, "MACHINE CHECK", "#MC, vector 18",
       "The processor reported an internal or bus error. This is hardware announcing a "
@@ -157,7 +163,7 @@ static const FaultScreenEntry FaultScreens[] = {
       "Nothing in this kernel. A machine check is an abort: the state below may not "
       "describe where the error occurred, and the machine's own error registers are the "
       "record.",
-      230U, 60U, 190U, FAULT_EVIDENCE_CONTROL },
+      250U, 90U, 90U, FAULT_EVIDENCE_CONTROL },
 
     { FAULT_SCREEN_SOFTWARE, "KERNEL PANIC", "raised by the kernel",
       "The kernel checked a condition it requires, found it false, and stopped. No "
@@ -173,10 +179,13 @@ static const FaultScreenEntry FaultScreens[] = {
  * vector from the dispatcher's mnemonics rather than pretending to an account it
  * does not have. */
 static const FaultScreenEntry FaultScreenGeneral = {
-    0U, "PROCESSOR EXCEPTION", "",
-    "The processor raised an exception from which this kernel cannot continue.",
-    "The vector above, in Intel SDM Volume 3A, Table 6-1. This kernel carries no account "
-    "written for this exception, so the general state below is all that is offered.",
+    0U, "UNEXPECTED KERNEL FAULT", "",
+    "The kernel raised an exception this table carries no account of, and cannot "
+    "continue. The exception is named above.",
+    "The vector above, in Intel SDM Volume 3A, Table 6-1. Most exceptions that reach this "
+    "screen are ordinary mistakes of a program, such as a divide by zero or an "
+    "instruction that is not one, which cost only the program that makes them. Reaching this screen means "
+    "one was made by the kernel, where there is nothing smaller to abandon.",
     180U, 180U, 180U, FAULT_EVIDENCE_OPCODE | FAULT_EVIDENCE_STACK | FAULT_EVIDENCE_CONTROL
 };
 

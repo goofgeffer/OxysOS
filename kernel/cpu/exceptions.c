@@ -244,6 +244,127 @@ void ExceptionReportState(const TrapFrame *frame, uint64_t fault_address)
     KernelWriteString("===========================\n");
 }
 
+bool ExceptionCameFromUserMode(uint64_t cs)
+{
+    /*
+     * The low two bits of a code segment selector are its requested privilege
+     * level, and for the selector the processor pushed they are the privilege
+     * level the code was actually running at. Anything above zero is outside the
+     * kernel.
+     */
+    return (cs & UINT64_C(0x03)) != 0U;
+}
+
+bool ExceptionOnlyOutsideKernel(uint64_t vector)
+{
+    /*
+     * The alignment check, and nothing else. Intel SDM, Volume 3A, Section 6.15:
+     * it requires privilege level 3, CR0.AM and RFLAGS.AC together, so no
+     * arrangement of kernel code can raise one.
+     */
+    return vector == EXCEPTION_ALIGNMENT_CHECK;
+}
+
+ExceptionDisposition ExceptionDispositionOf(uint64_t vector, uint64_t cs)
+{
+    /*
+     * The aborts, first and unconditionally.
+     *
+     * Intel SDM, Volume 3A, Section 6.5 classifies these as aborts: they permit
+     * no reliable resumption, and the state they report may not describe where
+     * the error occurred. The privilege level is irrelevant to them. A double
+     * fault means the processor could not deliver an earlier exception, which is
+     * a statement about the machine and not about a program; a machine check is
+     * the hardware reporting a fault in itself.
+     */
+    if ((vector == EXCEPTION_DOUBLE_FAULT) || (vector == EXCEPTION_MACHINE_CHECK))
+    {
+        return EXCEPTION_DISPOSITION_FATAL;
+    }
+
+    /*
+     * A non-maskable interrupt is not a program's mistake either. It is memory
+     * parity, a watchdog, or a hardware error the platform could not defer, and
+     * terminating whatever happened to be running when it arrived would blame
+     * the wrong thing.
+     */
+    if (vector == EXCEPTION_NON_MASKABLE)
+    {
+        return EXCEPTION_DISPOSITION_FATAL;
+    }
+
+    /*
+     * The two traps that may be resumed from. A trap reports the state *after*
+     * the instruction, so returning does not re-enter it; see the handlers
+     * below, which is where they are actually dealt with.
+     */
+    if ((vector == EXCEPTION_BREAKPOINT) || (vector == EXCEPTION_OVERFLOW))
+    {
+        return EXCEPTION_DISPOSITION_RESUME;
+    }
+
+    /*
+     * An invalid task state segment and an absent segment are faults in the
+     * descriptor tables, and the descriptor tables are the kernel's own data.
+     * Whoever tripped over one, the structure that is wrong was built here, so
+     * terminating the program that happened to reach it would leave the machine
+     * running with the same malformed descriptor and the next program would meet
+     * it too.
+     */
+    if ((vector == EXCEPTION_INVALID_TSS) || (vector == EXCEPTION_SEGMENT_ABSENT))
+    {
+        return EXCEPTION_DISPOSITION_FATAL;
+    }
+
+    /*
+     * Everything else is decided by where it happened, and this is the whole of
+     * the distinction.
+     *
+     * A divide error, an invalid opcode, a general-protection fault, an
+     * unresolved page fault, an alignment check: each of these is a mistake made
+     * by the code that raised it. Raised at privilege level 3 the mistake
+     * belongs to a program, and the program is what should end. Raised at
+     * privilege level 0 the mistake was the kernel's own, and there is no
+     * smaller thing to abandon than the machine.
+     *
+     * A vector this kernel does not expect at all — one Intel reserves, or one
+     * introduced by an extension it does not implement — reaches the same place
+     * and is fatal when it comes from the kernel, for the same reason: a kernel
+     * that has met an exception it has no account of does not know what state it
+     * is in.
+     */
+    if (ExceptionCameFromUserMode(cs))
+    {
+        return EXCEPTION_DISPOSITION_TERMINATE;
+    }
+
+    return EXCEPTION_DISPOSITION_FATAL;
+}
+
+/*
+ * The treatment of a fault that belongs to the program that caused it.
+ *
+ * There are no programs. Until sub-task 6.10 runs code at privilege level 3
+ * there is nothing outside the kernel to raise such a fault and nothing to
+ * terminate, so reaching this means the machine is at a privilege level this
+ * kernel does not know it has — which is itself a condition it cannot continue
+ * from, and is reported as one rather than being quietly ignored.
+ *
+ * From Phase 7 this becomes the ordinary path: the process is destroyed, its
+ * address space released, and the scheduler picks another. The machine is not
+ * halted and no screen is drawn.
+ */
+static void ExceptionTerminateProgram(TrapFrame *frame)
+{
+    KernelWriteString("\nA fault was raised outside the kernel, at privilege level ");
+    KernelWriteDecimal(frame->cs & UINT64_C(0x03));
+    KernelWriteString(".\n");
+    KernelWriteString("This fault belongs to the program that caused it, and from Phase 7 "
+                      "that program\nwould be terminated and the machine would carry on. "
+                      "There are no programs yet,\nso there is nothing to terminate and "
+                      "this cannot be continued from.\n");
+}
+
 /*
  * The handler for every exception from which no recovery is presently possible.
  *
@@ -254,7 +375,27 @@ void ExceptionReportState(const TrapFrame *frame, uint64_t fault_address)
  */
 static void ExceptionFatalHandler(TrapFrame *frame)
 {
+    const ExceptionDisposition disposition =
+        ExceptionDispositionOf(frame->vector, frame->cs);
+
     ExceptionReportState(frame, ReadCr2());
+
+    /*
+     * Only a fault the kernel cannot survive draws a screen.
+     *
+     * The screen says, in effect, that the system has stopped, and it must not
+     * be shown for a fault that ought to have cost one program and no more. A
+     * divide by zero in a user program is the plainest example: it is that
+     * program's mistake, its consequence is that program's death, and a
+     * full-screen page announcing the end of the machine would be a lie about
+     * what happened.
+     */
+    if (disposition != EXCEPTION_DISPOSITION_FATAL)
+    {
+        ExceptionTerminateProgram(frame);
+        KernelPanic("A fault outside the kernel was raised before any program exists.");
+        return;
+    }
 
     /*
      * The screen is drawn after the report and not instead of it. The report is
@@ -265,7 +406,7 @@ static void ExceptionFatalHandler(TrapFrame *frame)
      * have. Where there is no framebuffer this does nothing at all.
      */
     FaultScreenShowException(frame, ReadCr2());
-    KernelPanic("An unrecoverable processor exception was raised.");
+    KernelPanic("An unrecoverable processor exception was raised within the kernel.");
 }
 
 /*
@@ -298,8 +439,24 @@ static void ExceptionPageFaultHandler(TrapFrame *frame)
     }
 
     ExceptionReportState(frame, fault_address);
+
+    /*
+     * An unresolved page fault raised outside the kernel is the program's, and
+     * from Phase 7 costs the program alone. Raised within the kernel it is a
+     * mapping this kernel failed to make or a pointer it computed wrongly, and
+     * there is nothing smaller than the machine to abandon.
+     */
+    if (ExceptionDispositionOf(frame->vector, frame->cs) !=
+        EXCEPTION_DISPOSITION_FATAL)
+    {
+        ExceptionTerminateProgram(frame);
+        KernelPanic("A page fault outside the kernel was raised before any program "
+                    "exists.");
+        return;
+    }
+
     FaultScreenShowException(frame, fault_address);
-    KernelPanic("An unresolved page fault was raised.");
+    KernelPanic("An unresolved page fault was raised within the kernel.");
 }
 
 /*
