@@ -39,7 +39,7 @@ complementary, and neither replaces the other.
 | [`BOOT.md`](design/BOOT.md) | From the GRUB handover to `KernelMain`. |
 | [`MEMORY-LAYOUT.md`](design/MEMORY-LAYOUT.md) | The physical and virtual address spaces, the paging hierarchy, and the allocators above it. |
 | [`INTERRUPTS.md`](design/INTERRUPTS.md) | The descriptor table, the stubs, the dispatcher, the exceptions and the 8259A controllers. |
-| [`GRAPHICS.md`](design/GRAPHICS.md) | The framebuffer and its memory type, the primitives and clipping that draw upon it, the bitmap font and graphical console drawn with those, the measurement that made the console fast enough, and the fault screens a severe fault draws. |
+| [`GRAPHICS.md`](design/GRAPHICS.md) | The framebuffer and its memory type, the primitives and clipping that draw upon it, the bitmap font and graphical console drawn with those, the measurement that made the console fast enough, the fault screens a severe fault draws, and the pointer of sub-task 6.5 seen from the drawing it is built upon. |
 | [`PRIVILEGE.md`](design/PRIVILEGE.md) | The user-mode descriptors, the task state segment and its trusted stacks, and the registers that configure `SYSCALL`. |
 
 ### [`devices/`](devices/)
@@ -49,7 +49,8 @@ complementary, and neither replaces the other.
 | [`TIME.md`](devices/TIME.md) | The interval timer and the system tick. | `drivers/pit/` |
 | [`DISPLAY.md`](devices/DISPLAY.md) | The VGA text-mode display, and how sub-task 6.2 displaced it. | `drivers/vga/` |
 | [`SERIAL.md`](devices/SERIAL.md) | The 16550 serial adapter. | `drivers/serial/` |
-| [`KEYBOARD.md`](devices/KEYBOARD.md) | The 8042 controller and the PS/2 keyboard. | `drivers/keyboard/` |
+| [`KEYBOARD.md`](devices/KEYBOARD.md) | The PS/2 keyboard, and the 8042 controller it is reached through. | `drivers/ps2/`, `drivers/keyboard/` |
+| [`MOUSE.md`](devices/MOUSE.md) | The PS/2 mouse, and the pointer drawn from it. | `drivers/mouse/`, `graphics/cursor.c` |
 | [`PCI.md`](devices/PCI.md) | The PCI bus enumeration. | `drivers/pci/` |
 
 ### [`storage/`](storage/)

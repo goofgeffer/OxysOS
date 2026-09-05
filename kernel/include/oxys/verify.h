@@ -107,6 +107,12 @@ void KernelVerifyConsole(void);
  * has one of its own, and that no two of them are the same. */
 void KernelVerifyFaultScreen(void);
 
+/* Phase 6, sub-task 6.5: the PS/2 mouse, its packet decoder and framing, and
+ * the pointer drawn from it, both asserted without a mouse and without a
+ * display. */
+void KernelVerifyMouse(void);
+void KernelVerifyCursor(void);
+
 /* Phase 6, sub-task 6.3: the two-dimensional primitives, asserted against a
  * surface composed in memory so that they hold upon a machine with no display. */
 void KernelVerifyGraphics(void);

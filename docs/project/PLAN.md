@@ -183,6 +183,46 @@ re-titled to say what they are. See
 [`../design/PRIVILEGE.md`](../design/PRIVILEGE.md) and
 [`../design/GRAPHICS.md`](../design/GRAPHICS.md).
 
+**Sub-task 6.5 is complete**, and the machine has a pointer. The mouse is the
+second device upon the 8042, and the first thing that had to be done was not
+about the mouse: **the controller became a module of its own**. Its
+configuration byte governs both ports and is read, modified and written whole, so
+two drivers each keeping their own idea of it would each write back the other's
+bits as they last saw them — the mouse driver enabling its own interrupt would
+have restored the translation bit to whatever it was when the mouse driver first
+looked, and the keyboard would then have delivered scan code set 2 while decoding
+it as set 1. That is not a failure to work; it is most keys still producing
+plausible characters and some producing the wrong ones.
+
+Three properties of the decoder each guard a failure that produces working,
+wrong behaviour rather than an error. **The framing** rests upon the bit set in
+every packet's first byte: a driver that has lost its place does not stop, it
+reads the second byte of one packet as the first of the next and reports button
+states taken from movement magnitudes for ever, every value being one the device
+could have sent. **The movement is nine bits**, its sign living in another byte,
+so the obvious eight-bit sign extension gets −1 right by accident and turns −256
+into zero — losing exactly the largest movements a hand can make. And **the
+vertical sense is inverted once**, where the device is known, because a mouse
+measures upward as positive and a display downward; forwarding it gives a pointer
+that moves correctly sideways and backwards vertically, which presents as broken
+hardware.
+
+The position is kept by the driver and not by its readers, for the reason the
+keyboard keeps the modifier state: a sum is only correct if one thing performs
+it, and a reader that missed an event would not lose one movement but be
+displaced by it permanently. The bounds are told to the driver by whoever knows
+the display, a mouse having no idea what it is pointing at.
+
+The pointer keeps the pixels beneath it, there being one surface and no back
+buffer until sub-task 6.6, and `KernelWriteString` conceals it around every
+console write — the same fan-out point that became the only routine permitted to
+name an output device in 6.4, used again for the same kind of reason. The
+concealment is a **counted pair** because a panic raised from within a write
+nests inside it. All of this disappears in 6.6, and what survives is the shape
+and the position; whether the division was drawn in the right place is a question
+that sub-task answers rather than one argued here. See
+[`../devices/MOUSE.md`](../devices/MOUSE.md).
+
 **The testing arrangement**, which is not a phase and governs every one of them:
 there is no test harness and there will be none before Phase 7, so the kernel
 asserts its own properties at boot, in the order the subsystems are initialised.
@@ -311,7 +351,7 @@ Section 3.6.12 (framebuffer information tag); VESA BIOS Extensions 3.0.
 - [x] 6.2 Request a linear framebuffer by the Multiboot2 framebuffer tag and map it into kernel space. *(Designed in `docs/design/GRAPHICS.md`. The mode is the boot loader's to choose and GRUB ignores what it is asked for, so the kernel accepts whatever it is handed; the pages are given the write-combining memory type through entry 4 of `IA32_PAT`.)*
 - [x] 6.3 Implement 2D primitives: pixel, line, rectangle, blit and clipping. *(Upon a surface rather than upon the framebuffer, so that they may be asserted in memory upon a machine with no display. Clipping is treated as the memory-safety boundary it is; the line is clipped per pixel so that clipping does not move it. Designed in `docs/design/GRAPHICS.md`, Sections 11 to 17.)*
 - [x] 6.4 Implement a bitmap font renderer, and a graphical console above it that the diagnostic path may write to. *(The face is ninety-five glyphs of eight by eight, drawn for this project rather than obtained. The console replays what was written before the framebuffer could be mapped, scrolls by blitting the surface upon itself, and gives up the screen to the drawing figures when the command line asks for them. Measured afterwards at 15.2% of the whole boot and reduced to 4.5%; and given fault screens, one for each severe fault rather than one for all of them. Designed in `docs/design/GRAPHICS.md`, Sections 18 to 25.)*
-- [ ] 6.5 Implement a PS/2 mouse driver upon the second device port of the 8042, and a cursor.
+- [x] 6.5 Implement a PS/2 mouse driver upon the second device port of the 8042, and a cursor. *(The 8042 became a module of its own first: its configuration byte governs both ports and is written whole, so two drivers keeping their own idea of it would each undo the other's. The decoder frames the stream upon the bit that is set in every packet, extends the movement as the nine bits it is, and inverts the vertical sense once, where the device is known. The pointer keeps the pixels beneath it, there being no back buffer until 6.6. Designed in `docs/devices/MOUSE.md` and `docs/design/GRAPHICS.md`, Section 26.)*
 - [ ] 6.6 Implement a compositing surface abstraction and double buffering.
 - [ ] 6.7 Implement the `SYSCALL` entry path, the system-call dispatch table and argument validation.
 - [ ] 6.8 Implement the ELF64 loader for statically linked executables.
@@ -527,6 +567,7 @@ copies of an argument do not agree with each other for long.
 
 | Date | Phase | Change | Commit | Design |
 | ---- | ----- | ------ | ------ | ------ |
+| 2026-09-04 | Phase 6 | Sub-task 6.5: the PS/2 mouse and the pointer. The 8042 was given an owner of its own before either device was driven, its configuration byte governing both ports and being written whole. The decoder frames upon the bit set in every packet — a driver that has lost the framing does not stop working, it reports plausible nonsense for ever — extends the movement as nine bits rather than eight, and inverts the vertical sense at the one place that knows the device disagrees with the display. The pointer keeps the pixels beneath it and is concealed by `KernelWriteString`, there being one surface until 6.6. | `PENDING` | [`../devices/MOUSE.md`](../devices/MOUSE.md); [`../design/GRAPHICS.md`](../design/GRAPHICS.md), Section 26 |
 | 2026-09-04 | Phase 6 | Exceptions given a disposition, at the project owner's report that faults which threaten no more than one program were halting the machine. Resume, terminate the program, or fatal to the kernel, decided by the vector and the privilege level together; only the last draws a fault screen. The screens were narrowed from eleven to ten, re-titled as kernel faults, and given two assertions that no screen may exist for a fault that can never be the kernel's. | `0a21e34` | [`../design/INTERRUPTS.md`](../design/INTERRUPTS.md), Section 8.1; [`../design/GRAPHICS.md`](../design/GRAPHICS.md), Sections 24 and 25 |
 | 2026-09-04 | Phase 6 | Sub-task 6.4 continued: the console made fast, and given fault screens. Measurement by `RDTSC` — the interval timer being useless, seventeen ticks elapsing in the whole boot — put the console at 15.2% of it; a word-wide pixel path, a pattern block that clips a glyph once instead of sixty-four times, and a cell drawn in one pass rather than two bring it to 4.5%. The fault screens are one for each severe fault, each with its own colour, account and evidence, and the self-test requires that no two are alike. | `a75a965` | [`../design/GRAPHICS.md`](../design/GRAPHICS.md), Sections 23 to 25 |
 | 2026-09-04 | Phase 6 | Sub-task 6.4: the bitmap font and the graphical console, which end the blank screen sub-task 6.2 left. Ninety-five glyphs drawn for this project, not obtained. The console replays what was written before the framebuffer could be mapped, scrolls by blitting the surface upon itself, and stands down when the command line asks for the drawing figures. `KernelWriteString` becomes the only routine permitted to name an output device. | `5a755c9` | [`../design/GRAPHICS.md`](../design/GRAPHICS.md), Sections 18 to 22 |

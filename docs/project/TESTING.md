@@ -880,10 +880,85 @@ level 3 has to be stated before the assertion has any force.
 Restore the files afterwards. Each run must end `Fault disposition and screen
 self-test FAILED.`
 
-## 20. Test record
+## 21. Verification of the mouse and the pointer
+
+Neither self-test needs a mouse, and that is what makes them run at every boot
+upon every machine.
+
+**The decoder is driven directly.** `MouseProcessByte` is exposed for the same
+reason `KeyboardProcessScancode` is: the decoding of a movement packet is not a
+property of the 8042, and a byte arriving by any route decodes identically. So
+`KernelVerifyMouse` composes packets — of whichever length the device negotiated
+— and asserts the nine-bit sign extension, the inversion of the vertical sense,
+the confinement of the position at all four edges, the naming of button
+transitions, the discarding of an overflowed movement, the refusal and counting
+of a byte that cannot begin a packet, the recovery of the stream afterwards, the
+abandonment of a partial packet by a flush, and the behaviour of a full buffer.
+
+**The pointer is asserted upon a surface composed in memory**, whose pitch
+exceeds its width and whose padding holds a sentinel. That is what permits the
+assertion that a pointer at the edge writes nothing outside the surface, which a
+framebuffer could not be asked. It also asserts what a lazier test would omit:
+that the **transparent** pixels of the shape still hold the background, without
+which a pointer drawn as a solid rectangle would pass.
+
+Every assertion and the silent failure it catches is tabulated in
+[`../devices/MOUSE.md`](../devices/MOUSE.md), Sections 8.1 and 8.2.
+
+### 21.1 What is skipped, and why that is not a gap
+
+The assertions that need a device — that one answered, that IR12 was claimed and
+unmasked, that the controller agrees the second port is usable — are made only
+where `MouseIsPresent`. A machine may genuinely have no mouse, and the driver is
+required to discover that **without blocking**; reaching the skip at all is
+evidence that it did, every wait upon the controller being bounded.
+
+### 21.2 The negative tests
+
+Apply each, run `make verify`, then revert it.
+
+```sh
+# The device's vertical sign forwarded rather than inverted.
+sed -i 's|movement_y = -MouseExtendMovement|movement_y = MouseExtendMovement|' \
+    drivers/mouse/mouse.c
+
+# The magnitude sign-extended as eight bits rather than nine.
+sed -i 's|return (int32_t)magnitude - (negative ? 256 : 0);|(void)negative;\n    return (int32_t)(int8_t)magnitude;|' \
+    drivers/mouse/mouse.c
+```
+
+For the pointer, change `CursorRestoreUnder` in `graphics/cursor.c` to put the
+pixels back at `CursorPositionX`/`CursorPositionY` rather than at
+`CursorSavedX`/`CursorSavedY`; or move the `CursorSaveUnder` call in
+`CursorDrawAt` from before the drawing loop to after it.
+
+Each run must end `Mouse self-test FAILED.` or `Pointer self-test FAILED.`
+
+### 21.3 A caveat for headless capture
+
+A keystroke injected through the QEMU monitor **before the controller has been
+initialised** makes `Ps2Initialise` fail, and the machine then reports no
+controller, no keyboard and no mouse. The byte lands in the output buffer after
+the single drain at the start of the sequence and is read as the answer to a
+command that follows.
+
+It is an artefact of injecting into an emulated controller whose ports are
+disabled — a real machine does not scan a disabled port — and it is recorded here
+because it is an easy way to spend an hour diagnosing a driver that is working.
+When capturing a screenshot, either let GRUB's timeout elapse or wait for the
+boot to finish before drawing conclusions from the report.
+
+## 22. Test record
 
 | Date | Test | Result |
 | ---- | ---- | ------ |
+| 2026-09-04 | `make verify` — **sub-task 6.5, the mouse decoder** | Passed. The packet arithmetic is asserted without a mouse and without anybody moving one: a plain packet yields its movement, position and buttons; the vertical sense is inverted at the one place that knows the device meant otherwise; magnitude `0xFF` with the sign bit is −1 and magnitude `0x00` with the sign bit is **−256**, which is the case an eight-bit sign extension turns into zero; the position stops at each of the four edges; a button transition is named once and not twice; an overflowed movement is discarded while its buttons are kept; a byte lacking the always-set bit is refused, counted, and the stream recovers with the next packet; a flush abandons a partial packet; and a full buffer discards the newest and counts exactly what it discarded. |
+| 2026-09-04 | `make verify` — the mouse decoder, **the negative tests** | Passed, both. Forwarding the device's vertical sign gave `A movement was decoded with the wrong sense or magnitude.` Sign-extending the magnitude as eight bits gave `A movement of minus 256 was decoded as zero.` — the failure being invisible for every movement but the largest a hand can make in one report period. Both edits reverted. |
+| 2026-09-04 | `make verify` — **the pointer**, upon a surface composed in memory | Passed. The shape is well formed — no interior pixel that is not opaque, which is how the two masks would drift apart with no symptom — and the hot spot is part of it. The opaque pixels hold their colours **and the transparent ones still hold the background**, so a pointer drawn as a solid rectangle fails. Showing twice draws once; a move restores the old position; a pointer at the edge draws what fits and writes nothing into the row padding; a concealment nests, so one reveal of two does nothing; a move made while concealed takes effect on the reveal; and draws equal restores once it is hidden. |
+| 2026-09-04 | `make verify` — the pointer, **the negative tests** | Passed, both, and the first of them found a real weakness in the code rather than in the test. Restoring the saved pixels at the pointer's position rather than where they came from **passed** at first: `CursorMoveTo` repaired the old location before advancing the position, so the two agreed at every restore and the damage could not show. The order was changed — position first, repair second — which makes the saved coordinates load-bearing; the same damage then gave `The pointer left a trail where it had been.` and three further failures. Saving what is beneath the pointer after drawing it rather than before gave `Hiding the pointer did not restore what was beneath it.` and three further failures. |
+| 2026-09-04 | QEMU screendump 1280 by 800 — **the pointer, a person's judgement** | Passed. The arrow is white within a black outline and is legible over the boot log, which is light text upon black: neither colour alone would have been. Its tip is the position it reports. Moved twice through the monitor, it left no trail at either previous position, which is the property the save-under exists for and the one a screenshot judges better than an assertion — an assertion sees a surface in memory, and a person sees the framebuffer. |
+| 2026-09-04 | VirtualBox 640 by 480, headless, screenshot | Passed. The interrupt controller reports `IR1 (vector 33): PS/2 keyboard, unmasked` and `IR12 (vector 44): PS/2 mouse, unmasked`, three lines claimed and a mask of `0xEFF8` — the cascade upon IR2 included, IR12 being a line of the slave. The pointer is drawn over the boot log at the centre of the display. This board also has a legacy IDE controller and the disk driver finds it: `ATA: 3 devices, poll...`, `Primary master: ATAPI packet device`. QEMU q35 presents an AHCI controller instead and the same driver finds nothing, the legacy ports not being where an AHCI controller answers. |
+| 2026-09-04 | `make verify` — the 8042 given one owner | Passed, with the keyboard's own self-test unchanged: the same decoder assertions, the same modifiers, the same latch behaviour, from a driver that no longer touches the controller. `8042 controller: present, first port usable, second port usable` and `configuration 0x40, translation on, commands 11, timeouts 0, bytes drained 0`. The interrupt controller reports IR1 and IR12 both claimed and unmasked, which is the arrangement the shared configuration byte had to be got right for. |
 | 2026-09-04 | `make verify` — **the disposition of every exception** | Passed, and it corrects a real fault rather than adding a feature. Every exception was treated as fatal to the machine, so a divide by zero — the plainest mistake a program can make — would have halted the system and drawn a page saying so. The classification now depends upon the vector **and the privilege level together**: the aborts, the non-maskable interrupt and the two descriptor-table faults are fatal whatever raised them, and everything else terminates the program at privilege level 3 and is fatal only at privilege level 0. All of it is asserted at both privilege levels without raising an exception, `ExceptionDispositionOf` being a pure function — which is the only way the privilege level 3 half can be tested before any privilege level 3 code exists. |
 | 2026-09-04 | `make verify` — the disposition, **the negative test** | Passed. With the privilege-level test removed, so that every fault fell through to fatal as it did before this change, the run named all seven program faults in turn: `a program's own fault would halt the machine rather than the program`, at vectors `0x0`, `0x5`, `0x6`, `0xC`, `0xD`, `0xE` and `0x11`. Vector 0 is the divide by zero the fault was reported with. |
 | 2026-09-04 | `make verify` — the fault screen table, narrowed | Passed. The screens are now ten and are reserved for what the kernel cannot survive; `#DE` and `#AC` no longer have one. Two new assertions guard that: no screen may exist for a fault that is never fatal, and none for a fault the processor raises **only** outside the kernel. The second was needed because the first does not catch `#AC` — it is nominally fatal from a kernel selector, and only the architectural fact that it requires privilege level 3, `CR0.AM` and `RFLAGS.AC` together gives the rule any force. Confirmed by restoring the `#AC` entry: `a screen exists for a fault the processor raises only outside the kernel, at vector 0x11`. |

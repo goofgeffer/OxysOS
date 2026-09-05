@@ -44,6 +44,7 @@
 #include <oxys/graphics.h>
 #include <oxys/font.h>
 #include <oxys/console.h>
+#include <oxys/cursor.h>
 #include <oxys/paging.h>
 #include <oxys/exceptions.h>
 #include <oxys/cpu.h>
@@ -413,6 +414,16 @@ static bool FaultScreenBegin(const FaultScreenEntry *entry)
      * finds.
      */
     ConsoleSuspend();
+
+    /*
+     * The pointer of sub-task 6.5 goes with it, and for a related reason. It is
+     * not that the pointer would spoil the page — the page is about to fill the
+     * screen and would cover it — but that the pointer would still believe it
+     * holds the pixels beneath it. Nothing restores them here, the machine having
+     * stopped; taking it off now means the last thing drawn upon the display is
+     * the fault screen and nothing else.
+     */
+    CursorHide();
 
     FaultPaper = FramebufferEncode(16U, 16U, 24U);
     FaultInk = FramebufferEncode(230U, 230U, 235U);

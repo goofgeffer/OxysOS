@@ -413,7 +413,11 @@ Sections relied upon:
 - **The keyboard controller**: the 8042 is decoded at port `0x60` for data and
   `0x64` for the status register when read and the command register when written;
   status bit 0 is set while the output buffer holds a byte for the processor and
-  bit 1 while the input buffer still holds one for the controller.
+  bit 1 while the input buffer still holds one for the controller. Status bit 5
+  is set when the byte standing in the output buffer arrived from the second
+  device port rather than the first.
+- **The auxiliary device**: the mouse is attached to the controller's second
+  device port and raises IR12, a line of the slave controller.
 - **Scan code set 1**: a make code is the key's own code and the corresponding
   break code is that code with bit 7 set; a code prefixed by `0xE0` denotes one
   of the keys added after the original 84-key layout.
@@ -428,9 +432,11 @@ Sections relied upon:
   `0x01F0` with its control register at `0x03F6` and raises IRQ14; the second
   channel answers at `0x0170` and `0x0376` upon IRQ15.
 
-Used by: `drivers/pic/pic.c`, `drivers/pit/pit.c`, `drivers/keyboard/keyboard.c`,
+Used by: `drivers/pic/pic.c`, `drivers/pit/pit.c`, `drivers/ps2/ps2.c`,
+`drivers/keyboard/keyboard.c`, `drivers/mouse/mouse.c`,
 `drivers/serial/serial.c`, `kernel/include/oxys/pic.h`,
-`kernel/include/oxys/pit.h`, `kernel/include/oxys/keyboard.h`,
+`kernel/include/oxys/pit.h`, `kernel/include/oxys/ps2.h`,
+`kernel/include/oxys/keyboard.h`, `kernel/include/oxys/mouse.h`,
 `drivers/ata/ata.c`, `kernel/include/oxys/ata.h`, `kernel/kernel.c`.
 
 ### The 8042 controller and PS/2 device command sets
@@ -443,20 +449,33 @@ Controller commands, written to port `0x64`:
 
 - **0x20**, read the controller configuration byte; **0x60**, write it. The byte
   carries the first port's interrupt enable in bit 0, the second port's in bit 1,
-  the first port's clock disable in bit 4, and the translation of scan code set 2
-  into set 1 in bit 6.
-- **0xAD** and **0xAE**, disable and enable the first device port; **0xA7**,
-  disable the second.
+  the first port's clock disable in bit 4, the second port's in bit 5, and the
+  translation of scan code set 2 into set 1 in bit 6.
+- **0xAD** and **0xAE**, disable and enable the first device port; **0xA7** and
+  **0xA8**, disable and enable the second.
 - **0xAA**, the controller self-test, answered by `0x55` upon success. It resets
   the controller upon some implementations, discarding the configuration byte,
   which must therefore be written again afterwards.
-- **0xAB**, test the first device port, answered by `0x00` upon success.
+- **0xAB**, test the first device port, answered by `0x00` upon success;
+  **0xA9**, test the second, answered the same way.
+- **0xD4**, direct the byte written next to the data port to the second device
+  port rather than the first.
+
+There is no command reporting how many device ports the controller has. The
+second port's existence is established by enabling it and reading the
+configuration byte back: a controller that has one has started its clock, so
+bit 5 is found clear, while a controller with one port ignores the command and
+the bit stands as it was.
 
 Device commands, written to port `0x60` and forwarded by the controller:
 
 - **0xFF**, reset, answered by `0xFA` and then by `0xAA` where the device's own
-  self-test passed.
-- **0xF4**, enable scanning.
+  self-test passed, and then, upon an auxiliary device, by its identifier.
+- **0xF4** and **0xF5**, enable and disable scanning or data reporting.
+- **0xF6**, restore the default parameters.
+- **0xF3**, set the sample rate, taking the rate as a second byte; **0xF2**, read
+  the device identifier; **0xE8**, set the resolution, taking it as a second
+  byte; **0xE6**, set scaling to one to one.
 - The answers **0xFA**, acknowledged, and **0xFE**, send the command again.
 
 Note that the two command sets use overlapping numbers for unrelated purposes:
@@ -464,7 +483,39 @@ Note that the two command sets use overlapping numbers for unrelated purposes:
 own self-test passed. The port to which a byte is written is what distinguishes
 them.
 
-Used by: `drivers/keyboard/keyboard.c`, `kernel/include/oxys/keyboard.h`.
+Used by: `drivers/ps2/ps2.c`, `kernel/include/oxys/ps2.h`,
+`drivers/keyboard/keyboard.c`, `kernel/include/oxys/keyboard.h`,
+`drivers/mouse/mouse.c`, `kernel/include/oxys/mouse.h`.
+
+### The PS/2 auxiliary device movement packet
+The format in which a mouse upon the controller's second port reports. Recorded
+in the IBM Personal System/2 hardware interface technical reference and
+reproduced consistently since.
+
+A packet is three bytes:
+
+- **Byte 0**: bits 0, 1 and 2 the left, right and middle buttons, set while held;
+  bit 3 **always set**; bits 4 and 5 the signs of the horizontal and vertical
+  movements; bits 6 and 7 their overflow indications.
+- **Byte 1**: the magnitude of the horizontal movement.
+- **Byte 2**: the magnitude of the vertical movement.
+
+Each movement is therefore a **nine-bit** two's complement quantity, its low
+eight bits in its own byte and its sign in byte 0: a magnitude of `0xFF` with the
+sign bit set is −1, and a magnitude of `0x00` with the sign bit set is −256.
+Vertical movement is positive **upward**, which is the opposite of a display's
+sense. An overflow indication means the magnitude sent is the low bits of a
+larger movement and is not the movement.
+
+**The wheel extension.** A device given the sample rates 200, 100 and 80 in
+succession and then asked for its identifier answers `0x03` if it has a wheel,
+and sends four-byte packets thereafter; the fourth byte carries the wheel
+movement in its low four bits as a two's complement quantity. A device that does
+not recognise the sequence accepts three sample rates, continues to report itself
+as identifier `0x00`, and continues to send three-byte packets. There is no
+command that asks the question directly.
+
+Used by: `drivers/mouse/mouse.c`, `kernel/include/oxys/mouse.h`.
 
 ### IBM Video Graphics Array technical reference
 The colour text mode 3, presenting 80 columns by 25 rows, whose frame buffer

@@ -4,12 +4,14 @@
  *          state established by the boot loader, initialises in dependency order
  *          every subsystem the kernel presently has, runs the boot-time
  *          self-tests declared in <oxys/verify.h>, mounts a volume the machine
- *          carries at the root, and then either enters the keyboard echo loop,
- *          where a keyboard is present, or halts the processor where none is.
+ *          carries at the root, and then either enters the echo loop, where a
+ *          keyboard or a mouse is present, or halts the processor where neither
+ *          is.
  * Key functions: KernelMain, KernelPanic, KernelHalt, KernelWriteString,
  *          KernelWriteHexadecimal, KernelWriteDecimal,
- *          KernelCommandLineHasOption, KernelMountRootVolume, KernelEchoLoop,
- *          KernelEchoBackspace, KernelSerialCursorToColumn.
+ *          KernelCommandLineHasOption, KernelMountRootVolume,
+ *          KernelAttachPointer, KernelEchoLoop, KernelEchoBackspace,
+ *          KernelSerialCursorToColumn.
  * References:
  *   - Multiboot2 Specification 2.0, Section 3.3 ("I386 machine state"): EAX
  *     contains 0x36D76289 and EBX the physical address of the Multiboot2
@@ -63,11 +65,14 @@
 #include <oxys/cpu.h>
 #include <oxys/pic.h>
 #include <oxys/pit.h>
+#include <oxys/ps2.h>
 #include <oxys/keyboard.h>
+#include <oxys/mouse.h>
 #include <oxys/vga.h>
 #include <oxys/framebuffer.h>
 #include <oxys/graphics.h>
 #include <oxys/console.h>
+#include <oxys/cursor.h>
 #include <oxys/faultscreen.h>
 #include <oxys/serial.h>
 #include <oxys/pci.h>
@@ -188,9 +193,28 @@ void KernelWriteString(const char *string)
      * upon, and replays it then, so the screen shows the boot from its first
      * line rather than from the middle.
      */
+    /*
+     * The pointer is taken off the surface for the duration of the console's
+     * write and put back afterwards.
+     *
+     * It is done here because this is already the one routine permitted to name
+     * an output device, so it is the one place where every write to the console
+     * passes — and the pointer's record of the pixels beneath it is correct only
+     * while nothing else draws. Without this, a line printed while the pointer
+     * is shown leaves the pointer's next movement restoring stale pixels over the
+     * text, or the text over the pointer, and neither is a state any assertion
+     * could detect: every pixel involved holds a value something meant to write.
+     *
+     * The pair nests, so a panic raised from within a write does not reveal the
+     * pointer in the middle of the write that concealed it.
+     */
+    CursorConceal();
+
     VgaWriteString(string);
     ConsoleWriteString(string);
     SerialWriteString(string);
+
+    CursorReveal();
 }
 
 void KernelPanic(const char *message)
@@ -505,6 +529,53 @@ static void KernelEchoBackspace(void)
  * placed between them, a keystroke arriving in the interval would be serviced
  * and the processor would then halt with nothing left to wake it.
  */
+/*
+ * The surface the pointer is drawn upon.
+ *
+ * It is a file-scope object and not a local because the pointer keeps the
+ * address of it for as long as it is shown; a surface composed upon the stack of
+ * the routine that attached it would be a dangling pointer the moment that
+ * routine returned, and would go on being drawn through.
+ */
+static GraphicsSurface KernelPointerSurface;
+
+/*
+ * Gives the pointer a display, and tells the mouse how large that display is.
+ *
+ * Neither is done by either driver, and for the same reason in both directions.
+ * The mouse has no idea what it is pointing at, so the bounds are told to it by
+ * whoever knows the display; the pointer draws in pixel values, so the encoding
+ * of black and white is supplied by whoever knows the framebuffer. This routine
+ * is where those two pieces of knowledge meet, and it is in the entry point
+ * because the entry point is what establishes both.
+ *
+ * A machine the boot loader left in a text mode has no surface to draw upon.
+ * That is not a failure: the mouse still reports, its events are still decoded,
+ * and nothing is drawn.
+ */
+static void KernelAttachPointer(void)
+{
+    if (!GraphicsSurfaceFromFramebuffer(&KernelPointerSurface))
+    {
+        return;
+    }
+
+    MouseSetBounds((int32_t)KernelPointerSurface.width, (int32_t)KernelPointerSurface.height);
+    MouseSetPosition((int32_t)(KernelPointerSurface.width / 2U),
+                     (int32_t)(KernelPointerSurface.height / 2U));
+
+    /*
+     * Black within white. The two are chosen so that the pointer is visible upon
+     * whatever it stands over: a single colour disappears against itself, and the
+     * console draws light text upon a dark ground, which either alone would be
+     * lost in.
+     */
+    (void)CursorInitialise(&KernelPointerSurface, FramebufferEncode(0U, 0U, 0U),
+                           FramebufferEncode(255U, 255U, 255U));
+
+    CursorMoveTo(MouseX(), MouseY());
+}
+
 static _Noreturn void KernelEchoLoop(void)
 {
     VgaSetColour(VGA_COLOUR_LIGHT_CYAN, VGA_COLOUR_BLACK);
@@ -523,11 +594,52 @@ static _Noreturn void KernelEchoLoop(void)
     VgaSetEraseLimit();
     ConsoleSetEraseLimit();
 
+    /*
+     * The pointer becomes visible here and not at its initialisation. Everything
+     * above this line is the boot log being printed, and each of those lines
+     * would conceal and reveal the pointer again — several hundred times, each
+     * time reading back the pixels beneath it from write-combining memory, for a
+     * pointer nobody is yet moving.
+     */
+    if (MouseIsPresent())
+    {
+        CursorShow();
+    }
+
     for (;;)
     {
         char character;
 
         __asm__ __volatile__("sti; hlt");
+
+        /*
+         * The mouse's events are drained and the pointer moved once, not once per
+         * event. A hundred packets arrive each second while the operator is
+         * moving the mouse and the intermediate positions were never displayed;
+         * drawing them would be paying for the erasing and redrawing of the
+         * pointer a hundred times to show a path the eye cannot follow anyway.
+         *
+         * Where the position has not changed CursorMoveTo does nothing, which is
+         * what makes it safe to call upon every packet — including the button
+         * packets a stationary mouse continues to send.
+         */
+        {
+            MouseEvent movement;
+
+            while (MouseReadEvent(&movement))
+            {
+                /*
+                 * The event is read for its side effect of emptying the buffer.
+                 * The position it carries is the position the driver holds, and
+                 * that is read below rather than from the last event, so that a
+                 * buffer which overflowed still leaves the pointer where the
+                 * mouse actually is.
+                 */
+                (void)movement;
+            }
+
+            CursorMoveTo(MouseX(), MouseY());
+        }
 
         /*
          * The serial line is a source of characters equally, now that its
@@ -771,6 +883,17 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
     PitReport();
 
     /*
+     * The 8042 controller, before either of the devices upon it.
+     *
+     * It is one device shared by two drivers, and its configuration byte governs
+     * both ports and is written whole. Establishing it here, once, is what allows
+     * the keyboard and the mouse to be drivers for their own devices rather than
+     * two parties each reconfiguring a controller the other is using.
+     */
+    (void)Ps2Initialise();
+    Ps2Report();
+
+    /*
      * The keyboard is the last device of Phase 3. A machine without one is not
      * in error, so the return value is recorded rather than acted upon; the
      * report and the self-test both accommodate its absence.
@@ -778,6 +901,24 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
     (void)KeyboardInitialise();
     KernelVerifyKeyboard();
     KeyboardReport();
+
+    /*
+     * Sub-task 6.5: the mouse upon the controller's second port, and the pointer
+     * drawn from it.
+     *
+     * Both are established here, among the devices, rather than with the drawing
+     * of Phase 6 above. The reason is the interrupt flag: this is the last point
+     * at which it is still clear, and a decoder self-test that composed packets
+     * while a real mouse was delivering its own would be asserting upon a stream
+     * it did not compose. The self-tests therefore run before anything sets it,
+     * and the pointer is attached to the display afterwards.
+     */
+    (void)MouseInitialise();
+    KernelVerifyMouse();
+    KernelVerifyCursor();
+    KernelAttachPointer();
+    MouseReport();
+    CursorReport();
 
     /*
      * The self-test of sub-task 6.1 runs here rather than beside the
@@ -912,7 +1053,7 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
      * demonstrates the interrupt path end to end. Without one there is nothing
      * further to do.
      */
-    if (KeyboardIsPresent())
+    if (KeyboardIsPresent() || MouseIsPresent())
     {
         KernelEchoLoop();
     }

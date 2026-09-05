@@ -14,8 +14,9 @@ interface and never upon a driver's location.
 The framebuffer is deliberately **not** here. It is in [`../graphics/`](../graphics/),
 because nothing programs it: the boot loader sets the mode and hands over an
 address, and everything above that is arithmetic upon memory rather than a
-conversation with hardware. The mouse of sub-task 6.5 will be here, being a real
-PS/2 device sharing the keyboard's controller.
+conversation with hardware. The pointer drawn for the mouse is there for the same
+reason: the mouse is a device and is here, while its picture is arithmetic upon
+memory and is not.
 
 ## Contents
 
@@ -25,7 +26,9 @@ PS/2 device sharing the keyboard's controller.
 | `serial/serial.c` | The 16550-compatible UART at COM1, interrupt-driven. | `<oxys/serial.h>` | 1, 4.1 |
 | `pic/pic.c` | The pair of cascaded 8259A interrupt controllers. | `<oxys/pic.h>` | 3 |
 | `pit/pit.c` | Counter 0 of the 8253 interval timer, the system tick. | `<oxys/pit.h>` | 3 |
-| `keyboard/keyboard.c` | The 8042 controller and the PS/2 keyboard upon its first port. | `<oxys/keyboard.h>` | 3 |
+| `ps2/ps2.c` | The 8042 keyboard controller itself, and the two device ports it presents. | `<oxys/ps2.h>` | 3, 6.5 |
+| `keyboard/keyboard.c` | The PS/2 keyboard upon the controller's first port. | `<oxys/keyboard.h>` | 3 |
+| `mouse/mouse.c` | The PS/2 mouse upon the controller's second port. | `<oxys/mouse.h>` | 6.5 |
 | `pci/pci.c` | The PCI bus: configuration-space enumeration by mechanism one. | `<oxys/pci.h>` | 4.3 |
 | `ata/ata.c` | The ATA disk, in programmed input/output mode. | `<oxys/ata.h>` | 4.4 |
 | `block/block.c` | The generic block-device layer above the disk drivers. | `<oxys/block.h>` | 4.5 |
@@ -35,7 +38,6 @@ PS/2 device sharing the keyboard's controller.
 
 | Path | Device | Phase, sub-task |
 | ---- | ------ | --------------- |
-| `mouse/` | The PS/2 mouse, upon the second port of the 8042 controller the keyboard driver already leaves alone. | 6.5 |
 | `net/` | The Ethernet controller. | 11.1 |
 
 ## The drivers presently implemented
@@ -212,24 +214,72 @@ any interest in the shape of the output waveform. The reasoning, the divisor
 arithmetic and the accuracy actually obtained are recorded in
 [`../docs/devices/TIME.md`](../docs/devices/TIME.md).
 
+### `ps2/` — the 8042 controller
+
+Not a peripheral but the controller two of them are reached through. It runs the
+controller's self-test, discovers and tests each of the two device ports, owns
+the single configuration byte governing both, and performs the bounded exchange
+of bytes with whatever is attached.
+
+It exists as a module of its own from sub-task 6.5, and the reason is that one
+byte. The configuration byte is read, modified and written **whole**, so two
+drivers each keeping their own idea of it would each write back the other's bits
+as they last saw them — the mouse driver enabling its own interrupt would restore
+the translation bit to whatever it was when the mouse driver first looked, and
+the keyboard would then deliver scan code set 2 while decoding it as set 1. The
+whole argument is in [`../docs/devices/MOUSE.md`](../docs/devices/MOUSE.md),
+Section 2.
+
+The second port's existence is discovered rather than assumed: no register
+reports how many ports there are, so the port is enabled and the configuration
+byte read back, a controller that has one having started its clock.
+
+Every wait upon the controller is bounded, in accordance with convention 4 below.
+A machine with no PS/2 controller decodes its ports as a constant, and an
+unbounded wait upon a bit of that constant would hang the kernel during
+initialisation.
+
 ### `keyboard/` — the PS/2 keyboard
 
-Initialises the 8042 controller and the keyboard upon its first port, decodes
-scan code set 1 into key events carrying the character and the modifier state,
-and delivers them through a circular buffer of 128 events.
+Initialises the keyboard upon the controller's first port, decodes scan code
+set 1 into key events carrying the character and the modifier state, and delivers
+them through a circular buffer of 128 events. It does not configure the
+controller and refuses to run rather than doing so: a keyboard driver that reset
+the controller would silence a mouse already reporting.
 
 Two points are easily got wrong and are recorded in
 [`../docs/devices/KEYBOARD.md`](../docs/devices/KEYBOARD.md). The keyboard and the controller are
 different devices reached through the same pair of ports, and they use
 overlapping command numbers for unrelated purposes. And the keyboard does not
 send set 1: it powers up in set 2, and set 1 is what the controller presents on
-its behalf when the translation bit of the configuration byte is set, which this
-driver establishes rather than assumes.
+its behalf when the translation bit of the configuration byte is set — which the
+controller module establishes rather than assumes, it being the controller that
+translates.
 
-Every wait upon the controller is bounded, in accordance with convention 4 below.
-A machine with no PS/2 controller decodes its ports as a constant, and an
-unbounded wait upon a bit of that constant would hang the kernel during
-initialisation.
+Its handler reads one byte and asks which port that byte came from, both devices
+delivering through the controller's single output buffer. A byte from the second
+port is handed to the mouse rather than discarded: the read cannot be undone, and
+a discarded byte is a third of a movement packet.
+
+### `mouse/` — the PS/2 mouse
+
+Initialises the mouse upon the controller's second port, interrogates it for a
+wheel, decodes and frames its movement packets, accumulates the pointer position
+from them, and delivers events through a circular buffer of 64.
+
+Three properties of the packet each guard a failure that produces working, wrong
+behaviour rather than an error, and all three are recorded in
+[`../docs/devices/MOUSE.md`](../docs/devices/MOUSE.md). The stream is framed upon
+the bit set in every packet's first byte, a driver that has lost its place
+reporting plausible nonsense indefinitely rather than stopping. Each movement is
+a **nine-bit** quantity whose sign lives in another byte, so the obvious
+eight-bit sign extension turns −256 into zero. And the vertical sense is inverted
+once, where the device is known, a mouse measuring upward as positive and a
+display downward.
+
+The position is kept here and not by the reader, because a sum is only correct if
+exactly one thing performs it; the bounds it is confined to are supplied by
+whoever knows the display, a mouse having no idea what it is pointing at.
 
 ## Specifications implemented
 
@@ -239,7 +289,8 @@ initialisation.
 | National Semiconductor PC16550D datasheet | The register map at offsets 0 to 7; the divisor latch access bit, being bit 7 of the line control register; the transmitter holding register empty flag, being bit 5 of the line status register; the loopback bit, being bit 4 of the modem control register. |
 | IBM Personal Computer AT technical reference | The COM1 base address `0x03F8`, and the divisor of one yielding 115200 baud. The interrupt controllers at ports `0x20`/`0x21` and `0xA0`/`0xA1`, the slave's output attached to the master's IR2 input, IR0 being the interval timer and IR1 the keyboard. |
 | Intel 8259A datasheet, sections "INITIALIZATION COMMAND WORDS (ICWS)" and "OPERATION COMMAND WORDS (OCWS)" | The four-word initialisation sequence and its side effects; OCW1 the mask register; OCW2 the non-specific end-of-interrupt; OCW3 the selection of the in-service and request registers for reading. |
-| 8042 controller and PS/2 device command sets | The controller commands 0x20 and 0x60 reading and writing the configuration byte, 0xAD/0xAE and 0xA7 enabling and disabling the device ports, 0xAA the controller self-test answered by 0x55, and 0xAB the first port's test answered by 0x00; the configuration byte's interrupt-enable, clock-disable and translation bits; the device commands 0xFF reset and 0xF4 enable scanning, and the answers 0xFA acknowledge and 0xFE resend. |
+| 8042 controller and PS/2 device command sets | The controller commands 0x20 and 0x60 reading and writing the configuration byte, 0xAD/0xAE and 0xA7/0xA8 enabling and disabling the two device ports, 0xAA the controller self-test answered by 0x55, 0xAB and 0xA9 the ports' tests answered by 0x00, and 0xD4 directing a byte to the second port; the configuration byte's interrupt-enable, clock-disable and translation bits, and status bit 5 naming the port a byte came from; the device commands 0xFF reset, 0xF4/0xF5 reporting, 0xF6 defaults, 0xF3 sample rate, 0xF2 identifier, 0xE8 resolution and 0xE6 linear scaling, and the answers 0xFA acknowledge and 0xFE resend. |
+| PS/2 auxiliary device movement packet | The three-byte packet, its always-set framing bit, its nine-bit two's complement movements with their signs and overflow indications in the first byte, and its upward vertical sense; the sample-rate sequence 200, 100, 80 that interrogates for a wheel, and the four-byte packet a device answering 0x03 sends thereafter. |
 | Intel 8254 datasheet, sections "Programming the 8254", "Mode 2: Rate Generator" and "Counter Latch Command" | The control word fields; the two-byte transfer of the count, least significant first; the periodic reload of the rate generator and the illegality of a count of one within it; the latching of a running count for reading. |
 | Intel SDM, Volume 1, Section 18.3 | The programmed input/output address space through which both devices are reached. |
 

@@ -110,6 +110,7 @@ C_SOURCES := kernel/kernel.c \
              kernel/test/verify_graphics.c \
              kernel/test/verify_console.c \
              kernel/test/verify_faultscreen.c \
+             kernel/test/verify_mouse.c \
              kernel/test/verify_devices.c \
              kernel/test/verify_storage.c \
              kernel/test/verify_ext2.c \
@@ -132,7 +133,9 @@ C_SOURCES := kernel/kernel.c \
              drivers/serial/serial.c \
              drivers/pic/pic.c \
              drivers/pit/pit.c \
+             drivers/ps2/ps2.c \
              drivers/keyboard/keyboard.c \
+             drivers/mouse/mouse.c \
              drivers/pci/pci.c \
              drivers/ata/ata.c \
              drivers/block/block.c \
@@ -141,7 +144,8 @@ C_SOURCES := kernel/kernel.c \
              graphics/draw.c \
              graphics/font.c \
              graphics/console.c \
-             graphics/faultscreen.c
+             graphics/faultscreen.c \
+             graphics/cursor.c
 
 ASM_SOURCES := boot/boot.asm \
                kernel/cpu/interrupt_stubs.asm \

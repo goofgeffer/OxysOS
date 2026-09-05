@@ -1,7 +1,7 @@
 # `graphics/` — The Display
 
 **Phase**: 6, sub-tasks 6.2 to 6.6. This directory is created by sub-task 6.2 and
-grows through the four that follow it; 6.2, 6.3 and 6.4 are done.
+grows through the four that follow it; 6.2 to 6.5 are done.
 **Detailed design**: [`../docs/design/GRAPHICS.md`](../docs/design/GRAPHICS.md).
 
 ## Purpose
@@ -20,9 +20,13 @@ client protocol, the desktop — stays in Phase 9, after the shell.
 This is not a device driver directory. `drivers/` holds code that programs
 hardware through its registers; the framebuffer is not programmed at all. The
 boot loader sets the mode and hands over an address, and everything here is
-arithmetic upon the memory at that address. The one exception, the mouse of
-sub-task 6.5, is a PS/2 device and will live in `drivers/` beside the keyboard
-that shares its controller.
+arithmetic upon the memory at that address.
+
+The mouse of sub-task 6.5 shows where the line falls. The **device** is in
+`drivers/mouse/`, being a real PS/2 device upon the controller the keyboard
+shares; its **picture** — the shape, the pixels beneath it, the restoring of them
+— is `cursor.c` here, being arithmetic upon memory that would be identical if the
+position came from somewhere else entirely.
 
 ## Contents
 
@@ -32,14 +36,16 @@ that shares its controller.
 | `font.c` | Sub-task 6.4. The bitmap face — ninety-five glyphs of eight by eight covering the printable ASCII range, **drawn for this project rather than obtained**, with a picture comment beside each — and three ways of drawing one: transparent, opaque, and enlarged for a banner. `FontCovers`, `FontGlyph`, `FontGlyphRow`, `FontDrawGlyph`, `FontDrawGlyphOpaque`, `FontDrawGlyphScaled`. |
 | `console.c` | Sub-task 6.4. The graphical console: a grid of character cells upon the framebuffer, the four control characters of ANSI X3.4-1986 as the text-mode driver implements them, a scroll performed by blitting the surface upon itself, and a buffer that replays what was written before the framebuffer could be mapped. `ConsoleInitialise`, `ConsoleIsActive`, `ConsoleWriteCharacter`, `ConsoleWriteString`, `ConsoleSetColour`, `ConsoleColumns`, `ConsoleRows`, `ConsoleColumn`, `ConsoleRow`, `ConsoleSetEraseLimit`, `ConsoleReport`. |
 | `faultscreen.c` | Sub-task 6.4. The full-screen page a fault the kernel cannot survive produces — which faults those are is `ExceptionDispositionOf`'s decision, not this file's, a fault belonging to a program drawing nothing here: a table of screens, one for each fault, each with its own title, colour, account of what the processor is reporting, direction as to what to examine first, and evidence panels chosen for that fault. Runs inside a fault handler, so it allocates nothing, reads no address without asking the paging hierarchy, and draws once. `FaultScreenShowException`, `FaultScreenShowPanic`, `FaultScreenDemonstrate`, `FaultScreenWasDrawn`, `FaultScreenEntryCount`, `FaultScreenEntryAt`. |
+| `cursor.c` | Sub-task 6.5. The pointer: a shape of two bitmaps, drawn for this project, that says of each pixel whether the pointer covers it and, if so, in which of two colours — three states, because an arrow of one colour vanishes against itself. It keeps the pixels beneath it and puts them back as it moves, there being one surface and no back buffer until 6.6, and offers a **counted** conceal and reveal by which anything else may draw. `CursorInitialise`, `CursorIsAvailable`, `CursorShow`, `CursorHide`, `CursorIsVisible`, `CursorMoveTo`, `CursorConceal`, `CursorReveal`, `CursorX`, `CursorY`, `CursorShapeIsOpaque`, `CursorShapeIsInterior`, `CursorDrawCount`, `CursorRestoreCount`, `CursorReport`. |
 | `framebuffer.c` | Sub-task 6.2. Acquires the framebuffer described in the Multiboot2 boot information, gives its pages the write-combining memory type through the page attribute table, maps them into the kernel arena, and describes what was obtained. `FramebufferInitialise`, `FramebufferIsPresent`, `FramebufferIsGraphical`, `FramebufferAddress`, `FramebufferWidth`, `FramebufferHeight`, `FramebufferPitch`, `FramebufferBitsPerPixel`, `FramebufferBytesPerPixel`, `FramebufferByteCount`, `FramebufferFormat`, `FramebufferEncode`, `FramebufferWriteCombining`, `FramebufferReport`. |
 
 The interfaces are declared in
 [`../kernel/include/oxys/framebuffer.h`](../kernel/include/oxys/framebuffer.h),
 [`../kernel/include/oxys/graphics.h`](../kernel/include/oxys/graphics.h),
 [`../kernel/include/oxys/font.h`](../kernel/include/oxys/font.h) and
-[`../kernel/include/oxys/console.h`](../kernel/include/oxys/console.h) and
-[`../kernel/include/oxys/faultscreen.h`](../kernel/include/oxys/faultscreen.h),
+[`../kernel/include/oxys/console.h`](../kernel/include/oxys/console.h),
+[`../kernel/include/oxys/faultscreen.h`](../kernel/include/oxys/faultscreen.h) and
+[`../kernel/include/oxys/cursor.h`](../kernel/include/oxys/cursor.h),
 with the
 rest of the kernel's header corpus, so that a consumer depends upon an interface
 and not upon this directory.
@@ -49,6 +55,12 @@ surface, of which the framebuffer is one; a surface composed in ordinary memory
 is another, and is what the self-tests are conducted upon. That is what lets the
 drawing be asserted pixel by pixel on a machine with no display, and what will
 let sub-task 6.6 hand the same code a back buffer instead.
+
+The pointer is where that stopped being an argument and became a return. It reads
+the surface it draws upon — the first thing outside a self-test to do so, because
+a compositor reads — and it is asserted upon a surface in memory including the
+assertion that a pointer at the edge writes nothing into the row padding, which
+no framebuffer could be asked.
 
 ## Specifications implemented
 

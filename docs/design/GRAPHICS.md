@@ -1293,3 +1293,92 @@ run reported `a fault screen's text holds a character the font cannot draw, at
 vector 0x8, code 0xE2` — the first byte of its UTF-8 encoding.
 
 Every edit was reverted.
+
+---
+
+## 26. The pointer of sub-task 6.5
+
+The device that moves the pointer is documented in
+[`../devices/MOUSE.md`](../devices/MOUSE.md), which also carries the shape, the
+save-under and every assertion made upon them. What belongs here is what the
+pointer says about the drawing this document describes.
+
+### 26.1 It is the first thing that composites
+
+Everything drawn until now has been drawn once and left. The console writes a
+glyph; the fault screen fills a page; neither has any obligation to what was
+underneath, because nothing was. A pointer is the first object that must be
+**removable** — drawn over whatever is there, and then taken away leaving that
+whatever intact.
+
+With one surface and no back buffer there is exactly one way to do it: read the
+pixels back before drawing and write them again afterwards. That is what
+`graphics/cursor.c` does, and it is the first use in this kernel of
+`GraphicsPixelAt` outside a self-test.
+
+Section 6 declared that routine to exist "for the self-test", and noted that
+nothing in a drawing path reads the surface it draws upon. That is no longer
+true, and the reason it stopped being true is worth keeping: a compositor reads.
+The remark stands as written for Sections 6 to 25, and this is where it ends.
+
+### 26.2 What the surface abstraction bought
+
+The pointer draws through `GraphicsPutPixel` and `GraphicsPixelAt` and names no
+framebuffer. Two consequences follow directly, and both were the argument for
+the abstraction in Section 11:
+
+- The pointer is asserted upon a surface composed in memory, pixel by pixel,
+  upon a machine with no display — including the assertion that it writes nothing
+  into the row padding, which a framebuffer could not be asked.
+- Sub-task 6.6 substitutes a back buffer for the framebuffer and the pointer
+  needs no change to be composited into it instead.
+
+### 26.3 The cost, and why it is bounded
+
+Reading is the expensive half. The framebuffer is mapped write-combining and
+reads from write-combining memory are uncached — the same fact that made the
+scroll the costly operation in Section 23.2. The pointer is 12 by 18, so a move
+costs 216 uncached reads and up to 216 writes.
+
+Three things keep that from mattering:
+
+1. **A move is per movement, not per packet.** The echo loop drains the mouse's
+   event buffer and calls `CursorMoveTo` once. A hundred packets a second
+   describe a path the eye cannot follow, and drawing the intermediate positions
+   would pay the cost a hundred times to show nothing.
+2. **A move to where the pointer already is costs nothing.** A stationary mouse
+   still sends button packets at the full rate; without the early return the
+   pointer would be erased and redrawn a hundred times a second for as long as
+   nobody moved it.
+3. **The pointer is shown only once the boot log is finished.** Each of those
+   several hundred lines would otherwise conceal and reveal it — reading the
+   pixels back each time — for a pointer nobody is yet moving.
+
+### 26.4 The screen now has three owners, and the rule is unchanged
+
+Section 19.5 established that the screen has one owner at a time: the console
+holds it, the drawing figures take it, and the fault screens take it for good.
+The pointer does not take it. It is a fourth party that draws **over** whoever
+holds it and must get out of the way when they draw.
+
+`CursorConceal` and `CursorReveal` are that arrangement, and
+`KernelWriteString` is where it is applied, being already the one routine
+permitted to name an output device — the same fan-out point Section 19.1
+established for the same kind of reason. The pair is counted rather than a flag
+because a panic raised from within a write nests inside it.
+
+The fault screens do not conceal the pointer; they hide it. Concealment implies
+a reveal, and there will be none: the machine has stopped, and the last thing
+drawn upon the display should be the fault screen alone.
+
+### 26.5 What 6.6 removes
+
+The save-under is a single-surface expedient and is expected to disappear. With
+a back buffer the display is redrawn each frame and the pointer is composited
+last, so nothing needs saving, nothing needs concealing, and `KernelWriteString`
+stops knowing that a pointer exists.
+
+What survives into 6.6 is the shape, the two-mask encoding of it, and the
+position — which belongs to the mouse driver and never belonged here. That is
+the test of whether this division was drawn in the right place, and it will be
+answered one sub-task from now rather than argued here.

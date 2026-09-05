@@ -173,10 +173,12 @@ since established the apparatus a privilege transition is performed out of, and
 exercised it, and sub-task 6.2 has acquired the linear framebuffer the boot
 loader supplies and mapped it write-combining, and sub-task 6.3 has supplied the
 primitives that draw into it, and sub-task 6.4 the font and the console that draw
-the boot log upon it — which ends the blank screen the framebuffer had cost.
-Work continues at sub-task 6.5, the mouse, and thence to sub-task 6.7, whose
-system calls are the operations of the filesystem layer with a user's arguments
-copied in.
+the boot log upon it — which ends the blank screen the framebuffer had cost. And
+sub-task 6.5 has given the machine a pointer, which required the 8042 controller
+to become a module of its own first, its configuration byte governing two ports
+and admitting only one owner. Work continues at sub-task 6.6, the compositing
+surface, and thence to sub-task 6.7, whose system calls are the operations of the
+filesystem layer with a user's arguments copied in.
 
 ## 5. Privilege and address-space model
 

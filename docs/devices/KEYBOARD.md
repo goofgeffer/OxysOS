@@ -22,6 +22,18 @@ overlapping numbers for entirely different purposes — `0xAA` is the controller
 self-test and also the keyboard's report that *its* self-test passed — so a byte
 sent to the wrong port does something, and not the thing intended.
 
+**Since sub-task 6.5 they are two modules as well as two devices.** The
+controller is driven by [`../../drivers/ps2/ps2.c`](../../drivers/ps2/ps2.c) and
+this driver is a driver for the keyboard alone. The reason is the mouse upon the
+controller's second port: the configuration byte governs both ports and is
+written whole, so two drivers each keeping their own idea of it would each write
+back the other's bits as they last saw them. The whole argument, and what it
+would have broken, is in [`MOUSE.md`](MOUSE.md), Section 2.
+
+The translation bit went with it, and belongs there: it is the *controller* that
+translates, and Section 3 below now describes a property this driver depends upon
+rather than one it establishes.
+
 ## 2. The status register, and the rule that governs every access
 
 Port `0x64` read yields the status register. Two of its bits govern every
@@ -198,6 +210,9 @@ keyboard, and therefore one producer.
 
 ## 6. The initialisation sequence
 
+The controller's half of it is `Ps2Initialise` and runs once, before this driver
+and before the mouse's:
+
 1. Disable both device ports (`0xAD`, `0xA7`), so that nothing arrives while the
    controller is being reconfigured and no byte read below belongs to a keystroke
    rather than to the exchange in progress.
@@ -212,19 +227,28 @@ keyboard, and therefore one producer.
    upon some implementations, discarding what was written at step 3. Upon an
    implementation that does not, this is merely redundant. The failure it prevents
    is a keyboard that works upon the developer's machine and not upon the user's.
-6. Test the first port (`0xAB`); expect `0x00`.
-7. Enable the first port (`0xAE`).
-8. Reset the keyboard (`0xFF`); expect the acknowledgement `0xFA`, then `0xAA`
+6. Discover whether there is a second port at all, and test it if there is. See
+   [`MOUSE.md`](MOUSE.md), Section 2.3.
+7. Test the first port (`0xAB`); expect `0x00`.
+
+This driver's half is then short, because the controller is already standing:
+
+8. Enable the first port (`0xAE`).
+9. Reset the keyboard (`0xFF`); expect the acknowledgement `0xFA`, then `0xAA`
    reporting its self-test. The second byte is read but not insisted upon, some
    emulated keyboards omitting it.
-9. Enable scanning (`0xF4`).
-10. Drain again; nothing left by the reset is a keystroke.
-11. Set the first port's interrupt enable in the configuration byte.
-12. Register the handler, **then** unmask IR1.
+10. Enable scanning (`0xF4`).
+11. Drain again; nothing left by the reset is a keystroke.
+12. Set the first port's interrupt enable in the configuration byte.
+13. Register the handler, **then** unmask IR1.
 
-The order of step 12 matters. Were the line unmasked first, a keystroke arriving
-between the two would be recorded by the interrupt controller as an unclaimed
-request and lost.
+The order of the last step matters. Were the line unmasked first, a keystroke
+arriving between the two would be recorded by the interrupt controller as an
+unclaimed request and lost.
+
+This driver does **not** reconfigure the controller, and refuses to run rather
+than doing so: a keyboard driver that reset the controller would silence a mouse
+already reporting.
 
 ### 6.1 The handler reads exactly one byte
 
@@ -233,6 +257,15 @@ that drained the buffer in a loop would consume bytes whose requests had not yet
 been delivered, and those requests would then arrive to find nothing to read.
 They would be counted as spurious or unclaimed, and the accounting of
 `docs/design/INTERRUPTS.md`, Section 9, would cease to mean anything.
+
+### 6.2 The byte read may not be this driver's
+
+Since sub-task 6.5 the handler reads the byte **and asks which port it came
+from**, because both devices deliver through the controller's single output
+buffer. A byte from the second port is handed to the mouse's decoder rather than
+discarded: the read cannot be undone, and a discarded byte is one third of a
+movement packet, which puts that decoder out of step with every packet after it.
+See [`MOUSE.md`](MOUSE.md), Section 5.
 
 ## 7. Verification
 
