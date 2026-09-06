@@ -1108,8 +1108,8 @@ static bool AtaReportMassStorage(void)
                  (function->programming_interface == PCI_SATA_INTERFACE_AHCI))
         {
             KernelWriteString("an AHCI controller. Its registers are memory-mapped "
-                              "and it answers at no I/O port, so this driver cannot "
-                              "reach it.\n");
+                              "and it answers at no I/O port, so it is driven by the "
+                              "AHCI driver and not by this one.\n");
         }
         else if ((function->subclass == PCI_SUBCLASS_NVM) &&
                  (function->programming_interface == PCI_NVM_INTERFACE_NVME))
@@ -1195,12 +1195,11 @@ static void AtaReportControllers(void)
     {
         KernelWriteString("ATA: this driver reads and writes through the ATA command "
                           "block registers,\n");
-        KernelWriteString("ATA: which is an IDE controller and nothing else. Where the "
-                          "firmware offers\n");
-        KernelWriteString("ATA: a storage mode of IDE, Legacy or Compatibility in place "
-                          "of AHCI,\n");
-        KernelWriteString("ATA: selecting it makes the disks above visible to this "
-                          "kernel.\n");
+        KernelWriteString("ATA: which is an IDE controller and nothing else. An AHCI "
+                          "controller named\n");
+        KernelWriteString("ATA: above is reached by the AHCI driver instead, whose "
+                          "report follows this\n");
+        KernelWriteString("ATA: one and says what it found upon each of its ports.\n");
         return;
     }
 

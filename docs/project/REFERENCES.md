@@ -693,6 +693,54 @@ cross-verified against one another before being relied upon, as Section 6 of
 
 Used by: `drivers/ata/ata.c`, `kernel/include/oxys/ata.h`.
 
+### Serial ATA Advanced Host Controller Interface Specification, revision 1.3.1
+Intel Corporation, on behalf of the Serial ATA International Organization.
+
+Sections relied upon:
+
+- **Section 3.1, the generic host control registers**: `CAP` at `00h`, `GHC` at
+  `04h`, `IS` at `08h`, `PI` at `0Ch`, `VS` at `10h`, `CAP2` at `24h` and `BOHC`
+  at `28h`. `GHC.AE` is bit 31 and `GHC.HR` bit 0. `PI` is a **bitmap** of the
+  ports that exist and not a count of them; the implemented ports need not be
+  consecutive.
+- **Section 3.3, the port registers**: the block for port *x* begins at
+  `100h + x * 80h`, and within it `PxCLB` at `00h`, `PxCLBU` at `04h`, `PxFB` at
+  `08h`, `PxFBU` at `0Ch`, `PxIS` at `10h`, `PxIE` at `14h`, `PxCMD` at `18h`,
+  `PxTFD` at `20h`, `PxSIG` at `24h`, `PxSSTS` at `28h`, `PxSCTL` at `2Ch`,
+  `PxSERR` at `30h`, `PxSACT` at `34h` and `PxCI` at `38h`. `PxCMD.ST` is bit 0,
+  `PxCMD.FRE` bit 4, `PxCMD.FR` bit 14 and `PxCMD.CR` bit 15; `PxIS.TFES` is bit
+  30. `PxTFD` carries the device's status byte in its low eight bits, with BSY at
+  bit 7 and DRQ at bit 3.
+- **Section 3.3.8, `PxSSTS`**: `DET` in bits 3:0 is 3 when a device is present
+  and communication is established; `IPM` in bits 11:8 is 1 when the interface is
+  active. The negotiated speed lies between them, in bits 7:4.
+- **Section 4.2.1, the command header**: thirty-two bytes. The first double word
+  holds the command FIS length in **double words** in bits 4:0, the ATAPI bit at
+  5, the write bit at 6 and the region descriptor table length in bits 31:16; the
+  second holds the byte count transferred; the third and fourth the physical
+  address of the command table.
+- **Section 4.2.2, the alignment of the structures**: the command list is 1024
+  bytes upon a 1024-byte boundary, the received FIS structure 256 bytes upon a
+  256-byte boundary, and a command table lies upon a 128-byte boundary.
+- **Section 4.2.3, the command table**: the command FIS at offset 0, the ATAPI
+  command at `40h`, and the region descriptors from `80h`. Each descriptor is
+  sixteen bytes: a 64-bit data base address whose low bit is reserved, a reserved
+  double word, and a byte count **less one** in bits 21:0 with an interrupt bit
+  at 31.
+- **The port signatures**: `00000101h` a serial ATA disk, `EB140101h` a packet
+  device, `C33C0101h` an enclosure services device and `96690101h` a port
+  multiplier.
+- **The BIOS/OS handoff**: `CAP2.BOH`, bit 0, states that it is implemented;
+  `BOHC.BOS` bit 0 that the firmware owns the adaptor, `BOHC.OOS` bit 1 the
+  request for it, and `BOHC.BB` bit 4 that the firmware is still busy with it.
+
+The Register Host to Device frame information structure this driver composes is
+defined by **Serial ATA revision 3.0** rather than by AHCI: type `27h`, the C bit
+at bit 7 of byte 1, the command at byte 2, the low three address bytes at 4 to 6,
+the device register at 7, the high three at 8 to 10, and the sector count at 12
+and 13.
+
+Used by: `drivers/ahci/ahci.c`, `kernel/include/oxys/ahci.h`.
 ### The Second Extended File System: Internal Layout
 Poirier, D. `https://www.nongnu.org/ext2-doc/ext2.html`
 
@@ -897,6 +945,7 @@ Used by: `boot/grub/grub.cfg`, `Makefile`.
 | ------------- | ----- | ------- |
 | PCI Local Bus Specification 3.0 | 4 | Configuration space and device enumeration. |
 | ATA/ATAPI Command Set (ACS-3) | 4 | `IDENTIFY DEVICE`; 28-bit and 48-bit logical block addressing. |
+| Serial ATA AHCI 1.3.1 | 4 | The host bus adaptor: the generic host control and port registers, the command list, and the region descriptors by which a caller's pages are named to the device. |
 | IEEE Std 1003.1-2017, System Interfaces | 6, 7 | `fork()`, `exec()`, `wait()` and the file-descriptor semantics a fork imposes upon the open file table. |
 | Intel MultiProcessor Specification 1.4 | 6 | Application processor bring-up. |
 | Intel SDM, Volume 3A, Chapter 11 | 6 | The Local APIC and the I/O APIC, which retire the 8259A. |

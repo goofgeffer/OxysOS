@@ -132,6 +132,7 @@ void KernelVerifyPci(void);
 /* Phase 4: the disk, the generic block layer above it, and the buffer cache
  * above that. */
 void KernelVerifyAta(void);
+void KernelVerifyAhci(void);
 void KernelVerifyBlock(void);
 void KernelVerifyBuffer(void);
 

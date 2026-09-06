@@ -77,6 +77,7 @@
 #include <oxys/serial.h>
 #include <oxys/pci.h>
 #include <oxys/ata.h>
+#include <oxys/ahci.h>
 #include <oxys/block.h>
 #include <oxys/buffer.h>
 #include <oxys/ext2.h>
@@ -961,12 +962,25 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
     AtaReport();
 
     /*
+     * The same command set, reached the other way. Sub-task 4.4 drives an IDE
+     * controller through I/O ports; a firmware that presents its serial ATA
+     * controller in AHCI mode puts the disks behind memory-mapped registers that
+     * driver cannot reach, and upon most machines made in the last fifteen years
+     * that is where the disks are. The two run one after the other because a
+     * machine may carry both, and each finds only what belongs to it.
+     */
+    (void)AhciInitialise();
+    KernelVerifyAhci();
+    AhciReport();
+
+    /*
      * Every disk found presents itself through the generic layer, which is what
      * everything above will address it by. The layer is asserted against a
      * device of memory rather than against a disk: the machine this is verified
      * upon has no disk, and one that has holds data a self-test must not write.
      */
     (void)AtaRegisterBlockDevices();
+    (void)AhciRegisterBlockDevices();
     KernelVerifyBlock();
     BlockReport();
 

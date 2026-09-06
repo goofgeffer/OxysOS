@@ -1,24 +1,27 @@
 /*
  * File: kernel/test/verify_storage.c
- * Purpose: Asserts the storage stack of Phase 4: the ATA driver, the generic
- *          block-device layer above it, and the buffer cache above that.
- * Key functions: KernelVerifyAta, KernelVerifyBlock, KernelVerifyBuffer.
+ * Purpose: Asserts the storage stack of Phase 4: the ATA and AHCI drivers, the
+ *          generic block-device layer above them, and the buffer cache above that.
+ * Key functions: KernelVerifyAta, KernelVerifyAhci, KernelVerifyBlock,
+ *          KernelVerifyBuffer.
  * References:
-   - docs/storage/DISK.md, docs/storage/BLOCK.md and docs/storage/BUFFER.md:
- *     each has a verification section pairing the assertions below with the
- *     silent failure each would catch.
+ *   - docs/storage/DISK.md, docs/storage/AHCI.md, docs/storage/BLOCK.md and
+ *     docs/storage/BUFFER.md: each has a verification section pairing the
+ *     assertions below with the silent failure each would catch.
  *
  * The block and buffer assertions are made against the memory-backed
  * devices of <oxys/testvolume.h>, so they hold upon a machine with no disk. The
- * ATA assertions cannot be, a driver for a device being untestable without one;
- * where no device answers, that is reported and nothing is asserted. The write
- * path is exercised only when the boot loader\'s command line asks for it.
+ * ATA and AHCI assertions cannot be, a driver for a device being untestable
+ * without one; where no device answers, that is reported and nothing is
+ * asserted. The write path is exercised only when the boot loader\'s command
+ * line asks for it.
  */
 
 #include <oxys/kernel.h>
 #include <oxys/verify.h>
 #include <oxys/testvolume.h>
 #include <oxys/ata.h>
+#include <oxys/ahci.h>
 #include <oxys/block.h>
 #include <oxys/buffer.h>
 #include <oxys/pci.h>
@@ -588,6 +591,348 @@ void KernelVerifyAta(void)
     }
 
     KernelWriteString(succeeded ? "Disk self-test passed.\n" : "Disk self-test FAILED.\n");
+}
+
+/*
+ * Asserts the three decisions of the AHCI driver that are pure, and then the
+ * transfers themselves where a disk answered.
+ *
+ * The pure three are exposed for the same reason the ATA driver's addressing is:
+ * no board available to this project presents a packet device, an enclosure or a
+ * port multiplier upon an AHCI port, and none presents a port whose interface
+ * has gone to sleep. Every one of those is a value the driver must read
+ * correctly and none can be produced here, so each decision is asked directly of
+ * the values the hardware would have given.
+ */
+static bool KernelVerifyAhciDecisions(void)
+{
+    bool succeeded = true;
+
+    /* --- A port is usable when a device is present and the link is active. --- */
+
+    if (!AhciPortIsUsable(0x00000123U))
+    {
+        KernelWriteString("  A port with a device present and an active interface was "
+                          "called unusable.\n");
+        succeeded = false;
+    }
+
+    /*
+     * The speed field lies between the two that are read, in bits 7:4, and a
+     * mask that swept it in would reject every port upon every machine that
+     * negotiated anything but the slowest link. 0x123 above is DET 3, speed 2,
+     * IPM 1.
+     */
+    if (!AhciPortIsUsable(0x00000103U) || !AhciPortIsUsable(0x00000163U))
+    {
+        KernelWriteString("  The negotiated speed was read as part of the detection.\n");
+        succeeded = false;
+    }
+
+    /*
+     * DET of 1 is presence detected without communication established, which is
+     * the state of a port whose device has not finished negotiating. A driver
+     * that accepted it would issue a command and wait out its whole patience.
+     */
+    if (AhciPortIsUsable(0x00000101U) || AhciPortIsUsable(0x00000100U) ||
+        AhciPortIsUsable(0x00000104U))
+    {
+        KernelWriteString("  A port with no communication established was called "
+                          "usable.\n");
+        succeeded = false;
+    }
+
+    /*
+     * IPM of 2 is a partial power state and of 6 a slumbering one. The device is
+     * present in both, so a driver reading the detection alone would find them
+     * indistinguishable from a port ready to answer.
+     */
+    if (AhciPortIsUsable(0x00000203U) || AhciPortIsUsable(0x00000603U) ||
+        AhciPortIsUsable(0x00000003U))
+    {
+        KernelWriteString("  A port whose interface is not active was called usable.\n");
+        succeeded = false;
+    }
+
+    /* --- The signature says what is attached, and the four differ. --- */
+
+    if ((AhciKindFromSignature(0x00000101U) != AHCI_DEVICE_SATA) ||
+        (AhciKindFromSignature(0xEB140101U) != AHCI_DEVICE_SATAPI) ||
+        (AhciKindFromSignature(0xC33C0101U) != AHCI_DEVICE_ENCLOSURE) ||
+        (AhciKindFromSignature(0x96690101U) != AHCI_DEVICE_MULTIPLIER))
+    {
+        KernelWriteString("  A signature was not recognised as what it names.\n");
+        succeeded = false;
+    }
+
+    /*
+     * Every signature ends in 0101h, so a comparison of the low half alone would
+     * call a packet device a disk — and this driver would then issue READ DMA
+     * EXT to something that answers only the packet interface.
+     */
+    if ((AhciKindFromSignature(0xFFFFFFFFU) != AHCI_DEVICE_UNKNOWN) ||
+        (AhciKindFromSignature(0x00000000U) != AHCI_DEVICE_UNKNOWN))
+    {
+        KernelWriteString("  An unrecognised signature was taken for a device.\n");
+        succeeded = false;
+    }
+
+    /* --- The command header describes the FIS, the direction and the table. --- */
+
+    /*
+     * Five double words is the Register Host to Device FIS, eight regions is
+     * eight pages, and the two occupy opposite ends of the same word. A length
+     * given in bytes rather than double words is 20, which does not fit the five
+     * bits the field has and would silently become 4.
+     */
+    if (AhciDescribeCommand(5U, false, 8U) != 0x00080005U)
+    {
+        KernelWriteString("  A read command header was composed wrongly.\n");
+        succeeded = false;
+    }
+
+    /*
+     * The write bit is bit 6. A command whose direction is wrong transfers the
+     * disk into the buffer the caller meant to write from, and reports success.
+     */
+    if (AhciDescribeCommand(5U, true, 8U) != 0x00080045U)
+    {
+        KernelWriteString("  The write bit is not at bit 6 of the command header.\n");
+        succeeded = false;
+    }
+
+    if ((AhciDescribeCommand(5U, false, 0U) != 0x00000005U) ||
+        (AhciDescribeCommand(5U, true, 1U) != 0x00010045U))
+    {
+        KernelWriteString("  The region count is not in the high half of the command "
+                          "header.\n");
+        succeeded = false;
+    }
+
+    return succeeded;
+}
+
+void KernelVerifyAhci(void)
+{
+    const AhciDevice *const disk = AhciFirstDisk();
+    bool succeeded = KernelVerifyAhciDecisions();
+
+    KernelWriteString(succeeded ? "AHCI self-test: the port and command decisions are "
+                                  "sound.\n"
+                                : "AHCI self-test FAILED: the port and command "
+                                  "decisions.\n");
+
+    if (!AhciIsPresent())
+    {
+        KernelWriteString("AHCI self-test: no adaptor upon this machine; nothing "
+                          "transferred.\n");
+        return;
+    }
+
+    if (disk == NULL)
+    {
+        KernelWriteString("AHCI self-test: no disk upon any port; nothing "
+                          "transferred.\n");
+        return;
+    }
+
+    succeeded = true;
+
+    /*
+     * The first sector, twice, into buffers seeded differently.
+     *
+     * Two reads compared against each other establish less than they appear to:
+     * a transfer that is consistently the wrong length leaves both buffers
+     * holding the same wrong thing, and the comparison passes. **Seeding them
+     * with different bytes is what gives the comparison its force.** Wherever
+     * the device did not write, the two buffers still differ, so a region
+     * descriptor that describes half a sector — a byte count mistaken for a word
+     * count — is caught at the first byte the device did not reach.
+     *
+     * This was not hypothetical. The first form of this test compared two reads
+     * into buffers that both held the previous read, and it passed with the
+     * descriptor's byte count halved and again with it one too large.
+     */
+    for (size_t index = 0U; index < (AHCI_SECTOR_SIZE * 2U); ++index)
+    {
+        KernelDiskBufferA[index] = 0xA5U;
+        KernelDiskBufferB[index] = 0x5AU;
+    }
+
+    if (!AhciRead(disk, 0U, 1U, KernelDiskBufferA) ||
+        !AhciRead(disk, 0U, 1U, KernelDiskBufferB))
+    {
+        KernelWriteString("  The first sector did not read.\n");
+        succeeded = false;
+    }
+    else
+    {
+        if (!KernelRegionsMatch(KernelDiskBufferA, KernelDiskBufferB, AHCI_SECTOR_SIZE))
+        {
+            KernelWriteString("  A sector read twice differs, so less than a whole "
+                              "sector was transferred.\n");
+            succeeded = false;
+        }
+
+        /*
+         * And nothing beyond it. A byte count one too large — the descriptor
+         * holding the length rather than the length less one — writes past the
+         * sector the caller asked for, into whatever the buffer is part of.
+         */
+        for (size_t index = AHCI_SECTOR_SIZE; index < (AHCI_SECTOR_SIZE * 2U); ++index)
+        {
+            if (KernelDiskBufferA[index] != 0xA5U)
+            {
+                KernelWriteString("  The transfer wrote past the end of the sector.\n");
+                succeeded = false;
+                break;
+            }
+        }
+    }
+
+    /*
+     * A two-sector transfer is where the region descriptors are exercised
+     * against a length that is not one sector. The first sector of it must be
+     * what a one-sector read returned, and the second what a read of the
+     * following address returns.
+     */
+    if (disk->sector_count >= 2U)
+    {
+        if (!AhciRead(disk, 0U, 2U, KernelDiskBufferB))
+        {
+            KernelWriteString("  A two-sector read failed.\n");
+            succeeded = false;
+        }
+        else
+        {
+            if (!KernelRegionsMatch(KernelDiskBufferA, KernelDiskBufferB, AHCI_SECTOR_SIZE))
+            {
+                KernelWriteString("  A two-sector read did not begin where a one-sector "
+                                  "read did.\n");
+                succeeded = false;
+            }
+
+            if (!AhciRead(disk, 1U, 1U, KernelDiskBufferA) ||
+                !KernelRegionsMatch(KernelDiskBufferA, &KernelDiskBufferB[AHCI_SECTOR_SIZE],
+                                    AHCI_SECTOR_SIZE))
+            {
+                KernelWriteString("  The second sector of a two-sector read is not the "
+                                  "sector that follows.\n");
+                succeeded = false;
+            }
+        }
+    }
+
+    /*
+     * A sector beyond what 28 bits can name, where the device is large enough to
+     * have one.
+     *
+     * Every command this driver issues is an extended one, so unlike the ATA
+     * driver there is no second path to reach — but the address is composed from
+     * six bytes across two halves of the command FIS, and a byte written into
+     * the wrong one of them addresses a sector some multiple of 16 megabytes
+     * away. That is a read which succeeds and returns the wrong data, which is
+     * the failure this whole file exists to catch.
+     */
+    if (disk->sector_count > ATA_LBA28_LIMIT)
+    {
+        if (!AhciRead(disk, ATA_LBA28_LIMIT + 1U, 1U, KernelDiskBufferA))
+        {
+            KernelWriteString("  A sector beyond the 28-bit limit did not read.\n");
+            succeeded = false;
+        }
+    }
+
+    /*
+     * The refusals. Each is a request the adaptor must not be asked to attempt,
+     * and each is refused before it is touched: a range outside the device, a
+     * count beyond what one command may carry, a count of nothing, an absent
+     * buffer, and — this driver's own — a buffer at an odd address, whose low
+     * bit the region descriptor has no room for and would transfer one byte
+     * below where the caller asked.
+     */
+    if (AhciRead(disk, disk->sector_count, 1U, KernelDiskBufferA) ||
+        AhciRead(disk, 0U, AHCI_MAXIMUM_SECTORS + 1U, KernelDiskBufferA) ||
+        AhciRead(disk, 0U, 0U, KernelDiskBufferA) || AhciRead(disk, 0U, 1U, NULL) ||
+        AhciRead(disk, 0U, 1U, &KernelDiskBufferA[1]))
+    {
+        KernelWriteString("  A request that should have been refused was attempted.\n");
+        succeeded = false;
+    }
+
+    /*
+     * The write path, only upon request, and by the same rule the ATA driver's
+     * self-test keeps: the sector is read first, overwritten with a pattern,
+     * read back, compared, and then restored from what was read, the restoration
+     * being verified in its turn. Anybody may boot this kernel upon their own
+     * machine, and a self-test that wrote to their disk unbidden would destroy
+     * their data.
+     */
+    if (KernelCommandLineHasOption("disk-write-test"))
+    {
+        const uint64_t target = disk->sector_count - 1U;
+
+        KernelWriteString("  Writing to the final sector, as the command line permits.\n");
+
+        if (!AhciRead(disk, target, 1U, KernelDiskBufferA))
+        {
+            KernelWriteString("  The sector to be written could not first be read.\n");
+            succeeded = false;
+        }
+        else
+        {
+            for (size_t index = 0U; index < AHCI_SECTOR_SIZE; ++index)
+            {
+                KernelDiskBufferB[index] = (uint8_t)(index ^ 0x5AU);
+            }
+
+            if (!AhciWrite(disk, target, 1U, KernelDiskBufferB))
+            {
+                KernelWriteString("  The pattern could not be written.\n");
+                succeeded = false;
+            }
+            else if (!AhciRead(disk, target, 1U, &KernelDiskBufferB[AHCI_SECTOR_SIZE]))
+            {
+                KernelWriteString("  The pattern could not be read back.\n");
+                succeeded = false;
+            }
+            else if (!KernelRegionsMatch(KernelDiskBufferB,
+                                         &KernelDiskBufferB[AHCI_SECTOR_SIZE],
+                                         AHCI_SECTOR_SIZE))
+            {
+                KernelWriteString("  The sector read back is not the pattern written.\n");
+                succeeded = false;
+            }
+
+            /* Restored whatever happened above, and the restoration checked. */
+            if (!AhciWrite(disk, target, 1U, KernelDiskBufferA) ||
+                !AhciRead(disk, target, 1U, &KernelDiskBufferB[AHCI_SECTOR_SIZE]) ||
+                !KernelRegionsMatch(KernelDiskBufferA, &KernelDiskBufferB[AHCI_SECTOR_SIZE],
+                                    AHCI_SECTOR_SIZE))
+            {
+                KernelWriteString("  The sector was not restored to what it held.\n");
+                succeeded = false;
+            }
+        }
+    }
+
+    /*
+     * A device that exceeded the driver's patience is a different fault from one
+     * that refused a command, and neither is expected here.
+     */
+    if (AhciTimeoutCount() != 0U)
+    {
+        KernelWriteString("  A port exceeded the driver's patience.\n");
+        succeeded = false;
+    }
+
+    if (AhciErrorCount() != 0U)
+    {
+        KernelWriteString("  A device reported an error.\n");
+        succeeded = false;
+    }
+
+    KernelWriteString(succeeded ? "AHCI self-test passed.\n" : "AHCI self-test FAILED.\n");
 }
 
 /* Two blocks of working space for the transfers the self-tests perform. */

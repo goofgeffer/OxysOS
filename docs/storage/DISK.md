@@ -130,18 +130,24 @@ ATA: primary channel at 0x1F0, control 0x3F6, the compatibility address.
 ATA: secondary channel at 0x170, control 0x376, the compatibility address.
 ATA: no device answered upon either channel.
 ATA:   serial ATA controller, interface 0x1: an AHCI controller. Its registers
-       are memory-mapped and it answers at no I/O port, so this driver cannot
-       reach it.
+       are memory-mapped and it answers at no I/O port, so it is driven by the
+       AHCI driver and not by this one.
 ATA: this driver reads and writes through the ATA command block registers,
-ATA: which is an IDE controller and nothing else. Where the firmware offers
-ATA: a storage mode of IDE, Legacy or Compatibility in place of AHCI,
-ATA: selecting it makes the disks above visible to this kernel.
+ATA: which is an IDE controller and nothing else. An AHCI controller named
+ATA: above is reached by the AHCI driver instead, whose report follows this
+ATA: one and says what it found upon each of its ports.
 ```
 
-The remedy is named as well as the cause, and deliberately. It is not this
-kernel's to apply — an AHCI driver is sub-task 4.7 — but most firmware offers the
-choice, so it is within the reach of whoever is standing at the machine, which is
-who the message is for.
+Until sub-task 4.7 the last four lines named a **remedy** rather than a driver:
+where the firmware offered a storage mode of IDE, Legacy or Compatibility in
+place of AHCI, selecting it made the disks visible to this kernel. That was the
+best that could honestly be said of a kernel which could not reach them, and it
+was addressed to whoever was standing at the machine.
+
+It is no longer the best that can be said. Sub-task 4.7 drives the controller,
+so this driver's business with it is to name it and stand aside; see
+[`AHCI.md`](AHCI.md). Leaving the old advice in place would have sent a person
+into a firmware menu to work around a driver the kernel now has.
 
 ### 2.3 The storage that is not of the storage class
 
@@ -456,9 +462,11 @@ the PIIX3 IDE controller at `0:1.1` in compatibility mode. Both are recorded in
 
 1. **IDE controllers only.** The driver reaches an IDE controller in either
    mode — compatibility or native, since Section 2.1 — and nothing else. An AHCI
-   controller and an NVM Express controller are both invisible to it, which upon
-   a modern machine means no disk at all. The report says so by name; driving one
-   is sub-task 4.7. See Section 2.2.
+   controller and an NVM Express controller are both invisible to it. That is no
+   longer the same as having no disk: since sub-task 4.7 the AHCI controller is
+   driven by [`AHCI.md`](AHCI.md), and this driver's business with it is to name
+   it and stand aside. An NVM Express controller is still reached by nothing. See
+   Section 2.2.
 2. **Storage that is not of the storage class is named, not reached.** An eMMC
    part behind an SD host controller and a USB drive behind a serial-bus
    controller are both storage and neither is an ATA device. The report says

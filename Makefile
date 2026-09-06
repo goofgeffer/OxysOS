@@ -138,6 +138,7 @@ C_SOURCES := kernel/kernel.c \
              drivers/mouse/mouse.c \
              drivers/pci/pci.c \
              drivers/ata/ata.c \
+             drivers/ahci/ahci.c \
              drivers/block/block.c \
              drivers/block/buffer.c \
              graphics/framebuffer.c \

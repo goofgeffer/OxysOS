@@ -284,6 +284,62 @@ reverted.
 | An SD host controller classified as nothing. | `An SD host controller was not recognised as storage.` This is the fault as it was reported: a laptop told it has no disk. |
 | A mass-storage controller counted as storage outside its own class. | `An IDE controller was reported as beyond this driver's class.` and `An AHCI controller was counted outside its own class.` — two assertions, because the count decides which of the two closing paragraphs is printed, and a machine with no mass-storage controller would have been told to change a firmware setting it does not have. |
 
+
+### 6.4 Verification of the AHCI disk
+
+`KernelVerifyAhci` asserts three decisions that need no hardware and then the
+transfers themselves where a disk answered. The properties are tabulated against
+the failure each would catch in [`../storage/AHCI.md`](../storage/AHCI.md),
+Sections 8.1 and 8.2.
+
+`make verify` exercises more of this driver than the machine appears to offer.
+The q35 board's own AHCI controller answers, and the boot ISO is a packet device
+upon port 2, so the discovery, the firmware handoff, the port preparation and the
+signature are asserted at every boot; only the transfers report that they had
+nothing to do.
+
+The transfers need a disk, which is attached to the same board:
+
+```sh
+qemu-img create -f raw sata.img 256G
+mke2fs -q -t ext2 -b 1024 -L oxys-ahci -d seed -F probe.img 16384
+
+qemu-system-x86_64 -machine q35 -cpu qemu64 -smp cores=2 -m 512M \
+    -cdrom build/oxys.iso \
+    -drive file=probe.img,format=raw,if=none,id=sata0 \
+    -device ide-hd,drive=sata0,bus=ide.0 \
+    -display none -serial file:ahci.log
+```
+
+`if=none` with a separate `-device` is what puts the disk upon the board's AHCI
+controller rather than upon an IDE bus; `-drive ...,if=ide` would attach it to
+the controller the *other* driver reaches, and would prove nothing about this one.
+
+What is compared, and against what: the volume upon `ahci0` is mounted at the
+root and its directory listing is compared against `debugfs -R "ls -l /"` upon
+the same image from the host. The self-test cannot know what a medium holds, so
+this is the corroboration from outside that the driver read the sectors it was
+asked for and not some others.
+
+### 6.5 The negative tests of the AHCI driver
+
+Each was applied to `drivers/ahci/ahci.c`, confirmed, and reverted.
+
+| The damage | What the run reported |
+| ---------- | --------------------- |
+| The port's power state dropped, so that the detection is read alone. | `A port whose interface is not active was called usable.` A port whose device is present but whose interface is asleep would then be issued a command, and the driver's whole patience spent waiting for it. |
+| The signature compared upon its low half alone. | `A signature was not recognised as what it names.` All four signatures end in `0101h`, so a packet device would be driven as a disk. |
+| The write bit of the command header moved from bit 6 to bit 5. | `The write bit is not at bit 6 of the command header.` A command whose direction is wrong reads the disk into the buffer the caller meant to write from, and reports success. |
+| A region descriptor's byte count halved — a byte count mistaken for a word count. | `A sector read twice differs, so less than a whole sector was transferred.` **This one first passed**, and the assertion was strengthened before it caught anything; see below. |
+| A region descriptor's byte count written without its **less one**. | Nothing. Recorded as a gap in [`../storage/AHCI.md`](../storage/AHCI.md), Section 8.3: the descriptor is a capacity and the command's sector count is the length, so no adaptor available here ever reaches the extra byte. |
+
+**The fourth is worth recording for what it revealed about the test rather than
+the driver.** The first form of the transfer assertion read the same sector twice
+and compared the two buffers, which both already held the previous read — so a
+transfer that was consistently the wrong length left both holding the same wrong
+thing and the comparison passed. The buffers are now seeded with different bytes
+before the reads. Wherever the device did not write, the two still differ, and
+the halved descriptor is caught at the first byte the device did not reach.
 ## 7. Verification of the EXT2 superblock
 
 The parser is asserted at every boot against a volume composed within the
@@ -1169,3 +1225,10 @@ boot to finish before drawing conclusions from the report.
 | 2026-09-06 | QEMU q35, the echo loop after a hundred and thirty line feeds | Passed; this is the test of the row lengths moving with a scroll, which the boot-time self-test cannot reach. `abc`, a line feed and three backspaces leave `a`. With the shift removed the same sequence left `abc` untouched — the row lengths describing rows the text had left. |
 | 2026-09-06 | VirtualBox 7, headless, 640 by 480 — **through the keyboard itself** | Passed. Scancodes were injected with `VBoxManage controlvm keyboardputscancode`, so this exercises the whole path a person uses: key, 8042, decoder, echo loop, console. Typing `ab`, Enter, `cd`, Enter and three backspaces left `ab` alone. This display is sixty rows and the boot log has already scrolled it, which QEMU's hundred rows have not. |
 | 2026-09-06 | VirtualBox 7, the same session, after seventy further Enters | Passed, and it is the second machine to confirm the row lengths move with a scroll: with the display scrolled by the typing itself, `abc`, Enter and three backspaces left `a`. |
+| 2026-09-06 | `make verify` — **sub-task 4.7, the AHCI decisions** | Passed. A port is usable only where the detection says a device is present *and* the power state says the interface is active, with the negotiated speed between them read as part of neither; `DET` of 0, 1 and 4 and `IPM` of 0, 2 and 6 are each rejected; the four port signatures are told apart although all four end in `0101h`; and the command header places the FIS length in double words, the write bit at bit 6 and the region count in the high half. None of these values can be produced by any board here, so each is asked of the decision directly. |
+| 2026-09-06 | QEMU q35 — the AHCI adaptor, with no disk attached | Passed, and it exercises more than it appears to. `AHCI: adaptor at 0:31.2, version 0x10000, 6 ports implemented, 32 command slots, 64-bit addressing.` and `port 2: packet device` — the boot ISO, recognised by its signature and correctly **not** registered as a disk. The discovery, the firmware handoff, the port stop-and-restart and the signature all run at every `make verify`. |
+| 2026-09-06 | QEMU q35 with a 256 GiB sparse disk upon the AHCI controller | Passed. `port 0: serial ATA disk, 536870912 sectors (268435456 KiB), 48-bit addressing, QEMU HARDDISK`, and the transfers assert what the ATA driver's do and two more besides: a sector beyond the 28-bit limit reads, and a buffer at an **odd** address is refused, the region descriptor having no room for its low bit. |
+| 2026-09-06 | QEMU q35 with a seeded EXT2 volume upon the AHCI disk | Passed, and this is the corroboration from outside. The volume was mounted at the root as `/ <- ahci0 (ext2, block 1024, read-only)` and its directory listing — inodes 2, 2, 11, 12, 13, 14, 15 for `.`, `..`, `lost+found`, `hello.txt`, `link`, `oxys-write-test` and `sub` — is exactly what `debugfs -R "ls -l /"` reports of the same image upon the host. The whole stack above the driver read real data through it. |
+| 2026-09-06 | QEMU q35 from the `disk write self-test` entry — the AHCI write path | Passed. The final sector was read, overwritten with a pattern, read back, compared byte for byte and restored; `sectors read 8, written 2, device errors 0`. The image's MD5 sum is unchanged afterwards, which is the assertion the kernel cannot make about itself: the restoration was exact. |
+| 2026-09-06 | `make verify` — the AHCI driver, **the negative tests** | Passed, three of five, and the other two are recorded rather than claimed. The power state dropped gave `A port whose interface is not active was called usable.`; the signature compared on its low half gave `A signature was not recognised as what it names.`; the write bit moved to bit 5 gave `The write bit is not at bit 6 of the command header.` A halved region byte count **first passed** and the assertion was strengthened until it failed; a byte count without its less-one is not caught at all. The procedure and the reasoning are Sections 6.5 and `docs/storage/AHCI.md` Section 8.3. |
+| 2026-09-06 | VirtualBox 7, headless, 640 by 480, an Intel ICH8-M AHCI controller | Passed, upon a second silicon design rather than a second copy of the first. The bus shows `0:13.0 0x8086:0x2829 serial ATA controller (class 0x1, subclass 0x6, interface 0x1)`, the self-test passes, and the seeded volume is mounted as `/ <- ahci0 (ext2, block 1024, read-only)` with the same seven entries and the same inode numbers as QEMU reported. |

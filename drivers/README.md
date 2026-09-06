@@ -31,6 +31,7 @@ memory and is not.
 | `mouse/mouse.c` | The PS/2 mouse upon the controller's second port. | `<oxys/mouse.h>` | 6.5 |
 | `pci/pci.c` | The PCI bus: configuration-space enumeration by mechanism one. | `<oxys/pci.h>` | 4.3 |
 | `ata/ata.c` | The ATA disk, in programmed input/output mode. | `<oxys/ata.h>` | 4.4 |
+| `ahci/ahci.c` | The AHCI disk, by first-party direct memory access. | `<oxys/ahci.h>` | 4.7 |
 | `block/block.c` | The generic block-device layer above the disk drivers. | `<oxys/block.h>` | 4.5 |
 | `block/buffer.c` | The buffer cache above the block layer. | `<oxys/buffer.h>` | 4.6 |
 
@@ -141,6 +142,32 @@ native channel's addresses and the classification of storage outside its class �
 are pure functions of a configuration header, and are asserted upon headers this
 project cannot obtain the hardware for. See
 [`../docs/storage/DISK.md`](../docs/storage/DISK.md).
+
+### `ahci/` — the same disks, reached the other way
+
+The ATA driver above speaks to an IDE controller and to nothing else, and a
+firmware that presents its serial ATA controller in AHCI mode puts the disks
+behind memory-mapped registers that answer at no I/O port. This driver reaches
+those.
+
+It is not an extension of the driver above and could not have been. A command
+here is composed in memory as a frame information structure, the adaptor is
+handed the physical address of it, and the adaptor fetches the command and
+transfers the sectors into the caller's own pages by bus mastering. Every
+structure is therefore described by physical address, and a caller's buffer is
+named to the device one page at a time, since a buffer contiguous to the
+processor need not be contiguous to the device.
+
+The adaptor is taken from the firmware where it says the firmware still holds it,
+enabled, and each of the ports its bitmap names is stopped, given a page of its
+own, and restarted. A port answers only where the detection and the power state
+of its status register agree that a device is present and the interface active,
+and the signature it then presents says whether it is a disk, a packet device, an
+enclosure or a port multiplier — every one of which ends in the same sixteen bits.
+
+One command slot is used, polled, with no interrupt enabled. A write is followed
+by a cache flush within the same sequence. See
+[`../docs/storage/AHCI.md`](../docs/storage/AHCI.md).
 
 ### `block/` — the generic block-device layer
 
