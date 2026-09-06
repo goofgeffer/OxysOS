@@ -59,7 +59,7 @@ between runs.
 | `verify_privilege.c` | Phase 6, sub-task 6.1: the user-mode descriptors and their ordering, the task state segment, the interrupt stack table exercised rather than inspected, and the `SYSCALL` configuration exercised by executing it. |
 | `verify_mouse.c` | Phase 6, sub-task 6.5: the mouse's packet decoder, driven directly so that the framing, the nine-bit sign extension, the inverted vertical sense, the confinement of the position and the behaviour of a full buffer are all asserted **without a mouse and without anybody moving one**; and the pointer, upon a surface composed in memory, including that its transparent pixels leave the background alone — without which a pointer drawn as a solid rectangle would pass — and that a pointer at the edge writes nothing into the row padding. |
 | `verify_devices.c` | Phases 3 and 4: the 8259A controllers, the interval timer, the PS/2 keyboard, the 16550 serial adapter, the VGA display, and PCI enumeration. |
-| `verify_storage.c` | Phase 4: the ATA driver, the AHCI driver, the generic block layer, and the buffer cache. |
+| `verify_storage.c` | Phase 4: the ATA, AHCI and SD host controller drivers, the generic block layer, and the buffer cache. |
 | `verify_ext2.c` | Phase 5: the EXT2 format, in full, against the composed volume; and `KernelReportVolumes`, which reports upon whatever volume the machine actually carries. |
 | `verify_vfs.c` | Sub-task 5.8: the virtual filesystem layer, its mounts and its node identity; and `KernelVfsProbeVolume`, which exercises a real volume through the layer. |
 

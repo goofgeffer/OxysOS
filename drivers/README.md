@@ -32,6 +32,7 @@ memory and is not.
 | `pci/pci.c` | The PCI bus: configuration-space enumeration by mechanism one. | `<oxys/pci.h>` | 4.3 |
 | `ata/ata.c` | The ATA disk, in programmed input/output mode. | `<oxys/ata.h>` | 4.4 |
 | `ahci/ahci.c` | The AHCI disk, by first-party direct memory access. | `<oxys/ahci.h>` | 4.7 |
+| `sdhci/sdhci.c` | The SD card or embedded MultiMediaCard, through its host controller. | `<oxys/sdhci.h>` | 4.8 |
 | `block/block.c` | The generic block-device layer above the disk drivers. | `<oxys/block.h>` | 4.5 |
 | `block/buffer.c` | The buffer cache above the block layer. | `<oxys/buffer.h>` | 4.6 |
 
@@ -168,6 +169,32 @@ enclosure or a port multiplier — every one of which ends in the same sixteen b
 One command slot is used, polled, with no interrupt enabled. A write is followed
 by a cache flush within the same sequence. See
 [`../docs/storage/AHCI.md`](../docs/storage/AHCI.md).
+
+### `sdhci/` — the storage that is of neither class
+
+An inexpensive laptop keeps its system upon an embedded MultiMediaCard, attached
+to a host controller the PCI assignment specification classes as a system
+peripheral rather than as mass storage. Such a machine carries no mass-storage
+controller at all, so neither driver above will ever find anything upon it, and
+no setting in its firmware would give them something to find.
+
+The thing upon the bus is the *controller*; the thing holding the data is a
+*card*, and the card is a second device with a command set of its own. Most of
+this driver is that conversation: a card is woken, asked what it is, given an
+address, asked how large it is, and selected, before a single block may be read.
+Which power-up command it answers is how its kind is established — an SD card
+answers ACMD41 and an embedded card does not implement it at all, answering CMD1.
+
+The capacity is the arithmetic here most likely to be wrong and least likely to
+say so. There are two encodings in the card specific data, chosen by a field of
+the same register, differing in where every other field sits, in the units of the
+answer, and in whether a multiplier applies; and the controller strips the low
+eight bits of the register before presenting it, so every field lies eight bits
+from where the specification puts it. Both encodings are asserted at every boot
+against values composed for the purpose.
+
+Blocks move through the buffer data port a word at a time, one command per block.
+See [`../docs/storage/SDCARD.md`](../docs/storage/SDCARD.md).
 
 ### `block/` — the generic block-device layer
 

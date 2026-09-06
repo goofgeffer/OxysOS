@@ -741,6 +741,78 @@ the device register at 7, the high three at 8 to 10, and the sector count at 12
 and 13.
 
 Used by: `drivers/ahci/ahci.c`, `kernel/include/oxys/ahci.h`.
+
+### SD Host Controller Simplified Specification, version 4.20
+SD Association.
+
+Sections relied upon:
+
+- **Table 2-1, the register map**: the block size at `004h` and the block count
+  at `006h`, the argument at `008h`, the transfer mode at `00Ch` and the command
+  at `00Eh`, the four response registers from `010h`, the buffer data port at
+  `020h`, the present state at `024h`, host control 1 at `028h`, power control at
+  `029h`, clock control at `02Ch`, timeout control at `02Eh`, software reset at
+  `02Fh`, the normal interrupt status at `030h` and the error interrupt status at
+  `032h`, their status enables at `034h` and `036h` and their signal enables at
+  `038h` and `03Ah`, the capabilities at `040h`, and the host controller version
+  at `0FEh`.
+- **Table 2-10, the command register**: the command index in bits 13:8, data
+  present select at bit 5, command index check enable at bit 4, command CRC check
+  enable at bit 3, and the response type select in bits 1:0 — 00 no response, 01
+  a response of 136 bits, 10 one of 48 bits, and 11 one of 48 bits after which
+  busy is checked.
+- **Tables 2-15 and 2-16, the present state register**: command inhibit (CMD) at
+  bit 0 and command inhibit (DAT) at bit 1, buffer write enable at bit 10 and
+  buffer read enable at bit 11, card inserted at bit 16 and card state stable at
+  bit 17.
+- **The clock control register**: internal clock enable at bit 0, internal clock
+  stable at bit 1, SD clock enable at bit 2, and the frequency divider in bits
+  15:8, which holds *half* of the divisor.
+- **The power control register**: SD bus power at bit 0 and the bus voltage in
+  bits 3:1, the value 7 selecting 3.3 volts. **The software reset register**:
+  reset for all at bit 0, for the command line at bit 1 and for the data line at
+  bit 2.
+- **The normal interrupt status register**: command complete at bit 0, transfer
+  complete at bit 1, buffer write ready at bit 4, buffer read ready at bit 5, and
+  the error interrupt at bit 15.
+- **Section 2.2.7**: a response of 136 bits is presented in the four response
+  registers with its low eight bits — the CRC and the end bit — removed, so that
+  bit N of the card specific data appears at bit N - 8 of the response.
+
+Used by: `drivers/sdhci/sdhci.c`, `kernel/include/oxys/sdhci.h`.
+
+### SD Physical Layer Simplified Specification, version 8.00
+SD Association.
+
+Sections relied upon:
+
+- **The commands**: CMD0 GO_IDLE_STATE, CMD2 ALL_SEND_CID, CMD3
+  SEND_RELATIVE_ADDR, CMD7 SELECT/DESELECT_CARD, CMD8 SEND_IF_COND, CMD9
+  SEND_CSD, CMD16 SET_BLOCKLEN, CMD17 READ_SINGLE_BLOCK, CMD24 WRITE_BLOCK,
+  CMD55 APP_CMD and ACMD41 SD_SEND_OP_COND.
+- **The operating conditions register**: bit 31 is set when the card has finished
+  its power-up sequence, and bit 30 — the card capacity status — is set when the
+  card is block-addressed and clear when it is byte-addressed.
+- **The card specific data**: CSD_STRUCTURE in bits 127:126. For version 1,
+  READ_BL_LEN in bits 83:80, C_SIZE in 73:62 and C_SIZE_MULT in 49:47, the
+  capacity in bytes being (C_SIZE + 1) * 2^(C_SIZE_MULT + 2) * 2^READ_BL_LEN. For
+  version 2, C_SIZE in bits 69:48 alone, the capacity being (C_SIZE + 1) * 512
+  kibibytes.
+- **CMD8**: a card of the second version will not complete its power-up sequence
+  unless it has been sent, and answers with the supply voltage and check pattern
+  of the argument unchanged. A card of the first version does not answer it.
+
+Used by: `drivers/sdhci/sdhci.c`.
+
+### JEDEC Standard JESD84-B51, the Embedded Multimedia Card
+JEDEC Solid State Technology Association.
+
+Relied upon for the two respects in which an embedded card differs from an SD
+card in the sequence above: CMD1 SEND_OP_COND takes the place of ACMD41, which an
+embedded card does not implement at all; and CMD3 assigns a relative address the
+host chooses rather than reporting one the card chose.
+
+Used by: `drivers/sdhci/sdhci.c`.
 ### The Second Extended File System: Internal Layout
 Poirier, D. `https://www.nongnu.org/ext2-doc/ext2.html`
 
@@ -946,6 +1018,9 @@ Used by: `boot/grub/grub.cfg`, `Makefile`.
 | PCI Local Bus Specification 3.0 | 4 | Configuration space and device enumeration. |
 | ATA/ATAPI Command Set (ACS-3) | 4 | `IDENTIFY DEVICE`; 28-bit and 48-bit logical block addressing. |
 | Serial ATA AHCI 1.3.1 | 4 | The host bus adaptor: the generic host control and port registers, the command list, and the region descriptors by which a caller's pages are named to the device. |
+| SD Host Controller Simplified Specification 4.20 | 4 | The host controller registers, the command register, and the presentation of a response. |
+| SD Physical Layer Simplified Specification 8.00 | 4 | The card's own command set, the operating conditions register, and the two encodings of a capacity. |
+| JEDEC JESD84-B51 | 4 | The two respects in which an embedded MultiMediaCard differs from an SD card in the identification sequence. |
 | IEEE Std 1003.1-2017, System Interfaces | 6, 7 | `fork()`, `exec()`, `wait()` and the file-descriptor semantics a fork imposes upon the open file table. |
 | Intel MultiProcessor Specification 1.4 | 6 | Application processor bring-up. |
 | Intel SDM, Volume 3A, Chapter 11 | 6 | The Local APIC and the I/O APIC, which retire the 8259A. |

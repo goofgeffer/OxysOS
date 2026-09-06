@@ -340,6 +340,57 @@ transfer that was consistently the wrong length left both holding the same wrong
 thing and the comparison passed. The buffers are now seeded with different bytes
 before the reads. Wherever the device did not write, the two still differ, and
 the halved descriptor is caught at the first byte the device did not reach.
+
+### 6.6 Verification of the SD card and the embedded MultiMediaCard
+
+`KernelVerifySdhci` asserts the capacity and command arithmetic, which need no
+hardware, and then the transfers where a card answered. The properties are
+tabulated against the failure each would catch in
+[`../storage/SDCARD.md`](../storage/SDCARD.md), Sections 7.1 and 7.2.
+
+```sh
+mke2fs -q -t ext2 -b 1024 -L oxys-sd -d seed -F sd.img 16384
+qemu-img create -f raw sdhc.img 4G
+
+qemu-system-x86_64 -machine q35 -cpu qemu64 -smp cores=2 -m 512M \
+    -cdrom build/oxys.iso \
+    -device sdhci-pci,id=sd \
+    -drive if=none,id=sdcard,file=sd.img,format=raw \
+    -device sd-card,drive=sdcard,bus=sd-bus \
+    -display none -serial file:sd.log
+```
+
+**Both capacity encodings are reached by changing the size of the image alone.**
+An image of 16 mebibytes presents as a byte-addressed SD card and one of four
+gibibytes as a block-addressed SDHC card, so the driver's two paths are exercised
+without either being asked for. The expected reports are
+
+```
+  SD card, byte-addressed, address 0x4567, 32768 blocks (16384 KiB)
+  SDHC or SDXC card, block-addressed, address 0x4567, 8388608 blocks (4194304 KiB)
+```
+
+and both figures are exactly the image divided by 512, which is the corroboration
+from outside that the arithmetic of Section 5 of the design document is right.
+
+The seeded volume is then mounted at the root as `/ <- sd0` and its directory
+listing compared against `debugfs -R "ls -l /"` upon the same image from the
+host, exactly as for the other two drivers.
+
+**VirtualBox presents no SD host controller**, so this driver's live half has no
+second machine. The half that needs no hardware runs upon both. That is a
+limitation of the available hardware and is recorded as one rather than left for
+a reader to infer from its absence.
+
+### 6.7 The negative tests of the SD driver
+
+Each was applied to `drivers/sdhci/sdhci.c`, confirmed, and reverted.
+
+| The damage | What the run reported |
+| ---------- | --------------------- |
+| The capacity computed by the version 2 encoding whatever the structure field said. | `A version 1 capacity was computed wrongly.` The two encodings disagree upon the same bits, which is what makes the field load-bearing rather than decorative. |
+| The version 2 `C_SIZE` shifted by 16 rather than 8 — the offset of the stripped CRC applied twice. | `A version 2 capacity was computed wrongly.` and `The greatest version 2 capacity overflowed or was truncated.` |
+| A response of 136 bits composed with the index check enabled. | `A long response was composed with the index checked.` **The card still came up under QEMU**, which does not enforce the check; real silicon does, and every CMD2 and CMD9 would fail upon it. This is precisely why the composition is asserted directly rather than inferred from a card appearing. |
 ## 7. Verification of the EXT2 superblock
 
 The parser is asserted at every boot against a volume composed within the
@@ -1232,3 +1283,9 @@ boot to finish before drawing conclusions from the report.
 | 2026-09-06 | QEMU q35 from the `disk write self-test` entry — the AHCI write path | Passed. The final sector was read, overwritten with a pattern, read back, compared byte for byte and restored; `sectors read 8, written 2, device errors 0`. The image's MD5 sum is unchanged afterwards, which is the assertion the kernel cannot make about itself: the restoration was exact. |
 | 2026-09-06 | `make verify` — the AHCI driver, **the negative tests** | Passed, three of five, and the other two are recorded rather than claimed. The power state dropped gave `A port whose interface is not active was called usable.`; the signature compared on its low half gave `A signature was not recognised as what it names.`; the write bit moved to bit 5 gave `The write bit is not at bit 6 of the command header.` A halved region byte count **first passed** and the assertion was strengthened until it failed; a byte count without its less-one is not caught at all. The procedure and the reasoning are Sections 6.5 and `docs/storage/AHCI.md` Section 8.3. |
 | 2026-09-06 | VirtualBox 7, headless, 640 by 480, an Intel ICH8-M AHCI controller | Passed, upon a second silicon design rather than a second copy of the first. The bus shows `0:13.0 0x8086:0x2829 serial ATA controller (class 0x1, subclass 0x6, interface 0x1)`, the self-test passes, and the seeded volume is mounted as `/ <- ahci0 (ext2, block 1024, read-only)` with the same seven entries and the same inode numbers as QEMU reported. |
+| 2026-09-06 | `make verify` — **sub-task 4.8, the capacity and command arithmetic** | Passed. Both encodings of a card's capacity are computed correctly and, upon the same bits, **disagree** — which is what makes `CSD_STRUCTURE` load-bearing rather than decorative; the greatest version 2 capacity neither overflows nor truncates; an unknown structure yields zero rather than a guess; and the command register is composed with the index check off for a response of 136 bits and both checks off for the operating conditions register. No card here uses the first encoding, so the values are composed, each field named by its position in the card specific data rather than in the response. |
+| 2026-09-06 | QEMU q35 with a 16 MiB image upon an `sdhci-pci` controller | Passed. `SD: host controller at 0:3.0, specification version 2.00, base clock 52 MHz.` and `SD card, byte-addressed, address 0x4567, 32768 blocks (16384 KiB)` — the **first** capacity encoding, and 32768 blocks is exactly the image divided by 512. The seeded volume mounted at the root as `/ <- sd0 (ext2, block 1024, read-only)` with the same seven entries and inode numbers `debugfs` reports of the image upon the host. |
+| 2026-09-06 | QEMU q35 with a 4 GiB image upon the same controller | Passed, and it reaches the other encoding by changing nothing but the size of the image: `SDHC or SDXC card, block-addressed, address 0x4567, 8388608 blocks (4194304 KiB)`, again exactly the image divided by 512. The byte-addressed and block-addressed forms of the transfer argument are both exercised across the two runs. |
+| 2026-09-06 | QEMU q35 from the `disk write self-test` entry — the SD write path | Passed. The final block was read, overwritten with a pattern, read back, compared byte for byte and restored; `blocks read 8, written 2, card errors 0`. The image's MD5 sum is unchanged afterwards, which is the assertion the kernel cannot make about itself. |
+| 2026-09-06 | `make verify` — the SD driver, **the negative tests** | Passed, all three. The structure field ignored gave `A version 1 capacity was computed wrongly.`; the response offset applied twice gave two failures at once; a long response composed with the index check gave `A long response was composed with the index checked.` The third is the one worth recording: **the card still came up under QEMU**, which does not enforce the check, so the assertion upon the composition is the only thing standing between this driver and silicon that does. |
+| 2026-09-06 | VirtualBox 7, headless — sub-task 4.8 | Not applicable, and recorded as such. VirtualBox presents no SD host controller, so the driver reports `SD: no host controller upon this machine.` and its live half cannot run there. The half that needs no hardware — the capacity and command arithmetic — runs upon both machines and passes upon both. |

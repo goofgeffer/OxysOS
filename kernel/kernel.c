@@ -78,6 +78,7 @@
 #include <oxys/pci.h>
 #include <oxys/ata.h>
 #include <oxys/ahci.h>
+#include <oxys/sdhci.h>
 #include <oxys/block.h>
 #include <oxys/buffer.h>
 #include <oxys/ext2.h>
@@ -974,6 +975,17 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
     AhciReport();
 
     /*
+     * And the storage that is of neither class. An inexpensive laptop keeps its
+     * system upon an embedded MultiMediaCard behind a host controller the
+     * assignment specification classes as a system peripheral, and carries no
+     * mass-storage controller whatever: neither driver above will ever find
+     * anything upon such a machine, and no firmware setting would give them one.
+     */
+    (void)SdhciInitialise();
+    KernelVerifySdhci();
+    SdhciReport();
+
+    /*
      * Every disk found presents itself through the generic layer, which is what
      * everything above will address it by. The layer is asserted against a
      * device of memory rather than against a disk: the machine this is verified
@@ -981,6 +993,7 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
      */
     (void)AtaRegisterBlockDevices();
     (void)AhciRegisterBlockDevices();
+    (void)SdhciRegisterBlockDevices();
     KernelVerifyBlock();
     BlockReport();
 

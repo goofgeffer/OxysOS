@@ -139,6 +139,7 @@ C_SOURCES := kernel/kernel.c \
              drivers/pci/pci.c \
              drivers/ata/ata.c \
              drivers/ahci/ahci.c \
+             drivers/sdhci/sdhci.c \
              drivers/block/block.c \
              drivers/block/buffer.c \
              graphics/framebuffer.c \

@@ -74,7 +74,10 @@
  *   Such a machine carries no mass-storage controller at all, and no setting in
  *   its firmware will produce one. The report names those paths too, because
  *   the alternative was to tell somebody holding a working laptop that their
- *   machine has no disk.
+ *   machine has no disk. Since sub-tasks 4.7 and 4.8 both of the storage paths
+ *   it names are driven — AHCI by drivers/ahci, the SD host controller by
+ *   drivers/sdhci — so this report's business with them is to say which driver
+ *   has them and stand aside. A USB drive is still reached by nothing.
  */
 
 #include <oxys/ata.h>
@@ -1166,8 +1169,8 @@ static bool AtaReportForeignStorage(void)
         KernelWriteString(": ");
         KernelWriteString((kind == ATA_FOREIGN_STORAGE_SD)
                               ? "where an embedded MultiMediaCard or a card in a slot "
-                                "is attached. It is not an ATA device and has no "
-                                "command block registers.\n"
+                                "is attached. It is not an ATA device, and is driven by "
+                                "the SD host controller driver.\n"
                               : "where a USB drive is attached. It is not an ATA "
                                 "device and has no command block registers.\n");
     }
@@ -1206,9 +1209,10 @@ static void AtaReportControllers(void)
     KernelWriteString("ATA: this machine has no mass-storage controller at all, so "
                       "there is no\n");
     KernelWriteString("ATA: firmware setting that would present its storage as a disk. "
-                      "Reaching\n");
-    KernelWriteString("ATA: the storage above needs a driver this kernel does not yet "
-                      "have.\n");
+                      "What it\n");
+    KernelWriteString("ATA: does have is named above, and the report of whichever driver "
+                      "reaches\n");
+    KernelWriteString("ATA: it follows this one. A USB drive is reached by nothing yet.\n");
 }
 
 void AtaReport(void)

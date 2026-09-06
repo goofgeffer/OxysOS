@@ -133,6 +133,7 @@ void KernelVerifyPci(void);
  * above that. */
 void KernelVerifyAta(void);
 void KernelVerifyAhci(void);
+void KernelVerifySdhci(void);
 void KernelVerifyBlock(void);
 void KernelVerifyBuffer(void);
 

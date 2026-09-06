@@ -22,6 +22,7 @@
 #include <oxys/testvolume.h>
 #include <oxys/ata.h>
 #include <oxys/ahci.h>
+#include <oxys/sdhci.h>
 #include <oxys/block.h>
 #include <oxys/buffer.h>
 #include <oxys/pci.h>
@@ -935,6 +936,366 @@ void KernelVerifyAhci(void)
     KernelWriteString(succeeded ? "AHCI self-test passed.\n" : "AHCI self-test FAILED.\n");
 }
 
+
+/*
+ * Composes the four response registers a card specific data would appear in.
+ *
+ * The registers hold the specific data with its low eight bits removed, so a
+ * field at bit N of the specific data lies at bit N - 8 here. The helper takes
+ * the position in the **specific data**, because that is what the specification
+ * states and what a reader will check this against; subtracting the eight in
+ * only one place is the point of it.
+ */
+static void KernelPlaceCsdField(uint32_t response[4], uint32_t first_bit, uint32_t width,
+                                uint64_t value)
+{
+    for (uint32_t index = 0U; index < width; ++index)
+    {
+        const uint32_t position = (first_bit + index) - 8U;
+        const uint32_t word = position / 32U;
+        const uint32_t bit = position % 32U;
+
+        if (((value >> index) & 1U) != 0U)
+        {
+            response[word] |= (uint32_t)1U << bit;
+        }
+    }
+}
+
+/*
+ * Asserts the two decisions of the SD driver that are pure.
+ *
+ * The capacity arithmetic is the reason this exists. There are two encodings of
+ * a card's size, chosen by a field of the same register, and they differ in
+ * where every other field sits, in the units of the answer, and in whether a
+ * multiplier applies at all. A capacity computed by the wrong one is not a small
+ * error: it is wrong by a factor of thousands, and a block layer told a card is
+ * larger than it is reads beyond the end of it and is answered with nothing.
+ *
+ * No card available to this project uses the first encoding — it is the one used
+ * by cards of two gibibytes and below, and QEMU's is not one — so the values are
+ * composed rather than obtained, exactly as the ATA driver's channel addressing
+ * is.
+ */
+static bool KernelVerifySdhciDecisions(void)
+{
+    bool succeeded = true;
+    uint32_t response[4];
+
+    /* --- The second encoding: one field, in fixed units. --- */
+
+    /*
+     * C_SIZE of 3823 is the value a 2 GiB SDHC card reports: the capacity is
+     * (C_SIZE + 1) * 512 KiB, which is 3824 * 1024 blocks.
+     */
+    for (uint32_t word = 0U; word < 4U; ++word)
+    {
+        response[word] = 0U;
+    }
+
+    KernelPlaceCsdField(response, 126U, 2U, 1U);    /* CSD_STRUCTURE = 1. */
+    KernelPlaceCsdField(response, 48U, 22U, 3823U); /* C_SIZE. */
+
+    if (SdhciCapacityFromCsd(response) != (3824ULL * 1024ULL))
+    {
+        KernelWriteString("  A version 2 capacity was computed wrongly.\n");
+        succeeded = false;
+    }
+
+    /* The largest a version 2 card may report, which is where a 32-bit
+     * intermediate would wrap: 4194304 blocks per unit of C_SIZE. */
+    for (uint32_t word = 0U; word < 4U; ++word)
+    {
+        response[word] = 0U;
+    }
+
+    KernelPlaceCsdField(response, 126U, 2U, 1U);
+    KernelPlaceCsdField(response, 48U, 22U, 0x3FFFFFU);
+
+    if (SdhciCapacityFromCsd(response) != (0x400000ULL * 1024ULL))
+    {
+        KernelWriteString("  The greatest version 2 capacity overflowed or was "
+                          "truncated.\n");
+        succeeded = false;
+    }
+
+    /* --- The first encoding: three fields, in units the card chooses. --- */
+
+    /*
+     * A 1 GiB card: C_SIZE 3815, C_SIZE_MULT 7, READ_BL_LEN 10. The capacity in
+     * bytes is (3815 + 1) * 2^9 * 2^10, which is 2000683008, and in blocks
+     * 3907584.
+     */
+    for (uint32_t word = 0U; word < 4U; ++word)
+    {
+        response[word] = 0U;
+    }
+
+    KernelPlaceCsdField(response, 126U, 2U, 0U);  /* CSD_STRUCTURE = 0. */
+    KernelPlaceCsdField(response, 80U, 4U, 10U);  /* READ_BL_LEN. */
+    KernelPlaceCsdField(response, 62U, 12U, 3815U); /* C_SIZE. */
+    KernelPlaceCsdField(response, 47U, 3U, 7U);   /* C_SIZE_MULT. */
+
+    if (SdhciCapacityFromCsd(response) != 3907584ULL)
+    {
+        KernelWriteString("  A version 1 capacity was computed wrongly.\n");
+        succeeded = false;
+    }
+
+    /*
+     * The same card read by the other encoding would give a wholly different
+     * answer, which is what makes the structure field load-bearing rather than
+     * decorative. The assertion is that the two disagree: a driver that ignored
+     * the structure would pass every test above by accident if they did not.
+     */
+    for (uint32_t word = 0U; word < 4U; ++word)
+    {
+        response[word] = 0U;
+    }
+
+    KernelPlaceCsdField(response, 126U, 2U, 0U);
+    KernelPlaceCsdField(response, 80U, 4U, 9U);
+    KernelPlaceCsdField(response, 62U, 12U, 1000U);
+    KernelPlaceCsdField(response, 47U, 3U, 3U);
+
+    if (SdhciCapacityFromCsd(response) != ((1001ULL * 32ULL * 512ULL) / 512ULL))
+    {
+        KernelWriteString("  The version 1 multiplier or block length was misread.\n");
+        succeeded = false;
+    }
+
+    /* --- A structure this driver does not know yields nothing. --- */
+
+    for (uint32_t word = 0U; word < 4U; ++word)
+    {
+        response[word] = 0U;
+    }
+
+    KernelPlaceCsdField(response, 126U, 2U, 2U);
+    KernelPlaceCsdField(response, 48U, 22U, 3823U);
+
+    if (SdhciCapacityFromCsd(response) != 0U)
+    {
+        KernelWriteString("  An unknown card specific data structure was guessed at.\n");
+        succeeded = false;
+    }
+
+    if (SdhciCapacityFromCsd(NULL) != 0U)
+    {
+        KernelWriteString("  A card specific data that names nothing yielded a "
+                          "capacity.\n");
+        succeeded = false;
+    }
+
+    /* --- The command register. --- */
+
+    /*
+     * CMD17 with a short response and data: the index in bits 13:8, the data
+     * bit at 5, the index and CRC checks at 4 and 3, and a response type of 2.
+     */
+    if (SdhciCommandFlags(17U, SD_RESPONSE_SHORT, true) != 0x113AU)
+    {
+        KernelWriteString("  A data command was composed wrongly.\n");
+        succeeded = false;
+    }
+
+    /*
+     * A response of 136 bits carries no command index, so the index check must
+     * be off. Left on, every CMD2 and CMD9 reports an index error and the card
+     * is never identified — which presents as a machine with no storage.
+     */
+    if (SdhciCommandFlags(9U, SD_RESPONSE_LONG, false) != 0x0909U)
+    {
+        KernelWriteString("  A long response was composed with the index checked.\n");
+        succeeded = false;
+    }
+
+    /*
+     * The operating conditions register comes back with neither a CRC nor an
+     * index, both fields carrying part of the register instead. Checking either
+     * rejects a card that answered correctly, and the card is then never
+     * brought up.
+     */
+    if (SdhciCommandFlags(41U, SD_RESPONSE_UNCHECKED, false) != 0x2902U)
+    {
+        KernelWriteString("  An unchecked response was composed with a check.\n");
+        succeeded = false;
+    }
+
+    if ((SdhciCommandFlags(0U, SD_RESPONSE_NONE, false) != 0x0000U) ||
+        (SdhciCommandFlags(7U, SD_RESPONSE_BUSY, false) != 0x071BU))
+    {
+        KernelWriteString("  A command with no response, or one with busy, was "
+                          "composed wrongly.\n");
+        succeeded = false;
+    }
+
+    return succeeded;
+}
+
+void KernelVerifySdhci(void)
+{
+    const SdCard *const card = SdhciCard();
+    bool succeeded = KernelVerifySdhciDecisions();
+
+    KernelWriteString(succeeded
+                          ? "SD self-test: the capacity and command arithmetic is sound.\n"
+                          : "SD self-test FAILED: the capacity and command arithmetic.\n");
+
+    if (!SdhciIsPresent())
+    {
+        KernelWriteString("SD self-test: no host controller upon this machine; nothing "
+                          "transferred.\n");
+        return;
+    }
+
+    if (card == NULL)
+    {
+        KernelWriteString("SD self-test: no card in the slot; nothing transferred.\n");
+        return;
+    }
+
+    succeeded = true;
+
+    /*
+     * The first block, twice, into buffers seeded differently — the assertion
+     * the AHCI driver's self-test was corrected to make. Two reads compared
+     * against each other establish less than they appear to: a transfer that is
+     * consistently the wrong length leaves both holding the same wrong thing.
+     */
+    for (size_t index = 0U; index < (SDHCI_BLOCK_SIZE * 2U); ++index)
+    {
+        KernelDiskBufferA[index] = 0xA5U;
+        KernelDiskBufferB[index] = 0x5AU;
+    }
+
+    if (!SdhciRead(0U, 1U, KernelDiskBufferA) || !SdhciRead(0U, 1U, KernelDiskBufferB))
+    {
+        KernelWriteString("  The first block did not read.\n");
+        succeeded = false;
+    }
+    else
+    {
+        if (!KernelRegionsMatch(KernelDiskBufferA, KernelDiskBufferB, SDHCI_BLOCK_SIZE))
+        {
+            KernelWriteString("  A block read twice differs, so less than a whole block "
+                              "was transferred.\n");
+            succeeded = false;
+        }
+
+        for (size_t index = SDHCI_BLOCK_SIZE; index < (SDHCI_BLOCK_SIZE * 2U); ++index)
+        {
+            if (KernelDiskBufferA[index] != 0xA5U)
+            {
+                KernelWriteString("  The transfer wrote past the end of the block.\n");
+                succeeded = false;
+                break;
+            }
+        }
+    }
+
+    /*
+     * Two blocks are two commands here, one per block, so this asserts that the
+     * second command addressed the block after the first and placed it after it
+     * — which is where the byte-addressed and block-addressed forms of the
+     * argument differ, and where confusing them is invisible upon block zero.
+     */
+    if (card->block_count >= 2U)
+    {
+        if (!SdhciRead(0U, 2U, KernelDiskBufferB))
+        {
+            KernelWriteString("  A two-block read failed.\n");
+            succeeded = false;
+        }
+        else
+        {
+            if (!KernelRegionsMatch(KernelDiskBufferA, KernelDiskBufferB, SDHCI_BLOCK_SIZE))
+            {
+                KernelWriteString("  A two-block read did not begin where a one-block "
+                                  "read did.\n");
+                succeeded = false;
+            }
+
+            if (!SdhciRead(1U, 1U, KernelDiskBufferA) ||
+                !KernelRegionsMatch(KernelDiskBufferA, &KernelDiskBufferB[SDHCI_BLOCK_SIZE],
+                                    SDHCI_BLOCK_SIZE))
+            {
+                KernelWriteString("  The second block of a two-block read is not the "
+                                  "block that follows.\n");
+                succeeded = false;
+            }
+        }
+    }
+
+    /* The refusals, each made before the controller is touched. */
+    if (SdhciRead(card->block_count, 1U, KernelDiskBufferA) ||
+        SdhciRead(0U, SDHCI_MAXIMUM_BLOCKS + 1U, KernelDiskBufferA) ||
+        SdhciRead(0U, 0U, KernelDiskBufferA) || SdhciRead(0U, 1U, NULL))
+    {
+        KernelWriteString("  A request that should have been refused was attempted.\n");
+        succeeded = false;
+    }
+
+    /*
+     * The write path, only upon request, and restored afterwards — the rule the
+     * other two drivers keep, and for the same reason: this may be the only
+     * storage the machine has.
+     */
+    if (KernelCommandLineHasOption("disk-write-test"))
+    {
+        const uint64_t target = card->block_count - 1U;
+
+        KernelWriteString("  Writing to the final block, as the command line permits.\n");
+
+        if (!SdhciRead(target, 1U, KernelDiskBufferA))
+        {
+            KernelWriteString("  The block to be written could not first be read.\n");
+            succeeded = false;
+        }
+        else
+        {
+            for (size_t index = 0U; index < SDHCI_BLOCK_SIZE; ++index)
+            {
+                KernelDiskBufferB[index] = (uint8_t)(index ^ 0x3CU);
+            }
+
+            if (!SdhciWrite(target, 1U, KernelDiskBufferB))
+            {
+                KernelWriteString("  The pattern could not be written.\n");
+                succeeded = false;
+            }
+            else if (!SdhciRead(target, 1U, &KernelDiskBufferB[SDHCI_BLOCK_SIZE]))
+            {
+                KernelWriteString("  The pattern could not be read back.\n");
+                succeeded = false;
+            }
+            else if (!KernelRegionsMatch(KernelDiskBufferB,
+                                         &KernelDiskBufferB[SDHCI_BLOCK_SIZE],
+                                         SDHCI_BLOCK_SIZE))
+            {
+                KernelWriteString("  The block read back is not the pattern written.\n");
+                succeeded = false;
+            }
+
+            if (!SdhciWrite(target, 1U, KernelDiskBufferA) ||
+                !SdhciRead(target, 1U, &KernelDiskBufferB[SDHCI_BLOCK_SIZE]) ||
+                !KernelRegionsMatch(KernelDiskBufferA, &KernelDiskBufferB[SDHCI_BLOCK_SIZE],
+                                    SDHCI_BLOCK_SIZE))
+            {
+                KernelWriteString("  The block was not restored to what it held.\n");
+                succeeded = false;
+            }
+        }
+    }
+
+    if (SdhciTimeoutCount() != 0U)
+    {
+        KernelWriteString("  A command exceeded the driver's patience.\n");
+        succeeded = false;
+    }
+
+    KernelWriteString(succeeded ? "SD self-test passed.\n" : "SD self-test FAILED.\n");
+}
 /* Two blocks of working space for the transfers the self-tests perform. */
 static uint8_t KernelBlockBufferA[BLOCK_SIZE_DEFAULT * 2U];
 static uint8_t KernelBlockBufferB[BLOCK_SIZE_DEFAULT * 2U];

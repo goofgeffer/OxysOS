@@ -188,9 +188,15 @@ ATA:   SD host controller, interface 0x1: where an embedded MultiMediaCard or a
 ATA:   USB controller, interface 0x30: where a USB drive is attached. It is not
        an ATA device and has no command block registers.
 ATA: this machine has no mass-storage controller at all, so there is no
-ATA: firmware setting that would present its storage as a disk. Reaching
-ATA: the storage above needs a driver this kernel does not yet have.
+ATA: firmware setting that would present its storage as a disk. What it
+ATA: does have is named above, and the report of whichever driver reaches
+ATA: it follows this one. A USB drive is reached by nothing yet.
 ```
+
+The last three lines said, until sub-task 4.8, that reaching the storage above
+needed a driver this kernel did not have. It has one now — see
+[`SDCARD.md`](SDCARD.md) — and the message says which report to read instead of
+naming an absence.
 
 The two paragraphs are alternatives, and which is printed turns upon whether
 anything of the mass-storage class was found. Where there is such a controller
@@ -469,9 +475,10 @@ the PIIX3 IDE controller at `0:1.1` in compatibility mode. Both are recorded in
    Section 2.2.
 2. **Storage that is not of the storage class is named, not reached.** An eMMC
    part behind an SD host controller and a USB drive behind a serial-bus
-   controller are both storage and neither is an ATA device. The report says
-   where they are and that a driver is what is wanted; it can do nothing else,
-   and no firmware setting can either. See Section 2.3.
+   controller are both storage and neither is an ATA device. This driver says
+   where they are and can do nothing else. Since sub-task 4.8 the first of them
+   is driven by [`SDCARD.md`](SDCARD.md); a USB drive is reached by nothing yet.
+   See Section 2.3.
 3. **A controller in native mode is followed, not switched.** Where the
    programming interface says a channel's mode may be changed, this driver does
    not change it: it reads the addresses the firmware assigned and uses those.

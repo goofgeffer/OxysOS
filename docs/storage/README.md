@@ -1,6 +1,6 @@
 # `docs/storage/` — From a Medium to a Caller
 
-Six documents describing one stack, bottom upwards. They are grouped apart from
+Seven documents describing one stack, bottom upwards. They are grouped apart from
 [`../devices/`](../devices/) because each exists to serve the one above it, and
 because the whole stack is what the filesystem of Phase 5 is written against. The
 stack is complete as of sub-task 5.8: a sector at the bottom, a path and an open
@@ -10,6 +10,7 @@ file at the top.
 | -------- | ------- | -------------- | ----- |
 | [`DISK.md`](DISK.md) | The ATA disk in programmed input/output mode: the task file, the two addressing modes, where a channel actually answers, the identification of what answered, the cache flush that makes a write durable, and what storage the driver cannot reach and how it says so. | [`../../drivers/ata/ata.c`](../../drivers/ata/ata.c) | 4.4 |
 | [`AHCI.md`](AHCI.md) | The AHCI disk by first-party direct memory access: the handoff from the firmware, the ports an adaptor implements, the command list and the region descriptors that name the caller's own pages to the device, and the single command slot this driver keeps. | [`../../drivers/ahci/ahci.c`](../../drivers/ahci/ahci.c) | 4.7 |
+| [`SDCARD.md`](SDCARD.md) | The SD card and the embedded MultiMediaCard: the host controller upon the bus, the second command set of the card behind it, the two encodings of a card's capacity, and the transfer through the buffer data port. | [`../../drivers/sdhci/sdhci.c`](../../drivers/sdhci/sdhci.c) | 4.8 |
 | [`BLOCK.md`](BLOCK.md) | The generic block-device layer: what a driver supplies to register a device, and what the layer refuses before any driver is reached. | [`../../drivers/block/block.c`](../../drivers/block/block.c) | 4.5 |
 | [`BUFFER.md`](BUFFER.md) | The buffer cache: how a block is found, what is discarded when the store is full, and when a modified block reaches its device. | [`../../drivers/block/buffer.c`](../../drivers/block/buffer.c) | 4.6 |
 | [`EXT2.md`](EXT2.md) | The EXT2 volume: the superblock, the block group descriptor table, the inode with the direct and indirect pointers that name a file's blocks, and the directory entries that turn a name into an inode number, the reading of a file's contents, the allocation, writing and truncation that alter a volume, and the insertion and removal of the names by which a file is reached. | [`../../kernel/fs/ext2.c`](../../kernel/fs/ext2.c) | 5.1 to 5.7 |
