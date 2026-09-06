@@ -415,6 +415,45 @@ static bool SerialWaitForTransmitterEmpty(void)
 }
 
 /*
+ * Waits, by polling, until a received character is available. Returns false if
+ * the bound is exhausted, which in loopback denotes a character that was
+ * transmitted and never returned.
+ */
+static bool SerialWaitForReceivedData(void)
+{
+    for (uint32_t iteration = 0U; iteration < SERIAL_POLL_LIMIT; ++iteration)
+    {
+        if ((SerialRead(SERIAL_REGISTER_LINE_STATUS) & SERIAL_LINE_STATUS_DATA_READY) != 0U)
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/*
+ * Discards whatever the receiver holds, up to a bound.
+ *
+ * Reading the receive register is what clears data ready upon a 16550, so this
+ * both empties the buffer and puts the flag back where it belongs. The bound is
+ * there because an adapter that asserted data ready and never cleared it would
+ * otherwise be read from for ever.
+ */
+static void SerialDiscardReceived(void)
+{
+    for (uint32_t iteration = 0U; iteration < SERIAL_RECEIVE_BUFFER_CAPACITY; ++iteration)
+    {
+        if ((SerialRead(SERIAL_REGISTER_LINE_STATUS) & SERIAL_LINE_STATUS_DATA_READY) == 0U)
+        {
+            return;
+        }
+
+        (void)SerialRead(SERIAL_REGISTER_DATA);
+    }
+}
+
+/*
  * Presents one character to the line, waiting for the transmitter. This is the
  * path of the polled mode and of every circumstance in which an interrupt could
  * not arrive.
@@ -742,6 +781,29 @@ bool SerialInitialise(uint16_t port)
                           SERIAL_MODEM_CONTROL_REQUEST_TO_SEND |
                           SERIAL_MODEM_CONTROL_AUXILIARY_OUTPUT_TWO));
     SerialWrite(SERIAL_REGISTER_DATA, SERIAL_LOOPBACK_TEST_BYTE);
+
+    /*
+     * The byte is waited for rather than read at once.
+     *
+     * A byte written to the transmitter in loopback does not appear in the
+     * receiver in the same breath: it is shifted, and the adapter says when it
+     * has arrived by raising data ready in the line status. Reading the receive
+     * register immediately gets whatever that register held before — zero, upon
+     * an adapter the firmware has not used — and the comparison below then
+     * declares a working adapter absent.
+     *
+     * This was found upon VirtualBox, whose emulated adapter behaves as the real
+     * one does. QEMU's makes the byte available at once, so the probe passed
+     * there and the kernel had no serial output at all upon the other machine of
+     * the two it is required to be tested upon — which is also why the fault
+     * went unnoticed: the evidence of it would have arrived over the serial port.
+     */
+    if (!SerialWaitForReceivedData())
+    {
+        SerialActivePort = 0U;
+        return false;
+    }
+
     received_byte = SerialRead(SERIAL_REGISTER_DATA);
 
     if (received_byte != SERIAL_LOOPBACK_TEST_BYTE)
@@ -812,24 +874,6 @@ bool SerialTransmitInterruptEnabled(void)
     return (SerialInterruptEnableShadow & SERIAL_INTERRUPT_ENABLE_TRANSMITTER) != 0U;
 }
 
-/*
- * Waits, by polling, until a received character is available. Returns false if
- * the bound is exhausted, which in loopback denotes a character that was
- * transmitted and never returned.
- */
-static bool SerialWaitForReceivedData(void)
-{
-    for (uint32_t iteration = 0U; iteration < SERIAL_POLL_LIMIT; ++iteration)
-    {
-        if ((SerialRead(SERIAL_REGISTER_LINE_STATUS) & SERIAL_LINE_STATUS_DATA_READY) != 0U)
-        {
-            return true;
-        }
-    }
-
-    return false;
-}
-
 bool SerialLoopbackTest(void)
 {
     /*
@@ -846,8 +890,24 @@ bool SerialLoopbackTest(void)
         return false;
     }
 
-    /* Anything queued belongs upon the line, not in the loopback. */
+    /*
+     * Anything queued belongs upon the line, not in the loopback.
+     *
+     * The flush empties this driver's own queue into the adapter, and that is
+     * not the same as the adapter having finished with it: SerialTransmitPolled
+     * waits for the transmitter *before* each character, so when the flush
+     * returns the last one is still being shifted out. Entering loopback in that
+     * moment loops the straggler back, and it appears in the receiver as a ninth
+     * character the test never sent.
+     *
+     * That is exactly what was observed upon VirtualBox, which reported a
+     * surplus 0x79 — the letter y, out of the boot log and not out of the
+     * pattern below. QEMU shifts a character out fast enough that the window
+     * closed before the next instruction, so the fault lived only upon the other
+     * machine of the two this kernel is required to be tested upon.
+     */
     SerialFlush();
+    (void)SerialWaitForTransmitterEmpty();
 
     saved_interrupt_enable = SerialInterruptEnableShadow;
     SerialWrite(SERIAL_REGISTER_INTERRUPT_ENABLE, 0x00U);
@@ -871,6 +931,19 @@ bool SerialLoopbackTest(void)
             break;
         }
 
+        /*
+         * The receiver is emptied before each character is sent, so that the
+         * data ready observed after the write is this character's and not a flag
+         * left standing from the one before it.
+         *
+         * Upon VirtualBox it was the one before it. The second character of the
+         * sequence was seen to arrive as 0x00: data ready was set, the buffer
+         * was empty, and the read returned nothing — the flag having outlived
+         * the byte that raised it. A test that trusts a status bit it did not
+         * see change is a test that can pass or fail by timing.
+         */
+        SerialDiscardReceived();
+
         SerialWrite(SERIAL_REGISTER_DATA, (uint8_t)(unsigned char)pattern[index]);
 
         if (!SerialWaitForReceivedData() ||
@@ -881,10 +954,36 @@ bool SerialLoopbackTest(void)
         }
     }
 
-    /* Nothing beyond the sequence may have been manufactured by the adapter. */
-    if ((SerialRead(SERIAL_REGISTER_LINE_STATUS) & SERIAL_LINE_STATUS_DATA_READY) != 0U)
+    /*
+     * Nothing beyond the sequence may have been manufactured by the adapter.
+     *
+     * What is looked for is a surplus **byte**, not a surplus flag. Upon
+     * VirtualBox data ready is seen standing over an empty buffer after the last
+     * character has been taken, and reading it yields nothing; upon QEMU it is
+     * not. A test that failed upon the flag alone therefore failed about half
+     * the time upon one of the two machines this kernel must be tested upon, and
+     * about none of the time upon the other, which is the worst way for a test
+     * to be wrong: it teaches whoever runs it to disbelieve it.
+     *
+     * A byte that is genuinely surplus is a byte the adapter echoed twice or
+     * invented, so it is one of the characters sent — and the pattern above
+     * contains no zero. A read that yields zero is therefore the flag outliving
+     * its byte, and a read that yields anything else is the fault this is here
+     * to catch.
+     */
+    for (uint32_t iteration = 0U; iteration < SERIAL_RECEIVE_BUFFER_CAPACITY; ++iteration)
     {
-        succeeded = false;
+        if ((SerialRead(SERIAL_REGISTER_LINE_STATUS) &
+             SERIAL_LINE_STATUS_DATA_READY) == 0U)
+        {
+            break;
+        }
+
+        if (SerialRead(SERIAL_REGISTER_DATA) != 0U)
+        {
+            succeeded = false;
+            break;
+        }
     }
 
     SerialWrite(SERIAL_REGISTER_MODEM_CONTROL,

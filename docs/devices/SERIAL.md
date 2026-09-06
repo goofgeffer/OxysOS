@@ -279,6 +279,51 @@ receive buffer and `SerialReadCharacter`.
 | Line parameters | 8 data bits, no parity, 1 stop bit |
 | Receiver trigger level | 14 characters |
 
+
+### 8.4 The status bit that outlives its byte
+
+Three faults in this driver's use of the line status register were found together
+in September 2026, and all three had the same shape: a status bit was believed
+without being seen to change. They mattered because the machine they showed upon
+was **VirtualBox**, and their first effect was to silence the serial port
+entirely there — so the evidence of every one of them would have arrived over the
+channel they had broken.
+
+**The presence probe read the receiver before the byte arrived.** The adapter is
+placed in local loopback, a byte is written, and the byte is read back; a mismatch
+means no adapter. But a byte written to the transmitter does not appear in the
+receiver in the same breath — it is shifted, and the adapter raises data ready
+when it has arrived. Reading at once returns whatever the receive register held
+before, which upon an adapter the firmware has not used is zero. QEMU makes the
+byte available immediately and the probe passed; VirtualBox does not, so the
+kernel concluded there was no adapter and **wrote nothing to the serial port at
+all**. The tell was in the interrupt controller's report — `lines claimed 3` and
+no IR4 — which was on the screen the whole time.
+
+**The loopback test entered loopback while a character was still being shifted
+out.** `SerialFlush` empties this driver's queue into the adapter, which is not
+the same as the adapter having finished with it: `SerialTransmitPolled` waits for
+the transmitter *before* each character, so when the flush returns the last one
+is still in flight. Entering loopback in that moment loops the straggler back,
+where it appears as a character the test never sent. VirtualBox reported a
+surplus `0x79` — the letter *y*, out of the boot log and not out of the test's
+own pattern.
+
+**The test trusted a data-ready flag it had not seen change.** Two consequences,
+both intermittent, both about half the time upon VirtualBox and never upon QEMU:
+the second character of the sequence was read as `0x00` because data ready was
+still standing from the first, and the check for a surplus character fired upon a
+flag that had outlived its byte. The receiver is now emptied before each
+character is sent, so that the flag observed after a write is that character's;
+and the surplus check looks for a surplus **byte** rather than a surplus flag —
+the pattern contains no zero, so a byte the adapter echoed twice or invented is
+necessarily non-zero, while a read that yields zero is the flag outliving its
+byte.
+
+The general lesson is recorded because it will recur with every device this
+kernel drives: **a status bit read once, without having been observed to change,
+is a guess about timing.** Two emulators disagreeing about that timing is the
+ordinary case and not the exception.
 ## 9. Limitations
 
 1. Only COM1 is driven. The constants for COM2 exist and the driver is written
