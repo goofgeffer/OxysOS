@@ -237,6 +237,15 @@ Within that constraint the backspace behaves as the standard describes:
 upon the first row, the text it protected has left the display altogether, and
 the limit collapses to the origin: nothing that remains was written before it.
 
+The graphical console of sub-task 6.4 implements the same four rules, and did not
+at first: it crossed to the row above and put the cursor at the right-hand edge —
+"the eightieth column, which a short row was never written to" — which is the
+mistake this section was written to warn against. It is worth saying why the same
+document did not prevent it. This driver computes the column by reading the
+characters back out of text memory, and a console drawn upon a framebuffer has no
+characters to read back. The rule was implementable here and had to be given a
+record of its own there. See `docs/design/GRAPHICS.md`, Section 19.2.1.
+
 ### 7.1 The same correction upon a serial terminal
 
 A terminal at the far end of a serial line will not cross a line boundary upon

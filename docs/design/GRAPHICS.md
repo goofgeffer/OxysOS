@@ -732,6 +732,50 @@ should have been allowed.
 Every other control character is drawn as the replacement glyph rather than
 discarded, per Section 18.3.
 
+#### 19.2.1 Crossing to the row above, and the record that makes it possible
+
+A backspace standing in the first column of a row consumes the separator between
+that row and the one above, and the cursor belongs **after the text of the row
+above** — where the next character written upon that row would go. It does not
+belong at the right-hand edge of the display.
+
+The edge is where this console put it until sub-task 6.4 was corrected, and the
+consequence was not subtle. The caller composes an erasure from backspace, space,
+backspace; with the cursor at the far edge the space was written a hundred and
+fifty columns away from the text, so a person pressing backspace over a line
+separator saw the characters they meant to delete stay exactly where they were,
+and the cursor stride away from them. Backspacing within a line worked, which is
+what made it look like a fault in the crossing rather than in the landing.
+
+The text-mode driver answers the same question by reading the characters back out
+of text memory — `VgaFirstFreeColumn` scans the row for its last non-blank cell.
+A console drawn upon a framebuffer has no characters to read back, only pixels,
+so what text memory would have told it is recorded as it goes: `ConsoleRowEnd`
+holds, for each row, the column at which that row's text ended when the cursor
+last left it downward.
+
+The record cannot go stale, and the reason is the order in which it is used. It
+is written when a row is left and read when a row is re-entered from below; a row
+whose text was shortened by an erasure must be left again before it can be
+re-entered again, and the leaving rewrites the entry.
+
+**A row filled to its last column is the exception.** Such a row did not end
+because a line feed was written but because the text wrapped, and there is no
+separator between it and the row below to consume. The cursor therefore stops
+upon the final character, which the same backspace goes on to erase. This is why
+the value stored may be the column count itself: the count says "wrapped" and any
+lesser value says "ended", and the two want different landings.
+
+**The record moves with a scroll**, for the same reason the erase limit does. A
+row length left describing a fixed row would describe different text once the
+text beneath it had moved.
+
+The record is `.bss`, so it has a fixed size, and `CONSOLE_MAXIMUM_ROWS` is that
+size: 512 rows of an eight-pixel face is a display 4096 pixels tall. A taller
+framebuffer is not refused — the console occupies the topmost rows of it and
+leaves the remainder black, which is a display that is short rather than a
+console that is wrong.
+
 ### 19.3 The scroll, which is the blit paying for itself
 
 Scrolling is one `GraphicsBlit` of the surface upon itself, followed by a fill of
@@ -811,10 +855,22 @@ the kernel deny having a framebuffer three lines after describing one in detail.
    thing that must not interleave.
 8. **The picture comments are unchecked.** Nothing asserts that the art beside a
    glyph agrees with its bytes. See Section 18.2.
+9. **The console is at most `CONSOLE_MAXIMUM_ROWS` rows tall.** The row lengths
+   of Section 19.2.1 are `.bss` and therefore of a fixed size. Five hundred and
+   twelve rows is a display 4096 pixels tall, beyond anything a boot loader
+   hands this kernel; a taller framebuffer keeps its remainder black rather than
+   being refused.
+10. **A carriage return does not restore the row's recorded length.** The length
+   is the column at which the cursor left the row, so text overwritten after a
+   carriage return shortens what a later backspace will cross up to, where the
+   text-mode driver — which scans the characters themselves — would find the
+   longer text still standing. Nothing in this kernel writes a carriage return
+   without a line feed after it, and a line discipline that did belongs with
+   Phase 8.
 
 ## 21. Verification of the font and the console
 
-`KernelVerifyConsole` makes twenty-seven assertions in three groups. The font and
+`KernelVerifyConsole` makes thirty-three assertions in three groups. The font and
 its drawing are asserted against a surface composed in memory, as the primitives
 of Section 16 are, so that the whole of that holds upon a machine with no display.
 The control characters are asserted upon the live console, because the position
@@ -856,6 +912,13 @@ Only characters that draw nothing are used — CR, HT and BS — so the boot log
 is written into is not disturbed by the test of it, and the position is left at
 the first column of a fresh line afterwards.
 
+The two assertions about crossing to the row above are the exception and must
+be: a landing cannot be judged without text upon the row above to land after.
+They write upon a fresh line, assert, erase what they wrote, and leave the line
+blank, so the log is as it would have been. **Their absence is what let a real
+fault ship**: every assertion here used characters that draw nothing, so the one
+case that needs a character drawn was the one case never exercised.
+
 | Assertion | What its failure would mean |
 | --------- | --------------------------- |
 | The console's extent fits within the framebuffer, and is not zero | A row or column past the end of the mapping; or a division by zero at the first tabulation. |
@@ -864,6 +927,10 @@ the first column of a fresh line afterwards.
 | BS moves exactly one position | It erased as well, or moved two. |
 | BS at the erase limit does not move | An echo loop can erase the prompt, or output the kernel wrote. |
 | BS at column 0 with the limit there does not cross to the row above | The limit is not consulted on the row-crossing path — the path that would eat the previous line of the log. |
+| BS at column 0 crosses to the row above **and lands after its text** | Section 19.2.1: the cursor at the edge of the display instead, where the erasure the caller composes is written far away from the text and backspacing over a line separator does nothing a person can see. |
+| Three erasures then return to column 0 | The landing was right and the erasure that follows it is not, which is the half a position assertion alone would not reach. |
+| BS crossing into a row filled to its last column stops upon that **final character** | The wrapped row treated as one that ended with a line feed. There is no separator there to consume, so the cursor would stop one position past the last character and the erasure would fall off the row. |
+| Erasing a filled row returns to column 0 | The same, over the whole width of the display rather than at one position. |
 
 ### 21.4 What a person judges
 
@@ -885,6 +952,19 @@ Console self-test FAILED.
 ```
 
 and `make verify` failed on it. The edit was then reverted.
+
+Three further negative tests were made when the backspace was corrected. Putting
+the cursor back at the right-hand edge upon a crossing — the fault as it was
+reported — gave `a backspace crossing to the row above did not land after its
+text` and `three erasures did not return to the first column`. Dropping the
+filled-row exception gave `a backspace crossing into a filled row did not stop
+upon its final character` and the erasure assertion beside it. Removing the shift
+of the row lengths upon a scroll passed `make verify` — the console at 1280 by
+800 has a hundred rows and has not scrolled by the time the self-test runs — and
+was confirmed instead at the echo loop, by scrolling the display past a hundred
+and thirty lines and then backspacing over a line separator: the text stood
+unerased, exactly as it had upon the machine that reported this. See
+`docs/project/TESTING.md`, Section 17.3.
 
 ## 22. Observed state of the console
 

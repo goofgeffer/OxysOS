@@ -52,6 +52,22 @@
 #define CONSOLE_EARLY_CAPACITY 4096U
 
 /*
+ * The greatest number of character rows this console will occupy.
+ *
+ * A row's length is recorded so that a backspace crossing into the row above
+ * lands where that row's text ends rather than at the right-hand edge of the
+ * display; see ConsoleWriteCharacter. The record is one entry per row, it is
+ * .bss, and .bss must be a fixed size, so a bound is needed.
+ *
+ * Five hundred and twelve rows of an eight-pixel face is a display 4096 pixels
+ * tall, which is beyond anything a boot loader will hand this kernel. A taller
+ * framebuffer is not refused; the console occupies the topmost rows of it and
+ * leaves the remainder black, which is a display that is short rather than a
+ * console that is wrong.
+ */
+#define CONSOLE_MAXIMUM_ROWS 512U
+
+/*
  * Prepares the console upon the framebuffer and replays whatever was written
  * before it existed.
  *

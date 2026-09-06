@@ -472,6 +472,92 @@ static void KernelVerifyConsoleControl(void)
                              "although the limit stood there");
     }
 
+    /*
+     * A backspace crossing into the row above lands after that row's text.
+     *
+     * This is the assertion whose absence let a real fault ship. Every test
+     * above uses characters that draw nothing, and a cross-up cannot be judged
+     * without text upon the row above to land after — so the case was never
+     * exercised, and the console put the cursor at the right-hand edge of the
+     * display instead. The erasure a caller composes was then written a hundred
+     * and fifty columns away from the text, and backspacing over a line
+     * separator did nothing a person could see.
+     *
+     * The three characters written here are erased again before the test
+     * returns, so the boot log is as it would have been.
+     */
+    {
+        uint32_t text_row;
+        uint32_t expected_row;
+
+        ConsoleWriteCharacter('\n');
+        ConsoleSetEraseLimit();
+        text_row = ConsoleRow();
+
+        ConsoleWriteString("abc");
+        ConsoleWriteCharacter('\n');
+
+        /*
+         * A line feed upon the last row scrolls instead of advancing, and the
+         * row holding the text then moves up by one. The two cases are told
+         * apart by the row number, which advances in the one and does not in the
+         * other.
+         */
+        expected_row = (ConsoleRow() == text_row) ? (text_row - 1U) : text_row;
+
+        ConsoleWriteCharacter('\b');
+        KernelConsoleRequire(ConsoleRow() == expected_row,
+                             "a backspace at the first column did not cross to the row "
+                             "above");
+        KernelConsoleRequire(ConsoleColumn() == 3U,
+                             "a backspace crossing to the row above did not land after "
+                             "its text");
+
+        ConsoleWriteString("\b \b\b \b\b \b");
+        KernelConsoleRequire(ConsoleColumn() == 0U,
+                             "three erasures did not return to the first column");
+    }
+
+    /*
+     * A row filled to its last column is the exception, and the one a careless
+     * implementation gets wrong in the other direction. Such a row did not end
+     * with a line feed but by wrapping, so there is no separator between it and
+     * the row below to consume, and the cursor stops upon the final character —
+     * which the same backspace goes on to erase.
+     */
+    {
+        const uint32_t columns = ConsoleColumns();
+        uint32_t text_row;
+        uint32_t expected_row;
+
+        ConsoleWriteCharacter('\n');
+        ConsoleSetEraseLimit();
+        text_row = ConsoleRow();
+
+        for (uint32_t index = 0U; index < columns; ++index)
+        {
+            ConsoleWriteCharacter('x');
+        }
+
+        /* The last character wrapped of its own accord; no line feed was written. */
+        expected_row = (ConsoleRow() == text_row) ? (text_row - 1U) : text_row;
+
+        ConsoleWriteCharacter('\b');
+        KernelConsoleRequire(ConsoleRow() == expected_row,
+                             "a backspace did not cross into the wrapped row above");
+        KernelConsoleRequire(ConsoleColumn() == (columns - 1U),
+                             "a backspace crossing into a filled row did not stop upon "
+                             "its final character");
+
+        for (uint32_t index = 0U; index < columns; ++index)
+        {
+            ConsoleWriteString("\b \b");
+        }
+
+        KernelConsoleRequire(ConsoleColumn() == 0U,
+                             "erasing a filled row did not return to the first column");
+    }
+
     /* Leave the position where the next line of the log expects it. */
     ConsoleWriteCharacter('\r');
     ConsoleSetEraseLimit();

@@ -54,6 +54,29 @@ static uint64_t ConsoleCharactersWritten;
 static uint64_t ConsoleScrollCount;
 
 /*
+ * Where each row's text ended when the cursor last left it downward.
+ *
+ * A backspace standing in the first column of a row consumes the separator
+ * between that row and the one above, and the cursor belongs after the text of
+ * the row above — not at the right-hand edge of the display, which is where a
+ * console with no such record has to put it. The text-mode driver answers the
+ * same question by reading the characters back out of text memory; a console
+ * drawn upon a framebuffer has no characters to read back, only pixels, so what
+ * text memory would have told it is recorded as it goes.
+ *
+ * It is written when a row is left and read when a row is re-entered from below,
+ * so it cannot go stale: a row whose text was shortened by an erasure is left
+ * again before it can be re-entered again, and the leaving rewrites the entry.
+ *
+ * A row filled to its last column is the exception, and is why the value stored
+ * may be the column count itself. Such a row did not end because a line feed was
+ * written but because the text wrapped, and there is no separator between it and
+ * the row below to consume; the cursor therefore stops upon the final character,
+ * which the same backspace goes on to erase.
+ */
+static uint32_t ConsoleRowEnd[CONSOLE_MAXIMUM_ROWS];
+
+/*
  * What was written before the console existed, and how much did not fit.
  *
  * The count of dropped bytes is kept and reported rather than the overflow being
@@ -100,12 +123,29 @@ static void ConsoleScroll(void)
         ConsoleLimitColumn = 0U;
     }
 
+    /* The row lengths move with the rows they describe, for the same reason. */
+    for (uint32_t row = 0U; (row + 1U) < ConsoleRowCount; ++row)
+    {
+        ConsoleRowEnd[row] = ConsoleRowEnd[row + 1U];
+    }
+
+    ConsoleRowEnd[ConsoleRowCount - 1U] = 0U;
+
     ++ConsoleScrollCount;
 }
 
 /* Advances to the first column of the following row, scrolling upon the last. */
 static void ConsoleNewLine(void)
 {
+    /*
+     * Recorded before the column is reset, and recorded here rather than in the
+     * two callers because this is the one place a row is left downward: an
+     * explicit line feed arrives with the cursor after the text, and a wrap
+     * arrives with it at the column count, which is the distinction a backspace
+     * crossing back up needs to make.
+     */
+    ConsoleRowEnd[ConsoleCursorRow] = ConsoleCursorColumn;
+
     ConsoleCursorColumn = 0U;
 
     if ((ConsoleCursorRow + 1U) < ConsoleRowCount)
@@ -139,6 +179,17 @@ bool ConsoleInitialise(void)
     ConsoleRowCount = ConsoleSurface.height / FONT_HEIGHT;
 
     /*
+     * A framebuffer taller than the row lengths can describe is used as far as
+     * they reach. Nothing hands this kernel a display of four thousand pixels,
+     * and a console short of the foot of such a display is a better failure than
+     * a backspace that reads a row length beyond the end of the record.
+     */
+    if (ConsoleRowCount > CONSOLE_MAXIMUM_ROWS)
+    {
+        ConsoleRowCount = CONSOLE_MAXIMUM_ROWS;
+    }
+
+    /*
      * A framebuffer smaller than one cell is refused rather than divided by.
      * Nothing produces one, and a console of zero columns would divide by zero
      * at the first tabulation.
@@ -157,6 +208,11 @@ bool ConsoleInitialise(void)
     ConsoleLimitRow = 0U;
     ConsoleCharactersWritten = 0U;
     ConsoleScrollCount = 0U;
+
+    for (uint32_t row = 0U; row < ConsoleRowCount; ++row)
+    {
+        ConsoleRowEnd[row] = 0U;
+    }
 
     GraphicsResetClip(&ConsoleSurface);
     GraphicsClear(&ConsoleSurface, ConsoleBackground);
@@ -220,6 +276,76 @@ void ConsoleSetEraseLimit(void)
 void ConsoleSuspend(void)
 {
     ConsoleSuspended = true;
+}
+
+/*
+ * The position of a cell counted from the first cell of the first row, by which
+ * two positions are compared in one operation rather than by a pair of tests
+ * that must agree.
+ */
+static uint32_t ConsolePosition(uint32_t row, uint32_t column)
+{
+    return (row * ConsoleColumnCount) + column;
+}
+
+/*
+ * Retreats the cursor by one position, crossing into the row above where it
+ * stands in the first column.
+ *
+ * Crossing up lands after the text of the row above, which is where the next
+ * character written upon that row would go — not at the right-hand edge of the
+ * display. The edge is where this went before the row lengths were recorded, and
+ * it was wrong in a way that made backspacing over a line separator useless: the
+ * erasure the caller composes was written a hundred and fifty columns away from
+ * the text, so a person saw the characters they were trying to delete stay
+ * exactly where they were.
+ *
+ * The exception is a row filled to its last column. Such a row did not end
+ * because a line feed was written but because the text wrapped, and there is no
+ * separator to consume; the cursor stops upon the final character, which the
+ * same backspace goes on to erase.
+ *
+ * The movement stops at the erase limit. Without one the console has no way to
+ * tell a character the user typed from a character the kernel printed, and a
+ * backspace crossing a row boundary would consume the boot log a character at a
+ * time.
+ */
+static void ConsoleBackspace(void)
+{
+    const uint32_t limit = ConsolePosition(ConsoleLimitRow, ConsoleLimitColumn);
+
+    if (ConsolePosition(ConsoleCursorRow, ConsoleCursorColumn) <= limit)
+    {
+        return;
+    }
+
+    if (ConsoleCursorColumn > 0U)
+    {
+        --ConsoleCursorColumn;
+    }
+    else if (ConsoleCursorRow > 0U)
+    {
+        const uint32_t end = ConsoleRowEnd[ConsoleCursorRow - 1U];
+
+        --ConsoleCursorRow;
+        ConsoleCursorColumn = (end < ConsoleColumnCount) ? end : (ConsoleColumnCount - 1U);
+    }
+    else
+    {
+        /* The first column of the first row; there is nowhere above to go. */
+        return;
+    }
+
+    /*
+     * A row above whose text ends before the limit would otherwise have carried
+     * the cursor past it, the limit standing in the middle of a row that a
+     * prompt shares with the input that follows it.
+     */
+    if (ConsolePosition(ConsoleCursorRow, ConsoleCursorColumn) < limit)
+    {
+        ConsoleCursorRow = ConsoleLimitRow;
+        ConsoleCursorColumn = ConsoleLimitColumn;
+    }
 }
 
 void ConsoleWriteCharacter(char character)
@@ -296,22 +422,7 @@ void ConsoleWriteCharacter(char character)
          * text-mode display and upon a serial terminal. The limit is what keeps
          * an echo loop from retreating over a prompt.
          */
-        if ((ConsoleCursorRow == ConsoleLimitRow) &&
-            (ConsoleCursorColumn <= ConsoleLimitColumn))
-        {
-            return;
-        }
-
-        if (ConsoleCursorColumn > 0U)
-        {
-            --ConsoleCursorColumn;
-        }
-        else if (ConsoleCursorRow > 0U)
-        {
-            --ConsoleCursorRow;
-            ConsoleCursorColumn = ConsoleColumnCount - 1U;
-        }
-
+        ConsoleBackspace();
         return;
 
     default:

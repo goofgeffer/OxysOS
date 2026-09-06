@@ -713,7 +713,7 @@ trimmed blit — and end `Graphics self-test FAILED.` Restore the file afterward
 ## 17. Verification of the font and the console
 
 The font and the console of sub-task 6.4 are asserted at every boot by
-`KernelVerifyConsole` — twenty-seven assertions in three groups, each tabulated
+`KernelVerifyConsole` — thirty-three assertions in three groups, each tabulated
 against the silent failure it catches in
 [`../design/GRAPHICS.md`](../design/GRAPHICS.md), Section 21.
 
@@ -723,6 +723,13 @@ machine with no display. The four control characters are asserted upon the live
 console, because the position they move is the console's own and there is no
 second one to make; only characters that draw nothing are used — CR, HT and BS —
 so the boot log the test is written into is not disturbed by the test of it.
+
+The exception is the pair of assertions about a backspace crossing to the row
+above, added when that path was found to be wrong. A landing cannot be judged
+without text upon the row above to land after, so those write upon a fresh line,
+assert, erase what they wrote and leave the line blank. Their absence is what let
+the fault ship: every assertion here used characters that draw nothing, so the
+one case that needs a character drawn was the one case never exercised.
 
 The assertions worth naming here are the ones a compiler cannot make about a
 table authored by hand: that **no two glyphs are identical**, that exactly one
@@ -776,6 +783,53 @@ and `make verify` must itself fail, the harness having gained the assertion upon
 `FAILED` recorded in Section 1. Restore the file afterwards — the correct bytes
 for `'O'` are `0x78, 0x84, 0x84, 0x84, 0x84, 0x84, 0x78, 0x00`, and the picture
 comment beneath the line states them.
+
+### 17.3 The backspace across a line separator
+
+The fault was reported from a real machine: backspacing over letters worked and
+backspacing over a line separator did not. The cause was the console putting the
+cursor at the right-hand edge of the display when it crossed to the row above,
+so the erasure its caller composes — `BS SP BS` — wrote its space a hundred and
+fifty columns away from the text. See
+[`../design/GRAPHICS.md`](../design/GRAPHICS.md), Section 19.2.1.
+
+It is reproduced by driving the echo loop from outside, which needs the serial
+line for input rather than a log file. A socket serves for both, with the monitor
+upon a second one so that the screen can be captured while the machine still
+stands at the loop:
+
+```sh
+qemu-system-x86_64 -machine q35 -cpu qemu64 -smp cores=2 -m 512M \
+    -cdrom build/oxys.iso -display none -no-reboot \
+    -serial unix:/tmp/oxys-serial.sock,server=on,wait=off \
+    -monitor unix:/tmp/oxys-monitor.sock,server=on,wait=off
+```
+
+Wait for `A backspace erases, and crosses to the line above.` upon the serial
+socket, then send `ab`, a line feed, `cd`, a line feed, and three `0x08` bytes,
+a quarter of a second apart so that each is processed as a keystroke would be.
+Then `screendump` upon the monitor socket.
+
+| What to look for | What its absence would mean |
+| ---------------- | --------------------------- |
+| The three backspaces leave `ab` alone upon the screen | The line separator, then `d`, then `c` were each consumed. Both lines standing intact is the fault as reported. |
+| Ten backspaces leave neither line, and the banner above them intact | The erase limit still holds across a row crossing — the assertion that keeps an echo loop from eating the boot log. |
+| After a hundred and thirty line feeds, the same sequence still erases | The row lengths moved with the text when the display scrolled. |
+
+The third is the case the boot-time self-test cannot reach. The console at 1280
+by 800 is a hundred rows tall and has not scrolled by the time the self-test
+runs, so removing the shift of the row lengths upon a scroll leaves `make verify`
+passing; it is caught here and nowhere else.
+
+### 17.4 The negative tests of the backspace
+
+Each was applied to `graphics/console.c`, confirmed and reverted.
+
+| The damage | What the run reported |
+| ---------- | --------------------- |
+| The cursor put at the right-hand edge upon crossing, which is the fault as it was reported. | `a backspace crossing to the row above did not land after its text` and `three erasures did not return to the first column`. |
+| The filled-row exception dropped, so that a wrapped row is treated as one that ended with a line feed. | `a backspace crossing into a filled row did not stop upon its final character` and the erasure assertion beside it. |
+| The shift of the row lengths upon a scroll removed. | `make verify` **passed**, for the reason given in Section 17.3. Confirmed instead at the echo loop: after a hundred and thirty line feeds, `abc` followed by a line feed and three backspaces left `abc` standing untouched. |
 
 ## 18. Verification of the drawing optimisation
 
@@ -1108,3 +1162,10 @@ boot to finish before drawing conclusions from the report.
 | 2026-09-06 | QEMU q35 with `-device qemu-xhci`, the ordinary ISO | Passed; with the board's own AHCI controller present, the report names it, names the USB controller beneath it, and closes with the firmware remedy — which is the right paragraph here and the wrong one above. That the two are chosen apart is the assertion `An IDE controller was reported as beyond this driver's class.` guards. |
 | 2026-09-06 | `make verify` — the disk diagnosis, **the negative tests** | Passed, all three, each reverted afterwards. Reading the subclass without its class gave `An SMBus controller was taken for storage.`; classifying an SD host controller as nothing gave `An SD host controller was not recognised as storage.`, which is the reported fault itself; counting mass storage as foreign gave two failures at once. The procedure is Section 6.3. |
 | 2026-09-06 | VirtualBox 7, headless, 512 MiB, legacy BIOS, screenshot | Passed; both new self-tests report soundly and the addressing change alters nothing upon a machine that was already working, which is the property that most needed confirming. The PIIX4 controller is in compatibility mode and both channels are still addressed there — `ATA: primary channel at 0x1F0, control 0x3F6, the compatibility address.` — and the same three devices answer as before, the primary master being the ATAPI drive holding the ISO, so the run reports `devices answered but none is a disk`. This board also carries a `system peripheral (class 0x08, subclass 0x80)`, which is **not** an SD host controller and is not named as storage: the subclass distinction asserted upon composed headers, seen upon a real one. |
+| 2026-09-06 | `make verify` — **the backspace across a line separator** | Passed. A backspace at the first column now crosses to the row above and lands after its text, three erasures then return to the first column, a backspace crossing into a row filled to its last column stops upon that final character rather than one past it, and erasing such a row returns to the first column. These are the first assertions of the console self-test that need a character drawn; every one before them used characters that draw nothing, which is exactly why this path was never exercised. |
+| 2026-09-06 | `make verify` — the backspace, **the negative tests** | Passed, two of three, and the third is recorded as a gap rather than a pass. Restoring the right-hand edge upon a crossing — the fault as reported — gave `a backspace crossing to the row above did not land after its text`. Dropping the filled-row exception gave `a backspace crossing into a filled row did not stop upon its final character`. Removing the shift of the row lengths upon a scroll left `make verify` passing: the console at 1280 by 800 is a hundred rows tall and has not scrolled when the self-test runs. That case is confirmed at the echo loop instead; see Section 17.3. |
+| 2026-09-06 | QEMU q35, the echo loop driven through a serial socket — **the fault as reported** | Passed. `ab`, a line feed, `cd`, a line feed and three backspaces leave `ab` alone upon the screen: the separator, then `d`, then `c` were each consumed. Before the correction the same sequence left both lines standing intact, which is what a person sees as backspacing over letters working and backspacing over a line ending doing nothing. |
+| 2026-09-06 | QEMU q35, the echo loop — the erase limit across a crossing | Passed. Ten backspaces after the same two lines leave neither line and leave `A backspace erases, and crosses to the line above.` above them untouched. The limit holds upon the row-crossing path, which is the path that would otherwise eat the boot log a line at a time. |
+| 2026-09-06 | QEMU q35, the echo loop after a hundred and thirty line feeds | Passed; this is the test of the row lengths moving with a scroll, which the boot-time self-test cannot reach. `abc`, a line feed and three backspaces leave `a`. With the shift removed the same sequence left `abc` untouched — the row lengths describing rows the text had left. |
+| 2026-09-06 | VirtualBox 7, headless, 640 by 480 — **through the keyboard itself** | Passed. Scancodes were injected with `VBoxManage controlvm keyboardputscancode`, so this exercises the whole path a person uses: key, 8042, decoder, echo loop, console. Typing `ab`, Enter, `cd`, Enter and three backspaces left `ab` alone. This display is sixty rows and the boot log has already scrolled it, which QEMU's hundred rows have not. |
+| 2026-09-06 | VirtualBox 7, the same session, after seventy further Enters | Passed, and it is the second machine to confirm the row lengths move with a scroll: with the display scrolled by the typing itself, `abc`, Enter and three backspaces left `a`. |
