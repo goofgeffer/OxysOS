@@ -5,7 +5,8 @@
  *          it, and the reading and writing of sectors by 28-bit and 48-bit
  *          logical block addressing.
  * Key definitions: ATA_SECTOR_SIZE, AtaDeviceKind, AtaDevice, AtaInitialise,
- *          AtaDeviceCount, AtaDeviceAt, AtaFirstDisk, AtaRead, AtaWrite,
+ *          AtaDeviceCount, AtaDeviceAt, AtaFirstDisk, AtaChannelAddressesFor,
+ *          AtaForeignStorage, AtaClassifyForeignStorage, AtaRead, AtaWrite,
  *          AtaRegisterBlockDevices, AtaReport.
  * References:
  *   - AT Attachment with Packet Interface (ATA/ATAPI-6 and later), the command
@@ -30,9 +31,62 @@
 #define OXYS_ATA_H
 
 #include <oxys/types.h>
+#include <oxys/pci.h>
 
 /* The size of a sector, invariant across every device this driver addresses. */
 #define ATA_SECTOR_SIZE 512U
+
+/*
+ * Where a channel of the given PCI IDE controller answers, if it is in native
+ * PCI mode; false where it is in compatibility mode, where the function is not
+ * an IDE controller, or where the base address registers do not describe a usable
+ * pair of I/O port ranges.
+ *
+ * This is exposed because it cannot be tested otherwise. No board available to
+ * this project presents an IDE controller in native mode — every one of them
+ * uses the compatibility addresses, and a machine that did not could not be
+ * obtained to try it upon. The decision is therefore a pure function of a
+ * configuration header, and the self-test composes headers that no machine here
+ * has and asserts what would be done with them.
+ *
+ * The alternative was to write the arithmetic and hope, which is exactly the
+ * kind of code that is discovered to be wrong by somebody else, upon their own
+ * machine, with no diagnostic beyond a disk that is not there.
+ */
+bool AtaChannelAddressesFor(const PciFunction *function, uint8_t channel, uint16_t *io_base,
+                            uint16_t *control_base);
+
+/*
+ * The kinds of storage a machine may carry that are not of the mass-storage
+ * class at all, and which this driver therefore cannot find by searching it.
+ */
+typedef enum AtaForeignStorage
+{
+    ATA_FOREIGN_STORAGE_NONE = 0, /* Not a storage path, or one this driver's own class holds. */
+    ATA_FOREIGN_STORAGE_SD,       /* An SD host controller, which is where an eMMC part lives. */
+    ATA_FOREIGN_STORAGE_USB       /* A USB controller, which is where a removable drive lives. */
+} AtaForeignStorage;
+
+/*
+ * What storage path, outside the mass-storage class, the given function is.
+ *
+ * This exists because the diagnosis printed when no device answers was itself
+ * wrong upon a whole family of machines. An inexpensive laptop stores its system
+ * upon an embedded MultiMediaCard part, whose host controller the specification
+ * classes as a system peripheral; it carries no mass-storage controller of any
+ * kind. The driver looked for one, found none, and concluded that the machine
+ * had no disk — of a machine that had just booted from a USB drive and whose
+ * storage was sitting one class away.
+ *
+ * Saying "this machine has no disk" to somebody holding a laptop that plainly
+ * has storage is worse than saying nothing: it sends them to look for a fault in
+ * their hardware or their firmware, where there is none to find. The remedy for
+ * these is a driver, not a setting, and the report must say so.
+ *
+ * Returns ATA_FOREIGN_STORAGE_NONE for a null function, so that a caller may
+ * pass whatever a search gave it.
+ */
+AtaForeignStorage AtaClassifyForeignStorage(const PciFunction *function);
 
 /* The compatibility-mode addresses of the two channels, and their request lines. */
 #define ATA_PRIMARY_IO_BASE        UINT16_C(0x01F0)

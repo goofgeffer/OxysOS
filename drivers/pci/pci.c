@@ -528,16 +528,27 @@ const char *PciClassName(uint8_t class_code, uint8_t subclass)
     case 0x07U:
         return "communication controller";
 
-    case 0x08U:
-        return "system peripheral";
+    case PCI_CLASS_SYSTEM_PERIPHERAL:
+        switch (subclass)
+        {
+        case PCI_SUBCLASS_SD_HOST:
+            /*
+             * Named because this is where the storage of an inexpensive laptop
+             * is: an embedded MultiMediaCard part is attached to this
+             * controller and to no mass-storage controller at all.
+             */
+            return "SD host controller";
+        default:
+            return "system peripheral";
+        }
 
     case 0x09U:
         return "input device controller";
 
-    case 0x0CU:
+    case PCI_CLASS_SERIAL_BUS:
         switch (subclass)
         {
-        case 0x03U:
+        case PCI_SUBCLASS_USB:
             return "USB controller";
         case 0x05U:
             return "SMBus controller";

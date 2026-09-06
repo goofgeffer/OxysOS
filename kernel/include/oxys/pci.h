@@ -10,6 +10,12 @@
  *          PciFunctionAt, PciFindByClass, PciFindByIdentifier, PciBarIsIoPort,
  *          PciBarBase, PciEnableBusMastering, PciReport.
  * References:
+ *   - PCI Local Bus Specification, the class code register: the class, subclass
+ *     and programming interface bytes. Of the mass-storage class, an IDE
+ *     controller's programming interface names which of its two channels are in
+ *     native PCI mode rather than at the compatibility addresses, and a serial
+ *     ATA controller reporting 0x01 is an AHCI controller and answers at no I/O
+ *     port.
  *   - PCI Local Bus Specification, Configuration Space Access Mechanism #1: two
  *     32-bit I/O locations are used, CONFIG_ADDRESS at 0x0CF8 and CONFIG_DATA at
  *     0x0CFC. Bit 31 of CONFIG_ADDRESS is the enable flag, bits 30 to 24 are
@@ -85,14 +91,66 @@
 #define PCI_COMMAND_MEMORY_SPACE  UINT16_C(0x0002)
 #define PCI_COMMAND_BUS_MASTER    UINT16_C(0x0004)
 
+/*
+ * The wildcard PciFindByClass accepts in place of a class or a subclass.
+ *
+ * It is named because 0xFF is also a legitimate class code — the device class
+ * reserved for devices that do not fit any other — and a caller writing the
+ * literal would be writing something that reads as a search for that class.
+ */
+#define PCI_CLASS_ANY          UINT8_C(0xFF)
+#define PCI_CLASS_ANY_SUBCLASS UINT8_C(0xFF)
+
 /* The class codes this kernel names or searches for. */
-#define PCI_CLASS_MASS_STORAGE UINT8_C(0x01)
-#define PCI_CLASS_BRIDGE       UINT8_C(0x06)
+#define PCI_CLASS_MASS_STORAGE     UINT8_C(0x01)
+#define PCI_CLASS_BRIDGE           UINT8_C(0x06)
+#define PCI_CLASS_SYSTEM_PERIPHERAL UINT8_C(0x08)
+#define PCI_CLASS_SERIAL_BUS       UINT8_C(0x0C)
 
 /* Subclasses of those classes. */
+#define PCI_SUBCLASS_SCSI       UINT8_C(0x00)
 #define PCI_SUBCLASS_IDE        UINT8_C(0x01)
+#define PCI_SUBCLASS_RAID       UINT8_C(0x04)
+#define PCI_SUBCLASS_ATA        UINT8_C(0x05)
+#define PCI_SUBCLASS_SATA       UINT8_C(0x06)
+#define PCI_SUBCLASS_NVM        UINT8_C(0x08)
 #define PCI_SUBCLASS_HOST_BRIDGE UINT8_C(0x00)
 #define PCI_SUBCLASS_PCI_BRIDGE UINT8_C(0x04)
+
+/*
+ * The two subclasses that carry storage without being of the mass-storage class.
+ *
+ * An embedded MultiMediaCard part — the storage of most inexpensive laptops, in
+ * place of a disk — is attached to a host controller the specification classes
+ * as a system peripheral, not as mass storage. A USB drive is attached to a
+ * serial-bus controller. Neither is found by a search of the mass-storage class,
+ * and a machine carrying nothing else reports no storage controller at all
+ * while plainly having storage: it booted from some of it.
+ */
+#define PCI_SUBCLASS_SD_HOST UINT8_C(0x05)
+#define PCI_SUBCLASS_USB     UINT8_C(0x03)
+
+/*
+ * Programming interfaces of the mass-storage subclasses this kernel must tell
+ * apart, the subclass alone not being enough to say how a controller is reached.
+ *
+ * An IDE controller reports, in the low four bits, which of its two channels are
+ * in native PCI mode: bit 0 for the primary and bit 2 for the secondary, each
+ * with the bit above it saying whether the mode may be changed. A channel in
+ * compatibility mode answers at the addresses the IBM Personal Computer AT
+ * fixed them at; a channel in native mode answers at the addresses its base
+ * address registers give, and at no others.
+ *
+ * A serial ATA controller reporting 0x01 is an AHCI controller, whose registers
+ * are memory-mapped and which answers at no I/O port at all. That distinction is
+ * why a machine may carry a disk this kernel cannot see.
+ */
+#define PCI_IDE_PRIMARY_NATIVE     UINT8_C(0x01)
+#define PCI_IDE_PRIMARY_SWITCHABLE UINT8_C(0x02)
+#define PCI_IDE_SECONDARY_NATIVE   UINT8_C(0x04)
+#define PCI_IDE_SECONDARY_SWITCHABLE UINT8_C(0x08)
+#define PCI_SATA_INTERFACE_AHCI    UINT8_C(0x01)
+#define PCI_NVM_INTERFACE_NVME     UINT8_C(0x02)
 
 /* The number of base address registers in a standard header. */
 #define PCI_BAR_COUNT 6U

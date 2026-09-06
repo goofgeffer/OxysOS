@@ -52,7 +52,7 @@ the second channel answers at `0x0170` and `0x0376`. Those are the addresses thi
 driver uses. An IDE controller found upon the PCI bus reports in bits 0 and 2 of
 its programming interface whether each channel is in that compatibility mode or
 in the native mode that takes its addresses from the base address registers; see
-Section 8.
+Section 2.1.
 
 The bits this driver reads and writes:
 
@@ -65,6 +65,139 @@ The bits this driver reads and writes:
 | Status | 0 (ERR) | The command failed; the error register describes it. |
 | Device control | 1 (nIEN) | Set: the device does not assert its interrupt. |
 | Device control | 2 (SRST) | Set and then cleared: both devices upon the channel are reset. |
+
+### 2.1 Where a channel answers, which is not always where the AT put it
+
+The addresses `0x01F0`/`0x03F6` and `0x0170`/`0x0376` are the **compatibility**
+addresses, inherited from the IBM Personal Computer AT. They are where a channel
+answers only while it is in compatibility mode.
+
+A PCI IDE controller states, in the low bits of its programming interface byte,
+which of its two channels are in **native PCI mode** instead:
+
+| Bit | Meaning when set |
+| --- | ---------------- |
+| 0 | The primary channel is in native mode |
+| 1 | The primary channel's mode may be changed |
+| 2 | The secondary channel is in native mode |
+| 3 | The secondary channel's mode may be changed |
+
+A native channel answers at the addresses its base address registers give and at
+no others — BAR0 and BAR1 for the primary, BAR2 and BAR3 for the secondary. So a
+driver that probes the compatibility addresses regardless finds **nothing**, and
+the machine appears to have no disk.
+
+Two details of that mapping are easy to get wrong and both are asserted:
+
+- **The control block register is at offset 2 within the four bytes the control
+  BAR describes**, not at its start. A driver taking the base itself writes the
+  device control register to a reserved port, so the software reset does nothing
+  and the device's interrupt is never disabled — and the channel then appears to
+  work until something raises IRQ14 that nothing has claimed.
+- **The secondary channel reads the third and fourth registers.** Taking the
+  first pair for both channels would put both channels' commands to the
+  primary's ports.
+
+A controller declaring native mode with no address assigned, or with a register
+describing memory rather than ports, is disregarded and the channel left at its
+compatibility address. Following either would put ATA commands to an arbitrary
+port, and an arbitrary port belongs to some other device: the failure would not
+be a missing disk but whatever that device does when written to.
+
+### 2.2 What this driver cannot reach, and why that looked like a broken driver
+
+This is a driver for the ATA command block registers, reached through I/O ports.
+It therefore drives an **IDE controller**, in either mode, and nothing else.
+
+That is not a small omission upon a modern machine. A firmware that presents its
+SATA controller in **AHCI** mode — a serial ATA controller, class `0x01`,
+subclass `0x06`, programming interface `0x01` — puts the disks behind registers
+that are memory-mapped, and the controller answers at no I/O port whatever. An
+**NVM Express** controller is not an ATA device at all.
+
+The symptom of either is exactly the symptom of having no disk, and until this
+was reported from a real machine the kernel said only:
+
+```
+ATA: no device answered upon either channel.
+```
+
+That one line had two quite different causes behind it, and no way to tell them
+apart. It now says which:
+
+```
+ATA: primary channel at 0x1F0, control 0x3F6, the compatibility address.
+ATA: secondary channel at 0x170, control 0x376, the compatibility address.
+ATA: no device answered upon either channel.
+ATA:   serial ATA controller, interface 0x1: an AHCI controller. Its registers
+       are memory-mapped and it answers at no I/O port, so this driver cannot
+       reach it.
+ATA: this driver reads and writes through the ATA command block registers,
+ATA: which is an IDE controller and nothing else. Where the firmware offers
+ATA: a storage mode of IDE, Legacy or Compatibility in place of AHCI,
+ATA: selecting it makes the disks above visible to this kernel.
+```
+
+The remedy is named as well as the cause, and deliberately. It is not this
+kernel's to apply — an AHCI driver is sub-task 4.7 — but most firmware offers the
+choice, so it is within the reach of whoever is standing at the machine, which is
+who the message is for.
+
+### 2.3 The storage that is not of the storage class
+
+Naming the AHCI controller was still not enough, because the machine the fault
+was first reported from does not have one.
+
+It is an inexpensive laptop: an Intel Celeron, four gibibytes of memory, and its
+system upon an **embedded MultiMediaCard** part rather than a disk. It was booted
+from a **USB drive**. Neither of those is of the mass-storage class. An eMMC part
+is attached to an SD host controller, which the assignment specification classes
+as a *system peripheral* — class `0x08`, subclass `0x05`. A USB drive is attached
+to a serial-bus controller — class `0x0C`, subclass `0x03`.
+
+Such a machine carries **no mass-storage controller at all**. The report searched
+that class, found it empty, and said:
+
+```
+ATA:   the bus carries no mass-storage controller; this machine has no disk.
+```
+
+which was false, and false in the worst direction. The machine has two kinds of
+storage and had just booted from one of them. Telling its owner that it has no
+disk sends them to look for a fault in hardware that has none, or into a firmware
+menu for a setting that does not exist there. The AHCI advice printed above it
+would have been worse still: there is no AHCI controller to switch, and no
+storage mode to choose.
+
+The report now walks the whole recorded table and names the storage that is not
+of the storage class:
+
+```
+ATA: primary channel at 0x1F0, control 0x3F6, the compatibility address.
+ATA: secondary channel at 0x170, control 0x376, the compatibility address.
+ATA: no device answered upon either channel.
+ATA:   SD host controller, interface 0x1: where an embedded MultiMediaCard or a
+       card in a slot is attached. It is not an ATA device and has no command
+       block registers.
+ATA:   USB controller, interface 0x30: where a USB drive is attached. It is not
+       an ATA device and has no command block registers.
+ATA: this machine has no mass-storage controller at all, so there is no
+ATA: firmware setting that would present its storage as a disk. Reaching
+ATA: the storage above needs a driver this kernel does not yet have.
+```
+
+The two paragraphs are alternatives, and which is printed turns upon whether
+anything of the mass-storage class was found. Where there is such a controller
+the remedy may be a firmware setting and is named; where there is not, no setting
+will produce one and saying so plainly is the whole of what can honestly be
+offered. The classification is `AtaClassifyForeignStorage` in `drivers/ata/ata.c`,
+asserted at Section 7.3.
+
+A subclass is read only against its own class, never alone. Subclass `0x05` is an
+SD host controller under the system-peripheral class, an ATA controller under the
+mass-storage class, and an **SMBus** controller under the serial-bus class. A
+classifier that read the subclass by itself would offer a machine's SMBus as a
+place its disks might be.
 
 ## 3. The 400 nanoseconds
 
@@ -198,7 +331,75 @@ word that happens to contain it.
 | No device exceeded the driver's patience. | A timeout treated as an empty read. |
 | With the option given: a pattern written to a sector reads back byte for byte, and the sector is then restored to what it held before. | Everything above, from the writing side; and any failure of the flush, which would otherwise appear as a later read returning the old contents. |
 
-### 7.2 What the self-test cannot assert
+### 7.2 The addressing, asserted upon headers no machine here has
+
+The decision of Section 2.1 is a pure function of a PCI configuration header, and
+is exposed as one for exactly that reason: **no board available to this project
+presents an IDE controller in native mode.** Every one of them uses the
+compatibility addresses, so there is nothing here to probe, and a machine that
+did could not be obtained to try it upon.
+
+Headers are therefore composed and the decision asked about them. The alternative
+was to write the arithmetic and hope — which is what produced the fault being
+corrected, and which is discovered to be wrong by somebody else, upon their own
+machine, with no diagnostic beyond a disk that is not there.
+
+| Property asserted | The silent failure it would catch |
+| ----------------- | --------------------------------- |
+| A channel in compatibility mode is not moved, whatever its base address registers hold. | Reading the registers without consulting the programming interface, and then probing ports the controller does not decode upon a machine whose disks were at `0x1F0` all along. |
+| A native channel takes its command base from its own register, and its control base from **two bytes into** the next. | Section 2.1: a reset that does nothing and an interrupt never disabled. |
+| The secondary channel reads the third and fourth registers. | Both channels addressed at the primary's ports. |
+| One channel native and the other not is honoured for each separately. | A single test applied to both. |
+| A native declaration with no address assigned is refused. | ATA commands issued to port zero. |
+| A register describing memory is not read as I/O ports. | The same, to an arbitrary port belonging to another device. |
+| The programming interface is read only for subclass `0x01`. | An **AHCI** controller reports interface `0x01` — the same bit that marks an IDE primary channel as native — so a driver that skipped the subclass check would read its memory registers as I/O ports. This is not hypothetical: `0x01` is what the controller in this project's own QEMU board reports. |
+
+### 7.3 The storage that is not of the storage class, asserted the same way
+
+The classification of Section 2.3 is a pure function of a configuration header
+for the same reason as the addressing: **no board available to this project
+presents an SD host controller** in the ordinary course. Headers are composed and
+the classification asked about them.
+
+| Property asserted | The silent failure it would catch |
+| ----------------- | --------------------------------- |
+| An SD host controller is recognised as storage. | The report telling the owner of a laptop whose system is upon an eMMC part that the machine has no disk. |
+| A USB controller is recognised as storage. | The same, for the drive the kernel was booted from. |
+| A subclass is read only against its own class. | Subclass `0x05` is an SD host controller, an ATA controller or an **SMBus** controller according to its class; subclass `0x03` is a USB controller or something else entirely. Reading either alone offers a machine's SMBus as a place its disks might be. |
+| An IDE or AHCI controller is **not** counted here. | Counting one would print it twice, and would print the firmware remedy — which turns upon whether anything of the mass-storage class was found — for a machine that has no such controller and therefore no such remedy. |
+| A function that names nothing is not storage. | A null dereference in the path that runs only upon a machine that has already failed to find a disk. |
+
+The classification was then observed upon a board composed to have the shape of
+the machine that reported the fault: no mass-storage controller at all, an SD
+host controller, and the kernel booted from a USB drive.
+
+```sh
+qemu-system-x86_64 -machine q35,sata=off -cpu qemu64 -smp cores=2 -m 512M \
+    -device sdhci-pci -device qemu-xhci,id=xhci \
+    -drive if=none,id=usbstick,file=build/oxys.iso,format=raw,media=cdrom \
+    -device usb-storage,bus=xhci.0,drive=usbstick \
+    -display none -serial stdio
+```
+
+`sata=off` removes the board's own AHCI controller, which is what leaves the
+mass-storage class empty. Observed:
+
+```
+  0:3.0  0x1B36:0x7  SD host controller (class 0x8, subclass 0x5, interface 0x1), IRQ 11
+  0:4.0  0x1B36:0xD  USB controller (class 0xC, subclass 0x3, interface 0x30), IRQ 10
+...
+ATA: no device answered upon either channel.
+ATA:   SD host controller, interface 0x1: where an embedded MultiMediaCard or a
+       card in a slot is attached. It is not an ATA device and has no command
+       block registers.
+ATA:   USB controller, interface 0x30: where a USB drive is attached. It is not
+       an ATA device and has no command block registers.
+ATA: this machine has no mass-storage controller at all, so there is no
+ATA: firmware setting that would present its storage as a disk. Reaching
+ATA: the storage above needs a driver this kernel does not yet have.
+```
+
+### 7.4 What the self-test cannot assert
 
 It cannot assert that a sector holds what the operator put there — the kernel has
 no independent knowledge of the medium. That is established from outside, and was
@@ -242,7 +443,7 @@ before the disk was touched — and a figure that added them together would show
 healthy machine accumulating errors until an operator learned to ignore the
 number.
 
-### 7.3 The machine used for the disk tests
+### 7.5 The machine used for the disk tests
 
 `make verify` runs upon the q35 board, whose storage controller is AHCI and which
 presents no device this driver can address; the disk self-test there reports that
@@ -253,24 +454,34 @@ the PIIX3 IDE controller at `0:1.1` in compatibility mode. Both are recorded in
 
 ## 8. Limitations
 
-1. **Compatibility addressing only.** The driver uses `0x01F0` and `0x0170`. It
-   does not read the base address registers of a controller in native mode, nor
-   set the bits of the programming interface that would return it to
-   compatibility mode. Every machine of interest presents the legacy addresses;
-   the PCI enumeration of [`PCI.md`](../devices/PCI.md) records the controller, and using
-   what it recorded is the natural next step.
-2. **Polled, not interrupt-driven.** The device's interrupt is disabled at the
+1. **IDE controllers only.** The driver reaches an IDE controller in either
+   mode — compatibility or native, since Section 2.1 — and nothing else. An AHCI
+   controller and an NVM Express controller are both invisible to it, which upon
+   a modern machine means no disk at all. The report says so by name; driving one
+   is sub-task 4.7. See Section 2.2.
+2. **Storage that is not of the storage class is named, not reached.** An eMMC
+   part behind an SD host controller and a USB drive behind a serial-bus
+   controller are both storage and neither is an ATA device. The report says
+   where they are and that a driver is what is wanted; it can do nothing else,
+   and no firmware setting can either. See Section 2.3.
+3. **A controller in native mode is followed, not switched.** Where the
+   programming interface says a channel's mode may be changed, this driver does
+   not change it: it reads the addresses the firmware assigned and uses those.
+   Switching would be the smaller change and the worse one, since the
+   compatibility ports may already belong to something else on a machine whose
+   firmware chose otherwise.
+4. **Polled, not interrupt-driven.** The device's interrupt is disabled at the
    device by nIEN, rather than merely masked, because nothing claims IRQ14 or
    IRQ15 and a request that nothing claims is counted as unclaimed upon every
    command. A transfer therefore occupies the processor entirely.
-3. **No direct memory access.** Programmed input/output moves every word through
+5. **No direct memory access.** Programmed input/output moves every word through
    a register. Bus mastering is what makes a disk fast and it belongs with the
    block layer of sub-task 4.5.
-4. **No ATAPI commands.** A packet device is recognised and then left alone.
+6. **No ATAPI commands.** A packet device is recognised and then left alone.
    Reading from one requires the packet interface, which is a command set of its
    own.
-5. **No concurrency safety.** The driver has no lock, and the command block of a
+7. **No concurrency safety.** The driver has no lock, and the command block of a
    channel is a single resource shared by its two devices. Nothing else in the
    kernel touches a disk yet.
-6. **No retry.** A command that fails is reported, not repeated. What to retry
+8. **No retry.** A command that fails is reported, not repeated. What to retry
    and how often is a policy, and the block layer is where a policy belongs.

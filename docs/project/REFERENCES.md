@@ -625,15 +625,26 @@ Used by: `drivers/pci/pci.c`, `kernel/include/oxys/pci.h`.
 PCI Special Interest Group.
 
 The base class, subclass and programming interface codes: class `0x01` mass
-storage, whose subclass `0x01` is an IDE controller and `0x06` a serial ATA
-controller; class `0x02` network; class `0x03` display; class `0x06` bridge,
-whose subclass `0x00` is a host bridge, `0x01` an ISA bridge and `0x04` a
-PCI-to-PCI bridge; class `0x0C` serial bus, whose subclass `0x05` is SMBus. For
-an IDE controller, bit 0 of the programming interface denotes the primary channel
-in native mode and bit 2 the secondary, each clear meaning the compatibility mode
-that answers upon the legacy ports.
+storage, whose subclass `0x01` is an IDE controller, `0x05` an ATA controller,
+`0x06` a serial ATA controller and `0x08` a non-volatile memory controller; class
+`0x02` network; class `0x03` display; class `0x06` bridge, whose subclass `0x00`
+is a host bridge, `0x01` an ISA bridge and `0x04` a PCI-to-PCI bridge; class
+`0x08` base system peripheral, whose subclass `0x05` is an SD host controller;
+class `0x0C` serial bus, whose subclass `0x03` is a USB controller and `0x05`
+SMBus.
 
-Used by: `drivers/pci/pci.c`.
+For an IDE controller, bit 0 of the programming interface denotes the primary
+channel in native mode and bit 2 the secondary, each clear meaning the
+compatibility mode that answers upon the legacy ports; bits 1 and 3 say whether
+the respective mode may be changed. For a serial ATA controller, the programming
+interface `0x01` denotes the AHCI register interface; for a non-volatile memory
+controller, `0x02` denotes NVM Express.
+
+That a subclass is meaningful only against its class is what the table shows
+plainest: subclass `0x05` is an ATA controller, an SD host controller or an SMBus
+controller according to the class above it.
+
+Used by: `drivers/pci/pci.c`, `drivers/ata/ata.c`.
 
 ### AT Attachment with Packet Interface (ATA/ATAPI)
 ANSI INCITS, Technical Committee T13. The revisions relied upon are ATA/ATAPI-6

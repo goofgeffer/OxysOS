@@ -183,6 +183,30 @@ re-titled to say what they are. See
 [`../design/PRIVILEGE.md`](../design/PRIVILEGE.md) and
 [`../design/GRAPHICS.md`](../design/GRAPHICS.md).
 
+**Sub-task 4.4 acquired a sub-task beside it**, reported from a real machine
+rather than found by a test. A machine that boots this kernel found no disk upon
+it, and the cause was not a fault in the driver: the driver reads and writes
+through the ATA command block registers, which is an IDE controller and nothing
+else, while a modern firmware presents its SATA controller in **AHCI** mode,
+whose registers are memory-mapped and which answers at no I/O port whatever. The
+symptom of that is indistinguishable from the symptom of having no disk.
+
+Two things were done and a third was recorded. The driver now **reads the base
+address registers of a controller in native PCI mode**, which sub-task 4.4 had
+listed as its first limitation and which is a real fault upon any machine whose
+IDE channels are not at the addresses the IBM Personal Computer AT fixed. The
+report now **says which cause it is**, naming the controllers the bus carries,
+saying for each why this driver did not reach it, and naming the firmware setting
+that would make the disks visible — because that remedy is within the reach of
+whoever is standing at the machine and an AHCI driver is not. And the AHCI driver
+itself became sub-task 4.7.
+
+The addressing decision is asserted upon configuration headers **composed in
+memory**, no board available to this project presenting an IDE controller in
+native mode. That is the same idiom as everywhere else here: where the machine
+cannot be made to produce the condition, the decision is made a pure function and
+the condition is composed.
+
 **Sub-task 6.5 is complete**, and the machine has a pointer. The mouse is the
 second device upon the 8042, and the first thing that had to be done was not
 about the mouse: **the controller became a module of its own**. Its
@@ -308,7 +332,8 @@ IBM PS/2 controller documentation.
 subsequent user-facing subsystems.
 
 **Specifications**: PC16550D UART datasheet; ATA/ATAPI Command Set (ACS-3);
-PCI Local Bus Specification 3.0.
+PCI Local Bus Specification 3.0; Serial ATA Advanced Host Controller Interface
+1.3.1.
 
 - [x] 4.1 Promote the early serial routine to a formal, interrupt-driven COM1 driver with configurable line parameters.
 - [x] 4.2 Promote the early VGA routine to a formal text-mode driver with scrolling, cursor control and colour attributes.
@@ -316,6 +341,8 @@ PCI Local Bus Specification 3.0.
 - [x] 4.4 Implement an ATA PIO driver: bus reset, `IDENTIFY DEVICE`, 28-bit and 48-bit LBA sector read and write.
 - [x] 4.5 Define a generic block-device abstraction layer above the ATA driver.
 - [x] 4.6 Implement a buffer cache for block devices.
+- [ ] 4.7 Implement an AHCI driver, so that a machine whose firmware presents its SATA controller in AHCI mode has a disk at all. *(Added 2026-09-04, at the project owner's report that a machine which boots this kernel finds no disk upon it. Sub-task 4.4 drives the ATA command block registers, which is an IDE controller and nothing else; an AHCI controller's registers are memory-mapped and it answers at no I/O port, so the symptom is exactly the symptom of having no disk. The kernel now says which it is rather than leaving a person to guess — see `docs/storage/DISK.md`, Section 2.2 — but saying so is not driving it.)*
+- [ ] 4.8 Implement an SD host controller driver, so that a machine whose system is upon an embedded MultiMediaCard part has storage at all. *(Added 2026-09-06, at the project owner's report of the machine the previous sub-task was added for: an inexpensive laptop with an Intel Celeron, four gibibytes of memory and no disk of any kind — its system upon an eMMC part, booted from a USB drive. Such a machine carries no mass-storage controller whatever, so sub-task 4.7 would not help it either. An eMMC part is attached to an SD host controller, class `0x08`, subclass `0x05`, which the kernel now names in its report; see `docs/storage/DISK.md`, Section 2.3. Reaching a USB drive is a longer road — a host controller, then the mass-storage class above it — and is not planned here.)*
 
 ---
 
@@ -567,6 +594,7 @@ copies of an argument do not agree with each other for long.
 
 | Date | Phase | Change | Commit | Design |
 | ---- | ----- | ------ | ------ | ------ |
+| 2026-09-06 | Phase 4 | The disk driver taught where a channel actually answers, and to say what storage it cannot reach. Reported from a real machine that boots this kernel and finds no disk. Three things were wrong at once. A channel in native PCI mode answers at the addresses its base address registers give, which this driver never read; it now does, taking the control block at offset 2 within the second of them. A firmware presenting its SATA controller in AHCI mode puts the disks behind memory-mapped registers this driver cannot reach at all, which had exactly the symptom of having no disk; the report now names every mass-storage controller and says why each was or was not reached. And the machine in question has no mass-storage controller of any kind — its system sits upon an eMMC part behind an SD host controller and it was booted from a USB drive — so the report said it had no disk, of a laptop that plainly has storage; storage outside the mass-storage class is now named too, with no firmware remedy offered where none exists. AHCI becomes sub-task 4.7 and the SD host controller sub-task 4.8. | `PENDING` | [`../storage/DISK.md`](../storage/DISK.md), Sections 2.1, 2.2, 2.3, 7.2 and 7.3 |
 | 2026-09-04 | Phase 6 | Sub-task 6.5: the PS/2 mouse and the pointer. The 8042 was given an owner of its own before either device was driven, its configuration byte governing both ports and being written whole. The decoder frames upon the bit set in every packet — a driver that has lost the framing does not stop working, it reports plausible nonsense for ever — extends the movement as nine bits rather than eight, and inverts the vertical sense at the one place that knows the device disagrees with the display. The pointer keeps the pixels beneath it and is concealed by `KernelWriteString`, there being one surface until 6.6. | `e2774f7` | [`../devices/MOUSE.md`](../devices/MOUSE.md); [`../design/GRAPHICS.md`](../design/GRAPHICS.md), Section 26 |
 | 2026-09-04 | Phase 6 | Exceptions given a disposition, at the project owner's report that faults which threaten no more than one program were halting the machine. Resume, terminate the program, or fatal to the kernel, decided by the vector and the privilege level together; only the last draws a fault screen. The screens were narrowed from eleven to ten, re-titled as kernel faults, and given two assertions that no screen may exist for a fault that can never be the kernel's. | `0a21e34` | [`../design/INTERRUPTS.md`](../design/INTERRUPTS.md), Section 8.1; [`../design/GRAPHICS.md`](../design/GRAPHICS.md), Sections 24 and 25 |
 | 2026-09-04 | Phase 6 | Sub-task 6.4 continued: the console made fast, and given fault screens. Measurement by `RDTSC` — the interval timer being useless, seventeen ticks elapsing in the whole boot — put the console at 15.2% of it; a word-wide pixel path, a pattern block that clips a glyph once instead of sixty-four times, and a cell drawn in one pass rather than two bring it to 4.5%. The fault screens are one for each severe fault, each with its own colour, account and evidence, and the self-test requires that no two are alike. | `a75a965` | [`../design/GRAPHICS.md`](../design/GRAPHICS.md), Sections 23 to 25 |

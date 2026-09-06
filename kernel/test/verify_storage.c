@@ -62,10 +62,352 @@ static bool KernelRegionsMatch(const uint8_t *left, const uint8_t *right, size_t
  * and restores afterwards: a self-test that wrote to a disk unbidden would
  * destroy the data of anybody who booted this kernel upon their own machine.
  */
+/*
+ * Composes a PCI configuration header for an IDE controller, so that the
+ * addressing decision may be asserted upon headers no board here presents.
+ *
+ * Every field the decision reads is set and none other. The base address
+ * registers carry their low bit set, which is what marks a register as
+ * describing I/O ports rather than memory; the address occupies the bits above
+ * the two the specification reserves.
+ */
+static PciFunction KernelComposeIdeController(uint8_t programming_interface, uint32_t bar0,
+                                              uint32_t bar1, uint32_t bar2, uint32_t bar3)
+{
+    PciFunction function;
+
+    function.address.bus = 0U;
+    function.address.device = 31U;
+    function.address.function = 1U;
+    function.vendor_id = 0x8086U;
+    function.device_id = 0x7010U;
+    function.class_code = PCI_CLASS_MASS_STORAGE;
+    function.subclass = PCI_SUBCLASS_IDE;
+    function.programming_interface = programming_interface;
+    function.revision = 0U;
+    function.header_type = 0U;
+    function.multifunction = false;
+    function.interrupt_line = 0U;
+    function.interrupt_pin = 0U;
+
+    for (size_t index = 0U; index < PCI_BAR_COUNT; ++index)
+    {
+        function.base_address[index] = 0U;
+    }
+
+    function.base_address[0] = bar0;
+    function.base_address[1] = bar1;
+    function.base_address[2] = bar2;
+    function.base_address[3] = bar3;
+
+    return function;
+}
+
+/* An I/O base address register naming the given port. Bit 0 marks the space. */
+static uint32_t KernelIoBar(uint16_t port)
+{
+    return (uint32_t)port | 1U;
+}
+
+/*
+ * Asserts how the driver decides where a channel answers.
+ *
+ * This exists because the failure it guards against was reported from a real
+ * machine and could not be reproduced upon any board available here. A channel
+ * in native PCI mode answers at the addresses its base address registers give
+ * and at no others, and a driver that probed the compatibility addresses
+ * regardless finds nothing — which is indistinguishable, in every symptom, from
+ * a machine that has no disk.
+ *
+ * Every board this project can be run upon uses the compatibility addresses, so
+ * there is nothing here to probe. The decision is therefore a pure function of a
+ * configuration header, and headers no machine here has are composed and asked
+ * about. That is the only alternative to writing the arithmetic and hoping, and
+ * hoping is what produced the fault being corrected.
+ */
+static bool KernelVerifyAtaAddressing(void)
+{
+    bool succeeded = true;
+    uint16_t io_base = 0U;
+    uint16_t control_base = 0U;
+    PciFunction function;
+
+    /* --- A controller in compatibility mode yields nothing, whatever its BARs. --- */
+
+    /*
+     * The BARs are set to plausible addresses deliberately. A driver that read
+     * them without consulting the programming interface would take these and
+     * would then probe ports the controller does not decode — upon a machine
+     * whose disks were at 0x1F0 all along.
+     */
+    function = KernelComposeIdeController(0x80U, KernelIoBar(0xC000U), KernelIoBar(0xC008U),
+                                          KernelIoBar(0xC010U), KernelIoBar(0xC018U));
+
+    if (AtaChannelAddressesFor(&function, 0U, &io_base, &control_base) ||
+        AtaChannelAddressesFor(&function, 1U, &io_base, &control_base))
+    {
+        KernelWriteString("  A channel in compatibility mode was moved to its base "
+                          "address registers.\n");
+        succeeded = false;
+    }
+
+    /* --- A channel in native mode yields its own addresses. --- */
+
+    function = KernelComposeIdeController(
+        (uint8_t)(PCI_IDE_PRIMARY_NATIVE | PCI_IDE_SECONDARY_NATIVE), KernelIoBar(0xC000U),
+        KernelIoBar(0xC008U), KernelIoBar(0xC010U), KernelIoBar(0xC018U));
+
+    if (!AtaChannelAddressesFor(&function, 0U, &io_base, &control_base))
+    {
+        KernelWriteString("  A channel in native mode was left at the compatibility "
+                          "address.\n");
+        succeeded = false;
+    }
+    else if ((io_base != 0xC000U) || (control_base != 0xC00AU))
+    {
+        /*
+         * The control block register is at offset 2 within the four bytes the
+         * control register describes, not at its start. A driver that took the
+         * base itself would write the device control register to a reserved
+         * port: the software reset would do nothing and the device's interrupt
+         * would never be disabled, so the channel would appear to work until
+         * something raised IRQ14 that nothing had claimed.
+         */
+        KernelWriteString("  A native channel's command or control address is wrong.\n");
+        succeeded = false;
+    }
+
+    if (!AtaChannelAddressesFor(&function, 1U, &io_base, &control_base))
+    {
+        KernelWriteString("  The secondary channel in native mode was left at the "
+                          "compatibility address.\n");
+        succeeded = false;
+    }
+    else if ((io_base != 0xC010U) || (control_base != 0xC01AU))
+    {
+        /* The secondary channel reads the third and fourth registers. Taking the
+         * first pair for both channels is the obvious slip, and would put both
+         * channels' commands to the primary's ports. */
+        KernelWriteString("  The secondary channel read the primary's base address "
+                          "registers.\n");
+        succeeded = false;
+    }
+
+    /* --- One channel native and the other not. --- */
+
+    function = KernelComposeIdeController(PCI_IDE_SECONDARY_NATIVE, KernelIoBar(0xC000U),
+                                          KernelIoBar(0xC008U), KernelIoBar(0xC010U),
+                                          KernelIoBar(0xC018U));
+
+    if (AtaChannelAddressesFor(&function, 0U, &io_base, &control_base))
+    {
+        KernelWriteString("  A compatibility channel was moved because the other was "
+                          "native.\n");
+        succeeded = false;
+    }
+
+    if (!AtaChannelAddressesFor(&function, 1U, &io_base, &control_base))
+    {
+        KernelWriteString("  A native channel was left behind because the other was "
+                          "not.\n");
+        succeeded = false;
+    }
+
+    /* --- A malformed declaration is refused rather than followed. --- */
+
+    /*
+     * A controller declaring native mode with no address assigned, or with a
+     * register describing memory rather than ports, is refused. Following either
+     * would put ATA commands to an arbitrary port — and an arbitrary port belongs
+     * to some other device, so the failure would not be a missing disk but
+     * whatever that device does when written to.
+     */
+    function = KernelComposeIdeController(PCI_IDE_PRIMARY_NATIVE, 1U, 1U, 0U, 0U);
+
+    if (AtaChannelAddressesFor(&function, 0U, &io_base, &control_base))
+    {
+        KernelWriteString("  A native channel with no address assigned was followed.\n");
+        succeeded = false;
+    }
+
+    function = KernelComposeIdeController(PCI_IDE_PRIMARY_NATIVE, 0xF0000000U, 0xF0001000U,
+                                          0U, 0U);
+
+    if (AtaChannelAddressesFor(&function, 0U, &io_base, &control_base))
+    {
+        KernelWriteString("  A memory base address register was read as I/O ports.\n");
+        succeeded = false;
+    }
+
+    /* --- A controller of another subclass has no such bits to read. --- */
+
+    /*
+     * The programming interface of an AHCI controller is 0x01, which happens to
+     * be the same bit that marks an IDE primary channel as native. A driver that
+     * read it without checking the subclass would take an AHCI controller's first
+     * two base address registers — which describe memory — as I/O ports. This is
+     * not hypothetical: 0x01 is exactly what the controller in this project's own
+     * QEMU board reports.
+     */
+    function = KernelComposeIdeController(PCI_SATA_INTERFACE_AHCI, KernelIoBar(0xC000U),
+                                          KernelIoBar(0xC008U), 0U, 0U);
+    function.subclass = PCI_SUBCLASS_SATA;
+
+    if (AtaChannelAddressesFor(&function, 0U, &io_base, &control_base))
+    {
+        KernelWriteString("  An AHCI controller's interface byte was read as an IDE "
+                          "controller's.\n");
+        succeeded = false;
+    }
+
+    /* --- Arguments that name nothing are refused. --- */
+
+    if (AtaChannelAddressesFor(NULL, 0U, &io_base, &control_base) ||
+        AtaChannelAddressesFor(&function, 2U, &io_base, &control_base))
+    {
+        KernelWriteString("  An impossible argument was accepted.\n");
+        succeeded = false;
+    }
+
+    return succeeded;
+}
+
+/*
+ * Composes a PCI configuration header of an arbitrary class, for the storage
+ * that is not of the mass-storage class at all.
+ */
+static PciFunction KernelComposeFunction(uint8_t class_code, uint8_t subclass,
+                                         uint8_t programming_interface)
+{
+    PciFunction function = KernelComposeIdeController(0U, 0U, 0U, 0U, 0U);
+
+    function.class_code = class_code;
+    function.subclass = subclass;
+    function.programming_interface = programming_interface;
+
+    return function;
+}
+
+/*
+ * Asserts that the storage a machine carries outside the mass-storage class is
+ * recognised as storage.
+ *
+ * The failure this guards against was reported from a real machine and is worse
+ * than silence. An inexpensive laptop keeps its system upon an embedded
+ * MultiMediaCard part behind an SD host controller and boots from a USB drive,
+ * and carries no mass-storage controller at all. The report searched the
+ * mass-storage class, found nothing, and announced that the machine had no
+ * disk — to somebody holding a laptop that had just booted from its own
+ * storage. That sends a person to look for a fault in hardware that has none.
+ *
+ * There is no board available here that presents an SD host controller, so as
+ * with the channel addressing the decision is a pure function of a configuration
+ * header and headers this project cannot obtain are composed and asked about.
+ */
+static bool KernelVerifyAtaForeignStorage(void)
+{
+    bool succeeded = true;
+    PciFunction function;
+
+    /* --- An SD host controller is where an eMMC part is. --- */
+
+    function = KernelComposeFunction(PCI_CLASS_SYSTEM_PERIPHERAL, PCI_SUBCLASS_SD_HOST, 0x01U);
+
+    if (AtaClassifyForeignStorage(&function) != ATA_FOREIGN_STORAGE_SD)
+    {
+        KernelWriteString("  An SD host controller was not recognised as storage.\n");
+        succeeded = false;
+    }
+
+    /* --- A USB controller is where a removable drive is. --- */
+
+    function = KernelComposeFunction(PCI_CLASS_SERIAL_BUS, PCI_SUBCLASS_USB, 0x30U);
+
+    if (AtaClassifyForeignStorage(&function) != ATA_FOREIGN_STORAGE_USB)
+    {
+        KernelWriteString("  A USB controller was not recognised as storage.\n");
+        succeeded = false;
+    }
+
+    /*
+     * --- The subclass is read against its own class and no other. ---
+     *
+     * Subclass 0x05 is an SD host controller under the system-peripheral class,
+     * an ATA controller under the mass-storage class, and an SMBus controller
+     * under the serial-bus class. A classifier that read the subclass alone
+     * would report the machine's SMBus as a place its disks might be.
+     */
+    function = KernelComposeFunction(PCI_CLASS_SERIAL_BUS, PCI_SUBCLASS_SD_HOST, 0U);
+
+    if (AtaClassifyForeignStorage(&function) != ATA_FOREIGN_STORAGE_NONE)
+    {
+        KernelWriteString("  An SMBus controller was taken for storage.\n");
+        succeeded = false;
+    }
+
+    function = KernelComposeFunction(PCI_CLASS_SYSTEM_PERIPHERAL, PCI_SUBCLASS_USB, 0U);
+
+    if (AtaClassifyForeignStorage(&function) != ATA_FOREIGN_STORAGE_NONE)
+    {
+        KernelWriteString("  A system peripheral was taken for a USB controller.\n");
+        succeeded = false;
+    }
+
+    /*
+     * --- What this driver's own class holds is not foreign to it. ---
+     *
+     * An IDE controller counted here would be counted twice in the report, and
+     * the paragraph naming the firmware remedy is chosen by whether anything of
+     * the mass-storage class was found. Counting one there would print the
+     * remedy for a machine that has none.
+     */
+    function = KernelComposeFunction(PCI_CLASS_MASS_STORAGE, PCI_SUBCLASS_IDE, 0U);
+
+    if (AtaClassifyForeignStorage(&function) != ATA_FOREIGN_STORAGE_NONE)
+    {
+        KernelWriteString("  An IDE controller was reported as beyond this driver's "
+                          "class.\n");
+        succeeded = false;
+    }
+
+    function = KernelComposeFunction(PCI_CLASS_MASS_STORAGE, PCI_SUBCLASS_SATA,
+                                     PCI_SATA_INTERFACE_AHCI);
+
+    if (AtaClassifyForeignStorage(&function) != ATA_FOREIGN_STORAGE_NONE)
+    {
+        KernelWriteString("  An AHCI controller was counted outside its own class.\n");
+        succeeded = false;
+    }
+
+    /* --- A function that names nothing is not storage. --- */
+
+    if (AtaClassifyForeignStorage(NULL) != ATA_FOREIGN_STORAGE_NONE)
+    {
+        KernelWriteString("  A function that names nothing was taken for storage.\n");
+        succeeded = false;
+    }
+
+    return succeeded;
+}
+
 void KernelVerifyAta(void)
 {
     const AtaDevice *const disk = AtaFirstDisk();
-    bool succeeded = true;
+    bool succeeded = KernelVerifyAtaAddressing();
+
+    /*
+     * The addressing verdict is announced on its own, before anything that
+     * depends upon a device answering. It is the one part of this test that runs
+     * upon every machine, and a reader who saw only "nothing to assert" below
+     * would have no way to know it had run at all.
+     */
+    KernelWriteString(succeeded ? "Disk self-test: channel addressing is sound.\n"
+                                : "Disk self-test FAILED: channel addressing.\n");
+
+    succeeded = KernelVerifyAtaForeignStorage();
+    KernelWriteString(succeeded
+                          ? "Disk self-test: storage outside this class is recognised.\n"
+                          : "Disk self-test FAILED: storage outside this class.\n");
 
     if (AtaDeviceCount() == 0U)
     {

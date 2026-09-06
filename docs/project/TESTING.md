@@ -191,7 +191,9 @@ banner.
 `make verify` runs upon the q35 board, whose storage controller is AHCI; no
 device answers the ATA driver there, and the disk self-test reports as much and
 asserts nothing. That is the correct outcome upon that machine and is not a
-failure.
+failure. The driver now says which of the two causes it is, rather than leaving
+"no device answered" to stand for both: see Section 6.2, and
+[`../storage/DISK.md`](../storage/DISK.md), Sections 2.2 and 2.3.
 
 The disk is exercised upon the i440fx board, which presents the PIIX3 IDE
 controller at `0:1.1` in compatibility mode. The image is created sparse and
@@ -236,6 +238,51 @@ with `set default=2` in place of `set default=0`:
 sed 's/^set default=0/set default=2/' boot/grub/grub.cfg > isodir/boot/grub/grub.cfg
 grub-mkrescue -o write.iso isodir
 ```
+
+### 6.2 The decisions no board here can exercise
+
+Two of the driver's decisions cannot be reached upon any machine available to
+this project, and both were reported as faults from a machine that is not:
+
+- **Where a channel in native PCI mode answers.** Every board here uses the
+  compatibility addresses, so there is nothing to probe.
+- **Whether storage that is not of the mass-storage class is storage.** No board
+  here presents an SD host controller in the ordinary course.
+
+Both are pure functions of a PCI configuration header — `AtaChannelAddressesFor`
+and `AtaClassifyForeignStorage` — and the self-test composes headers no machine
+here has and asserts what would be decided about them. The properties are
+tabulated in [`../storage/DISK.md`](../storage/DISK.md), Sections 7.2 and 7.3.
+This is the only alternative to writing the arithmetic and hoping, and hoping is
+what produced both faults.
+
+The second was then observed upon a board composed to have the shape of the
+machine that reported it: an inexpensive laptop with no disk of any kind, its
+system upon an eMMC part, booted from a USB drive.
+
+```sh
+qemu-system-x86_64 -machine q35,sata=off -cpu qemu64 -smp cores=2 -m 512M \
+    -device sdhci-pci -device qemu-xhci,id=xhci \
+    -drive if=none,id=usbstick,file=build/oxys.iso,format=raw,media=cdrom \
+    -device usb-storage,bus=xhci.0,drive=usbstick \
+    -display none -serial stdio
+```
+
+`sata=off` removes the q35 board's own AHCI controller, which is what leaves the
+mass-storage class empty; the kernel is then booted from the USB drive, as it was
+upon the machine in question. Note that the ISO cannot be attached with `-cdrom`
+once the SATA controller is gone, that option needing an IDE bus to hang it upon.
+
+### 6.3 The negative tests
+
+Each was applied to `drivers/ata/ata.c`, confirmed by `make verify`, and
+reverted.
+
+| The damage | What the run reported |
+| ---------- | --------------------- |
+| The class check dropped from the SD host controller's classification, leaving the subclass read alone. | `An SMBus controller was taken for storage.` Subclass `0x05` under the serial-bus class is SMBus, and the report would have offered it as a place the machine's disks might be. |
+| An SD host controller classified as nothing. | `An SD host controller was not recognised as storage.` This is the fault as it was reported: a laptop told it has no disk. |
+| A mass-storage controller counted as storage outside its own class. | `An IDE controller was reported as beyond this driver's class.` and `An AHCI controller was counted outside its own class.` — two assertions, because the count decides which of the two closing paragraphs is printed, and a machine with no mass-storage controller would have been told to change a firmware setting it does not have. |
 
 ## 7. Verification of the EXT2 superblock
 
@@ -1055,3 +1102,9 @@ boot to finish before drawing conclusions from the report.
 | 2026-09-02 | `make verify` — sub-task 5.7, the name self-test | Passed; an insertion yields exactly one entry more when the whole directory is traversed and the name resolves as a path, a duplicate name is refused, a removal returns the directory to exactly what it held, `.` and `..` may not be removed, sixty-four insertions and removals of one name consume no blocks, a created file has one link and may be written and reached, a second name raises the link count and removing one of two names removes the name and not the file, removing the last name frees the inode and its blocks and the inode is then free in the bitmap and refused as deleted, a created directory has two links and its parent gains one with `/made/.`, `/made/..` and `/made/../made` all resolving, a directory holding a file is not empty and is not removed, an emptied directory is removed and the parent's link count returns, the root is not removed, the free counts and the root's entries return to what they were, `Ext2VerifyGroupDescriptors` passes, and a read-only volume refuses every one of these. |
 | 2026-09-02 | QEMU i440fx from the `EXT2 write self-test` GRUB entry — creating and removing names upon a real volume | Passed; within one boot the kernel created `/oxys-made` (inode 14), created `within` (inode 15) inside it, wrote to that file, and removed both, then rewrote `/oxys-write-test` with 8192 bytes. |
 | 2026-09-02 | `e2fsck -fn` upon the volume after creation and removal | Passed with no errors through all five passes. Pass 2 checks the directory structure the kernel split and joined, Pass 3 the connectivity of the `.` and `..` it wrote, and Pass 4 the reference counts it raised and lowered — including the parent's, which is the one a kernel cannot see for itself. The volume reported `13/2048 files`, exactly as before the test, so both inodes created were returned; `debugfs -R "ls -l /"` listed the same five entries as before; and the 8192 bytes still matched byte for byte. |
+| 2026-09-06 | `make verify` — **the channel addressing**, upon composed headers | Passed. No board here presents an IDE controller in native mode, so the decision is asserted as a pure function of a configuration header: a channel in compatibility mode is not moved whatever its base address registers hold; a native channel takes its command base from its own register and its control base **two bytes into** the next; the secondary channel reads the third and fourth registers; one channel native and the other not is honoured separately; a native declaration with no address, and one describing memory rather than ports, are both refused; and the programming interface is read only for subclass `0x01` — an AHCI controller reporting interface `0x01` would otherwise have its memory registers read as I/O ports, which is exactly what this project's own q35 board presents. |
+| 2026-09-06 | `make verify` — **the storage that is not of the storage class** | Passed. An SD host controller and a USB controller are each recognised as storage; a subclass is read only against its own class, so subclass `0x05` under the serial-bus class is SMBus and not somewhere disks might be; an IDE and an AHCI controller are **not** counted here, the count deciding which closing paragraph the report prints; and a function that names nothing is not storage. Composed headers again — no board here presents an SD host controller in the ordinary course. |
+| 2026-09-06 | QEMU q35 with `sata=off`, an `sdhci-pci` and the kernel booted from a USB drive | Passed; this is the machine that reported the fault, reproduced. The bus carries an SD host controller at `0:3.0` (class `0x8`, subclass `0x5`) and a USB controller at `0:4.0` (class `0xC`, subclass `0x3`) and no mass-storage controller at all. The report named both, said each has no command block registers, and closed `this machine has no mass-storage controller at all, so there is no firmware setting that would present its storage as a disk`. Before this change the same board was told `the bus carries no mass-storage controller; this machine has no disk`, of a machine that had just booted from its own storage. |
+| 2026-09-06 | QEMU q35 with `-device qemu-xhci`, the ordinary ISO | Passed; with the board's own AHCI controller present, the report names it, names the USB controller beneath it, and closes with the firmware remedy — which is the right paragraph here and the wrong one above. That the two are chosen apart is the assertion `An IDE controller was reported as beyond this driver's class.` guards. |
+| 2026-09-06 | `make verify` — the disk diagnosis, **the negative tests** | Passed, all three, each reverted afterwards. Reading the subclass without its class gave `An SMBus controller was taken for storage.`; classifying an SD host controller as nothing gave `An SD host controller was not recognised as storage.`, which is the reported fault itself; counting mass storage as foreign gave two failures at once. The procedure is Section 6.3. |
+| 2026-09-06 | VirtualBox 7, headless, 512 MiB, legacy BIOS, screenshot | Passed; both new self-tests report soundly and the addressing change alters nothing upon a machine that was already working, which is the property that most needed confirming. The PIIX4 controller is in compatibility mode and both channels are still addressed there — `ATA: primary channel at 0x1F0, control 0x3F6, the compatibility address.` — and the same three devices answer as before, the primary master being the ATAPI drive holding the ISO, so the run reports `devices answered but none is a disk`. This board also carries a `system peripheral (class 0x08, subclass 0x80)`, which is **not** an SD host controller and is not named as storage: the subclass distinction asserted upon composed headers, seen upon a real one. |

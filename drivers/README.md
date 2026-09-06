@@ -102,9 +102,13 @@ configured. See [`../docs/devices/PCI.md`](../docs/devices/PCI.md).
 
 ### `ata/` — the disk
 
-Reads and writes sectors by programmed input/output, at the compatibility
-addresses `0x01F0` and `0x0170` inherited from the IBM Personal Computer AT. Both
-channels are reset, and each of their two devices is identified: an ATA device
+Reads and writes sectors by programmed input/output. A channel answers at the
+compatibility addresses `0x01F0` and `0x0170` inherited from the IBM Personal
+Computer AT only while it is in compatibility mode; a PCI IDE controller states
+in its programming interface which of its channels are in native mode instead,
+and a native channel is addressed from the controller's base address registers,
+its control block lying two bytes into the second of the pair. Both channels are
+reset, and each of their two devices is identified: an ATA device
 answers `IDENTIFY DEVICE` with 256 words describing itself, while a packet device
 or a serial ATA device declines the command and leaves a signature in the address
 registers, which is the only way to tell them from a disk that failed.
@@ -122,9 +126,21 @@ masking it, nothing claiming IRQ14 or IRQ15. Its only clock is the read of an I/
 port, the interval timer counting by interrupt and the interrupt flag being clear
 throughout initialisation.
 
+This driver speaks to the ATA command block registers, which is an IDE controller
+and nothing else. Where nothing answers it reports what storage the machine has
+and why none of it was reached — an AHCI controller, whose registers are
+memory-mapped; an NVM Express controller, which is not an ATA device; an SD host
+controller, where an eMMC part lives; a USB controller, where a drive lives. The
+first of those has a remedy in most firmware and it is named. The others do not,
+and the report says that instead of offering a setting that would not help.
+
 The self-test reads unconditionally and writes only when the operator has booted
 the GRUB entry that passes `disk-write-test`, and then only to a sector it first
-read and afterwards restores. See [`../docs/storage/DISK.md`](../docs/storage/DISK.md).
+read and afterwards restores. Two decisions that no board here can exercise — the
+native channel's addresses and the classification of storage outside its class —
+are pure functions of a configuration header, and are asserted upon headers this
+project cannot obtain the hardware for. See
+[`../docs/storage/DISK.md`](../docs/storage/DISK.md).
 
 ### `block/` — the generic block-device layer
 

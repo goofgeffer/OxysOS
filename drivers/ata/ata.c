@@ -43,13 +43,45 @@
  *     device that aborted the command leaves both at zero.
  *   - IBM Personal Computer AT technical reference: the fixed disk adapter is
  *     decoded at 0x01F0 with its control register at 0x03F6, and the second
- *     channel at 0x0170 and 0x0376.
+ *     channel at 0x0170 and 0x0376. Those are the *compatibility* addresses and
+ *     are where a channel answers only while it is in compatibility mode.
+ *   - PCI Local Bus Specification, the class code register, and the IDE
+ *     controller programming interface: bit 0 states that the primary channel is
+ *     in native PCI mode and bit 2 that the secondary is. A native channel
+ *     answers at the addresses its base address registers give — BAR0 and BAR1
+ *     for the primary, BAR2 and BAR3 for the secondary — and at no others. The
+ *     control block register is at offset 2 within the four bytes the control
+ *     BAR describes.
+ *
+ * What this driver reaches, and what it does not.
+ *
+ *   This is a driver for the ATA command block registers, reached through I/O
+ *   ports. It therefore drives an IDE controller, in either mode, and nothing
+ *   else. In particular it does not drive an AHCI controller — a serial ATA
+ *   controller whose programming interface is 0x01 — whose registers are
+ *   memory-mapped and which answers at no I/O port whatever.
+ *
+ *   That is not a small omission upon a modern machine: a machine whose firmware
+ *   presents its SATA controller in AHCI mode carries disks this driver cannot
+ *   see, and the symptom is exactly the symptom of having no disk at all. The
+ *   report therefore says which it is, rather than leaving a person to guess;
+ *   see AtaReportControllers below.
+ *
+ *   Nor is AHCI the end of it. An inexpensive laptop has no disk in any sense
+ *   this driver understands: its system sits upon an embedded MultiMediaCard
+ *   part behind an SD host controller, which the specification classes as a
+ *   system peripheral, and its removable storage sits behind a USB controller.
+ *   Such a machine carries no mass-storage controller at all, and no setting in
+ *   its firmware will produce one. The report names those paths too, because
+ *   the alternative was to tell somebody holding a working laptop that their
+ *   machine has no disk.
  */
 
 #include <oxys/ata.h>
 #include <oxys/kernel.h>
 #include <oxys/io.h>
 #include <oxys/block.h>
+#include <oxys/pci.h>
 
 /* The command block registers, as offsets from the base address. */
 #define ATA_REGISTER_DATA          0U
@@ -444,6 +476,165 @@ static void AtaIdentify(AtaDevice *device)
                      sizeof(device->serial));
 }
 
+/*
+ * Where each channel actually answers, and how that was established.
+ *
+ * These begin at the compatibility addresses and are replaced where a PCI IDE
+ * controller declares a channel to be in native mode. They are held rather than
+ * recomputed because the report must be able to say what was used: a driver that
+ * found nothing at an address nobody can see is indistinguishable from a driver
+ * with a fault.
+ */
+static uint16_t AtaChannelIoBase[ATA_CHANNEL_COUNT];
+static uint16_t AtaChannelControlBase[ATA_CHANNEL_COUNT];
+static bool AtaChannelIsNative[ATA_CHANNEL_COUNT];
+
+/* The IDE controller the addresses came from, if any. */
+static const PciFunction *AtaController;
+
+/*
+ * Establishes where the two channels answer, before anything is asked of them.
+ *
+ * The compatibility addresses are the default and are correct for every machine
+ * whose IDE controller is in compatibility mode, which is every machine this
+ * kernel had been tried upon before this routine existed. A controller in native
+ * mode answers at its base address registers instead — the same registers in the
+ * same order, at an address the firmware assigned — and probing the
+ * compatibility addresses then finds nothing, which is the whole of the failure.
+ *
+ * A base address register that does not describe I/O ports, or that describes
+ * port zero, is disregarded and the channel left at its compatibility address.
+ * Such a register is a controller declaring native mode without having been
+ * given an address, and following it would put commands to an arbitrary port.
+ */
+AtaForeignStorage AtaClassifyForeignStorage(const PciFunction *function)
+{
+    if (function == NULL)
+    {
+        return ATA_FOREIGN_STORAGE_NONE;
+    }
+
+    /*
+     * Only the class and subclass are read. The programming interface of an SD
+     * host controller distinguishes the standard register interface from a
+     * vendor's own, and that of a USB controller distinguishes the four host
+     * controller interfaces; neither distinction changes the one thing said
+     * here, which is that this driver does not reach it.
+     */
+    if ((function->class_code == PCI_CLASS_SYSTEM_PERIPHERAL) &&
+        (function->subclass == PCI_SUBCLASS_SD_HOST))
+    {
+        return ATA_FOREIGN_STORAGE_SD;
+    }
+
+    if ((function->class_code == PCI_CLASS_SERIAL_BUS) &&
+        (function->subclass == PCI_SUBCLASS_USB))
+    {
+        return ATA_FOREIGN_STORAGE_USB;
+    }
+
+    return ATA_FOREIGN_STORAGE_NONE;
+}
+
+bool AtaChannelAddressesFor(const PciFunction *function, uint8_t channel, uint16_t *io_base,
+                            uint16_t *control_base)
+{
+    const uint8_t native_bit =
+        (channel == 0U) ? PCI_IDE_PRIMARY_NATIVE : PCI_IDE_SECONDARY_NATIVE;
+    const size_t command_bar = (channel == 0U) ? 0U : 2U;
+    const size_t control_bar = command_bar + 1U;
+    uint64_t command_address;
+    uint64_t control_address;
+
+    if ((function == NULL) || (io_base == NULL) || (control_base == NULL) ||
+        (channel >= ATA_CHANNEL_COUNT))
+    {
+        return false;
+    }
+
+    /* Only an IDE controller has these bits; the programming interface of any
+     * other subclass means something else entirely, and reading it as this would
+     * be reading a field that was never written. */
+    if ((function->class_code != PCI_CLASS_MASS_STORAGE) ||
+        (function->subclass != PCI_SUBCLASS_IDE))
+    {
+        return false;
+    }
+
+    if ((function->programming_interface & native_bit) == 0U)
+    {
+        return false;
+    }
+
+    if (!PciBarIsIoPort(function, command_bar) || !PciBarIsIoPort(function, control_bar))
+    {
+        return false;
+    }
+
+    command_address = PciBarBase(function, command_bar);
+    control_address = PciBarBase(function, control_bar);
+
+    /*
+     * A register declaring native mode without having been given an address, or
+     * an address beyond the 16-bit port space, is disregarded. Following either
+     * would put commands to an arbitrary port, which is worse than not finding
+     * the disk: an arbitrary port belongs to some other device.
+     */
+    if ((command_address == 0U) || (control_address == 0U) ||
+        (command_address > UINT64_C(0xFFFF)) || (control_address > UINT64_C(0xFFFD)))
+    {
+        return false;
+    }
+
+    *io_base = (uint16_t)command_address;
+
+    /*
+     * The control block register lies at offset 2 within the four bytes the
+     * control base address register describes, and not at its start. A driver
+     * that took the base itself would write the device control register to a
+     * reserved port: the software reset would do nothing and the device's
+     * interrupt would never be disabled, so the channel would appear to work
+     * until something raised IRQ14 that nothing had claimed.
+     */
+    *control_base = (uint16_t)(control_address + 2U);
+
+    return true;
+}
+
+static void AtaLocateChannels(void)
+{
+    size_t found_at = 0U;
+
+    for (uint8_t channel = 0U; channel < ATA_CHANNEL_COUNT; ++channel)
+    {
+        AtaChannelIoBase[channel] =
+            (channel == 0U) ? ATA_PRIMARY_IO_BASE : ATA_SECONDARY_IO_BASE;
+        AtaChannelControlBase[channel] =
+            (channel == 0U) ? ATA_PRIMARY_CONTROL_BASE : ATA_SECONDARY_CONTROL_BASE;
+        AtaChannelIsNative[channel] = false;
+    }
+
+    AtaController = PciFindByClass(PCI_CLASS_MASS_STORAGE, PCI_SUBCLASS_IDE, 0U, &found_at);
+
+    if (AtaController == NULL)
+    {
+        return;
+    }
+
+    for (uint8_t channel = 0U; channel < ATA_CHANNEL_COUNT; ++channel)
+    {
+        uint16_t io_base;
+        uint16_t control_base;
+
+        if (AtaChannelAddressesFor(AtaController, channel, &io_base, &control_base))
+        {
+            AtaChannelIoBase[channel] = io_base;
+            AtaChannelControlBase[channel] = control_base;
+            AtaChannelIsNative[channel] = true;
+        }
+    }
+}
+
 bool AtaInitialise(void)
 {
     AtaPresent = 0U;
@@ -455,6 +646,13 @@ bool AtaInitialise(void)
     AtaTimeouts = 0U;
     AtaError = "none";
 
+    /*
+     * Where the channels answer is established before any of them is addressed.
+     * The bus was enumerated before this driver ran, which is the ordering
+     * kernel.c fixes and the reason this may consult it.
+     */
+    AtaLocateChannels();
+
     for (uint8_t channel = 0U; channel < ATA_CHANNEL_COUNT; ++channel)
     {
         for (uint8_t drive = 0U; drive < ATA_DRIVE_COUNT; ++drive)
@@ -464,9 +662,8 @@ bool AtaInitialise(void)
             device->kind = ATA_DEVICE_NONE;
             device->channel = channel;
             device->drive = drive;
-            device->io_base = (channel == 0U) ? ATA_PRIMARY_IO_BASE : ATA_SECONDARY_IO_BASE;
-            device->control_base =
-                (channel == 0U) ? ATA_PRIMARY_CONTROL_BASE : ATA_SECONDARY_CONTROL_BASE;
+            device->io_base = AtaChannelIoBase[channel];
+            device->control_base = AtaChannelControlBase[channel];
             device->supports_lba48 = false;
             device->sector_count = 0U;
             device->model[0] = '\0';
@@ -843,11 +1040,186 @@ static const char *AtaKindName(AtaDeviceKind kind)
     }
 }
 
+/*
+ * States where each channel was addressed, and how that was decided.
+ *
+ * This is printed whether or not anything answered, because the address is the
+ * first thing a person diagnosing a missing disk needs and the last thing they
+ * can obtain otherwise.
+ */
+static void AtaReportAddressing(void)
+{
+    for (uint8_t channel = 0U; channel < ATA_CHANNEL_COUNT; ++channel)
+    {
+        KernelWriteString("ATA: ");
+        KernelWriteString((channel == 0U) ? "primary" : "secondary");
+        KernelWriteString(" channel at ");
+        KernelWriteHexadecimal((uint64_t)AtaChannelIoBase[channel]);
+        KernelWriteString(", control ");
+        KernelWriteHexadecimal((uint64_t)AtaChannelControlBase[channel]);
+        KernelWriteString(AtaChannelIsNative[channel]
+                              ? ", from the controller's base address registers.\n"
+                              : ", the compatibility address.\n");
+    }
+}
+
+/*
+ * Says what mass-storage controllers the machine has, and why this driver did
+ * not reach them. Reports whether it found any.
+ *
+ * It is printed only where nothing answered, and it exists because that case had
+ * exactly one symptom for two quite different causes. A machine with no disk and
+ * a machine whose disks are behind a controller this driver cannot speak to both
+ * reported "no device answered upon either channel", and the second is by far
+ * the commoner upon anything made in the last fifteen years: a firmware that
+ * presents its SATA controller in AHCI mode puts the disks somewhere this driver
+ * has no way to look.
+ *
+ * The remedy is named as well as the cause. It is not this kernel's to apply —
+ * an AHCI driver is a sub-task of its own — but it is within the reach of
+ * whoever is standing at the machine, most firmware offering the choice.
+ */
+static bool AtaReportMassStorage(void)
+{
+    size_t position = 0U;
+    size_t found_at = 0U;
+    const PciFunction *function;
+    bool any = false;
+
+    while ((function = PciFindByClass(PCI_CLASS_MASS_STORAGE, PCI_CLASS_ANY_SUBCLASS,
+                                      position, &found_at)) != NULL)
+    {
+        any = true;
+        position = found_at + 1U;
+
+        KernelWriteString("ATA:   ");
+        KernelWriteString(PciClassName(function->class_code, function->subclass));
+        KernelWriteString(", interface ");
+        KernelWriteHexadecimal((uint64_t)function->programming_interface);
+        KernelWriteString(": ");
+
+        if (function->subclass == PCI_SUBCLASS_IDE)
+        {
+            /* This driver does speak to it, so nothing answering is the
+             * ordinary case of a controller with no disk attached. */
+            KernelWriteString("driven by this driver; no disk is attached to it.\n");
+        }
+        else if ((function->subclass == PCI_SUBCLASS_SATA) &&
+                 (function->programming_interface == PCI_SATA_INTERFACE_AHCI))
+        {
+            KernelWriteString("an AHCI controller. Its registers are memory-mapped "
+                              "and it answers at no I/O port, so this driver cannot "
+                              "reach it.\n");
+        }
+        else if ((function->subclass == PCI_SUBCLASS_NVM) &&
+                 (function->programming_interface == PCI_NVM_INTERFACE_NVME))
+        {
+            KernelWriteString("an NVM Express controller, which is not an ATA device "
+                              "at all.\n");
+        }
+        else
+        {
+            KernelWriteString("not an ATA controller this driver addresses.\n");
+        }
+    }
+
+    return any;
+}
+
+/*
+ * Names the storage the machine carries outside the mass-storage class, and
+ * reports whether it found any.
+ *
+ * The whole recorded table is walked rather than searched twice, because the
+ * question asked of each function is one question — AtaClassifyForeignStorage —
+ * and asking it of everything is both shorter and the same work.
+ *
+ * This exists because the report was wrong upon a real machine and wrong in the
+ * most misleading direction. An inexpensive laptop carries its system upon an
+ * embedded MultiMediaCard part and boots this kernel from a USB drive, and has
+ * no mass-storage controller whatever; the report told its owner that the
+ * machine had no disk. It has two kinds of storage. Neither is reachable
+ * through the ATA command block registers, and no firmware setting will make
+ * them so — the remedy is a driver, and saying that is the whole point.
+ */
+static bool AtaReportForeignStorage(void)
+{
+    const size_t count = PciFunctionCount();
+    bool any = false;
+
+    for (size_t index = 0U; index < count; ++index)
+    {
+        const PciFunction *const function = PciFunctionAt(index);
+        const AtaForeignStorage kind = AtaClassifyForeignStorage(function);
+
+        if (kind == ATA_FOREIGN_STORAGE_NONE)
+        {
+            continue;
+        }
+
+        any = true;
+
+        KernelWriteString("ATA:   ");
+        KernelWriteString(PciClassName(function->class_code, function->subclass));
+        KernelWriteString(", interface ");
+        KernelWriteHexadecimal((uint64_t)function->programming_interface);
+        KernelWriteString(": ");
+        KernelWriteString((kind == ATA_FOREIGN_STORAGE_SD)
+                              ? "where an embedded MultiMediaCard or a card in a slot "
+                                "is attached. It is not an ATA device and has no "
+                                "command block registers.\n"
+                              : "where a USB drive is attached. It is not an ATA "
+                                "device and has no command block registers.\n");
+    }
+
+    return any;
+}
+
+/*
+ * Says what storage the machine has and why none of it answered, whether or not
+ * any of it is of a class this driver could ever have driven.
+ */
+static void AtaReportControllers(void)
+{
+    const bool mass_storage = AtaReportMassStorage();
+    const bool foreign = AtaReportForeignStorage();
+
+    if (!mass_storage && !foreign)
+    {
+        KernelWriteString("ATA:   the bus carries no storage controller of any "
+                          "class.\n");
+        return;
+    }
+
+    if (mass_storage)
+    {
+        KernelWriteString("ATA: this driver reads and writes through the ATA command "
+                          "block registers,\n");
+        KernelWriteString("ATA: which is an IDE controller and nothing else. Where the "
+                          "firmware offers\n");
+        KernelWriteString("ATA: a storage mode of IDE, Legacy or Compatibility in place "
+                          "of AHCI,\n");
+        KernelWriteString("ATA: selecting it makes the disks above visible to this "
+                          "kernel.\n");
+        return;
+    }
+
+    KernelWriteString("ATA: this machine has no mass-storage controller at all, so "
+                      "there is no\n");
+    KernelWriteString("ATA: firmware setting that would present its storage as a disk. "
+                      "Reaching\n");
+    KernelWriteString("ATA: the storage above needs a driver this kernel does not yet "
+                      "have.\n");
+}
+
 void AtaReport(void)
 {
+    AtaReportAddressing();
+
     if (AtaPresent == 0U)
     {
         KernelWriteString("ATA: no device answered upon either channel.\n");
+        AtaReportControllers();
         return;
     }
 
