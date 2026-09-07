@@ -891,7 +891,16 @@ this section's test and that of Section 14.6.
 Sub-task 2.8 completes the memory-management substrate. An address space is a
 paging hierarchy that may be created, cloned by the copy-on-write discipline,
 activated and destroyed. `fork()`, in sub-task 6.11, is little more than a clone
-of the calling process's address space together with a copy of its thread state.
+of the calling process's address space together with a copy of its thread state —
+and that is how it turned out: `ProcessFork` is one call to `AddressSpaceClone`,
+one call to `ThreadCreate`, and a copy of the system-call frame the entry path had
+already saved. Nothing in this section needed changing to carry it, the
+invalidation of Section 14.4 having anticipated a source hierarchy that is the
+active one, which under `fork` it always is. What the sub-task did add is a
+consumer within the kernel: `wait` writes a status into a page the fork has just
+protected, so the argument validation of
+[`PRIVILEGE.md`](PRIVILEGE.md), Section 9.8, must resolve a copy-on-write fault
+rather than refuse the address.
 
 The implementation is `kernel/mm/addrspace.c`; the interface is
 `kernel/include/oxys/addrspace.h`.

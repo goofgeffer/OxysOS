@@ -9,6 +9,9 @@
 ; Key routines:
 ;   ThreadSwitchContext - saves the calling thread's context and resumes another.
 ;   ThreadEnterUser     - leaves the kernel for privilege level 3 by IRETQ.
+;   ThreadResumeUser    - the same, with a whole saved register set restored,
+;                         which is how a thread made by fork continues its
+;                         parent's program rather than beginning a new one.
 ;
 ; References:
 ;   - System V Application Binary Interface, AMD64 supplement, Section 3.2.1:
@@ -27,6 +30,11 @@
 ;     and the five quadwords it expects.
 ;   - Intel SDM, Volume 1, Section 3.4.3: bit 1 of RFLAGS reads as one and is
 ;     reserved; a value with it clear is not a legal RFLAGS.
+;   - Intel SDM, Volume 2B, "SYSRET": the instruction takes the address to return
+;     to from RCX and the flags from R11, and raises a general-protection
+;     exception — at privilege level 0, before the return — where RCX does not
+;     hold a canonical address. That is the pair of facts ThreadResumeUser
+;     declines it for; see the note upon that routine.
 ;
 ; Why the switch is a function call and not an interrupt.
 ;
@@ -184,5 +192,97 @@ ThreadEnterUser:
     xor     r13, r13
     xor     r14, r14
     xor     r15, r15
+
+    iretq
+
+; ------------------------------------------------------------------------------
+; ThreadResumeUser(const SyscallFrame *frame, uint64_t code_selector,
+;                  uint64_t stack_selector)
+;
+; Sub-task 6.11. Returns to privilege level 3 with a whole register set restored
+; rather than with none, which is what a thread created by `fork` needs: it is
+; not entered at an entry point but continues a program already running, at the
+; instruction after its parent's SYSCALL and with its parent's registers.
+;
+; The arguments arrive in RDI, RSI and RDX. RDI names a SyscallFrame exactly as
+; kernel/cpu/syscall_entry.asm builds one; the offsets below are asserted against
+; the C structure by _Static_assert in kernel/proc/process.c.
+;
+; Why IRETQ and not SYSRET.
+;
+;   SYSRET is the shorter path and cannot be used here. It takes the address to
+;   return to from RCX and the flags from R11, which is exactly what SYSCALL put
+;   there — but a thread reaching this routine was placed here by a context
+;   switch and not by a SYSCALL, so nothing has loaded those registers, and
+;   loading them by hand would make the two the only registers of the set that
+;   could not simply be restored. IRETQ takes both from the stack instead, so
+;   every register in the frame is restored in the same way as every other, and
+;   RCX and R11 arrive at privilege level 3 holding what the frame says they
+;   should.
+;
+;   SYSRET is also refused a non-canonical address by raising a general
+;   protection fault *in the kernel*, at privilege level 0; IRETQ faults with the
+;   address on the stack and the fault belongs to the return. The frame here was
+;   built by this kernel and neither case should arise, but where two
+;   instructions differ in which privilege level absorbs a malformed value, the
+;   one that does not absorb it into the kernel is the one to choose.
+; ------------------------------------------------------------------------------
+
+; The offsets of SyscallFrame, in the order syscall_entry.asm pushes them.
+%define FRAME_R15        0
+%define FRAME_R14        8
+%define FRAME_R13        16
+%define FRAME_R12        24
+%define FRAME_R11        32
+%define FRAME_R10        40
+%define FRAME_R9         48
+%define FRAME_R8         56
+%define FRAME_RBP        64
+%define FRAME_RDI        72
+%define FRAME_RSI        80
+%define FRAME_RDX        88
+%define FRAME_RCX        96
+%define FRAME_RBX        104
+%define FRAME_RAX        112
+%define FRAME_USER_STACK 120
+
+global ThreadResumeUser
+
+ThreadResumeUser:
+    ; The data segment registers, before the stack segment, for the reason
+    ; ThreadEnterUser gives above.
+    mov     ax, dx
+    mov     ds, ax
+    mov     es, ax
+
+    ; The five quadwords IRETQ pops, pushed in the reverse of the order it pops
+    ; them. RIP is the frame's RCX, which is where SYSCALL put the address of the
+    ; instruction after it; RFLAGS is the frame's R11, which is where SYSCALL put
+    ; the caller's flags. The child therefore resumes at the instruction its
+    ; parent will resume at, with the flags its parent had.
+    push    rdx                         ; SS: the user stack selector, RPL 3.
+    push    qword [rdi + FRAME_USER_STACK]
+    push    qword [rdi + FRAME_R11]     ; RFLAGS, as SYSCALL preserved them.
+    push    rsi                         ; CS: the user code selector, RPL 3.
+    push    qword [rdi + FRAME_RCX]     ; RIP: after the parent's SYSCALL.
+
+    ; And the registers. RDI is loaded last because it is the pointer every one
+    ; of these is read through; loading it earlier would destroy the only means
+    ; of reaching the rest.
+    mov     rax, [rdi + FRAME_RAX]
+    mov     rbx, [rdi + FRAME_RBX]
+    mov     rcx, [rdi + FRAME_RCX]
+    mov     rdx, [rdi + FRAME_RDX]
+    mov     rsi, [rdi + FRAME_RSI]
+    mov     rbp, [rdi + FRAME_RBP]
+    mov     r8,  [rdi + FRAME_R8]
+    mov     r9,  [rdi + FRAME_R9]
+    mov     r10, [rdi + FRAME_R10]
+    mov     r11, [rdi + FRAME_R11]
+    mov     r12, [rdi + FRAME_R12]
+    mov     r13, [rdi + FRAME_R13]
+    mov     r14, [rdi + FRAME_R14]
+    mov     r15, [rdi + FRAME_R15]
+    mov     rdi, [rdi + FRAME_RDI]
 
     iretq

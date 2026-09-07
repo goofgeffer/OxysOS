@@ -7,7 +7,8 @@
  * Key definitions: SYSCALL_FLAG_MASK, SyscallInitialise, SyscallIsEnabled,
  *          SyscallEntryAddress, SyscallStar, SyscallLstar, SyscallFmask,
  *          SyscallDerivedKernelCode, SyscallDerivedUserCode, SyscallEntries,
- *          SyscallReport.
+ *          SyscallReport, SyscallSetKernelStack, SyscallEstablishKernelGsBase,
+ *          SyscallEstablishUserGsBase, SyscallCopyUserString.
  * References:
  *   - Intel 64 and IA-32 Architectures Software Developer's Manual, Volume 2B,
  *     "SYSCALL" and "SYSRET": SYSCALL saves the address of the following
@@ -209,7 +210,22 @@ typedef struct SyscallFrame
 #define SYSCALL_WRITE   0U
 #define SYSCALL_TICKS   1U
 #define SYSCALL_VERSION 2U
-#define SYSCALL_COUNT   3U
+
+/*
+ * The four calls of sub-task 6.11, by which a program may make another program,
+ * become another program, end, and collect what one of its children ended with.
+ *
+ * They are numbered after the three that existed rather than interleaved among
+ * them, because a number already handed to a program is a number that must not
+ * change: the self-test of sub-task 6.10 assembles `write` as call zero by hand,
+ * and every program written before this sub-task would call something else if
+ * the numbering were rearranged to look tidier.
+ */
+#define SYSCALL_FORK    3U
+#define SYSCALL_EXECVE  4U
+#define SYSCALL_EXIT    5U
+#define SYSCALL_WAIT    6U
+#define SYSCALL_COUNT   7U
 
 /*
  * The results a call may fail with.
@@ -225,6 +241,20 @@ typedef struct SyscallFrame
 #define SYSCALL_EFAULT         INT64_C(-2)  /* An address the caller may not use. */
 #define SYSCALL_EINVAL         INT64_C(-3)  /* An argument that cannot be right. */
 #define SYSCALL_EBADF          INT64_C(-4)  /* No such descriptor. */
+#define SYSCALL_ECHILD         INT64_C(-5)  /* The caller has no children to wait for. */
+#define SYSCALL_ENOENT         INT64_C(-6)  /* No such file, or one that will not load. */
+#define SYSCALL_ENOMEM         INT64_C(-7)  /* A frame, a table or a slot could not be had. */
+
+/*
+ * The greatest length of a path a caller may name, excluding its terminator.
+ *
+ * A bound is needed before the string is copied, and it must be the copy that is
+ * bounded rather than the search for the terminator: a caller may name a page of
+ * bytes with no zero in it at all, and a kernel that looked for one before
+ * deciding how much to read would walk off the end of the caller's mapping and
+ * fault in its own name.
+ */
+#define SYSCALL_PATH_MAXIMUM 255U
 
 /*
  * The boundary between what a user may name and what it may not.
@@ -255,6 +285,43 @@ typedef struct SyscallFrame
  */
 bool SyscallUserRangeIsReadable(uint64_t address, uint64_t length);
 bool SyscallUserRangeIsWritable(uint64_t address, uint64_t length);
+
+/*
+ * Copies a null-terminated string out of a caller's memory, bounded.
+ *
+ * The bound is applied to the copy and not to a prior search for the
+ * terminator, for the reason SYSCALL_PATH_MAXIMUM above records. Each byte is
+ * validated as its page is reached, so a string that begins upon a mapped page
+ * and runs onto an unmapped one is refused rather than faulted upon.
+ *
+ * Returns false where the range is not the caller's to read, or where no
+ * terminator stands within the capacity given.
+ */
+bool SyscallCopyUserString(uint64_t address, char *destination, size_t capacity);
+
+/*
+ * Tells the entry path which kernel stack to switch to.
+ *
+ * SYSCALL performs no stack switch, so the entry path reads this from the block
+ * GS names — and it is a *different* variable from the task state segment's
+ * `rsp0`, which is what an interrupt from privilege level 3 uses. Both describe
+ * the same stack and both must therefore follow the current thread. Until this
+ * sub-task only one of them did; see docs/design/PROCESS.md, Section 12.2.
+ */
+void SyscallSetKernelStack(uint64_t top);
+
+/*
+ * Establishes the two segment-base registers as the kernel requires them, and as
+ * a program requires them.
+ *
+ * SWAPGS exchanges rather than assigns, so whether one is owed depends upon how
+ * the kernel was entered — and a routine that switches threads cannot see how
+ * the thread it is resuming was entered. These two write the registers instead,
+ * so that the state is a consequence of the transition being made rather than of
+ * the history of the thread making it. See docs/design/PROCESS.md, Section 12.1.
+ */
+void SyscallEstablishKernelGsBase(void);
+void SyscallEstablishUserGsBase(void);
 
 /*
  * Whether a call number names an implemented call.

@@ -637,7 +637,7 @@ The test composes a real page — a frame, mapped low with the user bit — beca
 the second half of the validation cannot be asserted against a description. That
 page is the only user-accessible mapping this kernel has ever had.
 
-### 9.6 The calls, and why there are three
+### 9.6 The calls, and why there were three
 
 There is no C library to agree with and no process to act upon, so the table is
 what can be implemented honestly today: `write`, which exercises validation of a
@@ -645,16 +645,52 @@ range the kernel **reads**; `version`, which exercises a range the kernel
 **writes**; and `ticks`, which takes no argument at all and shows that a call
 needing no validation performs none.
 
-`exit`, `fork`, `execve` and the rest are not stubbed. A stub returning an error
+`exit`, `fork`, `execve` and the rest were not stubbed. A stub returning an error
 is a promise the kernel does not keep. The process control block they act upon
-arrived at sub-task 6.9 and the calls themselves arrive at 6.11; the table is
-still the three named above. A program that ends does so at present because it
-faulted and the exception path called `ThreadTerminateCurrent` for it, not
-because it asked — see [`PROCESS.md`](PROCESS.md), Section 10.1.
+arrived at sub-task 6.9, and at 6.11 the four of them arrived in fact rather than
+as numbers — see [`PROCESS.md`](PROCESS.md), Sections 11 to 16, for what each
+does and why. The table now holds seven, and the four were **numbered 3 to 6
+after the three above rather than interleaved among them**: a number handed to a
+program is a number that must not change, and `write` is call zero in machine
+code that was written before they existed.
 
 The numbers and the error values are this kernel's own. Inventing agreement with
 a library that does not exist would be inventing a compatibility nobody had
 tested.
+
+### 9.7 Two records of one kernel stack, of sub-task 6.11
+
+Section 9.1 says why the entry path reads its kernel stack from the block `GS`
+names rather than from `rsp0`: it has no stack from which to reach the task state
+segment. The consequence is that **two variables describe one stack**, and they
+must both follow the current thread.
+
+Until sub-task 6.11 only `rsp0` did. `SyscallInitialise` wrote the block's copy
+once at boot and nothing wrote it again, so every system call from every program
+arrived upon the stack the task state segment had been initialised with. With one
+program running at a time that stack belonged to nobody and served; with a
+program's child making a call while the parent was suspended inside one, both
+entries built their frames at the same addresses and the parent returned by
+`SYSRET` through the child's registers.
+
+`ThreadSetCurrent` now writes both, through `SyscallSetKernelStack`. The defect
+belonged to this section's sub-task and was found by a later one; the evidence
+and the negative test are in [`PROCESS.md`](PROCESS.md), Sections 12.2 and 16.1.
+
+### 9.8 A copy-on-write page the kernel must write
+
+`SyscallUserRangeIsWritable` refused a page that was mapped, user-accessible and
+**not writable**, which was right until `fork` existed. A fork withdraws write
+permission from every shared page of both hierarchies, so a buffer a program
+passed to a call before forking is read-only afterwards and is still the
+program's to write.
+
+The validation therefore resolves such a fault before concluding that a caller
+may not write. Provoking it instead is not an option — `CR0.WP` has been set
+since sub-task 3.4, so the kernel's own write to a read-only page is a fault at
+privilege level 0, which is a panic — and refusing is worse than either: the call
+fails for a reason the caller cannot see and could only correct by touching the
+page, which is the very thing it asked the kernel to do.
 
 ## 10. Present limitations
 
@@ -696,3 +732,11 @@ tested.
    together with `IA32_EFER.NXE` — the same bit
    [`EXECUTABLE.md`](EXECUTABLE.md), limitation 4, waits upon, there being no
    sense in enforcing two of the three and not the third.
+9. **`GS.base` is settled by writing and not by exchanging.** `SWAPGS` exchanges,
+   so which value it produces depends upon how the kernel was entered — and a
+   context switch cannot see that. Sub-task 6.11 therefore writes both
+   `IA32_GS_BASE` and `IA32_KERNEL_GS_BASE` at each boundary rather than
+   exchanging them, at the cost of two writes to model-specific registers per
+   switch and per descent. The entry and exit of `SyscallEntry` itself still
+   exchange, those being the one place where how the kernel was entered is known
+   by construction. See [`PROCESS.md`](PROCESS.md), Section 12.1.

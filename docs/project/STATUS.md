@@ -88,8 +88,7 @@ the GRUB entry that permits writing. See
 [`../storage/VFS.md`](../storage/VFS.md).
 
 **Phase 6 — graphics, system calls, processes, SMP.** Complete as far as sub-task
-6.10; 6.11 is next, and 6.12 to 6.15 are the multiprocessing half, none of it
-begun.
+6.11; 6.12 to 6.15 are the multiprocessing half, none of it begun.
 
 - The apparatus a privilege transition is performed out of stands and has been
   exercised: user-mode descriptors in the order `SYSCALL` and `SYSRET` derive
@@ -104,13 +103,21 @@ begun.
   rather than one for all; and composites all of it over a back buffer, after
   which **nothing reads the framebuffer**.
 - A `SYSCALL` entry path swaps `GS`, loads a kernel stack from a per-processor
-  block, dispatches through a table of three calls and validates a caller's
-  arguments against both the canonical user limit and the paging hierarchy.
+  block, dispatches through a table of seven calls and validates a caller's
+  arguments against both the canonical user limit and the paging hierarchy — and
+  resolves a copy-on-write fault upon a page it is asked to write, rather than
+  refusing an address a fork had protected.
 - An ELF64 loader places a statically linked image into an address space, and its
   design is the list of things it refuses to be told.
 - A process has an address space of its own and threads with kernel stacks of
   their own beneath guard pages; a switch exchanges six registers and a stack
   pointer; and `IRETQ` descends to privilege level 3.
+- **A program may make another program.** `fork` clones its address space by the
+  copy-on-write discipline of Phase 2 and gives the child its parent's whole
+  register set with `RAX` zeroed; `execve` replaces a process's program with one
+  read from a volume; `exit` ends a program upon its own request; and `wait`
+  collects what a child ended with. A child runs when its parent waits for it,
+  there being one thread of control until the scheduler of sub-task 6.15.
 
 See [`../design/PRIVILEGE.md`](../design/PRIVILEGE.md),
 [`../design/GRAPHICS.md`](../design/GRAPHICS.md),

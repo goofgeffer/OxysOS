@@ -1098,6 +1098,30 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
      * mounted at the root, read-only unless the operator permitted otherwise.
      */
     KernelVerifyVfs();
+
+    /*
+     * Sub-task 6.11, and it stands here rather than beside the rest of Phase 6
+     * for one reason: `execve` loads a program from a path, and a path leads
+     * nowhere until a volume is mounted.
+     *
+     * The dependency is upon the line above and not upon the one below.
+     * `KernelVerifyVfs` is what initialises the filesystem layer and registers
+     * the EXT2 type; the lifecycle test then composes a volume of memory,
+     * presents it as a device of its own, mounts it, writes the program it means
+     * to execute, and withdraws all three before it returns — so it needs
+     * nothing of the machine's own root volume, and `KernelMountRootVolume`
+     * below would in any case find nothing upon a machine with no disk.
+     *
+     * The fork alone is asserted first and needs none of that, being an
+     * operation upon two address spaces and a table; it is run here beside the
+     * test it explains rather than three hundred lines above it, so that a
+     * reader of the log meets the cheap assertion immediately before the
+     * expensive one it makes interpretable.
+     */
+    KernelVerifyFork();
+    KernelVerifyLifecycle();
+    ProcessReport();
+
     KernelMountRootVolume();
 
     PicReport();
@@ -1114,7 +1138,9 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
      * which sub-task the boot got as far as, and must be revised with the boot.
      */
     KernelWriteString("Phase 6 initialisation complete: a program has been loaded, "
-                      "run at privilege level 3, and ended.\n");
+                      "run at privilege level 3,\nhas made a child of itself, replaced "
+                      "that child's program with one read from a\nvolume, collected "
+                      "what it ended with, and ended.\n");
 
     VgaSetColour(VGA_COLOUR_LIGHT_GREY, VGA_COLOUR_BLACK);
 

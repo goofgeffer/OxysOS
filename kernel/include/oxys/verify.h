@@ -7,7 +7,10 @@
  *          KernelVerifyAllocators, KernelVerifyReferenceCounting,
  *          KernelVerifyCopyOnWrite, KernelVerifyAddressSpaces, KernelVerifyIdt,
  *          KernelVerifyInterruptStubs, KernelVerifyDispatcher,
- *          KernelVerifyExceptions, KernelVerifyPrivilege, KernelVerifyPic,
+ *          KernelVerifyExceptions, KernelVerifyPrivilege, KernelVerifySyscall,
+ *          KernelVerifyElf, KernelVerifyProcess, KernelVerifyContextSwitch,
+ *          KernelVerifyUserMode, KernelVerifyFork, KernelVerifyLifecycle,
+ *          KernelVerifyPic,
  *          KernelVerifyPit, KernelVerifyKeyboard, KernelVerifySerial,
  *          KernelVerifyVga, KernelVerifyPci, KernelVerifyAta, KernelVerifyBlock,
  *          KernelVerifyBuffer, KernelVerifyExt2, KernelVerifyVfs,
@@ -127,6 +130,8 @@ void KernelVerifyElf(void);
 void KernelVerifyProcess(void);
 void KernelVerifyContextSwitch(void);
 void KernelVerifyUserMode(void);
+void KernelVerifyFork(void);
+void KernelVerifyLifecycle(void);
 
 /* Phases 3 and 4: the devices. */
 void KernelVerifyPic(void);

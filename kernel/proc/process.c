@@ -6,7 +6,8 @@
  *          record of what a process has had loaded into it.
  * Key functions: ProcessInitialise, ProcessCreate, ProcessDestroy, ThreadCreate,
  *          ThreadDestroy, ThreadSetCurrent, ProcessCreateUserStack,
- *          ProcessRecordImage, ProcessReport.
+ *          ProcessRecordImage, ProcessReport, ProcessFork, ProcessExecute,
+ *          ProcessExit, ProcessWait.
  * References: kernel/include/oxys/process.h states what this implements, and
  *          docs/design/PROCESS.md why.
  *
@@ -18,6 +19,21 @@
  *   is deliberate: a structure that has never been switched to is one whose
  *   shape can still be argued about, and one that has is a structure with
  *   assembly written against its offsets.
+ *
+ *   Sub-task 6.11 adds the four calls by which a program governs another: fork,
+ *   execve, exit and wait. They are placed here rather than beside the dispatch
+ *   table because none of them is a system call in substance — each is an
+ *   operation upon the two tables above, and kernel/cpu/syscall.c does no more
+ *   than validate a caller's arguments and name one of them.
+ *
+ * A child runs when its parent waits for it.
+ *
+ *   There is one thread of control until the scheduler of sub-task 6.15, so a
+ *   forked child is created runnable and left standing until `wait` runs it upon
+ *   the parent's own thread of control. Everything a program can observe of the
+ *   ordering is preserved — a child runs after the fork that made it and before
+ *   the wait that collects it — and concurrency is not. It is recorded here and
+ *   in docs/design/PROCESS.md, Section 13.2, rather than left to be discovered.
  *
  * Identifiers are numbers and not indices.
  *
@@ -142,7 +158,18 @@ void ProcessInitialise(void)
 
 /* ---------------------------------------------------------------- processes */
 
-Process *ProcessCreate(const char *name, const Process *parent)
+/*
+ * Takes a slot and gives it an address space, either an empty one or a clone of
+ * another.
+ *
+ * The two differ in one call and in nothing else, which is why they are one
+ * routine: a fork that built an empty space and then replaced it would have to
+ * destroy a hierarchy it had just made, and a moment in which the process holds
+ * a space that is neither the one it began with nor the one it is to have is a
+ * moment in which a failure has nothing correct to fall back to.
+ */
+static Process *ProcessAllocate(const char *name, const Process *parent,
+                                const AddressSpace *clone_of)
 {
     for (size_t index = 0U; index < PROCESS_CAPACITY; ++index)
     {
@@ -153,7 +180,8 @@ Process *ProcessCreate(const char *name, const Process *parent)
             continue;
         }
 
-        if (!AddressSpaceCreate(&process->space))
+        if ((clone_of != NULL) ? !AddressSpaceClone(&process->space, clone_of)
+                               : !AddressSpaceCreate(&process->space))
         {
             /*
              * The slot is left unoccupied rather than half filled. A process
@@ -197,6 +225,11 @@ Process *ProcessCreate(const char *name, const Process *parent)
     }
 
     return NULL;
+}
+
+Process *ProcessCreate(const char *name, const Process *parent)
+{
+    return ProcessAllocate(name, parent, NULL);
 }
 
 void ProcessDestroy(Process *process)
@@ -381,6 +414,11 @@ Thread *ThreadCreate(Process *owner, uint64_t entry, uint64_t user_stack)
         thread->context.rsp = top;
         thread->owns_stack = true;
 
+        /* A thread created here begins at an entry point, not part way through a
+         * program, so there is no saved user context to restore. Sub-task 6.11's
+         * ProcessFork is what fills these in. */
+        thread->resumes_from_fork = false;
+
         thread->used = true;
 
         owner->threads[owner->thread_count] = thread;
@@ -529,6 +567,24 @@ void ThreadSetCurrent(Thread *thread)
      * exactly this moment.
      */
     TssSetKernelStack(thread->kernel_stack_top);
+
+    /*
+     * And the *other* record of the same stack.
+     *
+     * SYSCALL performs no stack switch, so the entry path of sub-task 6.7 cannot
+     * read `rsp0`: it reads a field of the block GS names instead. Two variables
+     * therefore describe one stack, and until sub-task 6.11 only one of them
+     * followed the current thread — the other still held the stack the task
+     * state segment was initialised with, because SyscallInitialise wrote it once
+     * and nothing wrote it again.
+     *
+     * With one program at a time that was invisible: the one stack nobody else
+     * was using served. It stops being invisible the moment a program's child
+     * makes a system call while the parent is inside one, which is exactly what
+     * `wait` arranges — both entries would build their frames at the same
+     * addresses, and the parent would return through the child's registers.
+     */
+    SyscallSetKernelStack(thread->kernel_stack_top);
 }
 
 Thread *ThreadCurrent(void)
@@ -556,7 +612,21 @@ _Static_assert(sizeof(ThreadContext) == 56U, "A context is seven quadwords.");
 extern void ThreadSwitchContext(ThreadContext *from, ThreadContext *to);
 extern void ThreadEnterUser(uint64_t entry, uint64_t user_stack, uint64_t code_selector,
                             uint64_t stack_selector);
+extern void ThreadResumeUser(const SyscallFrame *frame, uint64_t code_selector,
+                             uint64_t stack_selector);
 extern void ThreadTrampoline(void);
+
+/*
+ * ThreadResumeUser addresses SyscallFrame by number and cannot see this
+ * structure either. The two fields asserted are the two it reads that are not
+ * merely restored: RCX is the address the child resumes at and R11 the flags it
+ * resumes with, so a field displaced here without the assembly would return a
+ * program to whatever quadword had taken its place.
+ */
+_Static_assert(offsetof(SyscallFrame, rcx) == (12U * 8U),
+               "The resume takes the instruction pointer from RCX at offset 96.");
+_Static_assert(offsetof(SyscallFrame, r11) == (4U * 8U),
+               "The resume takes RFLAGS from R11 at offset 32.");
 
 /*
  * Prepares a thread's kernel stack so that switching to it lands in the
@@ -657,6 +727,7 @@ Thread *ThreadCreateKernel(void (*entry)(void))
         thread->entry = (uint64_t)(uintptr_t)entry;
         thread->user_stack = 0U;
         thread->owns_stack = true;
+        thread->resumes_from_fork = false;
         thread->used = true;
 
         thread->context.rsp = ThreadPrepareFrame(top, (uint64_t)(uintptr_t)entry);
@@ -746,6 +817,31 @@ void ThreadSwitchTo(Thread *from, Thread *to)
     from->state = (from->state == THREAD_RUNNING) ? THREAD_READY : from->state;
     to->state = THREAD_RUNNING;
 
+    /*
+     * The one piece of state a context does not carry.
+     *
+     * GS.base holds the per-processor block within the kernel and the program's
+     * own value outside it, and the two are exchanged by SWAPGS at each
+     * boundary — so which of them GS.base holds depends upon *how the kernel was
+     * entered*, and not upon which thread is running. A thread entered by a
+     * system call is in the kernel with the block in GS.base; a thread entered
+     * by an exception is in the kernel with the program's value there, the
+     * interrupt path performing no exchange.
+     *
+     * A switch cannot tell those apart, and it must not have to: the thread it
+     * resumes may return through the system-call path, whose closing SWAPGS
+     * assumes the block is in GS.base and would otherwise hand the block to
+     * privilege level 3 — where the *next* SYSCALL would exchange it away and
+     * the entry path would look for its kernel stack through whatever the
+     * program had left in the register.
+     *
+     * The register is therefore written rather than exchanged, at both
+     * boundaries: here, where the kernel resumes, and in ThreadTrampolineEntry
+     * below, where it departs. The state then follows from the transition being
+     * made instead of from the history of the thread making it.
+     */
+    SyscallEstablishKernelGsBase();
+
     /* rsp0 follows the incoming thread, so that its next entry from privilege
      * level 3 arrives upon its own stack. */
     ThreadSetCurrent(to);
@@ -771,6 +867,31 @@ void ThreadTrampolineEntry(void)
         KernelPanic("A thread was started with nowhere to begin.");
     }
 
+    /* The kernel is about to be left, so the segment bases are put as a program
+     * requires them; ThreadSwitchTo above says why they are written and not
+     * exchanged. */
+    SyscallEstablishUserGsBase();
+
+    /*
+     * A thread made by `fork` continues a program rather than beginning one.
+     *
+     * It resumes at the instruction after its parent's SYSCALL, upon the stack
+     * its parent was using — which is its own, the address space having been
+     * cloned — and with its parent's whole register set save RAX, which is zero
+     * because that is how a child tells itself apart from its parent.
+     *
+     * The other path clears every register instead, for the reason
+     * docs/design/PROCESS.md, Section 10, gives: whatever stands in a register at
+     * that moment is a kernel address as often as not. That reasoning does not
+     * reach a forked child, every value it inherits being one its parent already
+     * had at privilege level 3.
+     */
+    if (thread->resumes_from_fork)
+    {
+        ThreadResumeUser(&thread->resume, (uint64_t)GDT_USER_CODE_SELECTOR | 3U,
+                         (uint64_t)GDT_USER_DATA_SELECTOR | 3U);
+    }
+
     ThreadEnterUser(thread->entry, thread->user_stack,
                     (uint64_t)GDT_USER_CODE_SELECTOR | 3U,
                     (uint64_t)GDT_USER_DATA_SELECTOR | 3U);
@@ -779,6 +900,23 @@ void ThreadTrampolineEntry(void)
 bool ThreadStart(Thread *thread)
 {
     Thread *const caller = ProcessCurrentThread;
+
+    /*
+     * Whoever the caller was itself started by, of sub-task 6.11.
+     *
+     * A program may now start another — a parent that calls `wait` starts its
+     * child from within its own system call — so the single variable naming the
+     * thread to return to must be saved and put back rather than cleared. The
+     * chain of them lives upon the kernel stacks of the calls that made it, one
+     * to a stack, which is the shape a stack of callers takes when there is one
+     * thread of control and no scheduler to hold a queue.
+     *
+     * Clearing it instead was correct while nothing nested and would be a
+     * particular kind of silent failure now: the parent would end with nobody
+     * recorded to return to, and ThreadTerminateCurrent would refuse — leaving
+     * the exception path to panic about a program the kernel had itself started.
+     */
+    Thread *const previous = ProcessReturnThread;
 
     if ((thread == NULL) || !thread->used || (caller == NULL) || (thread == caller))
     {
@@ -804,7 +942,7 @@ bool ThreadStart(Thread *thread)
 
     /* Reached when the started thread — or the kernel acting for it — switches
      * back. */
-    ProcessReturnThread = NULL;
+    ProcessReturnThread = previous;
     ThreadSetCurrent(caller);
 
     return true;
@@ -913,6 +1051,290 @@ uint64_t ProcessCreateUserStack(Process *process)
     return top;
 }
 
+/* ------------------------------------------------------- sub-task 6.11 */
+
+/* Accounting for the four calls. */
+static uint64_t ProcessForks;
+static uint64_t ProcessExecutions;
+static uint64_t ProcessReaps;
+
+Process *ProcessCurrent(void)
+{
+    return (ProcessCurrentThread != NULL) ? ProcessCurrentThread->owner : NULL;
+}
+
+Process *ProcessFork(Process *parent, const SyscallFrame *frame)
+{
+    Process *child;
+    Thread *thread;
+
+    if ((parent == NULL) || !parent->used || (frame == NULL))
+    {
+        return NULL;
+    }
+
+    /*
+     * The address space is cloned, not built. That single call is the whole of
+     * what sub-task 2.8 was written for: the pages are shared, the writable ones
+     * are protected in both hierarchies, and a reference is recorded for the new
+     * holder — so a fork costs the paging structures and nothing else until one
+     * of the two writes.
+     */
+    child = ProcessAllocate(parent->name, parent, &parent->space);
+
+    if (child == NULL)
+    {
+        return NULL;
+    }
+
+    /*
+     * What the parent knows about its own memory is true of the child's, the
+     * mappings being the same ones. It is copied rather than recomputed because
+     * an address space still cannot answer what it maps — which is the reason
+     * these fields exist at all; see docs/design/MEMORY-LAYOUT.md, limitation 2.
+     */
+    child->image_lowest = parent->image_lowest;
+    child->image_highest = parent->image_highest;
+    child->image_entry = parent->image_entry;
+    child->mapped_pages = parent->mapped_pages;
+    child->user_stack_top = parent->user_stack_top;
+    child->user_stack_pages = parent->user_stack_pages;
+
+    /*
+     * The child begins where its parent will resume: at the address SYSCALL put
+     * in RCX, upon the stack the entry path saved. The stack is the parent's
+     * address and is the child's stack all the same, the cloned space mapping
+     * the same address to a frame of its own once either writes to it.
+     */
+    thread = ThreadCreate(child, frame->rcx, frame->user_stack);
+
+    if (thread == NULL)
+    {
+        ProcessDestroy(child);
+
+        return NULL;
+    }
+
+    thread->resume = *frame;
+    thread->resume.rax = 0U;
+    thread->resumes_from_fork = true;
+
+    child->state = PROCESS_READY;
+    ++ProcessForks;
+
+    return child;
+}
+
+int64_t ProcessExecute(Process *process, const char *path)
+{
+    Thread *const thread = ProcessCurrentThread;
+    AddressSpace fresh;
+    AddressSpace previous;
+    ElfImage image;
+    uint64_t stack;
+
+    if ((process == NULL) || !process->used || (path == NULL) || (thread == NULL) ||
+        (thread->owner != process))
+    {
+        return SYSCALL_EINVAL;
+    }
+
+    /*
+     * The new program is built entire before the old one is touched.
+     *
+     * A loader that filled the process's own address space would have nothing to
+     * go back to when an image turned out to be malformed half way through, and
+     * `execve` that fails must leave the caller running: a program told that its
+     * file does not exist is a program that carries on and reports so. The cost
+     * is that both address spaces exist at once, for as long as the load takes.
+     */
+    if (!AddressSpaceCreate(&fresh))
+    {
+        return SYSCALL_ENOMEM;
+    }
+
+    if (ElfLoadFile(&fresh, path, &image) != ELF_OK)
+    {
+        AddressSpaceDestroy(&fresh);
+
+        return SYSCALL_ENOENT;
+    }
+
+    /*
+     * The point of no return, and the order within it is not free.
+     *
+     * The new space is made active *before* the old one is released, because
+     * AddressSpaceDestroy refuses to release the space the processor is
+     * translating through — and rightly: releasing the frames beneath a running
+     * program's own mappings is a fault that arrives at some unrelated later
+     * instruction. This function continues to execute across the change because
+     * the kernel's higher half is mapped identically in both, which is what
+     * AddressSpaceCreate copies the kernel's entries for.
+     */
+    previous = process->space;
+    AddressSpaceSwitch(&fresh);
+    AddressSpaceDestroy(&previous);
+
+    process->space = fresh;
+    process->image_lowest = image.lowest;
+    process->image_highest = image.highest;
+    process->image_entry = image.entry;
+    process->mapped_pages = image.pages;
+
+    /* The old stack went with the old address space, and the extent record must
+     * say so before a new one may be given: ProcessCreateUserStack refuses a
+     * process that already has one, which is what stops a second stack being
+     * mapped over the first. */
+    process->user_stack_top = 0U;
+    process->user_stack_pages = 0U;
+
+    stack = ProcessCreateUserStack(process);
+
+    if (stack == 0U)
+    {
+        /*
+         * Beyond the point of no return there is no program to fail back into:
+         * the one that called is gone. The process is ended instead, with a
+         * status that says which failure it was, and its parent collects that
+         * exactly as it would collect any other ending.
+         */
+        ProcessExit(SYSCALL_ENOMEM);
+    }
+
+    thread->entry = image.entry;
+    thread->user_stack = stack;
+
+    /* A thread that reached here by `fork` has a saved user context, and it
+     * describes a program that no longer exists. Leaving it set would resume the
+     * old program's registers in the new program's address space. */
+    thread->resumes_from_fork = false;
+
+    ++ProcessExecutions;
+
+    SyscallEstablishUserGsBase();
+    ThreadEnterUser(image.entry, stack, (uint64_t)GDT_USER_CODE_SELECTOR | 3U,
+                    (uint64_t)GDT_USER_DATA_SELECTOR | 3U);
+
+    /* Not reached. */
+    return SYSCALL_OK;
+}
+
+void ProcessExit(int64_t status)
+{
+    if (!ThreadTerminateCurrent(status))
+    {
+        /*
+         * The same condition the exception path panics upon, reached by the
+         * other route: a program asked to end and there was nobody recorded to
+         * return to, which means privilege level 3 was reached by something that
+         * did not go through ThreadStart. Returning would return through SYSRET
+         * to a program that believes it has ended.
+         */
+        KernelPanic("A program ended that nothing this kernel started had begun.");
+    }
+}
+
+uint64_t ProcessWait(Process *parent, int64_t *status)
+{
+    Process *child = NULL;
+    uint64_t collected;
+
+    if ((parent == NULL) || !parent->used || (status == NULL))
+    {
+        return 0U;
+    }
+
+    /*
+     * A child that has ended is preferred to one that has not.
+     *
+     * Both are children and either may be collected, but collecting one that has
+     * already ended costs nothing, where collecting one that has not means
+     * running it to its end first. Taking the finished one first is therefore
+     * what makes a parent with several children collect them as they finish
+     * rather than in the order the table happens to hold them.
+     */
+    for (size_t index = 0U; index < PROCESS_CAPACITY; ++index)
+    {
+        Process *const candidate = &ProcessTable[index];
+
+        if (!candidate->used || (candidate->parent_id != parent->id))
+        {
+            continue;
+        }
+
+        if (candidate->state == PROCESS_EXITED)
+        {
+            child = candidate;
+            break;
+        }
+
+        if (child == NULL)
+        {
+            child = candidate;
+        }
+    }
+
+    if (child == NULL)
+    {
+        return 0U;
+    }
+
+    /*
+     * A child that has not run is run now, here, by its parent's own thread of
+     * control — which is what `wait` means while there is no scheduler.
+     *
+     * This is the sub-task's one substantial departure from the call it is named
+     * after, and it is recorded as such rather than disguised: elsewhere a child
+     * runs concurrently and `wait` blocks until it finishes, and here the two are
+     * the same act. What is preserved is everything a program can observe of the
+     * ordering — a child runs after the fork that made it and before the wait
+     * that collects it — and what is not is concurrency, which sub-task 6.15
+     * supplies. See docs/design/PROCESS.md, Section 13.2.
+     */
+    if (child->state != PROCESS_EXITED)
+    {
+        Thread *const thread = (child->thread_count > 0U) ? child->threads[0] : NULL;
+
+        if ((thread == NULL) || !ThreadStart(thread))
+        {
+            /*
+             * A child that cannot be started is ended rather than left standing.
+             * Returning zero here would tell the parent it has no children while
+             * one sits in the table for ever, and a parent that waited again
+             * would be told the same thing again.
+             */
+            child->state = PROCESS_EXITED;
+            child->exit_status = SYSCALL_EINVAL;
+        }
+    }
+
+    collected = child->id;
+    *status = child->exit_status;
+
+    /* And the slot, the threads and the address space go back. Nothing else
+     * holds the child: its parent named it by number, which is why a parent may
+     * be told an identifier that is already nobody's. */
+    ProcessDestroy(child);
+    ++ProcessReaps;
+
+    return collected;
+}
+
+uint64_t ProcessForkCount(void)
+{
+    return ProcessForks;
+}
+
+uint64_t ProcessExecuteCount(void)
+{
+    return ProcessExecutions;
+}
+
+uint64_t ProcessReapCount(void)
+{
+    return ProcessReaps;
+}
+
 uint64_t ProcessesCreated(void)
 {
     return ProcessCreations;
@@ -940,6 +1362,20 @@ void ProcessReport(void)
     KernelWriteString(" and ");
     KernelWriteDecimal(ThreadCreations);
     KernelWriteString(" since the start.\n");
+
+    /*
+     * The four calls, counted. The forks and the collections are printed
+     * together because they must balance: a process forked and never collected
+     * is a slot that stays occupied, and the difference between these two
+     * numbers is the number of children nobody has waited for.
+     */
+    KernelWriteString("Processes: ");
+    KernelWriteDecimal(ProcessForks);
+    KernelWriteString(" fork(s), ");
+    KernelWriteDecimal(ProcessExecutions);
+    KernelWriteString(" execution(s), ");
+    KernelWriteDecimal(ProcessReaps);
+    KernelWriteString(" child(ren) collected.\n");
 
     for (size_t index = 0U; index < PROCESS_CAPACITY; ++index)
     {

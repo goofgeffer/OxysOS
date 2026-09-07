@@ -38,6 +38,7 @@
 #include <oxys/paging.h>
 #include <oxys/pit.h>
 #include <oxys/tss.h>
+#include <oxys/process.h>
 
 /* Defined in kernel/cpu/syscall_entry.asm. */
 extern void SyscallEntry(void);
@@ -319,7 +320,24 @@ static bool SyscallPagesArePermitted(uint64_t address, uint64_t length, bool wri
             return false;
         }
 
-        if (writing && !PagingAddressIsWritable(page))
+        /*
+         * A page the kernel means to write that is not writable may still be
+         * writable to its owner: `fork` withdraws write permission from every
+         * shared page of both hierarchies, so a buffer a program passed to a
+         * call before forking is read-only afterwards and yet is the program's
+         * to write.
+         *
+         * The fault is therefore resolved here rather than provoked. Provoking
+         * it is not an option: CR0.WP has been set since sub-task 3.4, so the
+         * kernel's own write to such a page raises a page fault at privilege
+         * level 0, and a fault at privilege level 0 is a panic. Refusing the
+         * call instead would be worse than either, being a call that fails for a
+         * reason the caller cannot see and cannot correct — it would touch the
+         * page itself to correct it, which is the very thing it asked the kernel
+         * to do.
+         */
+        if (writing && !PagingAddressIsWritable(page) &&
+            !PagingResolveCopyOnWriteFault(page))
         {
             return false;
         }
@@ -338,6 +356,69 @@ bool SyscallUserRangeIsWritable(uint64_t address, uint64_t length)
 {
     return SyscallRangeIsWithinUserSpace(address, length) &&
            SyscallPagesArePermitted(address, length, true);
+}
+
+bool SyscallCopyUserString(uint64_t address, char *destination, size_t capacity)
+{
+    const char *const source = (const char *)(uintptr_t)address;
+
+    if ((destination == NULL) || (capacity == 0U))
+    {
+        return false;
+    }
+
+    destination[0] = '\0';
+
+    for (size_t index = 0U; index < capacity; ++index)
+    {
+        /*
+         * One byte validated, then one byte read, and in that order for every
+         * byte of the string.
+         *
+         * The length is not known until the terminator is found, so there is no
+         * range to validate in advance: a caller may name the last byte of a
+         * mapped page and the string may continue onto a page that is not
+         * mapped. Validating each byte as it is reached is what makes that case
+         * a refusal rather than a page fault raised by the kernel upon itself.
+         */
+        if (!SyscallUserRangeIsReadable(address + (uint64_t)index, 1U))
+        {
+            return false;
+        }
+
+        destination[index] = source[index];
+
+        if (source[index] == '\0')
+        {
+            return true;
+        }
+    }
+
+    /* No terminator within the capacity. The bytes copied are discarded rather
+     * than terminated at the bound: a path silently shortened would name a
+     * different file, and acting upon the wrong file is worse than refusing. */
+    destination[0] = '\0';
+
+    return false;
+}
+
+/* ------------------------------------------------- the state a transition owes */
+
+void SyscallSetKernelStack(uint64_t top)
+{
+    SyscallBlock.kernel_stack = top;
+}
+
+void SyscallEstablishKernelGsBase(void)
+{
+    WriteMsr(IA32_GS_BASE, (uint64_t)(uintptr_t)&SyscallBlock);
+    WriteMsr(IA32_KERNEL_GS_BASE, 0U);
+}
+
+void SyscallEstablishUserGsBase(void)
+{
+    WriteMsr(IA32_GS_BASE, 0U);
+    WriteMsr(IA32_KERNEL_GS_BASE, (uint64_t)(uintptr_t)&SyscallBlock);
 }
 
 /* ------------------------------------------------------------------ the calls */
@@ -447,6 +528,145 @@ static int64_t SyscallDoVersion(uint64_t address, uint64_t length)
     return (int64_t)copied;
 }
 
+/* ------------------------------------------- the four calls of sub-task 6.11 */
+
+/*
+ * Makes a child of the calling process.
+ *
+ * The frame is passed on rather than its fields, because the child needs the
+ * whole of it: the address the parent will return to, the stack it will return
+ * upon, and every register it is entitled to find unchanged. The dispatcher
+ * writes this function's result into the parent's RAX afterwards, so the copy
+ * the child keeps is taken before the parent's own return value exists — which
+ * is what leaves the child's RAX free to be set to zero.
+ */
+static int64_t SyscallDoFork(const SyscallFrame *frame)
+{
+    Process *const parent = ProcessCurrent();
+    Process *child;
+
+    if (parent == NULL)
+    {
+        return SYSCALL_EINVAL;
+    }
+
+    child = ProcessFork(parent, frame);
+
+    if (child == NULL)
+    {
+        return SYSCALL_ENOMEM;
+    }
+
+    return (int64_t)child->id;
+}
+
+/*
+ * Replaces the calling program with one loaded from a file.
+ *
+ * The path is copied into the kernel before anything else happens, and that is
+ * not merely tidiness: the address space the string stands in is released part
+ * way through this call, so a kernel that read the path from the caller's memory
+ * as it went would be reading memory it had already given back.
+ *
+ * The vectors of arguments and of environment variables are refused rather than
+ * ignored. There is no C library and no convention yet fixed for where a program
+ * finds them upon its stack, so accepting them would mean discarding them
+ * silently — and a program that passed arguments and found none would have no
+ * way to tell that the kernel had thrown them away.
+ */
+static int64_t SyscallDoExecve(uint64_t path_address, uint64_t argument_vector,
+                               uint64_t environment_vector)
+{
+    Process *const process = ProcessCurrent();
+    char path[SYSCALL_PATH_MAXIMUM + 1U];
+
+    if (process == NULL)
+    {
+        return SYSCALL_EINVAL;
+    }
+
+    if ((argument_vector != 0U) || (environment_vector != 0U))
+    {
+        return SYSCALL_EINVAL;
+    }
+
+    if (!SyscallCopyUserString(path_address, path, sizeof path))
+    {
+        ++SyscallFaults;
+
+        return SYSCALL_EFAULT;
+    }
+
+    /*
+     * Upon success this does not return: the caller is already executing the new
+     * program at privilege level 3. Its result is therefore always a refusal,
+     * and it is passed on as it stands rather than reduced to one — a program
+     * told that its file does not exist, when the machine had in fact run out of
+     * memory, would look for the fault in the one place it is not.
+     */
+    return ProcessExecute(process, path);
+}
+
+/* Ends the calling program. Does not return; the result exists so that the
+ * switch below has one, and so that a path that somehow came back would report
+ * something a reader could recognise as impossible. */
+static int64_t SyscallDoExit(uint64_t status)
+{
+    ProcessExit((int64_t)status);
+
+    return SYSCALL_EINVAL;
+}
+
+/*
+ * Collects a child that has ended, running it first if it has not yet run.
+ *
+ * The caller's buffer is validated before the child is run and not afterwards.
+ * Running the child is what produces the status, and a status produced and then
+ * found to have nowhere to go would be a child collected and its outcome
+ * discarded — the one loss in this call that nothing could recover from.
+ */
+static int64_t SyscallDoWait(uint64_t status_address)
+{
+    Process *const parent = ProcessCurrent();
+    int64_t status = 0;
+    uint64_t collected;
+
+    if (parent == NULL)
+    {
+        return SYSCALL_EINVAL;
+    }
+
+    if ((status_address != 0U) &&
+        !SyscallUserRangeIsWritable(status_address, (uint64_t)sizeof(int64_t)))
+    {
+        ++SyscallFaults;
+
+        return SYSCALL_EFAULT;
+    }
+
+    collected = ProcessWait(parent, &status);
+
+    if (collected == 0U)
+    {
+        return SYSCALL_ECHILD;
+    }
+
+    if (status_address != 0U)
+    {
+        uint8_t *const destination = (uint8_t *)(uintptr_t)status_address;
+
+        /* Byte by byte, in the order the architecture stores an integer, so that
+         * nothing here depends upon the caller's buffer being aligned for a
+         * quadword. A caller may name any address it owns. */
+        for (uint64_t index = 0U; index < (uint64_t)sizeof(int64_t); ++index)
+        {
+            destination[index] = (uint8_t)(((uint64_t)status >> (index * 8U)) & 0xFFU);
+        }
+    }
+
+    return (int64_t)collected;
+}
+
 /* ------------------------------------------------------------- the dispatch */
 
 /* A call: what it is named, and how many arguments it reads. The count is
@@ -461,7 +681,11 @@ typedef struct SyscallEntryDescriptor
 static const SyscallEntryDescriptor SyscallTable[SYSCALL_COUNT] = {
     { "write", 3U },
     { "ticks", 0U },
-    { "version", 2U }
+    { "version", 2U },
+    { "fork", 0U },
+    { "execve", 3U },
+    { "exit", 1U },
+    { "wait", 1U }
 };
 
 bool SyscallNumberIsValid(uint64_t number)
@@ -508,6 +732,22 @@ void SyscallDispatch(SyscallFrame *frame)
 
     case SYSCALL_VERSION:
         frame->rax = (uint64_t)SyscallDoVersion(frame->rdi, frame->rsi);
+        break;
+
+    case SYSCALL_FORK:
+        frame->rax = (uint64_t)SyscallDoFork(frame);
+        break;
+
+    case SYSCALL_EXECVE:
+        frame->rax = (uint64_t)SyscallDoExecve(frame->rdi, frame->rsi, frame->rdx);
+        break;
+
+    case SYSCALL_EXIT:
+        frame->rax = (uint64_t)SyscallDoExit(frame->rdi);
+        break;
+
+    case SYSCALL_WAIT:
+        frame->rax = (uint64_t)SyscallDoWait(frame->rdi);
         break;
 
     default:

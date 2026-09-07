@@ -114,6 +114,7 @@ C_SOURCES := kernel/kernel.c \
              kernel/test/verify_elf.c \
              kernel/test/verify_process.c \
              kernel/test/verify_usermode.c \
+             kernel/test/verify_lifecycle.c \
              kernel/test/verify_framebuffer.c \
              kernel/test/verify_graphics.c \
              kernel/test/verify_console.c \

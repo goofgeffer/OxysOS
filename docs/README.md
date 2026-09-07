@@ -44,7 +44,7 @@ complementary, and neither replaces the other.
 | [`PRIVILEGE.md`](design/PRIVILEGE.md) | The user-mode descriptors, the task state segment and its trusted stacks, the registers that configure `SYSCALL`, and the entry path, dispatch table and argument validation above them. |
 | [`GRAPHICS.md`](design/GRAPHICS.md) | The framebuffer and its memory type, the primitives and clipping that draw upon it, the bitmap font and graphical console drawn with those, the measurement that made the console fast enough, the fault screens a severe fault draws, the pointer, and the compositor beneath all of them. |
 | [`EXECUTABLE.md`](design/EXECUTABLE.md) | The ELF64 loader for statically linked executables: the list of things it refuses to be told by an untrusted document, and how a segment reaches an address space. |
-| [`PROCESS.md`](design/PROCESS.md) | The process control block, the thread and the saved context; the switch that exchanges one thread for another, and the descent to privilege level 3. |
+| [`PROCESS.md`](design/PROCESS.md) | The process control block, the thread and the saved context; the switch that exchanges one thread for another, the descent to privilege level 3, and the four calls by which a program makes another program, becomes another program, ends, and collects what a child ended with. |
 
 ### [`devices/`](devices/)
 

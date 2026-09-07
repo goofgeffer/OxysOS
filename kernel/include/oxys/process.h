@@ -6,7 +6,8 @@
  * Key definitions: ProcessState, ThreadState, ThreadContext, Thread, Process,
  *          ProcessInitialise, ProcessCreate, ProcessDestroy, ThreadCreate,
  *          ThreadDestroy, ThreadSetCurrent, ThreadCurrent, ProcessRecordImage,
- *          ProcessCreateUserStack, ProcessReport.
+ *          ProcessCreateUserStack, ProcessReport, ProcessFork, ProcessExecute,
+ *          ProcessExit, ProcessWait, ProcessCurrent.
  * References:
  *   - docs/design/PROCESS.md: the design of these structures and the reasons for
  *     their shape.
@@ -32,6 +33,13 @@
  *   another's, ThreadStart descends to privilege level 3, and
  *   ThreadTerminateCurrent is how a program that has ended gives the processor
  *   back — which is what made a fault outside the kernel survivable.
+ *
+ *   Sub-task 6.11 gives a program the four calls by which it may make another
+ *   one: ProcessFork clones a process upon the copy-on-write substrate of Phase
+ *   2, ProcessExecute replaces the program a process is running, ProcessExit
+ *   ends one on its own request, and ProcessWait collects what a child ended
+ *   with. Nothing runs concurrently: a child runs when its parent waits for it,
+ *   until the scheduler of sub-task 6.15.
  */
 
 #ifndef OXYS_PROCESS_H
@@ -40,6 +48,7 @@
 #include <oxys/types.h>
 #include <oxys/addrspace.h>
 #include <oxys/elf.h>
+#include <oxys/syscall.h>
 
 /* How many processes and threads may exist at once. */
 #define PROCESS_CAPACITY 64U
@@ -160,6 +169,25 @@ typedef struct Thread
     uint64_t user_stack;
 
     ThreadContext context;
+
+    /*
+     * The user registers a forked child resumes upon, of sub-task 6.11.
+     *
+     * A thread created by `fork` is not entered at an entry point: it continues
+     * a program that is already running, at the instruction after the SYSCALL
+     * its parent executed, with the whole of its parent's register set. The
+     * frame the entry path saved for the parent is therefore copied here with
+     * RAX set to zero, which is how a child tells itself apart from its parent.
+     *
+     * A thread entered at an entry point has every register cleared instead —
+     * see docs/design/PROCESS.md, Section 10 — and that would be wrong here in a
+     * way nothing would report: the System V convention entitles the code after
+     * a call to find RBX, RBP and R12 to R15 as it left them, so a child whose
+     * preserved registers had been zeroed would return from `fork` into a frame
+     * pointer of nothing and carry on.
+     */
+    SyscallFrame resume;
+    bool resumes_from_fork;
 
     /* Whether the stack above was taken from the arena and must be given back.
      * The thread describing the kernel's own execution runs upon the boot stack,
@@ -353,5 +381,88 @@ uint64_t ProcessTerminationCount(void);
 
 /* Emits the tables upon the diagnostic path. */
 void ProcessReport(void);
+
+/* ------------------------------------------------------------------------------
+ * Sub-task 6.11: fork, execve, exit and wait.
+ * ------------------------------------------------------------------------------ */
+
+/*
+ * Makes a child of a process: a second process holding the same memory by the
+ * copy-on-write discipline of Phase 2, and one thread prepared to resume where
+ * its parent will.
+ *
+ * The frame is the parent's, as the system-call entry path saved it. It supplies
+ * three things that exist nowhere else: the address the parent will return to,
+ * which is where the child begins; the parent's stack pointer, which the child
+ * inherits because the stack itself is cloned; and the parent's registers, which
+ * the child is entitled to find unchanged.
+ *
+ * The child is created READY and does not run. There is one thread of control
+ * until the scheduler of sub-task 6.15, so what starts a child is its parent
+ * asking for it by `wait`; see docs/design/PROCESS.md, Section 13.2.
+ *
+ * Returns null where a slot, a frame or a paging structure could not be had. The
+ * parent is unchanged in that case save for the pages the attempt protected,
+ * which is a loss of speed and not of correctness.
+ */
+Process *ProcessFork(Process *parent, const SyscallFrame *frame);
+
+/*
+ * Replaces the program a process is running with one loaded from a file.
+ *
+ * Upon success **this does not return**: the process's old address space has
+ * been released, a new one built from the image, a fresh user stack given, and
+ * the calling thread has descended to privilege level 3 at the new entry point.
+ * The kernel stack the call arrived upon is abandoned where it stands, which
+ * costs nothing — the next entry from privilege level 3 begins at its top again.
+ *
+ * Returns, having changed nothing, one of the SYSCALL_ result values of
+ * <oxys/syscall.h>: SYSCALL_ENOENT where the path names no file or names one
+ * this loader will not load, SYSCALL_ENOMEM where a frame or a paging structure
+ * could not be had, and SYSCALL_EINVAL where the arguments are not this
+ * process's to act upon.
+ *
+ * The three are distinguished rather than collapsed into one refusal. A program
+ * told that its file does not exist, when what happened was that the machine ran
+ * out of memory, would look for the fault in the one place it is not — and would
+ * be told the same thing however many times it looked.
+ *
+ * Beyond the point of no return a failure is fatal to the process rather than to
+ * the call, because a process whose address space has been released has no
+ * program left to return to.
+ */
+int64_t ProcessExecute(Process *process, const char *path);
+
+/*
+ * Ends the process the running thread belongs to, with a status, and returns to
+ * whoever started it. Does not return.
+ *
+ * This is a fourth way back from privilege level 3, and not one of the three
+ * docs/design/PROCESS.md, Section 10.1, named — those being the fault, the
+ * system-call return, and the pre-emption that does not yet exist. A program
+ * could fault its way out and could be returned to by SYSRET; what it could not
+ * do was say that it had finished.
+ */
+void ProcessExit(int64_t status);
+
+/*
+ * Collects a child that has ended, running it first if it has not yet run.
+ *
+ * Returns the identifier of the child collected and places its status through
+ * `status`, or zero where the caller has no children. The child's slot, its
+ * threads and its address space are released before this returns, so the
+ * identifier it names is already nobody's by the time the caller sees it — which
+ * is why it is returned rather than left to be looked up.
+ */
+uint64_t ProcessWait(Process *parent, int64_t *status);
+
+/* The process the running thread belongs to, or null where the running thread
+ * has none — which is every thread of the kernel's own. */
+Process *ProcessCurrent(void);
+
+/* Accounting. */
+uint64_t ProcessForkCount(void);
+uint64_t ProcessExecuteCount(void);
+uint64_t ProcessReapCount(void);
 
 #endif /* OXYS_PROCESS_H */
