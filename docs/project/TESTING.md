@@ -257,8 +257,8 @@ This is the only alternative to writing the arithmetic and hoping, and hoping is
 what produced both faults.
 
 The second was then observed upon a board composed to have the shape of the
-machine that reported it: an inexpensive laptop with no disk of any kind, its
-system upon an eMMC part, booted from a USB drive.
+machine that reported it — the HP Laptop 14-dq0052dx of Section 10.1: no disk of
+any kind, its system upon a 64 GB eMMC part, booted from a USB drive.
 
 ```sh
 qemu-system-x86_64 -machine q35,sata=off -cpu qemu64 -smp cores=2 -m 512M \
@@ -525,6 +525,39 @@ Physical testing requires a machine offering a legacy BIOS or a compatibility
 support module, since the UEFI boot path is not implemented until Phase 12.
 Diagnostic output should be captured through a serial adapter where the machine
 provides one. Sub-task 1.12 remains open.
+
+### 10.1 The machine the storage work was reported from
+
+One physical machine has run this kernel, and every fault recorded in
+[`../storage/DISK.md`](../storage/DISK.md), Sections 2.1 to 2.3, was reported
+from it. It is named here once, and the other documents cite this section rather
+than restating it.
+
+| | |
+| --- | --- |
+| Model | HP Laptop 14-dq0052dx |
+| Processor | Intel Celeron N4120 — Gemini Lake Refresh, **four cores**, four threads, 1.10 GHz base and 2.60 GHz burst, 14 nm, 6 W |
+| Memory | 4 GB DDR4 |
+| Storage | **64 GB eMMC**, and no disk of any other kind |
+| Graphics | Intel UHD Graphics 600 |
+| Display | 14-inch, 1366 × 768 |
+| Booted from | A USB drive |
+
+**Three of those lines are why the machine mattered**, and none of them was
+chosen for the purpose:
+
+Its storage is an **embedded MultiMediaCard** part, so the machine carries no
+mass-storage controller of any class. That is what sub-task 4.8 was added for,
+and it is why the report had to learn to name storage outside the mass-storage
+class rather than say there was none.
+
+It has **four cores**, where the QEMU configuration this project verifies against
+runs two. The application-processor bring-up of sub-task 6.14 will therefore
+first meet a real machine with more processors than any test has used.
+
+It is a **UEFI-era machine**, which is what makes sub-task 1.12 a question rather
+than a formality: the kernel has no UEFI boot path until Phase 12, so booting it
+here depends upon the firmware's compatibility support module.
 
 ## 11. Debugging with GDB
 

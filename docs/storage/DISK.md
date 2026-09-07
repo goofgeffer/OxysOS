@@ -167,9 +167,12 @@ into a firmware menu to work around a driver the kernel now has.
 Naming the AHCI controller was still not enough, because the machine the fault
 was first reported from does not have one.
 
-It is an inexpensive laptop: an Intel Celeron, four gibibytes of memory, and its
-system upon an **embedded MultiMediaCard** part rather than a disk. It was booted
-from a **USB drive**. Neither of those is of the mass-storage class. An eMMC part
+It is an **HP Laptop 14-dq0052dx**: an Intel Celeron N4120, four gibibytes of
+memory, and its system upon a 64 GB **embedded MultiMediaCard** part rather than
+a disk. It was booted from a **USB drive**. The full specification is in
+[`../project/TESTING.md`](../project/TESTING.md), Section 10.1, and is not
+restated here. Neither the eMMC part nor the USB drive is of the mass-storage
+class. An eMMC part
 is attached to an SD host controller, which the assignment specification classes
 as a *system peripheral* — class `0x08`, subclass `0x05`. A USB drive is attached
 to a serial-bus controller — class `0x0C`, subclass `0x03`.

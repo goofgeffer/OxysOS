@@ -122,14 +122,30 @@ builds. It does not mean it has been run everywhere. This table says where each
 phase has actually been observed, and is the reason those are separate columns
 there.
 
+The physical machine is one machine — the HP Laptop 14-dq0052dx specified in
+[`TESTING.md`](TESTING.md), Section 10.1.
+
 | Phase | QEMU | VirtualBox | OVMF (UEFI) | Physical hardware |
 | ----- | ---- | ---------- | ----------- | ----------------- |
-| 1 Bootstrapping | Yes | Yes | No — no UEFI path until Phase 12 | **Open (1.12)** |
-| 2 Memory | Yes | Yes | — | Not attempted |
-| 3 Interrupts | Yes | Yes | — | Not attempted |
-| 4 Device drivers | Yes | Yes, less the serial adapter | — | **Partly** — see below |
-| 5 EXT2 | Yes | Yes | — | Not attempted |
-| 6 Graphics and processes | Yes | Yes | — | Not attempted |
+| 1 Bootstrapping | Yes | Yes | No — no UEFI path until Phase 12 | Booted, on one machine; **1.12 not closed** — see below |
+| 2 Memory | Yes | Yes | — | Reached, not examined |
+| 3 Interrupts | Yes | Yes | — | Reached, not examined |
+| 4 Device drivers | Yes | Yes, less the serial adapter | — | **Yes, and it found two faults** — see below |
+| 5 EXT2 | Yes | Yes | — | Reached, not examined |
+| 6 Graphics and processes | Yes | Yes | — | Reached, not examined |
+
+"Reached, not examined" means the kernel ran that far upon the machine — it must
+have, the storage report of Phase 4 coming after all of it — but nothing about
+those phases was inspected or recorded there. It is not evidence that they are
+correct upon real hardware; it is only evidence that they did not stop it.
+
+**Sub-task 1.12 remains open although the kernel has booted upon hardware**, and
+the distinction is deliberate rather than an oversight. What has happened is that
+a kernel booted from a USB drive on one machine and its output was read. What
+1.12 asks for has not been settled: whether a single machine suffices, whether
+the boot must be captured through a serial adapter, and what is to be recorded.
+That is the project owner's to decide, and until it is decided the sub-task is
+better left open than marked done on a technicality.
 
 Three qualifications, each of which cost something to learn:
 
@@ -140,13 +156,16 @@ graphical console is what restored it.
 [`TESTING.md`](TESTING.md), Section 9.1.
 
 **The storage drivers are the one part with real-hardware evidence**, and it is
-evidence of failure rather than of success: a machine that boots this kernel
-reported no disk, and the cause was neither a fault in the driver nor an absent
-disk. It was a controller in AHCI mode, whose registers are memory-mapped and
-which answers at no I/O port; and then, upon the same machine, no mass-storage
-controller of any kind, its system being upon an eMMC part. Sub-tasks 4.7 and 4.8
-were added in consequence. [`../storage/DISK.md`](../storage/DISK.md),
-Sections 2.1 to 2.3.
+evidence of failure rather than of success. One machine has run this kernel — an
+**HP Laptop 14-dq0052dx**, Intel Celeron N4120, 4 GB of memory, 64 GB of eMMC
+storage and no disk of any other kind, booted from a USB drive — and it reported
+no disk. The cause was neither a fault in the driver nor an absent disk: it was a
+controller in AHCI mode, whose registers are memory-mapped and which answers at
+no I/O port; and then, upon the same machine, no mass-storage controller of any
+class whatever, its system being upon an eMMC part. Sub-tasks 4.7 and 4.8 were
+added in consequence. The machine is specified in [`TESTING.md`](TESTING.md),
+Section 10.1, and the diagnosis is in
+[`../storage/DISK.md`](../storage/DISK.md), Sections 2.1 to 2.3.
 
 **`make run-uefi` is expected to fail** and is provided in advance so that the
 UEFI work of Phase 12 has an established point of entry. Sub-task 12.7 renders it
