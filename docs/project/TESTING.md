@@ -1293,7 +1293,79 @@ because it is an easy way to spend an hour diagnosing a driver that is working.
 When capturing a screenshot, either let GRUB's timeout elapse or wait for the
 boot to finish before drawing conclusions from the report.
 
-## 22. Test record
+## 22. Judges this project did not write
+
+Every section above this one describes machinery this project wrote, asserting
+against fixtures this project composed. That is a closed loop, and its
+characteristic failure is **agreement**: a misreading of a specification is
+composed into the fixture, read back by the decoder that shares the misreading,
+and every assertion passes. The self-tests then establish self-consistency,
+which is a real property and not the one wanted.
+
+The remedy is an independent judge — something built by other people, from the
+same specification, sharing none of this project's assumptions. The value of one
+is inversely proportional to how much it has in common with the code it judges.
+
+**The case that proves it.** `e2fsck` found the defect in the recorded deletion
+time described in [`../storage/VFS.md`](../storage/VFS.md), Section 11.1. `i_dtime`
+is overloaded in EXT2 — a deletion time, or the link to the next inode upon the
+orphan list, distinguished by magnitude — so the constant 1 recorded for want of
+a clock made every freed inode appear orphaned. Every assertion in
+`kernel/test/` passed, and the volume was nevertheless wrong. No fixture this
+project composed could have caught it, because the fixture would have been
+composed with the same misunderstanding.
+
+### 22.1 The judges presently used
+
+| Judge | What it is independent of | Where |
+| ----- | ------------------------- | ----- |
+| `grub-file --is-x86-multiboot2` | This project's reading of the Multiboot2 header format. Run at every link. | `Makefile`, the `all` target |
+| `e2fsck`, `debugfs`, `dumpe2fs` | This project's reading of EXT2. | Sections 7 and 12.1 |
+| `clang` | `x86_64-elf-gcc`, and therefore what one toolchain tolerates. | [`TOOLCHAIN.md`](TOOLCHAIN.md), Section 9 |
+| Two independent renderings of a specification | A single transcription of a document not publicly distributed. | [`REFERENCES.md`](REFERENCES.md) |
+| Real hardware | Every emulator's approximation of a machine. | Sections 10.1 and 10.2 |
+
+Each has already returned something. `grub-file` fails the build outright if the
+header is malformed. `e2fsck` found the defect above. `clang` found, upon its
+first run, that `kernel/cpu/tss.c` named a 32-bit register to an instruction the
+architecture defines upon r/m16 — which GNU `as` had accepted, and assembled
+correctly, for as long as the file existed. The physical machine of Section 10.1
+found two, and both changed the design rather than the code.
+
+### 22.2 The judges available and not yet used
+
+Recorded because the argument above applies to them equally, and because a list
+of what has not been done is worth more than a resolution to do it.
+
+**Bochs.** QEMU is permissive: it tolerates malformed descriptors, reserved bits
+set where the architecture requires them clear, and questionable model-specific
+register writes. Bochs is pedantic and logs its objections. For a kernel that has
+built a global descriptor table, a task state segment, an interrupt descriptor
+table with interrupt stack tables and a `SYSCALL` configuration, that is an
+independent referee upon exactly the structures whose errors are least visible —
+the processor reads them directly, and its objections are exceptions rather than
+return codes.
+
+**Differential testing against Linux for EXT2.** Mount a volume this kernel wrote
+and compare its contents; write files with Linux and read them back with this
+kernel. Two implementations, one input, the outputs compared. It is the strongest
+form of independent judgement available, and the virtual filesystem layer is now
+complete enough to submit to it.
+
+**`readelf` and `objdump` upon the composed ELF images.**
+`kernel/test/verify_elf.c` assembles images to be wrong on purpose. Two questions
+follow: whether `readelf` agrees the *valid* one is well formed, and whether the
+loader accepts the output of a real `x86_64-elf-gcc`. It has so far seen only
+images this project composed.
+
+**The QEMU monitor** — `info mem`, `info tlb`, `info registers`. QEMU walks the
+paging hierarchy with its own code and reports what is mapped. At present the
+hierarchy is checked by `PagingTranslate` agreeing with `PagingMapPage`, which
+are both this project's and can share a misconception — as they did until
+sub-task 6.7, when intermediate entries were found never to have carried the user
+bit.
+
+## 23. Test record
 
 | Date | Test | Result |
 | ---- | ---- | ------ |

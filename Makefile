@@ -16,7 +16,10 @@
 #   verify    - Executes the ISO under QEMU without a display, asserts that the
 #               expected banner is emitted upon the serial port, and asserts
 #               that no boot-time self-test reported a failure.
-#   toolcheck - Confirms that every required tool is present.
+#   toolcheck - Confirms that every required tool is present, and reports upon
+#               the one optional one.
+#   clang-check - Compiles every translation unit with a second compiler and
+#               discards the objects, for the diagnostics alone. Builds nothing.
 #
 # References:
 #   - GNU Make Manual, Section 10.5.3 (automatic variables) and Section 4.12
@@ -76,8 +79,9 @@ LINKER_SCRIPT := linker.ld
 # -Wall -Wextra -Werror The diagnostic regime mandated by PROJECT_GUIDELINES.md, Section 4.
 #
 # Documented exception: -Wno-unused-parameter is NOT applied. No warning is
-# presently suppressed; should a suppression become necessary it must be
-# recorded here together with its justification.
+# suppressed in this regime, which is the one the kernel is built with; the one
+# suppression that exists anywhere in this file belongs to the clang-check
+# target alone and is recorded there with its justification.
 # ------------------------------------------------------------------------------
 
 INCLUDE_DIRS := -Ikernel/include
@@ -204,7 +208,7 @@ OVMF_FIRMWARE := /usr/share/ovmf/OVMF.fd
 
 VBOX_VM_NAME := Oxys-OS
 
-.PHONY: all iso clean run-qemu run-uefi run-vbox verify toolcheck
+.PHONY: all iso clean run-qemu run-uefi run-vbox verify toolcheck clang-check
 
 # ------------------------------------------------------------------------------
 # Principal targets.
@@ -317,5 +321,65 @@ toolcheck:
 			echo "ABSENT:  $$tool"; \
 		fi; \
 	done
+	@if command -v $(CLANG) >/dev/null; then \
+		echo "PRESENT: $(CLANG) (optional; the second compiler of the clang-check target)"; \
+	else \
+		echo "ABSENT:  $(CLANG) (optional; only the clang-check target requires it)"; \
+	fi
+
+# ------------------------------------------------------------------------------
+# The second compiler.
+#
+# This target compiles every translation unit with clang and discards the
+# objects. It does not build the kernel and is not part of `all` or of `verify`:
+# it exists for the diagnostics alone.
+#
+# Why a second compiler is worth a target of its own. Every assertion this
+# project makes about its own correctness is made by machinery this project
+# wrote, against fixtures this project composed. A compiler written by other
+# people, from the same standard, shares none of those assumptions — so it
+# refuses different things, and what it refuses is what one toolchain has been
+# quietly tolerating. Its first run found exactly one such thing: `kernel/cpu/tss.c`
+# named a 32-bit register to an instruction defined upon r/m16, which GNU as had
+# accepted and assembled correctly for as long as the file has existed.
+# `docs/project/TESTING.md`, Section 22, records the reasoning at length.
+#
+# clang needs no cross-toolchain of its own: it is multi-target by construction,
+# so `--target=x86_64-elf` is the whole of the configuration. Every flag of
+# CFLAGS above is accepted verbatim, `-mno-80387` included, so the two compilers
+# are given the same regime and any difference in what they say is a difference
+# between them and not between their flags.
+#
+# One warning is suppressed, and this is the record the diagnostic regime above
+# requires of a suppression:
+#
+#   -Wno-cast-align.  kernel/multiboot2.c casts the byte cursor it walks the
+#   Multiboot2 tag series with to each tag's structure type, which raises the
+#   required alignment from 1 to 4 or 8. clang warns upon that irrespective of
+#   target; GCC does not warn upon x86. Both are right. The pointer is in fact
+#   correctly aligned — Multiboot2 Specification, Section 3.6.2, requires every
+#   tag to begin upon an 8-byte boundary — but that guarantee is made by the boot
+#   loader and is invisible to a compiler. This is one of the two documented
+#   exceptions to the no-overlay rule of docs/project/CODING-STANDARDS.md,
+#   Section 7.1, and is admitted there for precisely this reason: the structure
+#   is not read from a medium, its fields are naturally aligned by the
+#   specification, and no byte-order decision arises. The suppression is confined
+#   to this target; -Wcast-align remains in force under GCC for every other file.
+# ------------------------------------------------------------------------------
+
+CLANG        := clang
+CLANG_TARGET := x86_64-elf
+CLANG_FLAGS  := --target=$(CLANG_TARGET) $(CFLAGS) -Wno-cast-align
+
+clang-check:
+	@command -v $(CLANG) >/dev/null \
+		|| (echo "ERROR: $(CLANG) was not found upon the PATH, and this target requires it." \
+		    && echo "It is optional: nothing else in this Makefile uses it." && false)
+	@echo "Second compiler: $$($(CLANG) --version | head -1)"
+	@echo "Compiling $(words $(C_SOURCES)) translation units for their diagnostics."
+	@for source in $(C_SOURCES); do \
+		$(CLANG) $(CLANG_FLAGS) -c $$source -o /dev/null || exit 1; \
+	done
+	@echo "CLANG CHECK SUCCEEDED: every translation unit compiles without diagnostics."
 
 -include $(DEPENDENCIES)

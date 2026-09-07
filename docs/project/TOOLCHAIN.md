@@ -16,6 +16,12 @@
 | OVMF firmware | UEFI firmware for QEMU, at `/usr/share/ovmf/OVMF.fd`. | Present. |
 | `VBoxManage` | VirtualBox execution. | **Absent.** The `run-vbox` target is provided but cannot presently be executed. |
 
+One tool is **optional** and is listed apart, nothing in the build requiring it:
+
+| Tool | Purpose | Status in the present environment |
+| ---- | ------- | --------------------------------- |
+| `clang` | The second compiler of Section 9. Compiles the sources for their diagnostics; builds nothing. | Present, version 18.1.3. |
+
 The command `make toolcheck` reports the presence or absence of each tool.
 
 ## 2. Why a cross-compiler is required
@@ -48,9 +54,14 @@ from plain ISO C.
 | `-O2` | Optimisation at level two. Level three is not selected because its aggressive inlining complicates the correlation of a fault address with a source line. |
 | `-g` | DWARF debugging information, consumed by the QEMU GDB stub. |
 
-No warning is presently suppressed. Should a suppression become necessary, it
-must be recorded in the `Makefile` together with its justification, as required
-by `PROJECT_GUIDELINES.md`, Section 4.
+**No warning is suppressed in this regime**, which is the one the kernel is
+built with. Should a suppression become necessary here, it must be recorded in
+the `Makefile` together with its justification, as required by
+`PROJECT_GUIDELINES.md`, Section 4.
+
+One suppression exists elsewhere in the `Makefile` and belongs to the
+`clang-check` target alone: `-Wno-cast-align`, for the reason set out in Section
+9.3. It is not applied to any build, and `-Wcast-align` remains in force above.
 
 ## 4. Assembler flags
 
@@ -87,7 +98,8 @@ permissions.
 | `run-uefi` | Executes the ISO under QEMU with the OVMF UEFI firmware. |
 | `run-vbox` | Registers and starts a VirtualBox machine attached to the ISO, with the serial port directed to a file. |
 | `verify` | Executes the ISO under QEMU without a display, captures the serial output, and asserts that the expected banner appears. |
-| `toolcheck` | Reports the presence or absence of each required tool. |
+| `toolcheck` | Reports the presence or absence of each required tool, and of the one optional one. |
+| `clang-check` | Compiles every translation unit with a second compiler and discards the objects. Builds nothing; see Section 9. |
 
 ## 7. Header dependency tracking
 
@@ -108,3 +120,73 @@ that directory upon the path, for example:
 export PATH="$HOME/opt/cross/bin:$PATH"
 make iso
 ```
+
+## 9. The second compiler
+
+```sh
+make clang-check
+```
+
+This target compiles every translation unit with `clang` and **discards the
+objects**. It does not build the kernel, is not part of `all` or of `verify`,
+and its output is nothing but diagnostics. `clang` is optional: the target is
+the only thing in the project that uses it, and it says so and stops if it is
+absent.
+
+### 9.1 Why a second compiler earns a target
+
+Every assertion this project makes about its own correctness is made by
+machinery this project wrote, against fixtures this project composed. That is a
+closed loop, and its characteristic failure is agreement: a misreading of a
+specification is composed into the fixture and then asserted against itself, and
+everything passes. `docs/project/TESTING.md`, Section 22, sets that argument out
+in full and names the several independent judges available to this project.
+
+A compiler written by other people, from the same standard, is one of them. It
+shares no assumption with `x86_64-elf-gcc` beyond the language, so what it
+refuses is what one toolchain has been quietly tolerating. Its first run found
+exactly that: `kernel/cpu/tss.c` named a 32-bit register to an instruction the
+architecture defines upon r/m16, which GNU `as` had accepted, and assembled
+correctly, for as long as the file had existed.
+
+### 9.2 The configuration
+
+`clang` needs no cross-toolchain of its own — it is multi-target by
+construction, so `--target=x86_64-elf` is the whole of the configuration and
+nothing is built or installed.
+
+**Every flag of `CFLAGS` is accepted verbatim**, `-mno-80387` included, so the
+two compilers are given precisely the same regime. That was not assumed; each
+flag was offered to `clang` individually and the result recorded. It matters
+because a difference in what the two say must be a difference between the
+compilers and not between their flags, or the exercise establishes nothing.
+
+Linking is not attempted. The value here is in what the compiler says about the
+sources, and the linker script and the boot object are `x86_64-elf-ld`'s
+business.
+
+### 9.3 The one suppression, and why
+
+`-Wno-cast-align`, confined to this target.
+
+`kernel/multiboot2.c` casts the byte cursor it walks the Multiboot2 tag series
+with to each tag's structure type, which raises the required alignment from 1 to
+4 or to 8. `clang` warns upon that whatever the target; GCC does not warn upon
+x86, where the access would work regardless.
+
+**Both are right, and the pointer is in fact correctly aligned.** Multiboot2
+Specification, Section 3.6.2, requires every tag to begin upon an 8-byte
+boundary — but that is a guarantee made by the boot loader, and no compiler can
+see it. This is one of the two documented exceptions to the no-overlay rule of
+[`CODING-STANDARDS.md`](CODING-STANDARDS.md), Section 7.1, admitted there for
+exactly this reason: the structure is not read from a medium, its fields are
+naturally aligned by the specification, and no byte-order decision arises.
+
+The suppression is not applied to the build. `-Wcast-align` remains in force
+under GCC for every file, this one included.
+
+### 9.4 What this target does not do
+
+It is a compiler's opinion of the source and nothing more. It executes no code,
+asserts no behaviour, and passing it means only that two independent front ends
+agree the sources are well formed. `make verify` remains the gate.

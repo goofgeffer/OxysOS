@@ -111,8 +111,25 @@ void TssInitialise(void)
      * type changes from 9 to 11 at this instruction and the self-test asserts
      * the changed value: that is the only evidence available that the processor
      * read the descriptor rather than merely that the selector was written.
+     *
+     * The selector is held in a uint16_t of its own rather than named directly,
+     * so that `%0` expands to a 16-bit register.
+     *
+     * Intel SDM, Volume 2A, "LTR", defines the instruction upon r/m16 and upon
+     * nothing else. `GDT_TSS_SELECTOR` is a UINT16_C constant, but it promotes
+     * to int in the operand, so naming it expanded `%0` to `%eax` and emitted
+     * `ltr %eax`. GNU as accepts that and assembles `0F 00 D8` — the correct
+     * encoding, and the only one the instruction has — so the kernel this
+     * produced was never wrong. But the source was relying upon the assembler
+     * being lenient about a register name the instruction does not admit, which
+     * clang's integrated assembler refuses outright with "invalid operand for
+     * instruction". Both compilers now name a 16-bit register — GCC `ltr %ax`
+     * and clang `ltrw %ax` — so the operand size is stated rather than inferred,
+     * and the encoding is unchanged.
      */
-    __asm__ __volatile__("ltr %0" : : "r"(GDT_TSS_SELECTOR) : "memory");
+    const uint16_t selector = GDT_TSS_SELECTOR;
+
+    __asm__ __volatile__("ltr %0" : : "r"(selector) : "memory");
 }
 
 void TssSetKernelStack(uint64_t stack_top)

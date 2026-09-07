@@ -128,6 +128,32 @@ else, which is why Section 7.2 asserts it: it is the only evidence available tha
 the processor read the descriptor at all, rather than that this kernel wrote a
 number into a register and drew a conclusion.
 
+### 2.2 The operand `LTR` takes, and a leniency this kernel was relying upon
+
+Intel SDM, Volume 2A, "LTR", defines the instruction upon **r/m16 and upon
+nothing else**. There is one encoding, `0F 00 /3`, and it reads sixteen bits
+whatever register name is written beside it.
+
+`TssInitialise` named the selector constant directly to the inline assembly for
+as long as the file existed. `GDT_TSS_SELECTOR` is a `UINT16_C` constant, but it
+promotes to `int` in an operand, so `%0` expanded to `%eax` and the compiler
+emitted `ltr %eax`. GNU `as` accepted that and assembled `0F 00 D8` — the correct
+encoding, and the only one there is — so **the kernel this produced was never
+wrong**, and no test could have found anything to report.
+
+It was nevertheless a defect: the source was relying upon the assembler being
+lenient about a register name the instruction does not admit. Clang's integrated
+assembler refuses it outright, with `invalid operand for instruction`, and would
+not build the file at all. The selector is now held in a `uint16_t` of its own,
+so both compilers name a sixteen-bit register and the operand size is stated
+rather than inferred. The encoding is unchanged.
+
+**This is the first thing the second compiler found**, upon its first run, and it
+is the class of defect that motivates having one: nothing this project wrote
+could have reported it, because everything this project wrote agreed with it. See
+[`../project/TOOLCHAIN.md`](../project/TOOLCHAIN.md), Section 9, and
+[`../project/TESTING.md`](../project/TESTING.md), Section 22.
+
 ## 3. The task state segment
 
 In 64-bit mode the structure named "task state segment" holds no task state.
