@@ -108,6 +108,7 @@ C_SOURCES := kernel/kernel.c \
              kernel/test/verify_privilege.c \
              kernel/test/verify_syscall.c \
              kernel/test/verify_elf.c \
+             kernel/test/verify_process.c \
              kernel/test/verify_framebuffer.c \
              kernel/test/verify_graphics.c \
              kernel/test/verify_console.c \
@@ -130,6 +131,7 @@ C_SOURCES := kernel/kernel.c \
              kernel/cpu/interrupts.c \
              kernel/cpu/exceptions.c \
              kernel/exec/elf.c \
+             kernel/proc/process.c \
              kernel/fs/ext2.c \
              kernel/fs/ext2_vfs.c \
              kernel/fs/vfs.c \

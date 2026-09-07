@@ -83,6 +83,7 @@
 #include <oxys/block.h>
 #include <oxys/buffer.h>
 #include <oxys/elf.h>
+#include <oxys/process.h>
 #include <oxys/ext2.h>
 #include <oxys/vfs.h>
 #include <oxys/ext2_vfs.h>
@@ -978,6 +979,17 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
      * established and asserted well above this line — and nothing of Phase 4.
      */
     KernelVerifyElf();
+
+    /*
+     * And the structures a loaded program will be held in. They are established
+     * here rather than beside the memory manager because a process owns an
+     * address space and a thread owns a kernel stack taken from the arena, so
+     * both of those must exist and have been asserted first — and neither the
+     * loader nor these structures needs anything of Phase 4.
+     */
+    ProcessInitialise();
+    KernelVerifyProcess();
+    ProcessReport();
 
     /*
      * Phase 4 begins here. The serial adapter was configured in the first

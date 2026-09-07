@@ -202,9 +202,11 @@ processor and a shared segment would deliver two system calls onto one stack. Th
 task register is per-processor already, so what must be duplicated is the storage
 and not the mechanism.
 
-`TssSetKernelStack` exists and is unused. From sub-task 6.9, when each thread has
-a kernel stack of its own, the context switch must write `rsp0` at every switch;
-the function is the seam that will be called there.
+`TssSetKernelStack` was written at sub-task 6.1 and left uncalled for exactly
+this. Sub-task 6.9 calls it: `ThreadSetCurrent` writes `rsp0` with the top of the
+thread's own kernel stack, so a thread entered from privilege level 3 arrives
+upon its own stack and not upon whichever thread ran last. See
+[`PROCESS.md`](PROCESS.md), Section 5.1.
 
 ## 4. The three registers
 
@@ -635,16 +637,18 @@ tested.
    compatibility mode, which this kernel does not support. A 32-bit program is
    not something this kernel can run at all, so an unwritten `CSTAR` is not a
    gap that a supported case falls into.
-4. **The kernel stack has no guard page.** An overflow runs into the `.bss`
-   below it, which happens to be the double-fault stack, so the overflow is
-   caught by the double fault and reported. That is an accident of placement and
-   not a design. Sub-task 6.9, where each thread has a stack of its own and the
-   stacks become numerous enough that an overflow becomes likely, must take them
-   from the kernel arena of sub-task 2.5 with a guard page beneath each.
+4. ~~**The kernel stack has no guard page.**~~ Resolved at sub-task 6.9 for a
+   thread's stack: five pages from the arena, of which the lowest is a guard,
+   mapped read-only so that an overflow's push faults. The *boot* stack still
+   has none and still relies upon the accident of the double-fault stack lying
+   below it; it is abandoned once anything else runs. See
+   [`PROCESS.md`](PROCESS.md), Section 5.1.
 5. **One task state segment, one processor.** See Section 3.3.
-6. **`rsp0` is written once and never updated.** It is correct while there is one
-   kernel stack. From sub-task 6.9 the context switch must write it at every
-   switch; `TssSetKernelStack` exists for that and is presently uncalled.
+6. ~~**`rsp0` is written once and never updated.**~~ Resolved at sub-task 6.9:
+   `ThreadSetCurrent` writes it, so it names the stack of whichever thread is
+   current. `TssSetKernelStack` is no longer uncalled. What remains is that
+   nothing yet *becomes* current in the course of running — 6.10 is what will
+   call it at a switch.
 7. **Six interrupt stack table entries are unused.** Only the double fault has
    one. The non-maskable interrupt and the machine-check exception are the
    conventional next candidates, both being deliverable at moments when the

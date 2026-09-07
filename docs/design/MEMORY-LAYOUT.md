@@ -984,9 +984,11 @@ the real hierarchy, not by a probe.
 1. A large page in the lower half is rejected rather than provided for. Sharing
    one at 4 KiB granularity would require the mapping to be split first, and
    nothing yet establishes such a mapping.
-2. There is no accounting of an address space's extent, and therefore no means of
-   answering what a space maps without walking it. The process control block of
-   sub-task 6.9 is where that record belongs.
+2. There is still no accounting of an address space's extent *in the space
+   itself*, and there deliberately is not: an address space is a paging
+   hierarchy and nothing besides. The record lives in the process control block
+   of sub-task 6.9, which is what put things there and therefore what can say
+   what it mapped. See [`PROCESS.md`](PROCESS.md), Section 2.
 3. Cloning is not safe against a concurrent fault upon the same address space.
    From sub-task 6.13 it must be performed under the lock governing the space, and
    the invalidation of Section 14.4 accompanied by a shootdown to the other

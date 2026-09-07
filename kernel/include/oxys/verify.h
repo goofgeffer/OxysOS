@@ -124,6 +124,7 @@ void KernelVerifyGraphics(void);
 void KernelVerifyPrivilege(void);
 void KernelVerifySyscall(void);
 void KernelVerifyElf(void);
+void KernelVerifyProcess(void);
 
 /* Phases 3 and 4: the devices. */
 void KernelVerifyPic(void);

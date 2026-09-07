@@ -188,9 +188,11 @@ Each was applied to `kernel/exec/elf.c`, confirmed, and reverted.
    and not applied: it needs `IA32_EFER.NXE`, which arrives with SMEP and SMAP at
    sub-task 13.3. Until then every mapped page is executable, so a data segment
    is executable too.
-5. **No stack, no arguments, no environment.** The loader places the image and
-   reports where to begin. A stack for the program to run upon belongs with the
-   process of sub-task 6.9, which is what will know how large it should be.
+5. **No arguments, no environment.** The loader places the image and reports
+   where to begin. The stack is now the process's, `ProcessCreateUserStack`
+   having arrived at sub-task 6.9; what a program is *told* when it starts —
+   its arguments and its environment — is written onto that stack by whatever
+   starts it, which is sub-task 6.11's `execve`.
 6. **A partly loaded address space is not cleaned up.** Failure returns and the
    space is the caller's to destroy, because destroying it here would mean a
    loader that frees an address space it did not create.
