@@ -466,11 +466,10 @@ static void KernelVerifyPrivilegeSystemCallConfiguration(void)
  * written.
  *
  * What is asserted instead: the whole of the dispatch and the argument
- * validation, in KernelVerifySyscall, which needs no transition because the
- * dispatcher is an ordinary function of an ordinary structure; and the
- * configuration, above, which is what says the transition *will* be correct. The
- * transition itself is executed for the first time at sub-task 6.10, where there
- * is a user program to execute it. See docs/design/PRIVILEGE.md, Section 9.4.
+ * validation, in KernelVerifySyscall; and the configuration, above, which is
+ * what says the transition *will* be correct. Sub-task 6.10 then executes it,
+ * from a program at privilege level 3, and KernelVerifyUserMode asserts that the
+ * call arrived. See docs/design/PROCESS.md, Section 10.
  */
 
 

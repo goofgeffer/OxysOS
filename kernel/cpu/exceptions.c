@@ -33,6 +33,7 @@
 #include <oxys/idt.h>
 #include <oxys/tss.h>
 #include <oxys/kernel.h>
+#include <oxys/process.h>
 #include <oxys/faultscreen.h>
 
 /* The number of quadwords of stack reproduced in a diagnostic report. */
@@ -358,11 +359,26 @@ static void ExceptionTerminateProgram(TrapFrame *frame)
 {
     KernelWriteString("\nA fault was raised outside the kernel, at privilege level ");
     KernelWriteDecimal(frame->cs & UINT64_C(0x03));
+    KernelWriteString(", vector ");
+    KernelWriteHexadecimal(frame->vector);
     KernelWriteString(".\n");
-    KernelWriteString("This fault belongs to the program that caused it, and from Phase 7 "
-                      "that program\nwould be terminated and the machine would carry on. "
-                      "There are no programs yet,\nso there is nothing to terminate and "
-                      "this cannot be continued from.\n");
+    KernelWriteString("The fault belongs to the program that caused it. The program is "
+                      "ended and the\nmachine carries on.\n");
+
+    /*
+     * And it is ended, which is what sub-task 6.10 made possible.
+     *
+     * Until there was a thread to return to this could only be reported and then
+     * panicked upon: a fault outside the kernel, with nothing outside the kernel
+     * to blame it on, was a condition the machine could not continue from. Now
+     * the program's thread is abandoned and whoever started it resumes.
+     *
+     * This does not return. If it does, there was nobody to return to — which
+     * means privilege level 3 was reached by something that did not go through
+     * ThreadStart, and that is still a condition the machine cannot continue
+     * from.
+     */
+    (void)ThreadTerminateCurrent(-(int64_t)frame->vector);
 }
 
 /*
@@ -393,7 +409,8 @@ static void ExceptionFatalHandler(TrapFrame *frame)
     if (disposition != EXCEPTION_DISPOSITION_FATAL)
     {
         ExceptionTerminateProgram(frame);
-        KernelPanic("A fault outside the kernel was raised before any program exists.");
+        KernelPanic("A fault outside the kernel was raised by nothing this kernel "
+                    "started.");
         return;
     }
 

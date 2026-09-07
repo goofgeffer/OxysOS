@@ -989,6 +989,23 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
      */
     ProcessInitialise();
     KernelVerifyProcess();
+
+    /*
+     * And the two transfers of sub-task 6.10: one thread exchanged for another,
+     * and the first descent to privilege level 3.
+     *
+     * The switch is asserted first and alone, between two threads of the kernel,
+     * because a failure there is a failure of the switch — where a failure in
+     * the descent could be a failure of the switch, the loader, the address
+     * space, the system call path or the exception dispositions, all of which
+     * the descent puts together at once.
+     *
+     * Both run with the interrupt flag set, which is where it stands by this
+     * point: a program that could not be interrupted could not be pre-empted,
+     * and the descent sets the flag in the program's own RFLAGS regardless.
+     */
+    KernelVerifyContextSwitch();
+    KernelVerifyUserMode();
     ProcessReport();
 
     /*

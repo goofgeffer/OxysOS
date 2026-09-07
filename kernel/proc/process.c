@@ -38,6 +38,7 @@
 #include <oxys/memory.h>
 #include <oxys/paging.h>
 #include <oxys/pmm.h>
+#include <oxys/gdt.h>
 #include <oxys/tss.h>
 #include <oxys/vmm.h>
 
@@ -48,6 +49,7 @@ static uint64_t ProcessNextId = 1U;
 static uint64_t ThreadNextId = 1U;
 static uint64_t ProcessCreations;
 static uint64_t ThreadCreations;
+static uint64_t ProcessTerminations;
 
 static Thread *ProcessCurrentThread;
 
@@ -366,6 +368,7 @@ Thread *ThreadCreate(Process *owner, uint64_t entry, uint64_t user_stack)
         thread->context.r14 = 0U;
         thread->context.r15 = 0U;
         thread->context.rsp = top;
+        thread->owns_stack = true;
 
         thread->used = true;
 
@@ -419,13 +422,23 @@ void ThreadDestroy(Thread *thread)
         ProcessCurrentThread = NULL;
     }
 
-    ThreadReleaseStack(thread->kernel_stack_base);
+    /*
+     * Only a stack this thread took. The thread describing the kernel's own
+     * execution runs upon the boot stack, which the linker established and which
+     * the arena never gave out; handing it to KernelPagesFree would be releasing
+     * an address the arena does not own.
+     */
+    if (thread->owns_stack)
+    {
+        ThreadReleaseStack(thread->kernel_stack_base);
+    }
 
     thread->used = false;
     thread->state = THREAD_UNUSED;
     thread->owner = NULL;
     thread->kernel_stack_base = NULL;
     thread->kernel_stack_top = 0U;
+    thread->owns_stack = false;
     thread->id = 0U;
 }
 
@@ -497,6 +510,321 @@ Thread *ThreadCurrent(void)
 }
 
 /* --------------------------------------------------- what a process holds */
+
+
+/* ------------------------------------------------------- sub-task 6.10 */
+
+/*
+ * The assembly of kernel/proc/switch.asm addresses ThreadContext by number and
+ * cannot see this structure. A field reordered here without the assembly would
+ * have a switch restore the stack pointer from a general register — which is a
+ * jump to an address that was never an address.
+ */
+_Static_assert(offsetof(ThreadContext, rbx) == 0U, "The switch saves RBX at offset 0.");
+_Static_assert(offsetof(ThreadContext, rsp) == 48U,
+               "The switch saves the stack pointer at offset 48.");
+_Static_assert(sizeof(ThreadContext) == 56U, "A context is seven quadwords.");
+
+/* Defined in kernel/proc/switch.asm. */
+extern void ThreadSwitchContext(ThreadContext *from, ThreadContext *to);
+extern void ThreadEnterUser(uint64_t entry, uint64_t user_stack, uint64_t code_selector,
+                            uint64_t stack_selector);
+extern void ThreadTrampoline(void);
+
+/* The thread that entered user mode, and is waiting to be returned to. */
+static Thread *ProcessReturnThread;
+
+/*
+ * Prepares a thread's kernel stack so that switching to it lands in the
+ * trampoline.
+ *
+ * ThreadSwitchContext restores six registers and then executes RET, so the
+ * incoming stack must look exactly as it would have done had that thread once
+ * called the switch: six saved registers, and above them the address to return
+ * to. There is no such history for a thread that has never run, so the history
+ * is fabricated — and the address returned to is the trampoline, which is where
+ * a thread that has never run begins.
+ *
+ * The alignment is not incidental. The System V convention requires the stack
+ * pointer to be sixteen-byte aligned at a call instruction, which means it is
+ * eight modulo sixteen immediately *after* the call has pushed a return address.
+ * The trampoline is entered by a return rather than by a call, so its stack is
+ * aligned where a called function's would be misaligned, and it calls onward
+ * from there.
+ */
+static uint64_t ThreadPrepareFrame(uint64_t stack_top, uint64_t resume_at)
+{
+    uint64_t *stack = (uint64_t *)(uintptr_t)stack_top;
+
+    /*
+     * Only a return address, and one quadword of padding above it.
+     *
+     * The switch keeps the six preserved registers **in the context structure**
+     * and not upon the stack — it saves them with stores and restores them with
+     * loads — so the only thing the incoming stack must hold is the address its
+     * RET will take. Six zeroes were written here first, in the belief that the
+     * switch popped them, and the RET then took the lowest of them: a return to
+     * address zero, which is a page fault at an instruction pointer of nothing.
+     *
+     * The padding is the alignment. A function entered by an ordinary call finds
+     * the stack pointer eight modulo sixteen, the call having pushed eight bytes
+     * onto a sixteen-byte boundary. Placing the return address sixteen bytes
+     * below the top reproduces that exactly; placing it eight below would enter
+     * every thread with the stack aligned the other way, which the compiler is
+     * entitled to assume it is not.
+     */
+    --stack;
+    *stack = 0U;
+    --stack;
+    *stack = resume_at;
+
+    return (uint64_t)(uintptr_t)stack;
+}
+
+static void ThreadPrepareStart(Thread *thread)
+{
+    thread->context.rsp = ThreadPrepareFrame(thread->kernel_stack_top,
+                                             (uint64_t)(uintptr_t)&ThreadTrampoline);
+}
+
+/*
+ * Creates a thread that runs kernel code at privilege level 0.
+ *
+ * It has no process and therefore no address space of its own: it runs in the
+ * kernel's. What it has is a stack, which is the whole reason it is a thread —
+ * something must be switched away from and back to, and both halves need a stack
+ * to hold the history.
+ *
+ * Its prepared frame returns directly to the routine given rather than to the
+ * trampoline: a kernel thread has no descent to privilege level 3 to make and
+ * nothing for the trampoline to do for it.
+ */
+Thread *ThreadCreateKernel(void (*entry)(void))
+{
+    if (entry == NULL)
+    {
+        return NULL;
+    }
+
+    for (size_t index = 0U; index < THREAD_CAPACITY; ++index)
+    {
+        Thread *const thread = &ThreadTable[index];
+        uint64_t top = 0U;
+        void *stack;
+
+        if (thread->used)
+        {
+            continue;
+        }
+
+        stack = ThreadAllocateStack(&top);
+
+        if (stack == NULL)
+        {
+            return NULL;
+        }
+
+        thread->id = ThreadNextId;
+        ++ThreadNextId;
+        thread->state = THREAD_CREATED;
+        thread->owner = NULL;
+        thread->kernel_stack_base = stack;
+        thread->kernel_stack_top = top;
+        thread->entry = (uint64_t)(uintptr_t)entry;
+        thread->user_stack = 0U;
+        thread->owns_stack = true;
+        thread->used = true;
+
+        thread->context.rsp = ThreadPrepareFrame(top, (uint64_t)(uintptr_t)entry);
+        ++ThreadCreations;
+
+        return thread;
+    }
+
+    return NULL;
+}
+
+Thread *ThreadAdoptCurrent(const char *name)
+{
+    Thread *thread = NULL;
+
+    for (size_t index = 0U; index < THREAD_CAPACITY; ++index)
+    {
+        if (!ThreadTable[index].used)
+        {
+            thread = &ThreadTable[index];
+            break;
+        }
+    }
+
+    if (thread == NULL)
+    {
+        return NULL;
+    }
+
+    (void)name;
+
+    /*
+     * The thread that is already running, described.
+     *
+     * It owns no stack: it runs upon the boot stack, which was established by
+     * the linker and is not the arena's to give back. That is what `owns_stack`
+     * records, and destroying this thread must not free what it did not take.
+     *
+     * Its context is left as it stands. Nothing reads it until something
+     * switches *away* from this thread, and that is the moment the switch fills
+     * it in.
+     */
+    thread->id = ThreadNextId;
+    ++ThreadNextId;
+    thread->state = THREAD_RUNNING;
+    thread->owner = NULL;
+    thread->kernel_stack_base = NULL;
+    thread->kernel_stack_top = TssKernelStack();
+    thread->entry = 0U;
+    thread->user_stack = 0U;
+    thread->owns_stack = false;
+    thread->used = true;
+    ++ThreadCreations;
+
+    ProcessCurrentThread = thread;
+
+    return thread;
+}
+
+void ThreadSwitchTo(Thread *from, Thread *to)
+{
+    if ((from == NULL) || (to == NULL) || (from == to))
+    {
+        return;
+    }
+
+    /*
+     * The address space is changed before the stack is.
+     *
+     * Both are safe to change in either order — the kernel's higher half is
+     * mapped identically in every space, so the stack this function is running
+     * upon remains addressable across a change of CR3 — but doing the space
+     * first means that when the switch returns into the incoming thread, it is
+     * already in the space that thread expects. A switch that changed CR3
+     * afterwards would have the incoming thread execute its first instructions
+     * in the outgoing thread's space.
+     */
+    if (to->owner != NULL)
+    {
+        AddressSpaceSwitch(&to->owner->space);
+    }
+    else
+    {
+        AddressSpaceSwitch(AddressSpaceKernel());
+    }
+
+    from->state = (from->state == THREAD_RUNNING) ? THREAD_READY : from->state;
+    to->state = THREAD_RUNNING;
+
+    /* rsp0 follows the incoming thread, so that its next entry from privilege
+     * level 3 arrives upon its own stack. */
+    ThreadSetCurrent(to);
+
+    ThreadSwitchContext(&from->context, &to->context);
+}
+
+/*
+ * Where a thread that has never run begins, called by the trampoline.
+ *
+ * It is `void` and does not return, because there is nothing to return to: the
+ * stack beneath it is the prepared frame and holds no history. A thread leaves
+ * this function by entering privilege level 3 and never comes back to it — what
+ * comes back is the kernel, upon this thread's kernel stack, through the system
+ * call path or an exception.
+ */
+void ThreadTrampolineEntry(void)
+{
+    Thread *const thread = ProcessCurrentThread;
+
+    if ((thread == NULL) || (thread->entry == 0U))
+    {
+        KernelPanic("A thread was started with nowhere to begin.");
+    }
+
+    ThreadEnterUser(thread->entry, thread->user_stack,
+                    (uint64_t)GDT_USER_CODE_SELECTOR | 3U,
+                    (uint64_t)GDT_USER_DATA_SELECTOR | 3U);
+}
+
+bool ThreadStart(Thread *thread)
+{
+    Thread *const caller = ProcessCurrentThread;
+
+    if ((thread == NULL) || !thread->used || (caller == NULL) || (thread == caller))
+    {
+        return false;
+    }
+
+    if ((thread->entry == 0U) || (thread->user_stack == 0U))
+    {
+        return false;
+    }
+
+    ThreadPrepareStart(thread);
+
+    /*
+     * The thread that starts another is the one it will be returned to when the
+     * program ends. There is one such at a time because there is one thread of
+     * control until the scheduler of sub-task 6.15; recording it here is what
+     * makes a program's death a return rather than a halt.
+     */
+    ProcessReturnThread = caller;
+
+    ThreadSwitchTo(caller, thread);
+
+    /* Reached when the started thread — or the kernel acting for it — switches
+     * back. */
+    ProcessReturnThread = NULL;
+    ThreadSetCurrent(caller);
+
+    return true;
+}
+
+bool ThreadTerminateCurrent(int64_t status)
+{
+    Thread *const thread = ProcessCurrentThread;
+    Thread *const back = ProcessReturnThread;
+
+    if ((thread == NULL) || (back == NULL) || (thread == back))
+    {
+        return false;
+    }
+
+    thread->state = THREAD_EXITED;
+
+    if (thread->owner != NULL)
+    {
+        thread->owner->state = PROCESS_EXITED;
+        thread->owner->exit_status = status;
+    }
+
+    ++ProcessTerminations;
+
+    /*
+     * The switch does not return.
+     *
+     * This function is running upon the terminating thread's own kernel stack,
+     * entered from privilege level 3 through a system call or an exception, and
+     * that stack is about to belong to nobody. Nothing after the switch would
+     * execute even if it were written, and the thread's context is saved into a
+     * structure that will shortly be released — which is harmless precisely
+     * because nothing will ever switch back to it.
+     */
+    ThreadSwitchTo(thread, back);
+
+    return true;
+}
+
+uint64_t ProcessTerminationCount(void)
+{
+    return ProcessTerminations;
+}
 
 void ProcessRecordImage(Process *process, const ElfImage *image)
 {

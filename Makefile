@@ -109,6 +109,7 @@ C_SOURCES := kernel/kernel.c \
              kernel/test/verify_syscall.c \
              kernel/test/verify_elf.c \
              kernel/test/verify_process.c \
+             kernel/test/verify_usermode.c \
              kernel/test/verify_framebuffer.c \
              kernel/test/verify_graphics.c \
              kernel/test/verify_console.c \
@@ -159,7 +160,8 @@ C_SOURCES := kernel/kernel.c \
 ASM_SOURCES := boot/boot.asm \
                kernel/cpu/interrupt_stubs.asm \
                kernel/cpu/gdt.asm \
-               kernel/cpu/syscall_entry.asm
+               kernel/cpu/syscall_entry.asm \
+               kernel/proc/switch.asm
 
 OBJECTS := $(patsubst %.c,$(BUILD_DIR)/%.c.o,$(C_SOURCES)) \
            $(patsubst %.asm,$(BUILD_DIR)/%.asm.o,$(ASM_SOURCES))

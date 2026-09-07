@@ -23,15 +23,15 @@
  *
  * What this sub-task defines and what it deliberately does not do.
  *
- *   It defines the structures and the tables that hold them, allocates and
- *   releases them, and gives each thread the stack it will be entered upon.
- *   Nothing here switches to anything: no context is ever restored, no address
- *   space is ever made active by this file, and no thread has ever run. That is
- *   sub-task 6.10.
+ *   Sub-task 6.9 defined the structures and the tables that hold them, allocated
+ *   and released them, and gave each thread the stack it would be entered upon,
+ *   without switching to anything: the division was deliberate, a structure that
+ *   has never been switched to being one whose shape can still be argued about.
  *
- *   The division is deliberate rather than tidy. A structure that has never been
- *   switched to is a structure whose shape can still be argued about; one that
- *   has is a structure with assembly written against its offsets.
+ *   Sub-task 6.10 switches. ThreadSwitchTo exchanges one thread's execution for
+ *   another's, ThreadStart descends to privilege level 3, and
+ *   ThreadTerminateCurrent is how a program that has ended gives the processor
+ *   back — which is what made a fault outside the kernel survivable.
  */
 
 #ifndef OXYS_PROCESS_H
@@ -159,6 +159,11 @@ typedef struct Thread
 
     ThreadContext context;
 
+    /* Whether the stack above was taken from the arena and must be given back.
+     * The thread describing the kernel's own execution runs upon the boot stack,
+     * which the linker established and which is not the arena's to release. */
+    bool owns_stack;
+
     bool used;
 } Thread;
 
@@ -277,6 +282,71 @@ const char *ThreadStateName(ThreadState state);
 /* Accounting. */
 uint64_t ProcessesCreated(void);
 uint64_t ThreadsCreated(void);
+
+/* ------------------------------------------------------------------------------
+ * Sub-task 6.10: switching, and the descent to privilege level 3.
+ * ------------------------------------------------------------------------------ */
+
+/*
+ * Describes the execution already in progress as a thread, so that something may
+ * be switched away from it and back to it.
+ *
+ * It owns no stack: it runs upon the boot stack, which the linker established.
+ * Its context is left as it stands, nothing reading it until the first switch
+ * away fills it in.
+ */
+Thread *ThreadAdoptCurrent(const char *name);
+
+/*
+ * Creates a thread that runs kernel code at privilege level 0, with a stack of
+ * its own and no process.
+ *
+ * It exists so that the switch may be asserted without a program, an address
+ * space or a privilege transition being involved at all: a failure there is a
+ * failure of the switch, where a failure in the descent could be a failure of
+ * anything.
+ */
+Thread *ThreadCreateKernel(void (*entry)(void));
+
+/*
+ * Exchanges the running thread for another: the address space, `rsp0`, and then
+ * the registers and the stack.
+ *
+ * Returns when somebody switches back to `from`. A thread that is never switched
+ * back to never returns from this, which is what happens to a thread that ends.
+ */
+void ThreadSwitchTo(Thread *from, Thread *to);
+
+/*
+ * Starts a thread at privilege level 3 and waits for it to end.
+ *
+ * The caller becomes the thread the program will be returned to when it ends,
+ * whether it ends by asking or by faulting. Returns false where the thread has
+ * no entry point or no stack, and true once the program has ended.
+ *
+ * There is one such caller at a time because there is one thread of control
+ * until the scheduler of sub-task 6.15.
+ */
+bool ThreadStart(Thread *thread);
+
+/*
+ * Ends the running thread and returns to whoever started it.
+ *
+ * Does not return. Called from the system-call path when a program asks to end,
+ * and from the exception path when a program is ended for it — which is what
+ * `docs/design/INTERRUPTS.md` has called terminating the program since the
+ * dispositions were written, and what could not be done until there was
+ * somewhere to return to.
+ *
+ * Returns false, having done nothing, where there is nobody to return to.
+ */
+bool ThreadTerminateCurrent(int64_t status);
+
+/* Where the trampoline enters. Declared for the assembly that calls it. */
+void ThreadTrampolineEntry(void);
+
+/* How many programs have ended. */
+uint64_t ProcessTerminationCount(void);
 
 /* Emits the tables upon the diagnostic path. */
 void ProcessReport(void);
