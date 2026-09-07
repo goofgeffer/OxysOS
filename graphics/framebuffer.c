@@ -287,6 +287,60 @@ uint32_t FramebufferEncode(uint8_t red, uint8_t green, uint8_t blue)
     return pixel;
 }
 
+/*
+ * Splits a pixel back into the three eight-bit channels it was packed from.
+ *
+ * This is the inverse of FramebufferEncode and exists because blending needs the
+ * channels apart: a colour laid over another at some coverage is computed per
+ * channel, and a packed pixel cannot be interpolated as a whole — the carries
+ * would run from one channel into the next.
+ *
+ * A channel narrower than eight bits is widened by **replicating its high bits
+ * into the low ones** rather than by shifting and leaving zeroes. A five-bit
+ * channel holding 0x1F must come back as 0xFF: replication gives that, and a
+ * plain shift gives 0xF8, so white would decode to something slightly grey and
+ * every round trip would darken the image a little further.
+ */
+void FramebufferDecode(uint32_t pixel, uint8_t *red, uint8_t *green, uint8_t *blue)
+{
+    const BootFramebuffer *const description = &FramebufferDescription;
+    const uint8_t positions[3] = { description->red_position, description->green_position,
+                                   description->blue_position };
+    const uint8_t sizes[3] = { description->red_size, description->green_size,
+                               description->blue_size };
+    uint8_t *const outputs[3] = { red, green, blue };
+
+    for (size_t index = 0U; index < 3U; ++index)
+    {
+        uint32_t value;
+        uint8_t widened;
+
+        if (outputs[index] == NULL)
+        {
+            continue;
+        }
+
+        if ((description->format != BOOT_FRAMEBUFFER_RGB) || (sizes[index] == 0U) ||
+            (sizes[index] > 8U))
+        {
+            *outputs[index] = 0U;
+            continue;
+        }
+
+        value = (pixel >> positions[index]) & ((UINT32_C(1) << sizes[index]) - 1U);
+        widened = (uint8_t)(value << (8U - sizes[index]));
+
+        /* Replicate the high bits downward, so that a full channel decodes to
+         * 0xFF rather than to 0xFF with its low bits cleared. */
+        for (uint32_t shift = sizes[index]; shift < 8U; shift += sizes[index])
+        {
+            widened = (uint8_t)(widened | (uint8_t)(value << (8U - sizes[index] - shift)));
+        }
+
+        *outputs[index] = widened;
+    }
+}
+
 void FramebufferReport(void)
 {
     if (!FramebufferDescribed)

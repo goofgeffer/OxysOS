@@ -100,6 +100,17 @@ typedef struct GraphicsRectangle
  * is false every primitive still works, byte at a time; nothing depends upon it
  * for correctness.
  */
+/*
+ * How deep the clip stack goes.
+ *
+ * Four is chosen because the nesting that exists is shallow and known: a
+ * compositor clips to the region it is presenting, a layer clips to itself, and
+ * a caller drawing within that clips to a panel. A fifth would mean somebody has
+ * built something this depth was not designed for, and the push refuses rather
+ * than overwriting the entry beneath it.
+ */
+#define GRAPHICS_CLIP_DEPTH 4U
+
 typedef struct GraphicsSurface
 {
     volatile uint8_t *pixels;
@@ -109,6 +120,17 @@ typedef struct GraphicsSurface
     uint8_t bytes_per_pixel;
     bool whole_words;
     GraphicsRectangle clip;
+
+    /*
+     * The saved clips of GraphicsPushClip, and how many are saved.
+     *
+     * The stack lives in the surface rather than in the caller because the clip
+     * does: a caller that saved and restored it by hand would have to know that
+     * it had been narrowed by somebody else in between, and the whole point of a
+     * push is that it need not.
+     */
+    GraphicsRectangle clip_stack[GRAPHICS_CLIP_DEPTH];
+    uint32_t clip_depth;
 } GraphicsSurface;
 
 /* ------------------------------------------------------------------------------
@@ -166,6 +188,26 @@ void GraphicsSetClip(GraphicsSurface *surface, GraphicsRectangle region);
 /* Restores the clip to the whole surface. */
 void GraphicsResetClip(GraphicsSurface *surface);
 
+/*
+ * Narrows the clip to the intersection of the present one and the region given,
+ * saving what it was. Returns false where the stack is full, in which case the
+ * clip is left alone — a push that silently discarded the region beneath it
+ * would let drawing escape a boundary a caller believed it had established.
+ *
+ * The intersection is the point. A push that replaced the clip could widen it,
+ * and a caller nesting a panel inside a clipped region would then draw outside
+ * the region it was given.
+ */
+bool GraphicsPushClip(GraphicsSurface *surface, GraphicsRectangle region);
+
+/* Restores the clip saved by the matching push. Returns false where nothing was
+ * pushed, the clip then being left alone. */
+bool GraphicsPopClip(GraphicsSurface *surface);
+
+/* How many clips are presently saved, which a self-test asserts returns to what
+ * it was: a push without a pop leaves every later drawing narrowed. */
+uint32_t GraphicsClipDepth(const GraphicsSurface *surface);
+
 /* The clip presently in force. */
 GraphicsRectangle GraphicsClip(const GraphicsSurface *surface);
 
@@ -193,6 +235,36 @@ void GraphicsPutPixel(GraphicsSurface *surface, int32_t x, int32_t y, uint32_t c
  * draws upon, and a framebuffer mapped write-combining is slow to read.
  */
 uint32_t GraphicsPixelAt(const GraphicsSurface *surface, int32_t x, int32_t y);
+
+/*
+ * Combines a colour into the pixel already at a position, at a coverage of 0 to
+ * 255, and clipped as every other write is.
+ *
+ * A coverage of 255 is exactly GraphicsPutPixel and takes that path; a coverage
+ * of 0 writes nothing at all, and writing nothing is not the same as writing
+ * what was already there — a surface being read to compose the result, the two
+ * differ in cost and, upon a framebuffer, in whether the read happens.
+ *
+ * The channels are combined apart, through FramebufferDecode, because a packed
+ * pixel cannot be interpolated as a whole: the carries would run out of one
+ * channel and into the next, so a half-covered red over a blue would produce a
+ * green that neither of them contains.
+ */
+void GraphicsBlendPixel(GraphicsSurface *surface, int32_t x, int32_t y, uint32_t colour,
+                        uint8_t coverage);
+
+/*
+ * Composites a source surface over a destination at a position, taking each
+ * pixel's coverage from a mask of one byte per pixel in the source's own
+ * dimensions.
+ *
+ * A null mask makes every pixel opaque, which is a blit. The mask is what makes
+ * a shape of arbitrary outline possible without a colour reserved to mean
+ * "absent" — a reserved colour is a colour the shape may not contain, and the
+ * pointer contains black and white, which are the two a caller would reach for.
+ */
+void GraphicsBlendSurface(GraphicsSurface *destination, int32_t x, int32_t y,
+                          const GraphicsSurface *source, const uint8_t *mask);
 
 /* Fills the rectangle, clipped. */
 void GraphicsFillRectangle(GraphicsSurface *surface, GraphicsRectangle rectangle,

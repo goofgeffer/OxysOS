@@ -71,6 +71,7 @@
 #include <oxys/vga.h>
 #include <oxys/framebuffer.h>
 #include <oxys/graphics.h>
+#include <oxys/compositor.h>
 #include <oxys/console.h>
 #include <oxys/cursor.h>
 #include <oxys/faultscreen.h>
@@ -196,27 +197,23 @@ void KernelWriteString(const char *string)
      * line rather than from the middle.
      */
     /*
-     * The pointer is taken off the surface for the duration of the console's
-     * write and put back afterwards.
+     * The three sinks are written, and the display is then carried out once.
      *
-     * It is done here because this is already the one routine permitted to name
-     * an output device, so it is the one place where every write to the console
-     * passes — and the pointer's record of the pixels beneath it is correct only
-     * while nothing else draws. Without this, a line printed while the pointer
-     * is shown leaves the pointer's next movement restoring stale pixels over the
-     * text, or the text over the pointer, and neither is a state any assertion
-     * could detect: every pixel involved holds a value something meant to write.
+     * Until sub-task 6.6 this routine also concealed the pointer and revealed it
+     * again, because the pointer kept the pixels beneath it and that store was
+     * correct only while nothing else drew. It no longer keeps them: the console
+     * draws into the back buffer, the pointer is a layer over it, and what is
+     * beneath the pointer is simply still there. This routine has stopped
+     * knowing that a pointer exists, which is what it should never have known.
      *
-     * The pair nests, so a panic raised from within a write does not reveal the
-     * pointer in the middle of the write that concealed it.
+     * The presentation carries only what changed. A line of text is some tens of
+     * character cells, so the cost is the cells and not the screen.
      */
-    CursorConceal();
-
     VgaWriteString(string);
     ConsoleWriteString(string);
     SerialWriteString(string);
 
-    CursorReveal();
+    CompositorPresent();
 }
 
 void KernelPanic(const char *message)
@@ -532,16 +529,6 @@ static void KernelEchoBackspace(void)
  * and the processor would then halt with nothing left to wake it.
  */
 /*
- * The surface the pointer is drawn upon.
- *
- * It is a file-scope object and not a local because the pointer keeps the
- * address of it for as long as it is shown; a surface composed upon the stack of
- * the routine that attached it would be a dangling pointer the moment that
- * routine returned, and would go on being drawn through.
- */
-static GraphicsSurface KernelPointerSurface;
-
-/*
  * Gives the pointer a display, and tells the mouse how large that display is.
  *
  * Neither is done by either driver, and for the same reason in both directions.
@@ -557,14 +544,15 @@ static GraphicsSurface KernelPointerSurface;
  */
 static void KernelAttachPointer(void)
 {
-    if (!GraphicsSurfaceFromFramebuffer(&KernelPointerSurface))
+    const GraphicsSurface *const display = CompositorSurface();
+
+    if (display == NULL)
     {
         return;
     }
 
-    MouseSetBounds((int32_t)KernelPointerSurface.width, (int32_t)KernelPointerSurface.height);
-    MouseSetPosition((int32_t)(KernelPointerSurface.width / 2U),
-                     (int32_t)(KernelPointerSurface.height / 2U));
+    MouseSetBounds((int32_t)display->width, (int32_t)display->height);
+    MouseSetPosition((int32_t)(display->width / 2U), (int32_t)(display->height / 2U));
 
     /*
      * Black within white. The two are chosen so that the pointer is visible upon
@@ -572,7 +560,7 @@ static void KernelAttachPointer(void)
      * console draws light text upon a dark ground, which either alone would be
      * lost in.
      */
-    (void)CursorInitialise(&KernelPointerSurface, FramebufferEncode(0U, 0U, 0U),
+    (void)CursorInitialise(FramebufferEncode(0U, 0U, 0U),
                            FramebufferEncode(255U, 255U, 255U));
 
     CursorMoveTo(MouseX(), MouseY());
@@ -606,6 +594,7 @@ static _Noreturn void KernelEchoLoop(void)
     if (MouseIsPresent())
     {
         CursorShow();
+        CompositorPresent();
     }
 
     for (;;)
@@ -641,6 +630,20 @@ static _Noreturn void KernelEchoLoop(void)
             }
 
             CursorMoveTo(MouseX(), MouseY());
+
+            /*
+             * And carried out, here rather than only as a side effect of writing
+             * text.
+             *
+             * This is what a movement costs since sub-task 6.6, and it is the
+             * whole of it: the pointer's old rectangle and its new one, some
+             * four hundred pixels, written once. It must be asked for explicitly
+             * because moving the pointer is the one thing that changes the
+             * display without anything being written to it — and the first form
+             * of this loop did not ask, so a pointer moved across a silent
+             * machine never appeared at all until somebody typed.
+             */
+            CompositorPresent();
         }
 
         /*
@@ -799,10 +802,32 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
      */
     if (!KernelCommandLineHasOption("graphics-figure"))
     {
+        /*
+         * Sub-task 6.6. The compositor takes the display first, and the console
+         * then draws into its back buffer rather than upon the framebuffer.
+         *
+         * The order is fixed by that: a console started first would hold a
+         * surface describing the framebuffer, and every presentation would copy
+         * the back buffer over the top of what it had drawn. Where the
+         * compositor cannot be prepared — no framebuffer, or an arena that
+         * cannot supply the pages — the console falls back to the framebuffer
+         * and behaves as it did before this sub-task.
+         */
+        (void)CompositorInitialise();
         (void)ConsoleInitialise();
     }
 
     ConsoleReport();
+
+    /*
+     * The compositing primitives are asserted first, upon surfaces composed in
+     * memory, and the compositor itself after: the second uses the first, and a
+     * failure in the clip or the blend would otherwise be reported as a failure
+     * of the compositor that merely called them.
+     */
+    KernelVerifyCompositing();
+    KernelVerifyCompositor();
+    CompositorReport();
     KernelVerifyConsole();
     KernelVerifyFaultScreen();
 
@@ -917,8 +942,19 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
      */
     (void)MouseInitialise();
     KernelVerifyMouse();
-    KernelVerifyCursor();
+
+    /*
+     * The pointer is attached before it is asserted, and that order is new at
+     * sub-task 6.6.
+     *
+     * Until then the pointer's self-test composed a surface of its own and drew
+     * upon it, so it needed nothing to have been attached. It now asserts the
+     * rendering the compositor will actually draw from, which does not exist
+     * until the pointer has a layer — and a test that ran first would report,
+     * every time and correctly, that there was nothing to look at.
+     */
     KernelAttachPointer();
+    KernelVerifyCursor();
     MouseReport();
     CursorReport();
 

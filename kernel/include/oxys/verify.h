@@ -102,6 +102,8 @@ void KernelVerifyFramebuffer(void);
 
 /* Phase 6, sub-task 6.4: the bitmap font and the console drawn with it. */
 void KernelVerifyConsole(void);
+void KernelVerifyCompositing(void);
+void KernelVerifyCompositor(void);
 
 /* Phase 6, sub-task 6.4: the table of fault screens — that every severe fault
  * has one of its own, and that no two of them are the same. */

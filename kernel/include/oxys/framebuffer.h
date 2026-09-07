@@ -112,6 +112,20 @@ BootFramebufferFormat FramebufferFormat(void);
 uint32_t FramebufferEncode(uint8_t red, uint8_t green, uint8_t blue);
 
 /*
+ * Splits a pixel back into three eight-bit channels: the inverse of the above.
+ *
+ * Blending needs the channels apart, a packed pixel being uninterpolatable as a
+ * whole — the carries would run from one channel into the next. A channel
+ * narrower than eight bits is widened by replicating its high bits downward, so
+ * that a full channel decodes to 0xFF rather than to 0xFF with its low bits
+ * cleared; a plain shift would darken every round trip a little further.
+ *
+ * Any of the three pointers may be null, and each is set to zero where the
+ * framebuffer is not of the direct-colour format.
+ */
+void FramebufferDecode(uint32_t pixel, uint8_t *red, uint8_t *green, uint8_t *blue);
+
+/*
  * Whether the mapping was given the write-combining memory type.
  *
  * False where the processor does not report the page attribute table, in which

@@ -162,6 +162,7 @@ bool GraphicsSurfaceInitialise(GraphicsSurface *surface, void *pixels, uint32_t 
     surface->pitch = pitch;
     surface->bytes_per_pixel = bytes_per_pixel;
     surface->clip = GraphicsSurfaceBounds(surface);
+    surface->clip_depth = 0U;
 
     /*
      * Whether this surface may be addressed a word at a time.
@@ -205,12 +206,57 @@ void GraphicsSetClip(GraphicsSurface *surface, GraphicsRectangle region)
 
 void GraphicsResetClip(GraphicsSurface *surface)
 {
+    /*
+     * The saved clips go with it. A reset means "the whole surface, and nothing
+     * is nested"; leaving the stack standing would let a later pop narrow the
+     * surface again to a region whose caller had long since finished.
+     */
     surface->clip = GraphicsSurfaceBounds(surface);
+    surface->clip_depth = 0U;
 }
 
 GraphicsRectangle GraphicsClip(const GraphicsSurface *surface)
 {
     return surface->clip;
+}
+
+bool GraphicsPushClip(GraphicsSurface *surface, GraphicsRectangle region)
+{
+    if (surface->clip_depth >= GRAPHICS_CLIP_DEPTH)
+    {
+        return false;
+    }
+
+    surface->clip_stack[surface->clip_depth] = surface->clip;
+    ++surface->clip_depth;
+
+    /*
+     * The intersection with what was already in force, not a replacement. A push
+     * that replaced the clip could widen it, and a caller nesting a panel within
+     * a region it was handed would then draw outside that region — which is the
+     * one thing the clip exists to prevent.
+     */
+    surface->clip = GraphicsRectangleIntersect(surface->clip, region);
+
+    return true;
+}
+
+bool GraphicsPopClip(GraphicsSurface *surface)
+{
+    if (surface->clip_depth == 0U)
+    {
+        return false;
+    }
+
+    --surface->clip_depth;
+    surface->clip = surface->clip_stack[surface->clip_depth];
+
+    return true;
+}
+
+uint32_t GraphicsClipDepth(const GraphicsSurface *surface)
+{
+    return surface->clip_depth;
 }
 
 /* The address of a pixel. The caller has already established that the
@@ -262,6 +308,94 @@ void GraphicsPutPixel(GraphicsSurface *surface, int32_t x, int32_t y, uint32_t c
     }
 
     GraphicsStorePixel(surface, GraphicsPixelAddress(surface, x, y), colour);
+}
+
+/*
+ * One channel of a blend: the source at the given coverage over the destination.
+ *
+ * The rounding term is not decoration. Without it a coverage of 128 over a
+ * channel of 255 yields 127, so a shape blended repeatedly at half coverage
+ * creeps darker with every pass; adding half the divisor before dividing keeps
+ * the midpoint where it belongs.
+ */
+static uint8_t GraphicsBlendChannel(uint8_t destination, uint8_t source, uint8_t coverage)
+{
+    const uint32_t weighted = ((uint32_t)source * coverage) +
+                              ((uint32_t)destination * (255U - coverage)) + 127U;
+
+    return (uint8_t)(weighted / 255U);
+}
+
+void GraphicsBlendPixel(GraphicsSurface *surface, int32_t x, int32_t y, uint32_t colour,
+                        uint8_t coverage)
+{
+    uint8_t source_red;
+    uint8_t source_green;
+    uint8_t source_blue;
+    uint8_t destination_red;
+    uint8_t destination_green;
+    uint8_t destination_blue;
+    uint32_t beneath;
+
+    if (coverage == 0U)
+    {
+        /*
+         * Nothing is written, and that is not the same as writing what was
+         * already there: the surface would have to be read to compose the
+         * result, and upon a framebuffer that read is the expensive half of
+         * everything this kernel draws.
+         */
+        return;
+    }
+
+    if (coverage == 255U)
+    {
+        GraphicsPutPixel(surface, x, y, colour);
+        return;
+    }
+
+    if (!GraphicsRectangleContains(surface->clip, x, y))
+    {
+        return;
+    }
+
+    beneath = GraphicsPixelAt(surface, x, y);
+
+    FramebufferDecode(colour, &source_red, &source_green, &source_blue);
+    FramebufferDecode(beneath, &destination_red, &destination_green, &destination_blue);
+
+    GraphicsStorePixel(
+        surface, GraphicsPixelAddress(surface, x, y),
+        FramebufferEncode(GraphicsBlendChannel(destination_red, source_red, coverage),
+                          GraphicsBlendChannel(destination_green, source_green, coverage),
+                          GraphicsBlendChannel(destination_blue, source_blue, coverage)));
+}
+
+void GraphicsBlendSurface(GraphicsSurface *destination, int32_t x, int32_t y,
+                          const GraphicsSurface *source, const uint8_t *mask)
+{
+    if ((destination == NULL) || (source == NULL))
+    {
+        return;
+    }
+
+    for (uint32_t row = 0U; row < source->height; ++row)
+    {
+        for (uint32_t column = 0U; column < source->width; ++column)
+        {
+            const uint8_t coverage =
+                (mask == NULL) ? 255U : mask[(row * source->width) + column];
+
+            if (coverage == 0U)
+            {
+                continue;
+            }
+
+            GraphicsBlendPixel(destination, x + (int32_t)column, y + (int32_t)row,
+                               GraphicsPixelAt(source, (int32_t)column, (int32_t)row),
+                               coverage);
+        }
+    }
 }
 
 uint32_t GraphicsPixelAt(const GraphicsSurface *surface, int32_t x, int32_t y)

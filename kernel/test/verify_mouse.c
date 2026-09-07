@@ -33,36 +33,9 @@
 #include <oxys/mouse.h>
 #include <oxys/cursor.h>
 #include <oxys/graphics.h>
+#include <oxys/framebuffer.h>
 #include <oxys/pic.h>
 #include <oxys/ps2.h>
-
-/*
- * The surface the pointer is asserted upon.
- *
- * Its pitch exceeds its width, and the padding beyond each row holds a sentinel,
- * so that a draw which computed an address from the width instead of the pitch
- * writes into the padding and is caught. This is the arrangement of
- * kernel/test/verify_graphics.c and the reason for it is the same.
- *
- * The store is declared as words rather than as bytes because words are what is
- * written into it. An object declared uint8_t[] has that type for its whole
- * life, and writing a uint32_t through a pointer into it is undefined; declaring
- * it as words and taking a byte pointer where a byte pointer is wanted is sound
- * in both directions, and guarantees the alignment the word path requires.
- */
-#define KERNEL_CURSOR_SURFACE_WIDTH  40U
-#define KERNEL_CURSOR_SURFACE_HEIGHT 32U
-#define KERNEL_CURSOR_SURFACE_PITCH  (KERNEL_CURSOR_SURFACE_WIDTH + 3U)
-
-static uint32_t KernelCursorStore[KERNEL_CURSOR_SURFACE_HEIGHT * KERNEL_CURSOR_SURFACE_PITCH];
-
-/* The pixel values used by the pointer test. They are arbitrary and distinct;
- * nothing about the encoding of a real framebuffer is assumed. */
-#define KERNEL_CURSOR_BACKGROUND UINT32_C(0x00112233)
-#define KERNEL_CURSOR_OUTLINE    UINT32_C(0x00000001)
-#define KERNEL_CURSOR_INTERIOR   UINT32_C(0x00FFFFFE)
-#define KERNEL_CURSOR_SENTINEL   UINT32_C(0xA5A5A5A5)
-
 /* The bounds the decoder is exercised within. Small, so that a movement can
  * reach an edge in one packet and the clamping is provoked rather than hoped
  * for. */
@@ -90,120 +63,6 @@ static void KernelMousePacket(uint8_t flags, uint8_t x, uint8_t y, uint8_t wheel
 
 /* The first byte of a packet with no buttons, no signs and no overflow. */
 #define KERNEL_MOUSE_FLAGS_PLAIN UINT8_C(0x08)
-
-/*
- * Composes the surface the pointer is asserted upon: the visible area a uniform
- * background, the padding beyond each row a sentinel.
- */
-static void KernelCursorPrepareSurface(GraphicsSurface *surface)
-{
-    for (size_t index = 0U;
-         index < (KERNEL_CURSOR_SURFACE_HEIGHT * KERNEL_CURSOR_SURFACE_PITCH); ++index)
-    {
-        KernelCursorStore[index] = KERNEL_CURSOR_SENTINEL;
-    }
-
-    (void)GraphicsSurfaceInitialise(surface, KernelCursorStore, KERNEL_CURSOR_SURFACE_WIDTH,
-                                    KERNEL_CURSOR_SURFACE_HEIGHT,
-                                    KERNEL_CURSOR_SURFACE_PITCH * 4U, 4U);
-
-    GraphicsClear(surface, KERNEL_CURSOR_BACKGROUND);
-}
-
-/* Whether every pixel of the visible area holds the background, and every word
- * of the padding still holds the sentinel. */
-static bool KernelCursorSurfaceIsClean(const GraphicsSurface *surface)
-{
-    for (uint32_t row = 0U; row < KERNEL_CURSOR_SURFACE_HEIGHT; ++row)
-    {
-        for (uint32_t column = 0U; column < KERNEL_CURSOR_SURFACE_WIDTH; ++column)
-        {
-            if (GraphicsPixelAt(surface, (int32_t)column, (int32_t)row) !=
-                KERNEL_CURSOR_BACKGROUND)
-            {
-                return false;
-            }
-        }
-
-        for (uint32_t pad = KERNEL_CURSOR_SURFACE_WIDTH; pad < KERNEL_CURSOR_SURFACE_PITCH;
-             ++pad)
-        {
-            if (KernelCursorStore[(row * KERNEL_CURSOR_SURFACE_PITCH) + pad] !=
-                KERNEL_CURSOR_SENTINEL)
-            {
-                return false;
-            }
-        }
-    }
-
-    return true;
-}
-
-/* Whether the padding is untouched, asked on its own where the visible area is
- * expected to hold a drawing. */
-static bool KernelCursorPaddingIsIntact(void)
-{
-    for (uint32_t row = 0U; row < KERNEL_CURSOR_SURFACE_HEIGHT; ++row)
-    {
-        for (uint32_t pad = KERNEL_CURSOR_SURFACE_WIDTH; pad < KERNEL_CURSOR_SURFACE_PITCH;
-             ++pad)
-        {
-            if (KernelCursorStore[(row * KERNEL_CURSOR_SURFACE_PITCH) + pad] !=
-                KERNEL_CURSOR_SENTINEL)
-            {
-                return false;
-            }
-        }
-    }
-
-    return true;
-}
-
-/*
- * Whether the pointer stands at this position, judged pixel by pixel against the
- * shape: every opaque pixel holds its colour and every transparent one still
- * holds the background.
- *
- * The transparent half is the half worth having. A pointer drawn as a solid
- * rectangle would satisfy any test that looked only at the pixels it should have
- * drawn, and would be a twelve by eighteen block obliterating the display around
- * the arrow.
- */
-static bool KernelCursorIsDrawnAt(const GraphicsSurface *surface, int32_t x, int32_t y)
-{
-    for (int32_t row = 0; row < CURSOR_HEIGHT; ++row)
-    {
-        for (int32_t column = 0; column < CURSOR_WIDTH; ++column)
-        {
-            const int32_t at_x = x + column;
-            const int32_t at_y = y + row;
-            uint32_t expected;
-
-            if ((at_x < 0) || (at_x >= (int32_t)KERNEL_CURSOR_SURFACE_WIDTH) || (at_y < 0) ||
-                (at_y >= (int32_t)KERNEL_CURSOR_SURFACE_HEIGHT))
-            {
-                continue;
-            }
-
-            if (!CursorShapeIsOpaque(column, row))
-            {
-                expected = KERNEL_CURSOR_BACKGROUND;
-            }
-            else
-            {
-                expected = CursorShapeIsInterior(column, row) ? KERNEL_CURSOR_INTERIOR
-                                                              : KERNEL_CURSOR_OUTLINE;
-            }
-
-            if (GraphicsPixelAt(surface, at_x, at_y) != expected)
-            {
-                return false;
-            }
-        }
-    }
-
-    return true;
-}
 
 void KernelVerifyMouse(void)
 {
@@ -544,249 +403,196 @@ void KernelVerifyMouse(void)
     KernelWriteString(succeeded ? "Mouse self-test passed.\n" : "Mouse self-test FAILED.\n");
 }
 
+/*
+ * Asserts the pointer: that its shape is well formed, and that the surface and
+ * coverage the compositor draws from agree with the bitmaps they came from.
+ *
+ * This changed shape at sub-task 6.6 and the change is the point. Until then the
+ * pointer drew itself upon a surface and kept the pixels beneath it, so what
+ * there was to assert was the drawing and the restoration — a trail left behind,
+ * a background overwritten, a concealment that failed to nest. None of that
+ * exists now: the pointer is rendered once and composited, so what is left to
+ * assert is the rendering, and the compositing is asserted where it lives, in
+ * KernelVerifyCompositor.
+ *
+ * The rendering is worth its own assertions because it is a conversion between
+ * two representations of the same thing, and those are where a shape silently
+ * loses a column or gains one.
+ */
 void KernelVerifyCursor(void)
 {
-    static GraphicsSurface surface;
+    const GraphicsSurface *image;
+    const uint8_t *mask;
     bool succeeded = true;
-    bool interior_seen = false;
-    bool opaque_seen = false;
 
-    KernelWriteString("Verifying the pointer.\n");
+    /* --- The shape is well formed, whatever it is drawn into. --- */
 
-    /* --- The shape is well formed. --- */
-
+    /*
+     * Every interior pixel is also opaque. The two masks are separate data and
+     * nothing but this makes them agree: an interior pixel that were not opaque
+     * would be a hole in the shape drawn in the interior colour, which is
+     * invisible in the picture comments because each is written beside its own
+     * row and neither shows the other.
+     */
     for (int32_t row = 0; row < CURSOR_HEIGHT; ++row)
     {
         for (int32_t column = 0; column < CURSOR_WIDTH; ++column)
         {
-            const bool opaque = CursorShapeIsOpaque(column, row);
-            const bool interior = CursorShapeIsInterior(column, row);
-
-            opaque_seen = opaque_seen || opaque;
-            interior_seen = interior_seen || interior;
-
-            /*
-             * A pixel that were interior and not opaque is a hole in the shape
-             * drawn in the interior colour: the draw consults the opacity mask
-             * and never reaches it, so the interior mask would carry a pixel
-             * nothing renders, and the two tables would have drifted apart with
-             * no symptom at all.
-             */
-            if (interior && !opaque)
+            if (CursorShapeIsInterior(column, row) && !CursorShapeIsOpaque(column, row))
             {
-                KernelWriteString("  The shape has an interior pixel that is not "
-                                  "opaque.\n");
+                KernelWriteString("  The shape has an interior pixel it does not "
+                                  "cover.\n");
                 succeeded = false;
             }
         }
     }
 
-    if (!opaque_seen || !interior_seen)
-    {
-        KernelWriteString("  The shape is empty, or has no interior.\n");
-        succeeded = false;
-    }
-
-    /* The hot spot is the pixel the pointer points at, and must be part of the
-     * pointer; a transparent tip is a pointer that indicates a pixel it does not
-     * cover. */
+    /* The hot spot is part of the shape. A pointer whose tip is transparent
+     * points at a pixel it does not draw, and cannot be aimed. */
     if (!CursorShapeIsOpaque(0, 0))
     {
         KernelWriteString("  The hot spot is not part of the shape.\n");
         succeeded = false;
     }
 
-    /* --- The pointer draws, and what was beneath it comes back. --- */
-
-    KernelCursorPrepareSurface(&surface);
-
-    if (!CursorInitialise(&surface, KERNEL_CURSOR_OUTLINE, KERNEL_CURSOR_INTERIOR))
+    /* A shape wholly opaque or wholly transparent is not a pointer, and either
+     * is what a mask read with the wrong bit order produces. */
     {
-        KernelWriteString("  The pointer refused a surface composed in memory.\n");
-        KernelWriteString("Pointer self-test FAILED.\n");
+        uint32_t opaque = 0U;
+
+        for (int32_t row = 0; row < CURSOR_HEIGHT; ++row)
+        {
+            for (int32_t column = 0; column < CURSOR_WIDTH; ++column)
+            {
+                if (CursorShapeIsOpaque(column, row))
+                {
+                    ++opaque;
+                }
+            }
+        }
+
+        if ((opaque == 0U) || (opaque == (CURSOR_WIDTH * CURSOR_HEIGHT)))
+        {
+            KernelWriteString("  The shape covers everything or nothing.\n");
+            succeeded = false;
+        }
+    }
+
+    /* --- What the compositor will actually draw. --- */
+
+    image = CursorImageSurface();
+    mask = CursorImageMask();
+
+    if (image == NULL)
+    {
+        /*
+         * No compositor, so no pointer, so nothing rendered. Upon a machine the
+         * boot loader left in a text mode this is the correct outcome and not a
+         * failure; the shape above was asserted regardless, being a table.
+         */
+        KernelWriteString(succeeded ? "Pointer self-test: shape sound; no display to "
+                                      "render upon.\n"
+                                    : "Pointer self-test FAILED.\n");
         return;
     }
 
-    CursorMoveTo(4, 3);
-    CursorShow();
-
-    if (!KernelCursorIsDrawnAt(&surface, 4, 3))
+    if ((image->width != CURSOR_WIDTH) || (image->height != CURSOR_HEIGHT))
     {
-        KernelWriteString("  The pointer was not drawn where it was shown.\n");
-        succeeded = false;
-    }
-
-    if (!KernelCursorPaddingIsIntact())
-    {
-        KernelWriteString("  Drawing the pointer wrote into the row padding.\n");
+        KernelWriteString("  The rendered pointer is not the size of the shape.\n");
         succeeded = false;
     }
 
     /*
-     * Showing a pointer already shown must draw nothing further. Were it to draw
-     * again it would first save what is beneath it, which is now the pointer
-     * itself, and the display beneath would be gone for good.
+     * The rendering agrees with the bitmaps, pixel for pixel.
+     *
+     * A covered pixel must have full coverage and the colour its interior bit
+     * chooses; an uncovered pixel must have none. The two failures this catches
+     * are opposite and both silent: a mask taken from the wrong bitmap gives a
+     * pointer that is a solid rectangle, and an interior test inverted gives one
+     * drawn inside out, which upon a black background looks almost right.
      */
-    CursorShow();
-    CursorHide();
-
-    if (!KernelCursorSurfaceIsClean(&surface))
+    for (int32_t row = 0; row < CURSOR_HEIGHT; ++row)
     {
-        KernelWriteString("  Hiding the pointer did not restore what was beneath it.\n");
-        succeeded = false;
+        for (int32_t column = 0; column < CURSOR_WIDTH; ++column)
+        {
+            const size_t index = ((size_t)row * CURSOR_WIDTH) + (size_t)column;
+            const bool opaque = CursorShapeIsOpaque(column, row);
+            const uint32_t pixel = GraphicsPixelAt(image, column, row);
+
+            if (opaque != (mask[index] == 255U))
+            {
+                KernelWriteString("  The coverage does not follow the shape.\n");
+                succeeded = false;
+                break;
+            }
+
+            if (!opaque)
+            {
+                continue;
+            }
+
+            if (pixel != (CursorShapeIsInterior(column, row)
+                              ? FramebufferEncode(255U, 255U, 255U)
+                              : FramebufferEncode(0U, 0U, 0U)))
+            {
+                KernelWriteString("  A rendered pixel is not the colour its bit "
+                                  "chooses.\n");
+                succeeded = false;
+                break;
+            }
+        }
     }
 
-    /* --- A movement restores the old position and draws the new. --- */
+    /* --- Showing, hiding and moving are the layer's, and are idempotent. --- */
 
-    CursorMoveTo(4, 3);
-    CursorShow();
-    CursorMoveTo(20, 11);
-
-    if (!KernelCursorIsDrawnAt(&surface, 20, 11))
     {
-        KernelWriteString("  The pointer was not drawn at the position it moved to.\n");
-        succeeded = false;
+        const bool was_visible = CursorIsVisible();
+        const int32_t saved_x = CursorX();
+        const int32_t saved_y = CursorY();
+        const uint64_t moves = CursorMoveCount();
+
+        CursorHide();
+        CursorShow();
+        CursorShow();
+
+        if (!CursorIsVisible())
+        {
+            KernelWriteString("  Showing the pointer twice left it hidden.\n");
+            succeeded = false;
+        }
+
+        CursorMoveTo(saved_x + 3, saved_y + 5);
+
+        if ((CursorX() != (saved_x + 3)) || (CursorY() != (saved_y + 5)))
+        {
+            KernelWriteString("  The pointer did not move where it was sent.\n");
+            succeeded = false;
+        }
+
+        /*
+         * A movement that ends where it began is not a movement. Without this
+         * the display would be told the pointer's rectangle had changed a
+         * hundred times a second for a hand at rest, the mouse reporting whether
+         * or not it has moved.
+         */
+        CursorMoveTo(CursorX(), CursorY());
+
+        if (CursorMoveCount() != (moves + 1U))
+        {
+            KernelWriteString("  A movement to where the pointer already stood was "
+                              "counted.\n");
+            succeeded = false;
+        }
+
+        /* Left as it was found, so that the operator's pointer is where the
+         * mouse thinks it is. */
+        CursorMoveTo(saved_x, saved_y);
+
+        if (!was_visible)
+        {
+            CursorHide();
+        }
     }
-
-    /*
-     * The pixels at the old position must be the background again. A driver that
-     * drew before restoring, or that restored to the new position rather than the
-     * saved one, leaves a trail of arrows behind the pointer — which is the
-     * commonest way this is got wrong and needs nobody to describe it twice.
-     */
-    if (GraphicsPixelAt(&surface, 4, 3) != KERNEL_CURSOR_BACKGROUND)
-    {
-        KernelWriteString("  The pointer left a trail where it had been.\n");
-        succeeded = false;
-    }
-
-    CursorHide();
-
-    if (!KernelCursorSurfaceIsClean(&surface))
-    {
-        KernelWriteString("  The surface was not clean after a move and a hide.\n");
-        succeeded = false;
-    }
-
-    /* --- A pointer at the edge draws no pixel outside the surface. --- */
-
-    CursorMoveTo((int32_t)KERNEL_CURSOR_SURFACE_WIDTH - 3,
-                 (int32_t)KERNEL_CURSOR_SURFACE_HEIGHT - 3);
-    CursorShow();
-
-    if (!KernelCursorPaddingIsIntact())
-    {
-        KernelWriteString("  A pointer at the edge wrote into the row padding.\n");
-        succeeded = false;
-    }
-
-    if (!KernelCursorIsDrawnAt(&surface, (int32_t)KERNEL_CURSOR_SURFACE_WIDTH - 3,
-                               (int32_t)KERNEL_CURSOR_SURFACE_HEIGHT - 3))
-    {
-        KernelWriteString("  A pointer at the edge did not draw the part that fits.\n");
-        succeeded = false;
-    }
-
-    CursorHide();
-
-    if (!KernelCursorSurfaceIsClean(&surface))
-    {
-        KernelWriteString("  A pointer clipped at the edge did not restore cleanly.\n");
-        succeeded = false;
-    }
-
-    /* --- Concealment nests. --- */
-
-    CursorMoveTo(10, 6);
-    CursorShow();
-
-    CursorConceal();
-
-    if (!KernelCursorSurfaceIsClean(&surface))
-    {
-        KernelWriteString("  Concealing the pointer did not take it off the surface.\n");
-        succeeded = false;
-    }
-
-    CursorConceal();
-    CursorReveal();
-
-    /*
-     * One reveal of two concealments must do nothing. A flag rather than a count
-     * would put the pointer back here, in the middle of the drawing that the
-     * outer concealment was protecting, and the save-under would then record the
-     * half-finished drawing as the display beneath.
-     */
-    if (!KernelCursorSurfaceIsClean(&surface))
-    {
-        KernelWriteString("  An inner reveal put the pointer back too early.\n");
-        succeeded = false;
-    }
-
-    CursorReveal();
-
-    if (!KernelCursorIsDrawnAt(&surface, 10, 6))
-    {
-        KernelWriteString("  The outermost reveal did not put the pointer back.\n");
-        succeeded = false;
-    }
-
-    if (!CursorIsVisible())
-    {
-        KernelWriteString("  A concealment altered whether the pointer is shown.\n");
-        succeeded = false;
-    }
-
-    /*
-     * A move made while concealed must leave the surface untouched and take
-     * effect when the pointer returns. The alternative is a pointer that draws
-     * itself in the middle of somebody else's drawing.
-     */
-    CursorConceal();
-    CursorMoveTo(2, 20);
-
-    if (!KernelCursorSurfaceIsClean(&surface))
-    {
-        KernelWriteString("  A move made while concealed drew upon the surface.\n");
-        succeeded = false;
-    }
-
-    CursorReveal();
-
-    if (!KernelCursorIsDrawnAt(&surface, 2, 20))
-    {
-        KernelWriteString("  A move made while concealed was not honoured.\n");
-        succeeded = false;
-    }
-
-    CursorHide();
-
-    if (!KernelCursorSurfaceIsClean(&surface))
-    {
-        KernelWriteString("  The surface was not clean at the end of the test.\n");
-        succeeded = false;
-    }
-
-    /*
-     * Every draw is matched by a restore, save the one standing upon the surface
-     * while the pointer is shown — and the pointer is hidden here, so they must
-     * be equal. A leak either way is a save-under that has been taken twice or
-     * put back twice, and the second is how a stale rectangle of pixels comes to
-     * be painted over something legitimate.
-     */
-    if (CursorDrawCount() != CursorRestoreCount())
-    {
-        KernelWriteString("  The pointer was drawn and restored a different number of "
-                          "times.\n");
-        succeeded = false;
-    }
-
-    /*
-     * The surface composed above goes out of scope with this test, so the
-     * pointer is detached from it. Whoever wants a pointer upon the display
-     * initialises it afresh against the framebuffer.
-     */
-    (void)CursorInitialise(NULL, 0U, 0U);
 
     KernelWriteString(succeeded ? "Pointer self-test passed.\n"
                                 : "Pointer self-test FAILED.\n");

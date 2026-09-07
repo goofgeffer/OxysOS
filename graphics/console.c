@@ -20,6 +20,7 @@
  */
 
 #include <oxys/console.h>
+#include <oxys/compositor.h>
 #include <oxys/font.h>
 #include <oxys/graphics.h>
 #include <oxys/framebuffer.h>
@@ -37,6 +38,11 @@
 
 static GraphicsSurface ConsoleSurface;
 static bool ConsoleActive;
+
+/* Whether the surface above is the compositor's back buffer rather than the
+ * framebuffer itself, and therefore whether what is drawn must be reported as
+ * changed before anybody will see it. */
+static bool ConsoleComposited;
 static bool ConsoleSuspended;
 
 static uint32_t ConsoleColumnCount;
@@ -131,6 +137,18 @@ static void ConsoleScroll(void)
 
     ConsoleRowEnd[ConsoleRowCount - 1U] = 0U;
 
+    /*
+     * A scroll moves every row, so every row must be carried out. This is the
+     * one operation whose damage cannot be narrowed, and it is also the one this
+     * sub-task made cheap: the blit now reads the back buffer, which is ordinary
+     * cached memory, where before it read the framebuffer through a mapping in
+     * which reads are uncached.
+     */
+    if (ConsoleComposited)
+    {
+        CompositorInvalidateAll();
+    }
+
     ++ConsoleScrollCount;
 }
 
@@ -170,7 +188,26 @@ static void ConsoleAdvance(void)
 
 bool ConsoleInitialise(void)
 {
-    if (!GraphicsSurfaceFromFramebuffer(&ConsoleSurface))
+    /*
+     * The back buffer where there is one, and the framebuffer where there is
+     * not.
+     *
+     * A surface owns nothing and describes memory somebody else supplied, which
+     * is exactly what allows this substitution to be one line: every primitive
+     * below, every glyph and the scroll itself go wherever this points without
+     * knowing which they got. That was the argument for the abstraction in
+     * sub-task 6.3 and this is the sub-task that collects on it.
+     */
+    if (CompositorIsActive())
+    {
+        ConsoleSurface = *CompositorSurface();
+        ConsoleComposited = true;
+    }
+    else if (GraphicsSurfaceFromFramebuffer(&ConsoleSurface))
+    {
+        ConsoleComposited = false;
+    }
+    else
     {
         return false;
     }
@@ -444,6 +481,15 @@ void ConsoleWriteCharacter(char character)
     FontDrawGlyphOpaque(&ConsoleSurface, (int32_t)(ConsoleCursorColumn * FONT_WIDTH),
                         (int32_t)(ConsoleCursorRow * FONT_HEIGHT), code, ConsoleForeground,
                         ConsoleBackground);
+
+    if (ConsoleComposited)
+    {
+        const GraphicsRectangle cell = { (int32_t)(ConsoleCursorColumn * FONT_WIDTH),
+                                         (int32_t)(ConsoleCursorRow * FONT_HEIGHT),
+                                         FONT_WIDTH, FONT_HEIGHT };
+
+        CompositorInvalidate(cell);
+    }
 
     ++ConsoleCharactersWritten;
     ConsoleAdvance();

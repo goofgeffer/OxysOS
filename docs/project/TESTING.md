@@ -1088,6 +1088,71 @@ level 3 has to be stated before the assertion has any force.
 Restore the files afterwards. Each run must end `Fault disposition and screen
 self-test FAILED.`
 
+
+## 20. Verification of the compositor
+
+`KernelVerifyCompositing` and `KernelVerifyCompositor` run at every boot. The
+first asserts the clip stack and the blend upon surfaces composed in memory, so
+it holds upon a machine with no display; the second asserts the damage
+arithmetic and the layer table, which is what can be asserted of a compositor
+that owns one back buffer and one framebuffer and has no second of either to
+compose. Both are tabulated against the failure each would catch in
+[`../design/GRAPHICS.md`](../design/GRAPHICS.md), Section 27.5.
+
+### 20.1 What only looking establishes
+
+Three things, and all three are what the sub-task exists for.
+
+| What to look for | What its absence would mean |
+| ---------------- | --------------------------- |
+| The boot log appears at all, from its first line | The console is drawing into a back buffer nothing carries out, or into the framebuffer while presentations copy the back buffer over it |
+| The pointer is drawn **over** the text, its black outline cutting into the letters beneath | The layer is composited under the base, or not at all |
+| After the pointer has crossed the screen, **the text it passed over is intact and there is no trail** | Section 27.3: a layer that marks only where it has arrived leaves its previous appearance standing. This is the fault the save-under existed to prevent, and reintroducing it would undo the sub-task |
+| A fault screen stays on the screen | Section 27.6: the compositor must be suspended, or the next `KernelWriteString` carries the back buffer over the page |
+
+The pointer is driven from the monitor rather than by hand, so that the path is
+repeatable:
+
+```sh
+qemu-system-x86_64 -machine q35 -cpu qemu64 -smp cores=2 -m 512M \
+    -cdrom build/oxys.iso -display none -no-reboot \
+    -serial unix:/tmp/oxys-serial.sock,server=on,wait=off \
+    -monitor unix:/tmp/oxys-monitor.sock,server=on,wait=off
+```
+
+Wait upon the serial socket for `A backspace erases, and crosses to the line
+above.`, then send `mouse_move 20 12` to the monitor a dozen times, a quarter of
+a second apart, and `screendump` afterwards. The pointer should stand at the far
+end of the path and nothing should mark the path itself.
+
+A trail is easier to measure than to see: a screendump in which no row holds a
+run of six or more white pixels except at the pointer's final position is a
+screen with one pointer upon it.
+
+### 20.2 The negative tests of the compositor
+
+Each was applied, confirmed, and reverted.
+
+| The damage | What the run reported |
+| ---------- | --------------------- |
+| A push replacing the clip in force rather than intersecting it. | `a push to a wider region widened the clip` |
+| The mask indexed by the destination's width rather than the source's. | `the mask was indexed by the wrong stride` and `the mask was indexed by the destination's width` — but only after the test was corrected; see below. |
+| `CompositorMoveLayer` marking only where the layer has arrived and not where it was. | **Nothing at all** from the self-test, and a trail upon the screen: thirteen pointers along the path of one. Measured rather than admired — a screendump in which four rows hold a run of six or more white pixels holds one pointer, and this one had fifty-two. |
+| The layers taken by the self-test not given back. | Nothing from the self-test, and a machine that boots **with no pointer** and reports no failure: the table was exhausted, `CursorInitialise` was refused a layer, and every routine in the pointer then correctly did nothing. |
+
+**Two of the four are invisible to every assertion available**, and both were
+found by looking at the screen. That is what Section 20.1 is for, and it is why
+the compositor's verification is not finished when `make verify` passes.
+
+The second is worth recording for what it revealed about the test rather than
+the code. Applied to the test as first written it **passed**: the composited
+source and the destination were both sixteen pixels wide, so an index taken from
+either was the same number and the fault the assertion named could not be
+produced. The source is now seven wide against a destination of sixteen with a
+pitch of nineteen, so the three strides differ at every row after the first. An
+assertion that cannot fail is worse than no assertion, because it is counted
+among those that pass.
+
 ## 21. Verification of the mouse and the pointer
 
 Neither self-test needs a mouse, and that is what makes them run at every boot
@@ -1292,3 +1357,9 @@ boot to finish before drawing conclusions from the report.
 | 2026-09-06 | VirtualBox 7, headless — **the serial port, which had never worked there** | Fixed and confirmed. The kernel had written nothing to COM1 upon VirtualBox since the driver was written: the presence probe of `SerialInitialise` read the receive register immediately after writing the loopback byte, and VirtualBox does not make it available in the same breath, so the probe concluded there was no adapter. The tell was in the interrupt controller's own report — `lines claimed 3` and no IR4, against `lines claimed 4` upon QEMU — which had been on the screen throughout. The probe now waits for data ready. The log is 10964 bytes and reports 4977 characters transmitted upon 55 interrupts with no line error. |
 | 2026-09-06 | VirtualBox 7 — the serial loopback self-test, five consecutive runs | Passed, five of five, with identical log sizes and no failure line. Two further faults were found once the port spoke: a character still being shifted out when the test entered loopback returned as a surplus `0x79` — the letter `y` from the boot log — and a data-ready flag left standing from the previous character caused the second character to be read as `0x00`. Before the corrections the test failed upon roughly half of all VirtualBox boots and upon none of QEMU's, which is the worst way for a test to be wrong. See [`../devices/SERIAL.md`](../devices/SERIAL.md), Section 8.4. |
 | 2026-09-06 | `make verify` — the serial corrections upon QEMU | Passed, unchanged: `Serial self-test passed.`, 5037 characters transmitted, `realised 115200 baud`. None of the three faults was ever visible upon this machine, which is why the second machine of the testing mandate exists. |
+| 2026-09-06 | `make verify` — **sub-task 6.6, the clip stack and the blend** | Passed. A push intersects the clip in force rather than replacing it, a pop restores what the matching push saved, a pop upon an empty stack and a push beyond the depth are both refused without altering the clip, and a reset abandons the saved clips. Full coverage is exactly an opaque write and no coverage writes nothing; half coverage of white over black is a middling grey with its three channels equal; and red blended over blue produces no green, which is the assertion that the channels are combined apart rather than the packed pixel interpolated whole. |
+| 2026-09-06 | `make verify` — the compositor's damage and layer table | Passed. Damage accumulates as the rectangle enclosing both regions rather than as the latest alone, damage outside the buffer is discarded, a presentation empties it, and a presentation with nothing damaged carries no pixels. The layer table takes exactly its capacity, refuses a layer beyond it and one with no surface, and gives back everything the test took. |
+| 2026-09-06 | QEMU q35, screendump — **the pointer over the console** | Passed, and this is what the sub-task is for. The pointer is drawn over the boot log with its black outline cutting into the letters beneath, which is compositing rather than the save-under's rectangle. `Compositor: back buffer 1280 by 800, 4000 KiB, 1 layer(s).` and `framebuffer reads 0`. |
+| 2026-09-06 | QEMU q35, the pointer walked twelve steps from the monitor | Passed. After crossing four lines of text the pointer stands at the far end of its path, the text it passed over is intact, and **there is no trail**: exactly four rows of the screendump hold a run of six or more white pixels, which is one pointer. |
+| 2026-09-06 | QEMU q35 — the compositor, **the negative tests** | Passed, all four, and two of them only because somebody looked. Marking a moved layer's new position alone left thirteen pointers along the path of one and fifty-two rows with white runs, while the self-test reported nothing; the self-test failing to give back the layers it took left the machine with no pointer and no failure. The procedure is Section 20.2. |
+| 2026-09-06 | QEMU q35 from the `raise a genuine page fault` entry | Passed. `KERNEL PANIC: An unresolved page fault was raised within the kernel.` and the screen holds `KERNEL PAGE FAULT` with its address, registers and account. The compositor is suspended when a fault screen takes the display; without that the next `KernelWriteString` — and the panic path makes several — would carry the back buffer over the top of the page just drawn. |

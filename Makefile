@@ -109,6 +109,7 @@ C_SOURCES := kernel/kernel.c \
              kernel/test/verify_framebuffer.c \
              kernel/test/verify_graphics.c \
              kernel/test/verify_console.c \
+             kernel/test/verify_compositor.c \
              kernel/test/verify_faultscreen.c \
              kernel/test/verify_mouse.c \
              kernel/test/verify_devices.c \
@@ -146,6 +147,7 @@ C_SOURCES := kernel/kernel.c \
              graphics/draw.c \
              graphics/font.c \
              graphics/console.c \
+             graphics/compositor.c \
              graphics/faultscreen.c \
              graphics/cursor.c
 

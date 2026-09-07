@@ -1,17 +1,16 @@
 /*
  * File: graphics/cursor.c
- * Purpose: Implements the pointer of sub-task 6.5: the shape drawn for this
- *          project, the store of the pixels it stands upon, the restoration of
- *          them as it moves, and the nested concealment by which anything else
- *          may draw while it is shown.
+ * Purpose: Implements the pointer: the shape drawn for this project, the small
+ *          surface and coverage mask it is rendered into once, and the
+ *          compositor layer through which it appears over everything else.
  * Key functions: CursorInitialise, CursorShow, CursorHide, CursorMoveTo,
- *          CursorConceal, CursorReveal, CursorIsVisible, CursorX, CursorY,
- *          CursorShapeIsOpaque, CursorShapeIsInterior, CursorReport.
+ *          CursorIsVisible, CursorX, CursorY, CursorShapeIsOpaque,
+ *          CursorShapeIsInterior, CursorReport.
  * References:
- *   - docs/devices/MOUSE.md, Sections 7 and 8: the design of the pointer, the
- *     save-under, and every assertion made upon them.
- *   - docs/design/GRAPHICS.md, Section 26: the same, seen from the drawing it
- *     is built upon.
+ *   - docs/design/GRAPHICS.md, Section 26: the shape and the two-mask encoding
+ *     of it; Section 27.4: what sub-task 6.6 removed from this file and why.
+ *   - docs/devices/MOUSE.md, Sections 7 and 8: the pointer as the mouse driver
+ *     sees it, and every assertion made upon it.
  *   - PROJECT_GUIDELINES.md, Section 2: no code or artwork is copied. The shape
  *     below was drawn for this project, in the same way and for the same reason
  *     as the face of sub-task 6.4.
@@ -29,30 +28,31 @@
  *   and a fixed background — is a pointer that works upon the boot log and
  *   disappears the moment anything is drawn.
  *
- * The save-under, and its one real limitation.
+ * What sub-task 6.6 took out of this file.
  *
- *   There is one surface until sub-task 6.6, so what the pointer covers must be
- *   read back before it is drawn and written again before it is drawn elsewhere.
- *   Reading is the expensive half: the framebuffer is mapped write-combining and
- *   reads from write-combining memory are uncached, which is the same fact that
- *   made the console's scroll the costly operation in Section 23. It is 216
- *   pixels and is paid once per movement, not once per packet — see CursorMoveTo.
+ *   Until the compositor there was one surface, so what the pointer covered had
+ *   to be read back before it was drawn and written again before it was drawn
+ *   elsewhere. That store was correct only while nothing else drew, so the rest
+ *   of the kernel had to declare that it was about to — KernelWriteString
+ *   concealed a pointer it had no business knowing existed, the concealment had
+ *   to nest, and the fault screens had to hide what they could not reveal.
  *
- *   The store is correct only while nothing else draws upon the surface, and
- *   nothing here can detect a violation: every pixel involved holds a value that
- *   something meant to write. CursorConceal and CursorReveal are how the rest of
- *   the kernel declares that it is about to draw, and KernelWriteString — which
- *   is already the one routine permitted to name an output device — is where the
- *   declaration is actually made.
+ *   None of it remains. The pointer is rendered once into a surface of its own
+ *   with a coverage mask beside it, and the compositor composes it over the back
+ *   buffer as the changed region is carried to the display. What is beneath the
+ *   pointer is never overwritten, so there is nothing to save, nothing to
+ *   restore and nothing to declare. What survived is what Section 26.5
+ *   predicted would: the shape, the two-mask encoding, and a position that
+ *   belongs to the mouse driver and is merely reflected here.
  *
  * Concurrency. The pointer is moved by whoever drains the mouse's event buffer,
- * which is not an interrupt handler, and is concealed by whoever writes to the
- * console, which may be one. The concealment count is therefore the field a
- * handler and the main flow both touch; from sub-task 6.13 it requires the
- * spinlock governing the surface, together with the drawing it guards.
+ * which is not an interrupt handler. Nothing else touches this file's state, the
+ * concealment that two parties shared having gone with the save-under.
  */
 
 #include <oxys/cursor.h>
+#include <oxys/compositor.h>
+#include <oxys/framebuffer.h>
 #include <oxys/graphics.h>
 #include <oxys/kernel.h>
 
@@ -121,11 +121,28 @@ static const uint16_t CursorInterior[CURSOR_HEIGHT] = {
  */
 _Static_assert(CURSOR_WIDTH <= 16, "A cursor row is held in a 16-bit word.");
 
-/* The surface the pointer is drawn upon, and whether one was adopted. */
-static GraphicsSurface *CursorTarget;
+/*
+ * The pointer, rendered once.
+ *
+ * The two bitmaps above are the shape as a person edits it; these are the shape
+ * as the compositor consumes it — a surface of pixels and a byte of coverage
+ * beside each. The conversion happens once, at initialisation, because the shape
+ * does not change and a compositor that re-derived it from the bitmaps at every
+ * presentation would be doing the same arithmetic sixty times a second to reach
+ * the same answer.
+ *
+ * The coverage is a byte and not a bit, so that a shape with a soft edge needs
+ * no change here — only a table with values between. Nothing yet has one.
+ */
+static uint32_t CursorPixels[CURSOR_HEIGHT * CURSOR_WIDTH];
+static uint8_t CursorCoverage[CURSOR_HEIGHT * CURSOR_WIDTH];
+static GraphicsSurface CursorImage;
 static bool CursorAvailable;
 
-/* The two colours, encoded for that surface. */
+/* The layer the compositor knows the pointer by. */
+static size_t CursorLayer = COMPOSITOR_LAYER_NONE;
+
+/* The two colours, encoded for the display. */
 static uint32_t CursorOutlineColour;
 static uint32_t CursorInteriorColour;
 
@@ -134,32 +151,10 @@ static int32_t CursorPositionX;
 static int32_t CursorPositionY;
 static bool CursorVisible;
 
-/*
- * The depth of concealment. Zero means nothing is drawing; above zero the
- * pointer is off the surface however visible it is meant to be.
- *
- * It is a count and not a flag because the situations nest, and a flag would let
- * the inner reveal put the pointer back in the middle of the outer party's
- * drawing. See <oxys/cursor.h>.
- */
-static uint32_t CursorConcealment;
-
-/*
- * The pixels the pointer presently stands upon, and where they came from.
- *
- * `CursorSavedValid` is not redundant with the visibility: the pointer may be
- * visible and concealed, in which case nothing is saved and nothing must be put
- * back. Restoring an unsaved store would paint eighteen rows of whatever the
- * array last held.
- */
-static uint32_t CursorSaved[CURSOR_HEIGHT][CURSOR_WIDTH];
-static int32_t CursorSavedX;
-static int32_t CursorSavedY;
-static bool CursorSavedValid;
-
-/* Accounting. */
-static uint64_t CursorDraws;
-static uint64_t CursorRestores;
+/* Accounting: how many times the pointer has actually moved, which is not how
+ * many packets the mouse sent — a movement that ends where it began costs
+ * nothing and is counted as nothing. */
+static uint64_t CursorMoves;
 
 /* Whether the pixel at this column and row is covered by the pointer at all. */
 bool CursorShapeIsOpaque(int32_t column, int32_t row)
@@ -184,109 +179,80 @@ bool CursorShapeIsInterior(int32_t column, int32_t row)
 }
 
 /*
- * Records the pixels the pointer is about to cover.
+ * Renders the shape into the surface the compositor will draw from.
  *
- * The whole rectangle is saved and not merely the opaque pixels within it. The
- * saving is a read of the surface either way, and a rectangle is one loop with
- * no test in it, where a shape would be a loop that consulted the mask twice —
- * once here and once in the restore — and would have to agree with itself both
- * times about a shape that may have been edited in between.
- *
- * Pixels outside the surface are read as zero by GraphicsPixelAt and written
- * back by GraphicsPutPixel to nowhere, the clip refusing them. A pointer half
- * off the edge therefore needs no special case here.
+ * A pixel the pointer does not cover is given a coverage of zero and a colour of
+ * zero. The colour of an uncovered pixel is never read — the compositor skips it
+ * upon the coverage — but it is set all the same, so that a fault in the mask
+ * shows as a black rectangle rather than as whatever the array happened to hold,
+ * which is the difference between a visible fault and an intermittent one.
  */
-static void CursorSaveUnder(int32_t x, int32_t y)
+static void CursorRender(void)
 {
     for (int32_t row = 0; row < CURSOR_HEIGHT; ++row)
     {
         for (int32_t column = 0; column < CURSOR_WIDTH; ++column)
         {
-            CursorSaved[row][column] = GraphicsPixelAt(CursorTarget, x + column, y + row);
-        }
-    }
+            const size_t index = ((size_t)row * CURSOR_WIDTH) + (size_t)column;
 
-    CursorSavedX = x;
-    CursorSavedY = y;
-    CursorSavedValid = true;
-}
-
-/* Puts back what was saved, and forgets it. */
-static void CursorRestoreUnder(void)
-{
-    if (!CursorSavedValid)
-    {
-        return;
-    }
-
-    for (int32_t row = 0; row < CURSOR_HEIGHT; ++row)
-    {
-        for (int32_t column = 0; column < CURSOR_WIDTH; ++column)
-        {
-            GraphicsPutPixel(CursorTarget, CursorSavedX + column, CursorSavedY + row,
-                             CursorSaved[row][column]);
-        }
-    }
-
-    CursorSavedValid = false;
-    ++CursorRestores;
-}
-
-/* Draws the shape at the position, having saved what is beneath it. */
-static void CursorDrawAt(int32_t x, int32_t y)
-{
-    CursorSaveUnder(x, y);
-
-    for (int32_t row = 0; row < CURSOR_HEIGHT; ++row)
-    {
-        const uint16_t opacity = CursorOpacity[row];
-        const uint16_t interior = CursorInterior[row];
-
-        for (int32_t column = 0; column < CURSOR_WIDTH; ++column)
-        {
-            const uint16_t bit = (uint16_t)(1U << (CURSOR_WIDTH - 1 - column));
-
-            if ((opacity & bit) == 0U)
+            if (!CursorShapeIsOpaque(column, row))
             {
+                CursorPixels[index] = 0U;
+                CursorCoverage[index] = 0U;
                 continue;
             }
 
-            GraphicsPutPixel(CursorTarget, x + column, y + row,
-                             ((interior & bit) != 0U) ? CursorInteriorColour
-                                                      : CursorOutlineColour);
+            CursorPixels[index] = CursorShapeIsInterior(column, row) ? CursorInteriorColour
+                                                                     : CursorOutlineColour;
+            CursorCoverage[index] = 255U;
         }
     }
-
-    ++CursorDraws;
 }
 
-/* Whether the pointer ought to be standing upon the surface at this moment. */
-static bool CursorShouldBeDrawn(void)
+bool CursorInitialise(uint32_t outline, uint32_t interior)
 {
-    return CursorAvailable && CursorVisible && (CursorConcealment == 0U);
-}
-
-bool CursorInitialise(GraphicsSurface *surface, uint32_t outline, uint32_t interior)
-{
-    CursorTarget = NULL;
     CursorAvailable = false;
     CursorVisible = false;
-    CursorConcealment = 0U;
-    CursorSavedValid = false;
     CursorPositionX = 0;
     CursorPositionY = 0;
-    CursorDraws = 0U;
-    CursorRestores = 0U;
+    CursorMoves = 0U;
+    CursorLayer = COMPOSITOR_LAYER_NONE;
+    CursorOutlineColour = outline;
+    CursorInteriorColour = interior;
 
-    if ((surface == NULL) || (surface->pixels == NULL) || (surface->width == 0U) ||
-        (surface->height == 0U))
+    /*
+     * The pointer's own surface is four bytes to the pixel whatever the display
+     * is, because it is composed and not scanned out: the compositor reads it a
+     * pixel at a time through GraphicsPixelAt and writes the result in the
+     * display's format. A surface that matched the display would save nothing
+     * and would have to be rebuilt if the mode changed.
+     */
+    if (!GraphicsSurfaceInitialise(&CursorImage, CursorPixels, CURSOR_WIDTH, CURSOR_HEIGHT,
+                                   CURSOR_WIDTH * 4U, 4U))
     {
         return false;
     }
 
-    CursorTarget = surface;
-    CursorOutlineColour = outline;
-    CursorInteriorColour = interior;
+    CursorRender();
+
+    if (!CompositorIsActive())
+    {
+        /*
+         * No compositor, so no pointer. This is not a failure of the machine: it
+         * is a machine with no framebuffer, or one whose arena could not supply
+         * a back buffer, and upon such a machine there is nothing to point at.
+         */
+        return false;
+    }
+
+    CursorLayer = CompositorAddLayer(&CursorImage, CursorCoverage, CursorPositionX,
+                                     CursorPositionY);
+
+    if (CursorLayer == COMPOSITOR_LAYER_NONE)
+    {
+        return false;
+    }
+
     CursorAvailable = true;
 
     return true;
@@ -299,7 +265,17 @@ bool CursorIsAvailable(void)
 
 bool CursorIsVisible(void)
 {
-    return CursorVisible;
+    return CursorAvailable && CursorVisible;
+}
+
+const GraphicsSurface *CursorImageSurface(void)
+{
+    return CursorAvailable ? &CursorImage : NULL;
+}
+
+const uint8_t *CursorImageMask(void)
+{
+    return CursorCoverage;
 }
 
 void CursorShow(void)
@@ -310,11 +286,7 @@ void CursorShow(void)
     }
 
     CursorVisible = true;
-
-    if (CursorConcealment == 0U)
-    {
-        CursorDrawAt(CursorPositionX, CursorPositionY);
-    }
+    CompositorSetLayerVisible(CursorLayer, true);
 }
 
 void CursorHide(void)
@@ -325,87 +297,35 @@ void CursorHide(void)
     }
 
     CursorVisible = false;
-    CursorRestoreUnder();
+    CompositorSetLayerVisible(CursorLayer, false);
 }
 
 void CursorMoveTo(int32_t x, int32_t y)
 {
-    if (!CursorAvailable)
-    {
-        return;
-    }
-
-    /*
-     * A movement to where the pointer already is costs nothing. This is not a
-     * refinement: the mouse reports at a hundred packets a second and a hand at
-     * rest still produces the button packets, so without this the pointer would
-     * be erased and redrawn — 432 uncached reads and 216 writes — a hundred times
-     * a second for as long as nobody moved it.
-     */
     if ((x == CursorPositionX) && (y == CursorPositionY))
     {
-        return;
-    }
-
-    if (CursorShouldBeDrawn())
-    {
         /*
-         * The position is advanced before the repair and not after, which is
-         * what makes the saved coordinates load-bearing rather than a copy of
-         * the position: the pixels are put back where they came from, which by
-         * this point is no longer where the pointer is.
-         *
-         * Written the other way round the two would agree at every restore, and
-         * a restore that used the position instead of the saved coordinates
-         * would be indistinguishable from a correct one — until some later
-         * caller moved the pointer and repaired afterwards, at which point it
-         * would paint a rectangle of stale pixels over whatever stood at the new
-         * position and leave the old one holding an arrow for ever.
+         * A movement that ends where it began is not a movement. The mouse
+         * reports at a hundred packets a second and a hand at rest still
+         * produces them; without this the display would be told that the
+         * pointer's rectangle had changed a hundred times a second for a
+         * pointer that had not moved.
          */
-        CursorPositionX = x;
-        CursorPositionY = y;
-        CursorRestoreUnder();
-        CursorDrawAt(x, y);
-
         return;
     }
 
     CursorPositionX = x;
     CursorPositionY = y;
-}
+    ++CursorMoves;
 
-void CursorConceal(void)
-{
-    if (!CursorAvailable)
+    if (CursorAvailable)
     {
-        return;
-    }
-
-    /*
-     * Only the outermost concealment takes the pointer off the surface. The
-     * count is incremented first so that the test reads as the state after this
-     * call rather than before it.
-     */
-    ++CursorConcealment;
-
-    if ((CursorConcealment == 1U) && CursorVisible)
-    {
-        CursorRestoreUnder();
-    }
-}
-
-void CursorReveal(void)
-{
-    if (!CursorAvailable || (CursorConcealment == 0U))
-    {
-        return;
-    }
-
-    --CursorConcealment;
-
-    if ((CursorConcealment == 0U) && CursorVisible)
-    {
-        CursorDrawAt(CursorPositionX, CursorPositionY);
+        /*
+         * The compositor marks both where the pointer was and where it now is.
+         * That is the whole of what replaced the save-under, and it is one call
+         * rather than a read of 216 pixels followed by a write of them.
+         */
+        CompositorMoveLayer(CursorLayer, x, y);
     }
 }
 
@@ -419,36 +339,30 @@ int32_t CursorY(void)
     return CursorPositionY;
 }
 
-uint64_t CursorDrawCount(void)
+uint64_t CursorMoveCount(void)
 {
-    return CursorDraws;
-}
-
-uint64_t CursorRestoreCount(void)
-{
-    return CursorRestores;
+    return CursorMoves;
 }
 
 void CursorReport(void)
 {
-    KernelWriteString("Pointer: ");
-
     if (!CursorAvailable)
     {
-        KernelWriteString("no surface; nothing is drawn.\n");
+        KernelWriteString("Pointer: no compositor to draw upon.\n");
         return;
     }
 
+    KernelWriteString("Pointer: ");
     KernelWriteString(CursorVisible ? "shown" : "hidden");
     KernelWriteString(" at ");
     KernelWriteDecimal((uint64_t)(uint32_t)CursorPositionX);
     KernelWriteString(", ");
     KernelWriteDecimal((uint64_t)(uint32_t)CursorPositionY);
-    KernelWriteString("; drawn ");
-    KernelWriteDecimal(CursorDraws);
-    KernelWriteString(", restored ");
-    KernelWriteDecimal(CursorRestores);
-    KernelWriteString(", concealment ");
-    KernelWriteDecimal((uint64_t)CursorConcealment);
+    KernelWriteString("; ");
+    KernelWriteDecimal((uint64_t)CURSOR_WIDTH);
+    KernelWriteString(" by ");
+    KernelWriteDecimal((uint64_t)CURSOR_HEIGHT);
+    KernelWriteString(", composited, moves ");
+    KernelWriteDecimal(CursorMoves);
     KernelWriteString(".\n");
 }

@@ -253,9 +253,20 @@ the event buffer and moves the pointer once, and `CursorMoveTo` returns
 immediately where the position has not changed, which is what a stationary mouse
 still sending a hundred button packets a second requires.
 
-From sub-task 6.6 this disappears. With a back buffer the pointer is composited
-at the end of a frame and no pixels need saving; the save-under is what made a
-pointer possible one sub-task early, not a mechanism the kernel keeps.
+**Sub-task 6.6 removed all of it.** With a back buffer the pointer is composited
+as the changed region is carried to the display, so no pixels need saving, and
+the save-under turned out to be what made a pointer possible one sub-task early
+rather than a mechanism the kernel kept. Sections 7, 7.1 and 7.2 above describe
+the arrangement as it stood between sub-tasks 6.5 and 6.6 and are left standing:
+what they say about *why* a pointer needs more than a bitmap is still true, and
+the cost they describe is what a reader should understand the compositor to have
+removed. What replaced them is `GRAPHICS.md`, Section 27.4.
+
+One thing carried over unchanged and is worth naming, because the compositor did
+not make it unnecessary: `CursorMoveTo` still returns immediately where the
+position has not changed. A stationary mouse sends a hundred packets a second and
+each would otherwise mark two rectangles as changed, so the display would be
+carried out a hundred times a second for a pointer standing still.
 
 ## 8. Verification
 
@@ -286,25 +297,32 @@ driver's own report and skipped where no mouse was found. A machine may genuinel
 have none, and the driver is required to discover that without blocking;
 reaching the assertion at all is evidence that it did.
 
-### 8.2 The pointer, upon a surface composed in memory
+### 8.2 The pointer, and what sub-task 6.6 changed about asserting it
 
-`KernelVerifyCursor` draws upon a surface whose pitch exceeds its width and whose
-padding holds a sentinel, as `verify_graphics.c` does, so that a draw computing an
-address from the width is caught.
+Until sub-task 6.6 the pointer drew itself upon a surface and kept the pixels
+beneath it, so what there was to assert was the drawing and the restoration: a
+trail left behind, a background overwritten, a concealment that failed to nest.
+The surface was composed in memory with a pitch exceeding its width, so that a
+draw computing an address from the width was caught writing into the padding.
 
-| Assertion | The silent failure it catches |
-| --------- | ----------------------------- |
-| Every interior pixel is opaque | The two masks drifting apart: a pixel the interior mask carries and the draw never reaches |
-| The shape is not empty, and has an interior | A table cleared by an edit |
-| The hot spot is part of the shape | A pointer indicating a pixel it does not cover |
-| Opaque pixels hold their colour **and transparent ones hold the background** | A pointer drawn as a solid rectangle, which any test looking only at what it should have drawn would pass |
-| Nothing is written into the row padding | An address computed from the width |
-| Showing twice draws once | A second save recording the pointer as the display beneath it, losing the display for good |
-| A move restores the old position | A trail of arrows behind the pointer |
-| A pointer at the edge draws what fits and no more | Drawing outside the surface |
-| One reveal of two concealments does nothing | A flag instead of a count |
-| A move made while concealed takes effect on reveal | The pointer drawing itself into somebody else's drawing |
-| Draws equal restores when hidden | A save-under taken twice or put back twice |
+None of that exists now. The pointer is rendered once and composited, so what is
+left to assert here is the **shape** and the **rendering**, and the compositing
+is asserted where it lives — `GRAPHICS.md`, Section 27.5.
+
+| Property asserted | The silent failure it would catch |
+| ----------------- | --------------------------------- |
+| Every interior pixel is also opaque | The two bitmaps are separate data and nothing else makes them agree. An interior pixel that were not opaque is a hole in the shape drawn in the interior colour, invisible in the picture comments because each is written beside its own row |
+| The hot spot is part of the shape | A pointer whose tip is transparent points at a pixel it does not draw, and cannot be aimed |
+| The shape covers neither everything nor nothing | Either is what a mask read with the wrong bit order produces |
+| The rendered surface is the size of the shape | — |
+| Coverage follows the opacity bitmap exactly | A mask taken from the wrong bitmap gives a pointer that is a solid rectangle |
+| Each covered pixel is the colour its interior bit chooses | An interior test inverted gives a pointer drawn inside out, which upon a black background looks almost right |
+| Showing twice leaves it shown; a move goes where it was sent | — |
+| A move to where the pointer already stands is **not** counted | Section 7.3: the display carried out a hundred times a second for a hand at rest |
+
+The rendering is worth its own assertions because it is a conversion between two
+representations of the same thing, and those are where a shape silently loses a
+column or gains one.
 
 ### 8.3 The negative tests
 
@@ -324,6 +342,12 @@ the damage could not show. The order was changed — position first, repair seco
 — which makes the saved coordinates load-bearing and the test meaningful. See
 Section 7.2.
 
+The last two applied to the save-under, which sub-task 6.6 removed, and they are
+recorded here as what was done rather than as a procedure to repeat: there is
+nothing left to damage in that way. The equivalent fault now lives in the
+compositor — a layer that marks only where it has arrived and not where it was —
+and is provoked and recorded in `../project/TESTING.md`, Section 20.
+
 ## 9. Observed state
 
 Under QEMU 1280 by 800, with no mouse moved:
@@ -334,7 +358,7 @@ Under QEMU 1280 by 800, with no mouse moved:
 PS/2 mouse: present with a wheel, four-byte packets, line unmasked.
 PS/2 mouse: bytes 316, packets 78, mis-framed 2, overflowed 1, discarded 4.
 PS/2 mouse: pointer at 640, 400 within 1280 by 800, buttons 0x0.
-Pointer: hidden at 640, 400; drawn 0, restored 0, concealment 0.
+Pointer: hidden at 640, 400; 12 by 18, composited, moves 0.
 ```
 
 Every figure but the position is the self-test's own work, and is named here so
