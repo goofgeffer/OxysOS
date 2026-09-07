@@ -117,6 +117,18 @@ PhysicalAddress PagingTranslate(VirtualAddress address);
 bool PagingAddressIsWritable(VirtualAddress address);
 
 /*
+ * Reports whether the mapping governing a virtual address permits privilege
+ * level 3 to touch it, accumulating the user flag across all four levels by the
+ * same conjunction rule.
+ *
+ * Returns false if the address is not mapped. This is what the system-call
+ * argument validation asks of every address a caller supplies: a kernel that
+ * copied from a page merely because it was mapped would read its own memory on
+ * behalf of a caller that could never have reached it.
+ */
+bool PagingAddressIsUser(VirtualAddress address);
+
+/*
  * Establishes a 4 KiB mapping in the kernel hierarchy and invalidates any stale
  * translation for the address. The flags are those of Table 4-15;
  * PAGE_ENTRY_PRESENT is supplied by the implementation.

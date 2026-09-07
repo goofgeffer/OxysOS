@@ -122,6 +122,7 @@ void KernelVerifyGraphics(void);
 /* Phase 6, sub-task 6.1: the descriptors, the task state segment, the interrupt
  * stack table and the three registers that configure SYSCALL. */
 void KernelVerifyPrivilege(void);
+void KernelVerifySyscall(void);
 
 /* Phases 3 and 4: the devices. */
 void KernelVerifyPic(void);

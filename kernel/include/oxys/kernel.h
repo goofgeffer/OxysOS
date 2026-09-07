@@ -50,6 +50,16 @@ extern char KernelTextEnd[];
  * mapped once Phase 2, sub-task 2.4, has run. The region occupies the 64 TiB
  * beginning at this address; refer to docs/design/MEMORY-LAYOUT.md, Section 2.
  */
+/*
+ * The name and version of the system.
+ *
+ * They live here rather than in kernel.c because two things now present them:
+ * the banner at every start, and the system call by which a program asks what it
+ * is running upon. A second copy would be a second thing to forget to change.
+ */
+#define OXYS_SYSTEM_NAME    "Oxys-OS"
+#define OXYS_VERSION_STRING "0.1.0"
+
 #define DIRECT_MAP_BASE UINT64_C(0xFFFF800000000000)
 
 /*

@@ -255,29 +255,18 @@ The bits are named individually in `syscall.h` and combined by `|` rather than a
 constant `0x47700` being written down, because the constant would record the
 answer and lose every one of the reasons above.
 
-## 5. The entry point, and why it is a placeholder
+## 5. The entry point, as it was and as it is
 
-`SyscallEntry` in `kernel/cpu/syscall_entry.asm` records the selectors and flags
-the processor loaded, increments a counter, restores `RFLAGS` from `R11` and
-jumps to `RCX`. Sub-task 6.7 replaces it entirely. Two of its properties are
-deliberate and would be defects in the real path:
+*Written at sub-task 6.1 and left standing, the answer following.*
 
-**It does not switch stacks.** `SYSCALL` leaves `RSP` exactly as the caller had
-it — this is the difference between `SYSCALL` and an interrupt gate, and the
-reason `IF` must be in the mask. A genuine entry from privilege level 3 would
-arrive here executing kernel code upon a user stack, and the real path's first
-act must be to leave it, by `SWAPGS` to reach the per-processor data and a load
-of the kernel stack from it. Nothing enters here from privilege level 3, there
-being no user program until sub-task 6.10, and the only caller is the self-test,
-which executes `SYSCALL` from privilege level 0 where `RSP` is already a kernel
-stack. The two pushes are safe for that caller and for no other.
+> `SyscallEntry` in `kernel/cpu/syscall_entry.asm` records the selectors and
+> flags the processor loaded, increments a counter, restores `RFLAGS` from `R11`
+> and jumps to `RCX`. Sub-task 6.7 replaces it entirely. Two of its properties
+> are deliberate and would be defects in the real path: it does not switch
+> stacks, and it does not return by `SYSRET`.
 
-**It does not return by `SYSRET`.** `SYSRET` returns to privilege level 3
-unconditionally, forcing the RPL of the selectors it loads to 3 whatever
-privilege it was reached from. Returning by it would drop the self-test into user
-mode, with no user mapping to execute in and no user stack. Control is returned
-instead by `push r11; popfq; jmp rcx`, which arrives back in the caller at
-privilege level 0.
+Sub-task 6.7 replaced it, and both properties were indeed the defects the note
+called them. What replaced them is Section 9.
 
 ## 6. Where this stands in the boot sequence
 
@@ -464,7 +453,177 @@ its last byte. The report prints selectors with RPL 3 applied — `0x2B` and `0x
 — because those are the values a program will hold, not the `0x28` and `0x20` in
 the table.
 
-## 9. Present limitations
+## 9. The system call, of sub-task 6.7
+
+Sub-task 6.1 established that the transition was *configured*. This one
+establishes what happens when it is taken.
+
+### 9.1 The first three instructions
+
+They are the whole of the security of the path and none may be moved.
+
+```
+    swapgs
+    mov     [gs:BLOCK_USER_STACK], rsp
+    mov     rsp, [gs:BLOCK_KERNEL_STACK]
+```
+
+**`SWAPGS` first**, because until it has run there is no addressable kernel state
+at all. `RSP` belongs to the caller, every general register belongs to the
+caller, and `GS` names whatever the caller left in it. `SWAPGS` exchanges
+`GS.base` with `IA32_KERNEL_GS_BASE` — a register privilege level 3 cannot write
+— and it is the only instruction here that needs nothing to work.
+
+**The caller's `RSP` is stored second**, because there is nowhere else to put it:
+every register is the caller's and must be given back, and there is no stack yet
+to push it onto. The per-processor block is the one addressable place.
+
+**The kernel stack is loaded third**, and only then may anything be pushed. A
+path that pushed before switching would be writing to the caller's stack while
+executing at privilege level 0 — which is a kernel that writes wherever privilege
+level 3 asks it to.
+
+The kernel stack is the one the task state segment names, which is the same stack
+an interrupt from privilege level 3 arrives upon. Deliberately the same: a system
+call and an interrupt are both entries to the kernel from a user program, and a
+kernel using two stacks for them would have to say which was which at every point
+that examined one.
+
+### 9.2 Where the arguments are
+
+| Register | Carries |
+| -------- | ------- |
+| `RAX` | The call number on entry, the result on return |
+| `RDI`, `RSI`, `RDX` | Arguments one to three |
+| `R10` | Argument **four** |
+| `R8`, `R9` | Arguments five and six |
+
+The System V convention passes the fourth integer argument in `RCX`, and
+`SYSCALL` destroys `RCX`: it puts the return address there. The fourth argument
+therefore moves to `R10` and everything else stands. This is the convention Linux
+adopted and it is adopted here for the same reason — there is no other register
+the instruction leaves alone.
+
+The whole register set is saved and not merely the arguments, because everything
+belongs to the caller and `SYSRET` restores none of it. A register the kernel
+used and did not put back is a register a user program finds changed for no
+reason it can see, which is the least debuggable class of fault there is.
+
+**The frame's field order and the assembly's push order are one thing stated
+twice**, and they are held together by `_Static_assert` upon the offsets. The
+assembler cannot see the C structure and would otherwise agree with it only by
+inspection; a field reordered in one and not the other makes the dispatcher read
+one register and call it another.
+
+### 9.3 Validating a caller's arguments
+
+Four things are asked of every range a caller names, and each admits a distinct
+attack.
+
+| Refused | Because |
+| ------- | ------- |
+| A length of zero, or a null address | Meaningless, and cheaper to refuse than to reason about |
+| A range that **wraps** past the end of the address space | The sum a careless check performs is *smaller* than the address, so a range covering the whole machine appears to lie within bounds. The test is written as a subtraction — the length against what remains below the limit — which cannot overflow |
+| Any byte at or above `SYSCALL_USER_LIMIT` | The boundary is the sign bit of a canonical address, so the test is one comparison, and it is made **before** the page tables are consulted: a kernel address that happened to be mapped and marked user would otherwise be accepted by the walk alone |
+| Any page not mapped, not marked accessible to privilege level 3, or — for a write — not writable | A kernel that copied from a page merely because it was mapped would read its own memory on behalf of a caller that named an address it could never have reached itself |
+
+**Every page is walked, not the first.** A range may begin upon a page that is
+mapped and end upon one that is not, and a kernel that checked the first byte
+alone would begin a copy it had promised to finish and fault in the middle of it.
+
+**The bytes are copied once.** A kernel that read a caller's memory twice — once
+to validate and once to use — would be reading memory another processor may have
+changed in between, so what was validated and what was used need not be the same
+bytes. From sub-task 6.14 there is a second processor to open that window.
+
+#### The user bit, which was missing above the leaf
+
+Establishing the first page accessible to privilege level 3 found a real defect
+in the paging of Phase 2. Intermediate entries were created "permissive — present
+and writable", and the user bit was not among what they were given.
+
+Section 4.6 of Volume 3A provides that the permissions of a translation are the
+**conjunction** of those at every level. A leaf marked accessible to privilege
+level 3 beneath a directory that is not is therefore a page privilege level 3
+cannot reach — a mapping that looks correct at the only level anybody inspects,
+and that faults at the first instruction of the first user program. The comment
+in `PagingObtainTable` stated the rule correctly and the code applied it to the
+write permission alone.
+
+It now inherits the user bit as well, and adds it to a table that already exists,
+because which mapping came first is an accident of ordering and must not decide
+whether the second one works. Granting it to an intermediate grants nothing by
+itself: a kernel page beneath the same directory still has no user bit at its
+leaf, so the conjunction still refuses it.
+
+This would have been found at sub-task 6.10 as a triple fault with no obvious
+cause. It was found here because the self-test needed a page it could validate
+against and made a real one.
+
+### 9.4 Why the self-test does not execute SYSCALL
+
+The entry path returns by `SYSRET`, and `SYSRET` returns to privilege level 3
+unconditionally. A self-test executing `SYSCALL` from the kernel would not return
+to the kernel: it would arrive in user mode with no user mapping to execute in.
+
+Until this sub-task the test did execute it, because the placeholder returned by
+`push r11; popfq; jmp rcx` and so came back at privilege level 0. That assertion
+is therefore **lost**, and its loss is recorded rather than disguised: what it
+established — that the processor loads the selectors `IA32_STAR` names and that
+`IA32_FMASK` clears the interrupt flag — is asserted upon the configuration
+still, and observed for the first time in fact at sub-task 6.10.
+
+The alternative was a branch in the entry path returning differently for a caller
+the kernel trusts. It was not written, and the reason is worth stating as a rule:
+**a test hook in the system-call entry path is indistinguishable from a
+privilege-escalation bug.** Anything that decides "this caller may be returned to
+differently" is the thing an attacker wants to reach, and a kernel that has one
+for the convenience of its own tests has one.
+
+What remains asserted is not small. The dispatcher is an ordinary function of an
+ordinary structure, so the table, the refusals and the whole of the argument
+validation — which is the part that decides whether a hostile caller can make the
+kernel read or write memory it chose — are asserted directly.
+
+### 9.5 Verification
+
+| Property asserted | The silent failure it would catch |
+| ----------------- | --------------------------------- |
+| A number within the table is valid and one beyond it is not | The number indexes the table, so a bound wrong by one calls whatever function follows the array |
+| The greatest number is refused | The number is unsigned, so a caller passing a negative one passes an enormous one and meets the same comparison — which is why there is only one |
+| A call beyond the table returns `ENOSYS` rather than falling through | A call added to the table and not to the dispatch would return whatever the caller had in `RAX`, which is the number it asked for and looks like success |
+| A range wrapping past the end of the address space is refused | Section 9.3 |
+| A range beginning below the limit and ending above it is refused | What a check of the starting address alone admits: a legitimate address reaching the kernel's memory |
+| An address in the kernel's half is refused | — |
+| A mapped, user-accessible page is **accepted** | The other half of the assertion, and the one that found the missing user bit. A validation that refused everything would satisfy every row above |
+| A range straddling a mapped page and an unmapped one is refused | A copy begun that cannot be finished |
+| The last byte of a page is accepted and the first byte beyond it is not | The boundary from both sides |
+| A write from the kernel's own memory is refused | The kernel printing its own memory back to a caller that asked for it |
+| The version written into the kernel's own memory is refused | The same, in the direction that corrupts rather than discloses |
+| A descriptor that names nothing is refused before the buffer is examined | — |
+| The page the test composed is gone afterwards | A self-test leaving the kernel with a page privilege level 3 can reach for the rest of the boot |
+
+The test composes a real page — a frame, mapped low with the user bit — because
+the second half of the validation cannot be asserted against a description. That
+page is the only user-accessible mapping this kernel has ever had.
+
+### 9.6 The calls, and why there are three
+
+There is no C library to agree with and no process to act upon, so the table is
+what can be implemented honestly today: `write`, which exercises validation of a
+range the kernel **reads**; `version`, which exercises a range the kernel
+**writes**; and `ticks`, which takes no argument at all and shows that a call
+needing no validation performs none.
+
+`exit`, `fork`, `execve` and the rest are not stubbed. A stub returning an error
+is a promise the kernel does not keep, and they arrive with the process control
+block at sub-task 6.9 and the process calls at 6.11.
+
+The numbers and the error values are this kernel's own. Inventing agreement with
+a library that does not exist would be inventing a compatibility nobody had
+tested.
+
+## 10. Present limitations
 
 1. **The entry point is a placeholder.** It records and returns; it dispatches
    nothing, validates nothing and switches no stack. Sub-task 6.7 replaces it.

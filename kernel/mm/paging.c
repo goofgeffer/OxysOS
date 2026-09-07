@@ -169,18 +169,47 @@ static PhysicalAddress PagingAllocateTable(void)
  * Returns the physical address of the structure referenced by the given entry of
  * the given table, allocating and installing one if the entry is not present.
  */
-static PhysicalAddress PagingObtainTable(PhysicalAddress table, size_t index)
+static PhysicalAddress PagingObtainTable(PhysicalAddress table, size_t index,
+                                         uint64_t flags)
 {
+    /*
+     * An intermediate entry is created as permissive as anything beneath it may
+     * need, and the restriction is applied at the leaf.
+     *
+     * That is the architectural rule of Section 4.6: the permissions of a
+     * translation are the conjunction of those at every level, so a restrictive
+     * intermediate restricts *every* mapping beneath it and not merely this one.
+     * The write permission has always been given here for that reason. The user
+     * bit was not, and had to be: a leaf marked accessible to privilege level 3
+     * beneath a directory that is not is a page privilege level 3 cannot reach —
+     * which is a mapping that looks correct at the only level anybody inspects
+     * and faults at the first instruction of the first user program.
+     *
+     * Giving the bit to an intermediate grants nothing by itself. A kernel page
+     * beneath the same directory still has no user bit at its leaf, so the
+     * conjunction still refuses it; the leaf remains the authority and the
+     * intermediate merely stops overriding it.
+     */
+    const uint64_t inherited =
+        PAGE_ENTRY_PRESENT | PAGE_ENTRY_WRITABLE | (flags & PAGE_ENTRY_USER);
     uint64_t *entries = PagingTableAt(table);
 
     if ((entries[index] & PAGE_ENTRY_PRESENT) == 0U)
     {
         PhysicalAddress allocated = PagingAllocateTable();
 
-        entries[index] = allocated | PAGE_ENTRY_PRESENT | PAGE_ENTRY_WRITABLE;
+        entries[index] = allocated | inherited;
 
         return allocated;
     }
+
+    /*
+     * A table that already exists may have been made for a kernel mapping and
+     * now be asked to admit a user one. The bit is added rather than assumed,
+     * because which mapping came first is an accident of the order things are
+     * established in and must not decide whether the second one works.
+     */
+    entries[index] |= (flags & PAGE_ENTRY_USER);
 
     return entries[index] & PAGE_ENTRY_ADDRESS_MASK;
 }
@@ -190,18 +219,19 @@ static PhysicalAddress PagingObtainTable(PhysicalAddress table, size_t index)
  * physical frame, with the given flags, creating intermediate structures as
  * required.
  *
- * The intermediate entries are created permissive - present and writable - and
- * the restriction is applied at the leaf. This is the architectural rule: Intel
- * SDM, Volume 3A, Section 4.6, provides that the permissions of a translation
- * are the conjunction of those at every level, so a restrictive intermediate
- * entry would restrict every mapping beneath it, not merely this one.
+ * The intermediate entries are created as permissive as the leaf requires and
+ * the restriction is applied there. This is the architectural rule: Intel SDM,
+ * Volume 3A, Section 4.6, provides that the permissions of a translation are the
+ * conjunction of those at every level, so a restrictive intermediate entry would
+ * restrict every mapping beneath it, not merely this one. See
+ * PagingObtainTable for what that means for the user bit in particular.
  */
 static void PagingMapPage(PhysicalAddress root, VirtualAddress virtual_address,
                           PhysicalAddress physical_address, uint64_t flags)
 {
-    PhysicalAddress level3 = PagingObtainTable(root, PagingLevel4Index(virtual_address));
-    PhysicalAddress level2 = PagingObtainTable(level3, PagingLevel3Index(virtual_address));
-    PhysicalAddress level1 = PagingObtainTable(level2, PagingLevel2Index(virtual_address));
+    PhysicalAddress level3 = PagingObtainTable(root, PagingLevel4Index(virtual_address), flags);
+    PhysicalAddress level2 = PagingObtainTable(level3, PagingLevel3Index(virtual_address), flags);
+    PhysicalAddress level1 = PagingObtainTable(level2, PagingLevel2Index(virtual_address), flags);
     uint64_t *entries = PagingTableAt(level1);
 
     entries[PagingLevel1Index(virtual_address)] =
@@ -216,8 +246,8 @@ static void PagingMapPage(PhysicalAddress root, VirtualAddress virtual_address,
 static void PagingMapLargePage(PhysicalAddress root, VirtualAddress virtual_address,
                                PhysicalAddress physical_address, uint64_t flags)
 {
-    PhysicalAddress level3 = PagingObtainTable(root, PagingLevel4Index(virtual_address));
-    PhysicalAddress level2 = PagingObtainTable(level3, PagingLevel3Index(virtual_address));
+    PhysicalAddress level3 = PagingObtainTable(root, PagingLevel4Index(virtual_address), flags);
+    PhysicalAddress level2 = PagingObtainTable(level3, PagingLevel3Index(virtual_address), flags);
     uint64_t *entries = PagingTableAt(level2);
 
     entries[PagingLevel2Index(virtual_address)] =
@@ -520,12 +550,28 @@ PhysicalAddress PagingTranslate(VirtualAddress address)
     return (entry & PAGE_ENTRY_ADDRESS_MASK) + (address & (PAGE_SIZE - 1U));
 }
 
-bool PagingAddressIsWritable(VirtualAddress address)
+/*
+ * Whether every level of the translation of an address carries a permission bit.
+ *
+ * Intel SDM, Volume 3A, Section 4.6 provides that the permissions of a
+ * translation are the **conjunction** of those at every level, so a page marked
+ * writable beneath a directory that is not is not writable. Accumulating by
+ * conjunction is therefore the whole of the arithmetic, and consulting the last
+ * level alone — which is the obvious implementation — reports a permission the
+ * processor will not grant.
+ *
+ * The same walk answers two questions and is written once. The user bit governs
+ * whether privilege level 3 may touch the page at all, and is what the system
+ * call argument validation of sub-task 6.7 asks about: a kernel that copied from
+ * a page merely because it was mapped would read its own memory on behalf of a
+ * caller that named an address it could never have reached itself.
+ */
+static bool PagingAddressPermits(VirtualAddress address, uint64_t permission)
 {
     const uint64_t *entries;
     uint64_t entry;
     PhysicalAddress table;
-    uint64_t accumulated = PAGE_ENTRY_WRITABLE;
+    uint64_t accumulated = permission;
 
     entries = PagingTableAt(PagingActiveTable);
     entry = entries[PagingLevel4Index(address)];
@@ -555,7 +601,7 @@ bool PagingAddressIsWritable(VirtualAddress address)
 
     if ((entry & PAGE_ENTRY_LARGE) != 0U)
     {
-        return (accumulated & PAGE_ENTRY_WRITABLE) != 0U;
+        return (accumulated & permission) != 0U;
     }
 
     table = entry & PAGE_ENTRY_ADDRESS_MASK;
@@ -567,8 +613,18 @@ bool PagingAddressIsWritable(VirtualAddress address)
     }
     accumulated &= entry;
 
-    return (accumulated & PAGE_ENTRY_WRITABLE) != 0U;
+    return (accumulated & permission) != 0U;
 }
+bool PagingAddressIsWritable(VirtualAddress address)
+{
+    return PagingAddressPermits(address, PAGE_ENTRY_WRITABLE);
+}
+
+bool PagingAddressIsUser(VirtualAddress address)
+{
+    return PagingAddressPermits(address, PAGE_ENTRY_USER);
+}
+
 
 /*
  * Locates the page-table entry that maps the given address, if the address is

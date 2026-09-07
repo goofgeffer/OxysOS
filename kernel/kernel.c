@@ -87,13 +87,6 @@
 #include <oxys/ext2_vfs.h>
 
 /*
- * The name and version of the system, presented upon the console and emitted
- * upon the serial port at every start.
- */
-#define OXYS_SYSTEM_NAME    "Oxys-OS"
-#define OXYS_VERSION_STRING "0.1.0"
-
-/*
  * Halts the processor permanently with interrupts masked. Execution does not
  * proceed beyond this function. The halt is placed within a loop because the
  * HLT instruction resumes execution upon a non-maskable interrupt or a system
@@ -959,13 +952,23 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
     CursorReport();
 
     /*
-     * The self-test of sub-task 6.1 runs here rather than beside the
-     * initialisation, because half of it must execute SYSCALL with the interrupt
-     * flag set: the assertion that IA32_FMASK clears that flag says nothing at
-     * all if the flag was clear to begin with, and this is the first point in
-     * the sequence at which it may be set safely.
+     * The apparatus of a privilege transition, and the system calls that will
+     * arrive through it.
+     *
+     * The first asserts the configuration — the descriptors, the task state
+     * segment's stacks, and the three registers that decide where SYSCALL goes
+     * and what it clears. It executed SYSCALL until sub-task 6.7 and no longer
+     * does; the reason is recorded where the routine that did it stood.
+     *
+     * The second asserts the dispatch and the validation of a caller's
+     * arguments, which need no transition: the dispatcher is an ordinary
+     * function of an ordinary structure. It composes a page accessible to
+     * privilege level 3 in order to have something real to validate against, and
+     * takes it away again, so it runs after the frame allocator and the paging
+     * hierarchy are both established and asserted.
      */
     KernelVerifyPrivilege();
+    KernelVerifySyscall();
 
     /*
      * Phase 4 begins here. The serial adapter was configured in the first

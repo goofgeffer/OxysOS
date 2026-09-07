@@ -106,6 +106,7 @@ C_SOURCES := kernel/kernel.c \
              kernel/test/verify_memory.c \
              kernel/test/verify_interrupts.c \
              kernel/test/verify_privilege.c \
+             kernel/test/verify_syscall.c \
              kernel/test/verify_framebuffer.c \
              kernel/test/verify_graphics.c \
              kernel/test/verify_console.c \

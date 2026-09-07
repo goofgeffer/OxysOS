@@ -139,19 +139,6 @@ static uint64_t KernelSystemSegmentLimit(uint64_t low)
     return (low & UINT64_C(0xFFFF)) | (((low >> 48) & UINT64_C(0xF)) << 16);
 }
 
-/*
- * Executes SYSCALL.
- *
- * RCX and R11 are destroyed by the instruction itself — it places the return
- * address in the one and the flags in the other — so both are declared clobbered
- * rather than being saved, and the condition codes with them, the entry point
- * restoring the flags it was given.
- */
-static void KernelExecuteSystemCall(void)
-{
-    __asm__ __volatile__("syscall" : : : "rcx", "r11", "cc", "memory");
-}
-
 /* Asserts the descriptors the transition will load. */
 static void KernelVerifyPrivilegeDescriptors(void)
 {
@@ -459,67 +446,33 @@ static void KernelVerifyPrivilegeSystemCallConfiguration(void)
 }
 
 /*
- * Exercises the transition, which is the only part of this sub-task that can be
- * made to happen rather than merely inspected.
+ * Why the transition is no longer executed here, and where it is executed
+ * instead.
  *
- * SYSCALL is executed from privilege level 0. It raises no privilege, there
- * being none to raise, but it performs every other part of the transition: it
- * loads CS and SS from IA32_STAR, transfers to IA32_LSTAR, saves the return
- * address in RCX and the flags in R11, and clears the bits IA32_FMASK names. The
- * entry point records what it was given, and this compares that record against
- * what the configuration said would happen.
+ * Until sub-task 6.7 this routine executed SYSCALL from privilege level 0 and
+ * asserted what the entry point observed: the selectors the processor loaded,
+ * and that IA32_FMASK had cleared the interrupt flag. It could do that because
+ * the entry point was a placeholder that returned by restoring the flags and
+ * jumping to the address in RCX, which arrives back at privilege level 0.
  *
- * It is performed twice, with the interrupt flag clear and then set, because the
- * assertion that the flag was cleared upon entry says nothing whatever if the
- * flag was already clear.
+ * The real entry path returns by **SYSRET**, and SYSRET returns to privilege
+ * level 3 unconditionally. Executing SYSCALL from the kernel would therefore
+ * not return to the kernel: it would drop this self-test into user mode with no
+ * user mapping to execute in, and the next instruction fetched would fault.
+ *
+ * The alternative was a branch in the entry path that returned differently for
+ * a caller the kernel trusts — and that is a test hook in the one path where a
+ * test hook is indistinguishable from a privilege-escalation bug. It was not
+ * written.
+ *
+ * What is asserted instead: the whole of the dispatch and the argument
+ * validation, in KernelVerifySyscall, which needs no transition because the
+ * dispatcher is an ordinary function of an ordinary structure; and the
+ * configuration, above, which is what says the transition *will* be correct. The
+ * transition itself is executed for the first time at sub-task 6.10, where there
+ * is a user program to execute it. See docs/design/PRIVILEGE.md, Section 9.4.
  */
-static void KernelVerifyPrivilegeTransition(void)
-{
-    const uint64_t before = SyscallEntries();
-    const bool interrupts_were_enabled = InterruptsAreEnabled();
 
-    if (!SyscallIsEnabled())
-    {
-        KernelPrivilegeRequire(false,
-                               "the transition was not exercised: SYSCALL is not enabled");
-        return;
-    }
-
-    KernelExecuteSystemCall();
-
-    KernelPrivilegeRequire(SyscallEntries() == (before + 1U),
-                           "SYSCALL did not reach the entry point IA32_LSTAR names");
-    KernelPrivilegeRequire(SyscallObservedCode() == GDT_KERNEL_CODE_SELECTOR,
-                           "the processor loaded a code selector that is not the kernel's");
-    KernelPrivilegeRequire(SyscallObservedStack() == GDT_KERNEL_DATA_SELECTOR,
-                           "the processor loaded a stack selector that is not the kernel's");
-    KernelPrivilegeRequire(!InterruptsAreEnabled(),
-                           "the interrupt flag was set upon return although it was clear "
-                           "before, so the flags were not restored");
-
-    /*
-     * The same again with the flag set, which is the state a user program will
-     * be in. The entry point must observe it clear; that is IA32_FMASK working,
-     * and it is not observable at all in the first pass.
-     */
-    __asm__ __volatile__("sti" : : : "memory");
-
-    KernelExecuteSystemCall();
-
-    KernelPrivilegeRequire(SyscallEntries() == (before + 2U),
-                           "the second SYSCALL did not reach the entry point");
-    KernelPrivilegeRequire((SyscallObservedFlags() & RFLAGS_INTERRUPT_ENABLE) == 0U,
-                           "the interrupt flag was still set within the handler, so the "
-                           "kernel was entered interruptible");
-    KernelPrivilegeRequire(InterruptsAreEnabled(),
-                           "the interrupt flag was not restored upon return, so the flags "
-                           "saved in R11 were lost");
-
-    if (!interrupts_were_enabled)
-    {
-        __asm__ __volatile__("cli" : : : "memory");
-    }
-}
 
 void KernelVerifyPrivilege(void)
 {
@@ -529,7 +482,6 @@ void KernelVerifyPrivilege(void)
     KernelVerifyPrivilegeTaskSegment();
     KernelVerifyPrivilegeInterruptStacks();
     KernelVerifyPrivilegeSystemCallConfiguration();
-    KernelVerifyPrivilegeTransition();
 
     KernelWriteString(KernelPrivilegeSucceeded ? "Privilege self-test passed.\n"
                                                : "Privilege self-test FAILED.\n");
