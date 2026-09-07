@@ -119,6 +119,11 @@ C_SOURCES := kernel/kernel.c \
              kernel/test/verify_devices.c \
              kernel/test/verify_storage.c \
              kernel/test/verify_ext2.c \
+             kernel/test/ext2/format.c \
+             kernel/test/ext2/directory.c \
+             kernel/test/ext2/file.c \
+             kernel/test/ext2/write.c \
+             kernel/test/ext2/probe.c \
              kernel/test/verify_vfs.c \
              kernel/mm/pmm.c \
              kernel/mm/paging.c \
@@ -143,7 +148,12 @@ C_SOURCES := kernel/kernel.c \
              kernel/fs/ext2/path.c \
              kernel/fs/ext2/name.c \
              kernel/fs/ext2_vfs.c \
-             kernel/fs/vfs.c \
+             kernel/fs/vfs/vfs.c \
+             kernel/fs/vfs/node.c \
+             kernel/fs/vfs/path.c \
+             kernel/fs/vfs/mount.c \
+             kernel/fs/vfs/file.c \
+             kernel/fs/vfs/namespace.c \
              drivers/vga/vga.c \
              drivers/serial/serial.c \
              drivers/pic/pic.c \
@@ -153,6 +163,11 @@ C_SOURCES := kernel/kernel.c \
              drivers/mouse/mouse.c \
              drivers/pci/pci.c \
              drivers/ata/ata.c \
+             drivers/ata/port.c \
+             drivers/ata/identify.c \
+             drivers/ata/channel.c \
+             drivers/ata/transfer.c \
+             drivers/ata/report.c \
              drivers/ahci/ahci.c \
              drivers/sdhci/sdhci.c \
              drivers/block/block.c \

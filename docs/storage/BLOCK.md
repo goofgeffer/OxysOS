@@ -34,7 +34,7 @@ would send a caller to whichever was found first.
 The context is the whole of the coupling. The ATA driver registers each disk with
 its own `AtaDevice` as the context, and its two operations cast it back; the layer
 carries the pointer and never looks inside it. That is why the adaptor lives in
-`drivers/ata/ata.c` and not here — a driver knows the layer it presents itself
+`drivers/ata/transfer.c` and not here — a driver knows the layer it presents itself
 through, and the layer knows nothing of ATA.
 
 ## 3. What the layer refuses

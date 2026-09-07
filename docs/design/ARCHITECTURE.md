@@ -50,8 +50,15 @@ than as later additions, in accordance with `PROJECT_GUIDELINES.md`, Section 5:
 
 ### 2.2 When a subsystem becomes a directory
 
-`kernel/fs/ext2/` is the first subsystem here to occupy a directory of its own
-rather than a file, and the rule it establishes is worth stating once.
+Four subsystems occupy a directory of their own rather than a file, and the rule
+they establish is worth stating once.
+
+| Directory | Was | Is now |
+| --------- | --- | ------ |
+| `kernel/fs/ext2/` | `kernel/fs/ext2.c`, 4,325 lines | Nine units, 306 to 856 lines, and a private header |
+| `kernel/fs/vfs/` | `kernel/fs/vfs.c`, 2,355 lines | Six units, 184 to 532 lines, and a private header |
+| `kernel/test/ext2/` | part of `kernel/test/verify_ext2.c`, 2,618 lines | Five chapters and a private header, the entry point remaining above them at 318 lines |
+| `drivers/ata/` | `drivers/ata/ata.c`, 1,282 lines | Six units, 160 to 320 lines, and a private header |
 
 A translation unit is divided when it stops being readable as one thing.
 `kernel/fs/ext2.c` reached 4,325 lines, and the evidence that it had outgrown
@@ -66,6 +73,24 @@ the functions group by: a fault in `path.c` resolves a name to the wrong file, a
 fault in `name.c` leaves a volume malformed, a fault in `alloc.c` leaves the
 bitmaps disagreeing with the summaries. Each is a different kind of wrongness
 with a different way of being found.
+
+The same test applied to the other three. `drivers/ata/` divides at the point
+where the *symptoms* diverge: a fault in `port.c` is a timing rule broken and a
+status register believed too early, a fault in `channel.c` is a disk this driver
+never looked in the right place for, and a fault in `transfer.c` is the wrong
+sector returned — and only the last of the three is visible to the caller at all.
+`kernel/test/ext2/probe.c` is separated on a line the project had already drawn
+in prose: a probe asserts nothing, and `kernel/test/README.md` explains at length
+why the two must not be confused. Making that distinction a file boundary means
+it can no longer be blurred by accident.
+
+**A division is not a rewrite.** Nothing was reordered, renamed for taste, or
+improved in passing. What changed is the set of files the same code lives in, so
+that the check afterwards can be mechanical: the function definitions before and
+after must be the same set, and every non-comment line must survive but for the
+qualifiers the new boundaries force. Anything else in that difference is a defect
+introduced by the division, and would be invisible in a diff that also carried
+improvements.
 
 Such a directory carries an `internal.h` beside its sources and **not** in
 `kernel/include/oxys/`. The public corpus is what a consumer may depend upon;
@@ -132,7 +157,13 @@ either.
 | `kernel/test/verify_mouse.c` | The self-tests of the mouse's packet decoder, driven without a mouse, and of the pointer upon a surface in memory. |
 | `kernel/test/verify_devices.c` | The self-tests of the interrupt controllers, the interval timer, the keyboard, the serial adapter, the display and the bus. |
 | `kernel/test/verify_storage.c` | The self-tests of the disk, the block layer and the buffer cache. |
-| `kernel/test/verify_ext2.c` | The self-tests of the EXT2 format, and the report upon a real volume. |
+| `kernel/test/verify_ext2.c` | The entry point of the EXT2 self-test: the fixture composed, the superblock and its refusals asserted, and the five chapters below called in turn. |
+| `kernel/test/ext2/internal.h` | What those chapters share: their own entry points, the restoration of the fixture between them, and the two helpers more than one judges through. |
+| `kernel/test/ext2/format.c` | The superblock, the group descriptors and the inode, and the dozen ways a volume may contradict itself and be refused. |
+| `kernel/test/ext2/directory.c` | The directory record, its traversal, and the resolution of a path across symbolic links. |
+| `kernel/test/ext2/file.c` | The reading of a file's contents, its holes, and both forms of symbolic link. |
+| `kernel/test/ext2/write.c` | Everything that alters a volume: allocation, writing, truncation, and the insertion and removal of names. |
+| `kernel/test/ext2/probe.c` | The report upon whatever volume the machine actually carries. **Not a self-test**: it asserts nothing, and the distinction is the reason it is a file of its own. |
 | `kernel/test/verify_vfs.c` | The self-tests of the virtual filesystem layer, and the probe of a real volume through it. |
 | `kernel/mm/heap.c` | The kernel heap: a slab allocator of eight size classes over the kernel arena. |
 | `kernel/mm/vmm.c` | The kernel virtual address allocator, issuing ranges of the kernel arena backed by frames. |
@@ -149,7 +180,13 @@ either.
 | `kernel/fs/ext2/directory.c` | The record a directory is made of: the file types, the decoding and validation of one entry, the traversal, and the search for a name. |
 | `kernel/fs/ext2/path.c` | The resolution of an absolute path to the inode it names, across symbolic links and with a bound upon how many may be followed. |
 | `kernel/fs/ext2/name.c` | The names themselves: the insertion and removal of a record, and the creation and destruction of files, directories and hard links. |
-| `kernel/fs/vfs.c` | The virtual filesystem layer: the registry of filesystem types, the mount table that joins several volumes into one tree, the node cache that gives one file one identity, the resolution of a path across mount points, and the open file with a position that advances. |
+| `kernel/fs/vfs/internal.h` | What the six units below share: the four fixed tables the layer's whole state lives in, the refusal record and the accounting, the open file, and the resolution and node-cache primitives. |
+| `kernel/fs/vfs/vfs.c` | The state itself, the refusals and the names of the error codes, the bounded string primitives, and the accounting and reports. |
+| `kernel/fs/vfs/node.c` | The node cache: the identity a file has within the kernel, and why one file must be one node however many callers reach it. |
+| `kernel/fs/vfs/path.c` | The resolution of a path: the walk through each component, the crossing of mount points in both directions, and the following of symbolic links. |
+| `kernel/fs/vfs/mount.c` | The registry of filesystem types and the mount table that joins several volumes into one tree. |
+| `kernel/fs/vfs/file.c` | The open file: the descriptor table, the position that advances, and the reading, writing and seeking above it. |
+| `kernel/fs/vfs/namespace.c` | The operations that name a file rather than hold one open: stat, truncate, the creation and removal of names and directories, and the flush. |
 | `kernel/fs/ext2_vfs.c` | The binding of the EXT2 implementation to that layer: the operations vector, the translation between the format's mode and the layer's neutral node type, and the mark a mount leaves upon a volume it has open. |
 | `kernel/multiboot2.c` | The Multiboot2 parser, reducing the boot loader's structure to the neutral `BootInformation` description. |
 | `kernel/kernel.c` | `KernelMain`, which validates the boot loader handover, initialises every subsystem in the dependency order of Section 4, runs the self-tests, mounts a root volume and enters the echo loop. `KernelPanic`, the unrecoverable-error path. |
@@ -159,7 +196,13 @@ either.
 | `drivers/pit/pit.c` | Counter 0 of the 8253 interval timer: the system tick, the elapsed-time conversion and the bounded wait. |
 | `drivers/block/buffer.c` | The buffer cache above the block layer: the hash, the recency list, the reference discipline and the write-back policy. |
 | `drivers/block/block.c` | The generic block-device layer: the registry of devices that transfer fixed-size blocks, and the validated path through which every caller above reaches a driver. |
-| `drivers/ata/ata.c` | The ATA driver in programmed input/output mode: the reset of a channel, the identification of its devices, and sector transfer by 28-bit and 48-bit addressing. |
+| `drivers/ata/internal.h` | What the six units below share: the register and status constants, the table of devices found, the addresses each channel answers at, the accounting, and the register-level discipline. |
+| `drivers/ata/ata.c` | The driver's state, its refusals, the initialisation that finds what is present, the device accessors and the binding to the block layer. |
+| `drivers/ata/port.c` | The register-level discipline of the task file: the settling delay a selection must be followed by, the two waits every command is bracketed by, and the reset of a channel. |
+| `drivers/ata/identify.c` | The identification of whatever stands at one of the four addresses, and the distinction between a device that is absent and one answering a different command set. |
+| `drivers/ata/channel.c` | Where each channel actually answers: the base address registers of a controller in native mode, and the classification of storage this driver cannot reach at all. |
+| `drivers/ata/transfer.c` | The transfer of sectors: the judgement of a request, both addressing forms, and the cache flush that makes a write durable. |
+| `drivers/ata/report.c` | The report, including — for a machine upon which no disk was found — every controller the bus carries and why each was not reached. |
 | `drivers/pci/pci.c` | The PCI configuration-space enumeration by access mechanism one: the walk of buses, devices and functions, and the searches by which a driver finds its hardware. |
 | `drivers/ps2/ps2.c` | The 8042 controller itself: its configuration byte, written whole by the one module that owns it, and the two device ports it presents. |
 | `drivers/keyboard/keyboard.c` | The PS/2 keyboard upon the controller's first port: initialisation, the decoding of scan code set 1, the modifier state and the circular event buffer. |

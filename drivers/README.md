@@ -30,7 +30,14 @@ memory and is not.
 | `keyboard/keyboard.c` | The PS/2 keyboard upon the controller's first port. | `<oxys/keyboard.h>` | 3 |
 | `mouse/mouse.c` | The PS/2 mouse upon the controller's second port. | `<oxys/mouse.h>` | 6.5 |
 | `pci/pci.c` | The PCI bus: configuration-space enumeration by mechanism one. | `<oxys/pci.h>` | 4.3 |
-| `ata/ata.c` | The ATA disk, in programmed input/output mode. | `<oxys/ata.h>` | 4.4 |
+| `ata/` | The ATA disk, in programmed input/output mode, divided into six translation units and a private header; `../docs/design/ARCHITECTURE.md`, Section 2.2, records why. | `<oxys/ata.h>` | 4.4 |
+| `ata/internal.h` | What those units share: the register, status, control and command constants, the table of devices found, the addresses each channel answers at, the accounting, and the register-level discipline. | — | 4.4 |
+| `ata/ata.c` | The state, the refusals, the initialisation, the device accessors and the binding to the block layer. | `<oxys/ata.h>` | 4.4 |
+| `ata/port.c` | The task file: the settling delay a selection must be followed by, the two waits every command is bracketed by, and the reset of a channel. | — | 4.4 |
+| `ata/identify.c` | `IDENTIFY DEVICE`, and the distinction between a device that is absent and one that answers a different command set. | — | 4.4 |
+| `ata/channel.c` | Where a channel actually answers: the base address registers of a controller in native mode, and the storage this driver cannot reach. | — | 4.4, 4.7, 4.8 |
+| `ata/transfer.c` | The transfer of sectors in both addressing forms, and the cache flush that makes a write durable. | — | 4.4 |
+| `ata/report.c` | The report, including every controller the bus carries and why each was or was not reached. | — | 4.4 |
 | `ahci/ahci.c` | The AHCI disk, by first-party direct memory access. | `<oxys/ahci.h>` | 4.7 |
 | `sdhci/sdhci.c` | The SD card or embedded MultiMediaCard, through its host controller. | `<oxys/sdhci.h>` | 4.8 |
 | `block/block.c` | The generic block-device layer above the disk drivers. | `<oxys/block.h>` | 4.5 |

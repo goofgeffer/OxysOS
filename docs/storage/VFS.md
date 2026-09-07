@@ -2,7 +2,19 @@
 
 **Corresponding phase**: 5, sub-task 5.8, which completes the phase.
 **Authority**: `PROJECT_GUIDELINES.md`, Sections 2 and 4.
-**Implemented by**: [`../../kernel/fs/vfs.c`](../../kernel/fs/vfs.c),
+**Implemented by**: [`../../kernel/fs/vfs/`](../../kernel/fs/vfs/), which holds
+six translation units and the private header between them:
+[`vfs.c`](../../kernel/fs/vfs/vfs.c) (the state, the refusals and the
+accounting), [`node.c`](../../kernel/fs/vfs/node.c) (Section 6),
+[`path.c`](../../kernel/fs/vfs/path.c) (Sections 4 and 5),
+[`mount.c`](../../kernel/fs/vfs/mount.c) (Sections 3 and 5),
+[`file.c`](../../kernel/fs/vfs/file.c) (Sections 7 and 8),
+[`namespace.c`](../../kernel/fs/vfs/namespace.c) (Sections 9 and 10), and
+[`internal.h`](../../kernel/fs/vfs/internal.h). It was one file of 2,355 lines
+until the review that followed sub-task 6.10; the sections of this document
+corresponded to those units already, which is why the division needed nothing
+rewritten. See [`../design/ARCHITECTURE.md`](../design/ARCHITECTURE.md),
+Section 2.2.
 [`../../kernel/fs/ext2_vfs.c`](../../kernel/fs/ext2_vfs.c),
 [`../../kernel/include/oxys/vfs.h`](../../kernel/include/oxys/vfs.h),
 [`../../kernel/include/oxys/ext2_vfs.h`](../../kernel/include/oxys/ext2_vfs.h).
@@ -46,7 +58,7 @@ copied in.
                        VfsOpen, VfsRead, VfsResolve, VfsMountVolume
                                         |
      +--------------------------------- | ---------------------------------+
-     |               kernel/fs/vfs.c    v                                   |
+     |               kernel/fs/vfs/     v                                   |
      |                                                                      |
      |   mount table        node cache        open file table               |
      |   4 mounts           64 nodes          32 descriptors                |
@@ -64,7 +76,7 @@ copied in.
                                         |
                      drivers/block/buffer.c  (the cache)
                      drivers/block/block.c   (the device)
-                     drivers/ata/ata.c       (the disk)
+                     drivers/ata/            (the disk)
 ```
 
 The layer knows nothing of EXT2 and nothing in `kernel/fs/ext2/` knows anything

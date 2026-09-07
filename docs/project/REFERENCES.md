@@ -470,7 +470,7 @@ Used by: `drivers/pic/pic.c`, `drivers/pit/pit.c`, `drivers/ps2/ps2.c`,
 `drivers/serial/serial.c`, `kernel/include/oxys/pic.h`,
 `kernel/include/oxys/pit.h`, `kernel/include/oxys/ps2.h`,
 `kernel/include/oxys/keyboard.h`, `kernel/include/oxys/mouse.h`,
-`drivers/ata/ata.c`, `kernel/include/oxys/ata.h`, `kernel/kernel.c`.
+`drivers/ata/`, `kernel/include/oxys/ata.h`, `kernel/kernel.c`.
 
 ### The 8042 controller and PS/2 device command sets
 The command sets of the IBM Personal Computer AT keyboard controller and of the
@@ -677,7 +677,7 @@ That a subclass is meaningful only against its class is what the table shows
 plainest: subclass `0x05` is an ATA controller, an SD host controller or an SMBus
 controller according to the class above it.
 
-Used by: `drivers/pci/pci.c`, `drivers/ata/ata.c`.
+Used by: `drivers/pci/pci.c`, `drivers/ata/channel.c`.
 
 ### AT Attachment with Packet Interface (ATA/ATAPI)
 ANSI INCITS, Technical Committee T13. The revisions relied upon are ATA/ATAPI-6
@@ -724,7 +724,7 @@ command details above were taken from two independent secondary renderings and
 cross-verified against one another before being relied upon, as Section 6 of
 `PROJECT_GUIDELINES.md` requires.
 
-Used by: `drivers/ata/ata.c`, `kernel/include/oxys/ata.h`.
+Used by: `drivers/ata/`, `kernel/include/oxys/ata.h`.
 
 ### Serial ATA Advanced Host Controller Interface Specification, revision 1.3.1
 Intel Corporation, on behalf of the Serial ATA International Organization.
@@ -1018,7 +1018,7 @@ And from `open()`: `O_APPEND` places each write at the end of the file "prior to
 each write", which is why an appending write here takes the size and not the
 position.
 
-Used by: `kernel/fs/vfs.c`, `kernel/include/oxys/vfs.h`.
+Used by: `kernel/fs/vfs/`, `kernel/include/oxys/vfs.h`.
 
 ### The UNIX Time-Sharing System
 Ritchie, D. M., and Thompson, K. Communications of the ACM, volume 17, number 7,
@@ -1033,7 +1033,7 @@ for the concept and for the statement that the substitution is of a directory by
 a root, which is the design of Section 5 of
 [`../storage/VFS.md`](../storage/VFS.md); the implementation is original.
 
-Used by: `kernel/fs/vfs.c`.
+Used by: `kernel/fs/vfs/`.
 
 ### GNU GRUB Manual
 Free Software Foundation.

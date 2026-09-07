@@ -6,8 +6,21 @@
 hardware behaviour below carries a citation, and every specification named is
 registered in [`REFERENCES.md`](../project/REFERENCES.md).
 
-**Implementation**: [`../drivers/ata/ata.c`](../../drivers/ata/ata.c),
-[`../kernel/include/oxys/ata.h`](../../kernel/include/oxys/ata.h).
+**Implementation**: [`../../drivers/ata/`](../../drivers/ata/), which holds six
+translation units and the private header between them:
+[`ata.c`](../../drivers/ata/ata.c) (the state, the refusals, the initialisation
+and the block-layer binding),
+[`port.c`](../../drivers/ata/port.c) (the task file and its timing rules),
+[`identify.c`](../../drivers/ata/identify.c) (Section 3),
+[`channel.c`](../../drivers/ata/channel.c) (Sections 2.1 to 2.3, where a channel
+answers and what this driver cannot reach),
+[`transfer.c`](../../drivers/ata/transfer.c) (Sections 4 and 5),
+[`report.c`](../../drivers/ata/report.c) (Sections 7.2 and 7.3), and
+[`internal.h`](../../drivers/ata/internal.h). It was one file of 1,282 lines
+until the review that followed sub-task 6.10; see
+[`../design/ARCHITECTURE.md`](../design/ARCHITECTURE.md), Section 2.2.
+The public interface is
+[`../../kernel/include/oxys/ata.h`](../../kernel/include/oxys/ata.h).
 
 ## 1. What is different about a disk
 
@@ -202,7 +215,7 @@ The two paragraphs are alternatives, and which is printed turns upon whether
 anything of the mass-storage class was found. Where there is such a controller
 the remedy may be a firmware setting and is named; where there is not, no setting
 will produce one and saying so plainly is the whole of what can honestly be
-offered. The classification is `AtaClassifyForeignStorage` in `drivers/ata/ata.c`,
+offered. The classification is `AtaClassifyForeignStorage` in `drivers/ata/channel.c`,
 asserted at Section 7.3.
 
 A subclass is read only against its own class, never alone. Subclass `0x05` is an
