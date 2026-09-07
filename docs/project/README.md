@@ -6,12 +6,27 @@ explains how the kernel functions; that is [`../design/`](../design/),
 
 | Document | Subject |
 | -------- | ------- |
-| [`PLAN.md`](PLAN.md) | The thirteen-phase roadmap, the sub-task tracker and the revision history. Every other document opens by citing the phase and sub-task it belongs to, and this is where those are defined. It is the single source of truth for what is done. |
+| [`PLAN.md`](PLAN.md) | The thirteen-phase roadmap and the sub-task tracker: what is being built, what state each sub-task is in, and what comes next. Every other document opens by citing the phase and sub-task it belongs to, and this is where those are defined. It is the single source of truth for what is done. |
+| [`STATUS.md`](STATUS.md) | The present condition of the system: what it does today, one paragraph to a phase, and the table of which environments each phase has actually been observed to work in. |
+| [`HISTORY.md`](HISTORY.md) | The revision history: one row per change, pointing at the commit that made it and the design document that reasons about it. |
 | [`TESTING.md`](TESTING.md) | How the kernel is verified — the `make verify` procedure, the interactive and machine-specific runs, and the dated record of every test performed with its outcome. |
 | [`TOOLCHAIN.md`](TOOLCHAIN.md) | The `x86_64-elf` cross-toolchain, its construction, and the build system that uses it. |
 | [`CODING-STANDARDS.md`](CODING-STANDARDS.md) | Style, naming, file headers, the `-Wall -Wextra -Werror` regime, and the register of compiler extensions relied upon with the justification of each. |
 | [`REFERENCES.md`](REFERENCES.md) | Every specification the project relies upon, with the sections relied upon named and, where a specification is not publicly distributed, a note of how its details were cross-verified. |
 | [`INSPIRATIONS.md`](INSPIRATIONS.md) | The systems this project takes its character from — ToaruOS principally, SerenityOS and BSD besides — what is taken from each, what is not, and the rule that separates an inspiration from a source of code. |
+
+## The three that were one
+
+`PLAN.md` held all three of the above until 2026-09-07, and had become hard to
+scan: the roadmap it exists to be was 2,000 words inside a document of 17,000.
+The division answers three different questions and keeps each in one place.
+
+- **Where are we, and what comes next?** — `PLAN.md`.
+- **What does it do today, and where has it been seen to work?** — `STATUS.md`.
+- **How did it come to be that way?** — `HISTORY.md`.
+
+There is deliberately no separate roadmap document. `PLAN.md` *is* the roadmap,
+and a second one would be a second place for the phase list to drift.
 
 ## The order of work
 

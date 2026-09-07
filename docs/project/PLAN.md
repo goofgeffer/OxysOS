@@ -8,294 +8,68 @@ is made, in accordance with `PROJECT_GUIDELINES.md`, Section 7.
 **Boot protocol**: Multiboot2 (legacy BIOS, GRUB) initially; native UEFI added in Phase 12.
 **Kernel model**: Monolithic.
 
-## Current status
+## What is being built
 
-This section states the present condition of the work, one paragraph to a phase.
-The chronological account is the Revision History at the foot of this document;
-the reasoning behind any decision named here is in the design document cited,
-which is revised as the design is and is the authority where the two differ.
+A monolithic, Unix-like operating system for x86_64, written from scratch in ISO
+C11 and NASM assembly, in thirteen phases ordered by dependency. Each phase is
+divided into atomic sub-tasks, and every milestone must be bootable and testable.
 
-**Phase 1 is complete but for sub-task 1.12.** The kernel builds without
-diagnostics under the full regime, is confirmed Multiboot2 compliant by
-`grub-file`, and boots under QEMU and VirtualBox alike, presenting its banner
-upon the VGA console and COM1. Sub-task 1.12, boot from a physical USB medium,
-remains open. See [`../design/BOOT.md`](../design/BOOT.md).
+## Where we are
 
-**Phase 2 is complete.** A bitmap allocator governs every physical frame; a
-permanent hierarchy maps the kernel text and read-only data without write
-permission and the whole of physical memory at `0xFFFF800000000000`; a kernel
-arena and a slab heap serve allocations of arbitrary size; every frame carries a
-reference count and returns to the allocator only upon its last release; and an
-address space may be created, cloned by the copy-on-write discipline, activated
-and destroyed. The substrate `fork()` is built upon in sub-task 6.11 is therefore
-complete. See [`../design/MEMORY-LAYOUT.md`](../design/MEMORY-LAYOUT.md).
+**Phases 1 to 5 are complete but for sub-task 1.12** (boot from a physical USB
+medium). **Phase 6 is complete as far as sub-task 6.10**: a statically linked
+ELF64 program is loaded into an address space of its own, entered at privilege
+level 3, returned to by `SYSRET` when it makes a system call, and ended when it
+faults.
 
-**Phase 3 is complete.** The interrupt descriptor table is loaded; a stub for
-each of the 256 vectors constructs a uniform trap frame whatever the vector; a
-dispatch table routes each vector to a registered handler that may alter the
-frame it returns through; every architecture-defined exception has a handler that
-decodes its error code; and the cascaded 8259A pair is remapped clear of the
-exceptions, with each line masked until a driver claims it. See
-[`../design/INTERRUPTS.md`](../design/INTERRUPTS.md).
+**Next: sub-task 6.11** — `fork()` upon the copy-on-write substrate of Phase 2,
+with `execve()`, `exit()` and `wait()` beside it. Then the multiprocessing half
+of Phase 6: the APIC, the locks, the bring-up and the scheduler.
 
-**Phase 4 is complete.** The serial adapter is interrupt-driven and keeps a
-polled path it reverts to whenever the interrupt flag is clear, a panic reporting
-with interrupts disabled and needing a channel that will drain. The display is a
-formal driver reading its configuration rather than assuming it. PCI is
-enumerated through bridges rather than swept. An ATA driver transfers sectors by
-both addressing forms. A generic block layer performs every judgement before a
-driver is reached, and a buffer cache of sixty-four blocks stands above it, a
-buffer's identity being the device and the block number together. See
-[`../devices/`](../devices/) and [`../storage/`](../storage/).
+For what the system does today, and where it has been observed to do it, see
+[`STATUS.md`](STATUS.md). For how it came to be that way, see
+[`HISTORY.md`](HISTORY.md).
 
-**Phase 5 is complete.** An EXT2 volume is read, written and mounted: the
-superblock, the group descriptors, the inodes and every level of their block
-pointers, directory traversal, path resolution, both forms of symbolic link,
-allocation from both bitmaps, writing, truncation, and the creation and
-destruction of the names that reach a file. Above it stands a virtual filesystem
-layer, and three of its properties are the substance of the work, each being a
-decision the obvious alternative gets silently wrong: **a mount is found through
-the node it covers and never through a path prefix**; **a file reached twice is
-one node**, since two descriptions of one file silently truncate it; and **a
-volume opened for writing is marked unclean before anything else is written to
-it**, a kernel that marked it upon unmounting recording only the mounts that
-ended well. The root volume of a machine this kernel is booted upon is mounted
-read-only unless the operator chose the GRUB entry that permits writing. See
-[`../storage/EXT2.md`](../storage/EXT2.md) and
-[`../storage/VFS.md`](../storage/VFS.md).
+## How to read this document
 
-**Phase 6 is complete as far as sub-task 6.10.** Sub-tasks 6.1 to 6.10 are done
-and 6.11 is next. The paragraphs below state the condition of each; where a
-sub-task's substance is already carried by its entry in the Phase 6 list and by
-the Revision History, it is not restated a third time here, for the reason the
-Revision History gives at the foot of this document.
+**A sub-task carries three independent facts, and none of them implies another.**
+One checkbox used to carry all three, which meant it could not distinguish a
+sub-task whose code exists from one that has been run, or either from one that
+some assertion actually covers.
 
-**Sub-task 6.1 is complete.** The apparatus a privilege
-transition is performed out of now stands, and has been exercised rather than
-merely built. The global descriptor table holds the user-mode descriptors, whose
-order is fixed by the arithmetic `SYSCALL` and `SYSRET` derive their selectors
-by and not by any preference of this kernel's. A task state segment names the
-stack loaded upon entry from user mode and, in its first interrupt stack table
-entry, a separate stack the double fault is delivered upon; its I/O map base lies
-beyond the segment limit, which is what denies every port to user mode.
-`IA32_STAR`, `IA32_LSTAR` and `IA32_FMASK` are written before `IA32_EFER.SCE` is
-set. The interrupt stack table is exercised rather than inspected. The transition
-itself was exercised too, at the time, `SYSCALL` being executable from privilege
-level 0 against the placeholder entry point this sub-task installed — but sub-task
-6.7 replaced that entry point with one that returns by `SYSRET`, which returns to
-privilege level 3 unconditionally, so **the self-test no longer executes
-`SYSCALL`** and the assertion is recorded as lost rather than disguised. See
-[`../design/PRIVILEGE.md`](../design/PRIVILEGE.md), Section 9.4.
+| Column | What it says | What it does **not** say |
+| ------ | ------------ | ------------------------ |
+| **State** | Whether the code exists. `Planned`, `In progress`, or `Implemented`. | Nothing about whether it works, or where it has been run. |
+| **Asserted by** | Which boot-time self-test covers the sub-task, if any. `—` means no assertion of its own — a statement of fact, not a defect: some sub-tasks are not the kind of thing an assertion can reach. `(indirect)` means no assertion names the sub-task, but an assertion elsewhere would fail if it were wrong. | Nothing about whether that assertion is sufficient. |
+| **Verified** | Recorded per phase in [`STATUS.md`](STATUS.md), Section 3, because the evidence is per environment — QEMU, VirtualBox, OVMF, physical hardware — and not per sub-task. | — |
 
-**Sub-task 6.2 is complete.** The image asks the boot loader for a linear
-framebuffer, and what it is given is validated, mapped and described. Two
-decisions are the substance of it. The pages are **write-combining and not
-write-back**, through entry 4 of `IA32_PAT` — an entry chosen because every
-existing mapping in the kernel selects one of the first four, so taking it
-changes the memory type of nothing already in use. Write-back would have been
-the default and is the one type that is wrong here: a cached write may sit in a
-line while the adapter displays what memory held before it, so the image is
-wrong and then, for no reason connected to anything, right. And **the mode is
-the boot loader's to choose**: GRUB 2.12 ignores `gfxpayload` for a multiboot2
-image, which was established rather than assumed, so the kernel accepts whatever
-it is handed and asserts what it was. The cost is that the adapter is now in a
-graphics mode with no console upon it: for two sub-tasks the screen showed the
-self-test's colour bands and the serial port carried the boot log alone, until
-sub-task 6.4 supplied a console that draws upon a framebuffer.
+So `Implemented` means the code exists and builds under the full diagnostic
+regime. It does not mean tested, and it does not mean verified upon any
+particular machine. Sub-task 1.12 is the clearest case: everything around it is
+implemented and nothing about it is, because the sub-task *is* the verification.
 
-**Sub-task 6.3 is complete.** The primitives draw upon a `GraphicsSurface` and
-not upon the framebuffer, which is one surface among them: blit has no meaning
-with a single surface, the double buffering of sub-task 6.6 is the substitution
-of one for another, and — the reason that mattered most in practice — a surface
-composed in ordinary memory can be read back pixel by pixel, so the whole of the
-self-test holds upon a machine with no display. **Clipping is treated as the
-memory-safety boundary it is** rather than as a convenience: it is implemented
-once, a clip is always confined to its surface so no argument can widen it, and
-each shape is clipped once before a loop that then tests nothing. The line is
-Bresenham's and is clipped **per pixel rather than at its endpoints**, which is
-slower and is the only way to keep the promise that a clipped line lights exactly
-the pixels the unclipped line would: the algorithm accumulates its error from the
-start, so moving the start moves the line by a pixel here and there, and that
-shows as a kink where two clipped regions meet along a seam.
+## The thirteen phases
 
-**Sub-task 6.4 is complete**, and it ends the blank screen. A bitmap face of
-ninety-five glyphs, eight by eight, **drawn for this project rather than
-obtained** — a font being exactly the kind of asset that is easy to lift, and
-`PROJECT_GUIDELINES.md` Section 2 prohibiting it — and a console of character
-cells above it, which clears the framebuffer and replays the boot log over it.
-Three things are worth stating. The console **records what it is given until it
-has a framebuffer to draw upon**, because the mapping comes out of the kernel
-arena and nineteen hundred bytes of log precede it, and a screen that began part
-way through the boot would omit exactly the messages worth having when a machine
-will not boot. Scrolling is **one blit of the surface upon itself**, which is the
-overlapping case sub-task 6.3 chose a copy direction for and the whole of the
-payment for it. And the console and the figures those earlier self-tests paint
-**cannot share the screen**, so the figures are drawn only when the command line
-asks for them and the console stands down for that boot; a screen is for reading.
-One fault found in the doing is recorded because of how it read: the numeric
-output routines named the display and the serial port themselves, so the console
-was shown every word of the log and not one of its addresses — which looks like a
-formatting error and is a missing output path. `KernelWriteString` is now the
-only routine permitted to name an output device.
+| Phase | Subject | State |
+| ----- | ------- | ----- |
+| [1](#phase-1--bootstrapping-and-early-output) | Bootstrapping and early output | Implemented; 1.12 open |
+| [2](#phase-2--memory-management-including-copy-on-write) | Memory management, including copy-on-write | Implemented |
+| [3](#phase-3--interrupts-exceptions-and-keyboard-input) | Interrupts, exceptions and keyboard input | Implemented |
+| [4](#phase-4--basic-device-drivers) | Basic device drivers | Implemented |
+| [5](#phase-5--ext2-filesystem) | EXT2 filesystem | Implemented |
+| [6](#phase-6--graphics-system-calls-process-management-and-symmetric-multi-processing) | Graphics, system calls, processes, SMP | **In progress** — 6.1 to 6.10 done |
+| [7](#phase-7--userland-and-minimal-c-library) | Userland and minimal C library | Planned |
+| [8](#phase-8--shell) | Shell | Planned |
+| [9](#phase-9--the-desktop-its-system-services-and-its-configuration) | The desktop, its services and its configuration | Planned |
+| [10](#phase-10--cryptography) | Cryptography | Planned |
+| [11](#phase-11--networking) | Networking | Planned |
+| [12](#phase-12--uefi-transition) | UEFI transition | Planned |
+| [13](#phase-13--polish-optimisation-and-final-hardening) | Polish, optimisation and final hardening | Planned |
 
-VirtualBox is the result this sub-task was for. It has no serial adapter this
-kernel detects and, since sub-task 6.2, no text mode either, so it had no
-readable diagnostic output at all; it now draws the log upon its own framebuffer,
-and being too short to hold it, scrolls.
-
-**Two things followed from having a console, and both are part of 6.4.**
-
-It was slow, and what was measured was not what had been guessed at. `RDTSC` had
-to be used at all because the interval timer is useless here — interrupts are
-disabled for most of the boot and seventeen ticks elapse in the whole of it — and
-the measurement put the console at **15.2% of the entire boot**. The cause was
-that a four-byte pixel was written as four separate bytes, a glyph was clipped
-sixty-four times instead of eight, and a console cell was written twice: once
-filled and once drawn over. The console is now 4.5% of the boot and the
-operations that matter are between three and eight times faster. The remaining
-factor is the framebuffer read that a scroll performs, and removing that needs
-the back buffer of sub-task 6.6.
-
-And the screen could show the boot log but not the one thing a person most needs,
-which is what happened when the machine stopped. There are now **fault screens:
-one for each severe fault, not one for all of them**, because the faults are not
-one thing — a page fault names an address, a general-protection fault names a
-selector or names nothing and is then about the instruction, and a double fault's
-own registers are the wrong ones to read, the fault worth finding being the one
-before it. Each screen carries its own title, colour, account, direction and
-evidence. The self-test asserts what a person reading one screen would not
-notice: that no two of them share a title or a colour, that every severe vector
-has one, and that every title fits the 640-pixel display the person judging them
-was probably not using.
-
-One fault there was found only by looking, and no assertion available would have
-caught it: the screens were drawn correctly and displayed wrongly, `KernelPanic`
-writing to a console that was still upon the same framebuffer and scrolling the
-finished page up by three character rows.
-
-**A second fault, and a more serious one, was found by being told about it.**
-Every exception was treated as fatal to the machine, so a divide by zero — the
-plainest mistake a program can make, and one that must cost that program and
-nothing else — would have halted the system and drawn a full-screen page
-announcing it. That is not a missing feature; it is a false account of what
-happened, given to the person least able to check it. Exceptions now have a
-**disposition**, decided by the vector and the privilege level together: resume,
-terminate the program that raised it, or fatal to the kernel — and only the last
-draws a screen. The aborts, the non-maskable interrupt and the two
-descriptor-table faults are fatal whatever raised them, for reasons of their own;
-everything else belongs to whoever raised it. Nothing can reach the terminating
-path until sub-task 6.10 runs code at privilege level 3, so the classification is
-asserted rather than exercised — `ExceptionDispositionOf` being a pure function,
-it can be asked about a privilege level that does not yet exist, which is the
-idiom sub-task 6.1 used for `SYSCALL`. The screens were narrowed to ten and
-re-titled to say what they are. See
-[`../design/PRIVILEGE.md`](../design/PRIVILEGE.md) and
-[`../design/GRAPHICS.md`](../design/GRAPHICS.md).
-
-**Sub-task 4.4 acquired a sub-task beside it**, reported from a real machine
-rather than found by a test. A machine that boots this kernel found no disk upon
-it, and the cause was not a fault in the driver: the driver reads and writes
-through the ATA command block registers, which is an IDE controller and nothing
-else, while a modern firmware presents its SATA controller in **AHCI** mode,
-whose registers are memory-mapped and which answers at no I/O port whatever. The
-symptom of that is indistinguishable from the symptom of having no disk.
-
-Two things were done and a third was recorded. The driver now **reads the base
-address registers of a controller in native PCI mode**, which sub-task 4.4 had
-listed as its first limitation and which is a real fault upon any machine whose
-IDE channels are not at the addresses the IBM Personal Computer AT fixed. The
-report now **says which cause it is**, naming the controllers the bus carries,
-saying for each why this driver did not reach it, and naming the firmware setting
-that would make the disks visible — because that remedy is within the reach of
-whoever is standing at the machine and an AHCI driver is not. And the AHCI driver
-itself became sub-task 4.7.
-
-The addressing decision is asserted upon configuration headers **composed in
-memory**, no board available to this project presenting an IDE controller in
-native mode. That is the same idiom as everywhere else here: where the machine
-cannot be made to produce the condition, the decision is made a pure function and
-the condition is composed.
-
-**Sub-task 6.5 is complete**, and the machine has a pointer. The mouse is the
-second device upon the 8042, and the first thing that had to be done was not
-about the mouse: **the controller became a module of its own**. Its
-configuration byte governs both ports and is read, modified and written whole, so
-two drivers each keeping their own idea of it would each write back the other's
-bits as they last saw them — the mouse driver enabling its own interrupt would
-have restored the translation bit to whatever it was when the mouse driver first
-looked, and the keyboard would then have delivered scan code set 2 while decoding
-it as set 1. That is not a failure to work; it is most keys still producing
-plausible characters and some producing the wrong ones.
-
-Three properties of the decoder each guard a failure that produces working,
-wrong behaviour rather than an error. **The framing** rests upon the bit set in
-every packet's first byte: a driver that has lost its place does not stop, it
-reads the second byte of one packet as the first of the next and reports button
-states taken from movement magnitudes for ever, every value being one the device
-could have sent. **The movement is nine bits**, its sign living in another byte,
-so the obvious eight-bit sign extension gets −1 right by accident and turns −256
-into zero — losing exactly the largest movements a hand can make. And **the
-vertical sense is inverted once**, where the device is known, because a mouse
-measures upward as positive and a display downward; forwarding it gives a pointer
-that moves correctly sideways and backwards vertically, which presents as broken
-hardware.
-
-The position is kept by the driver and not by its readers, for the reason the
-keyboard keeps the modifier state: a sum is only correct if one thing performs
-it, and a reader that missed an event would not lose one movement but be
-displaced by it permanently. The bounds are told to the driver by whoever knows
-the display, a mouse having no idea what it is pointing at.
-
-The pointer keeps the pixels beneath it, there being one surface and no back
-buffer until sub-task 6.6, and `KernelWriteString` conceals it around every
-console write — the same fan-out point that became the only routine permitted to
-name an output device in 6.4, used again for the same kind of reason. The
-concealment is a **counted pair** because a panic raised from within a write
-nests inside it. All of this disappears in 6.6, and what survives is the shape
-and the position; whether the division was drawn in the right place is a question
-that sub-task answers rather than one argued here. See
-[`../devices/MOUSE.md`](../devices/MOUSE.md).
-
-**Sub-tasks 6.6 to 6.10 are complete, and between them the kernel acquired a
-display it composes rather than writes to, and a program.** The compositor of 6.6
-put a back buffer in ordinary memory beneath everything that draws, which
-discharged at once the clip stack and the blend of 6.3, the double buffering 6.4
-asked for, and the save-under of 6.5 — the last removed outright, along with the
-concealment that made it safe and `KernelWriteString`'s knowledge that a pointer
-existed. Nothing reads the framebuffer any more. Sub-task 6.7 supplied the
-`SYSCALL` entry path, whose first three instructions are the whole of its
-security, a dispatch table of three calls and the validation of a caller's
-arguments; establishing the first page reachable from privilege level 3 found a
-defect in the paging of Phase 2, intermediate entries never having carried the
-user bit. Sub-task 6.8 supplied the ELF64 loader, whose design is the list of
-fifteen things it refuses to be told. Sub-task 6.9 defined the process control
-block, the thread and the saved context without running any of them, so that the
-shape could still be argued about before assembly was written against its
-offsets; and sub-task 6.10 wrote that assembly. A program of twenty-nine bytes
-now runs at privilege level 3, writes a string through a system call, executes an
-undefined instruction on purpose, and is ended — which made
-`ExceptionTerminateProgram` a path that terminates rather than one that panics
-for want of anywhere to return to. See
-[`../design/GRAPHICS.md`](../design/GRAPHICS.md), Section 27,
-[`../design/PRIVILEGE.md`](../design/PRIVILEGE.md), Section 9,
-[`../design/EXECUTABLE.md`](../design/EXECUTABLE.md) and
-[`../design/PROCESS.md`](../design/PROCESS.md).
-
-**The testing arrangement**, which is not a phase and governs every one of them:
-there is no test harness and there will be none before Phase 7, so the kernel
-asserts its own properties at boot, in the order the subsystems are initialised.
-Those tests are in `kernel/test/`, one file per subsystem, and `make verify`
-fails if any of them reports a failure. See
-[`../../kernel/test/README.md`](../../kernel/test/README.md) and
-[`TESTING.md`](TESTING.md).
-
-## Legend
-
-| Marker | Meaning |
-| ------ | ------- |
-| `[ ]`  | Not commenced. |
-| `[~]`  | In progress. |
-| `[x]`  | Completed and verified by test. |
+The ordering is dictated by dependency, which
+[`../design/ARCHITECTURE.md`](../design/ARCHITECTURE.md), Section 4, sets out —
+including the two places where the order was deliberately chosen against the
+obvious one, and why.
 
 ---
 
@@ -307,19 +81,22 @@ address space, and emits identifying output.
 
 **Specifications**: Multiboot2 Specification 2.0; Intel SDM Volume 3A,
 Chapters 2, 4 and 9; System V ABI for AMD64.
+**Design**: [`../design/BOOT.md`](../design/BOOT.md).
 
-- [x] 1.1 Verify the cross-compilation toolchain (`x86_64-elf-gcc`, `x86_64-elf-ld`, `nasm`, `grub-mkrescue`, `xorriso`) is present and functional.
-- [x] 1.2 Author the linker script `linker.ld` defining a higher-half kernel at virtual base `0xFFFFFFFF80000000` with a physical load address of `0x00100000`.
-- [x] 1.3 Author `boot/boot.asm`: Multiboot2 header, 32-bit protected-mode entry point, Multiboot2 magic validation, CPUID and long-mode feature detection.
-- [x] 1.4 Construct the boot-time paging hierarchy (PML4, two PDPTs, one PD) providing a 1 GiB identity map and a coincident 1 GiB higher-half map using 2 MiB pages.
-- [x] 1.5 Perform the long-mode transition (CR4.PAE, IA32_EFER.LME, CR0.PG) and load a 64-bit GDT.
-- [x] 1.6 Transfer control to the higher-half 64-bit kernel entry point and establish the kernel stack.
-- [x] 1.7 Implement a minimal VGA text-mode output routine and a minimal COM1 serial output routine for early diagnostics.
-- [x] 1.8 Implement `KernelMain`, which clears the screen and prints the string "Oxys-OS".
-- [x] 1.9 Author the `Makefile` with the targets `all`, `clean`, `iso`, `run-qemu`, `run-vbox` and `run-uefi`.
-- [x] 1.10 Generate the ISO image and verify boot under QEMU.
-- [x] 1.11 Verify boot under VirtualBox.
-- [ ] 1.12 Verify boot on physical hardware from a USB medium.
+| # | Sub-task | State | Asserted by |
+| - | -------- | ----- | ----------- |
+| 1.1 | Verify the cross-compilation toolchain (`x86_64-elf-gcc`, `x86_64-elf-ld`, `nasm`, `grub-mkrescue`, `xorriso`) is present and functional. | Implemented | `make toolcheck` |
+| 1.2 | Author the linker script `linker.ld` defining a higher-half kernel at virtual base `0xFFFFFFFF80000000` with a physical load address of `0x00100000`. | Implemented | — |
+| 1.3 | Author `boot/boot.asm`: Multiboot2 header, 32-bit protected-mode entry point, Multiboot2 magic validation, CPUID and long-mode feature detection. | Implemented | `grub-file`, at each link |
+| 1.4 | Construct the boot-time paging hierarchy (PML4, two PDPTs, one PD) providing a 1 GiB identity map and a coincident 1 GiB higher-half map using 2 MiB pages. | Implemented | — |
+| 1.5 | Perform the long-mode transition (CR4.PAE, IA32_EFER.LME, CR0.PG) and load a 64-bit GDT. | Implemented | — |
+| 1.6 | Transfer control to the higher-half 64-bit kernel entry point and establish the kernel stack. | Implemented | — |
+| 1.7 | Implement a minimal VGA text-mode output routine and a minimal COM1 serial output routine for early diagnostics. | Implemented | `verify_devices.c` |
+| 1.8 | Implement `KernelMain`, which clears the screen and prints the string "Oxys-OS". | Implemented | `make verify` banner |
+| 1.9 | Author the `Makefile` with the targets `all`, `clean`, `iso`, `run-qemu`, `run-vbox` and `run-uefi`. | Implemented | — |
+| 1.10 | Generate the ISO image and verify boot under QEMU. | Implemented | `make verify` |
+| 1.11 | Verify boot under VirtualBox. | Implemented | [`TESTING.md`](TESTING.md) §9 |
+| 1.12 | Verify boot on physical hardware from a USB medium. | **Planned** | — |
 
 ---
 
@@ -331,15 +108,23 @@ provide the copy-on-write primitives upon which `fork()` will later depend.
 **Specifications**: Intel SDM Volume 3A, Chapter 4 (Paging) and Section 6.15
 (Page-Fault Exception); Multiboot2 Specification, Sections 3.6.7 (ELF-Symbols
 tag) and 3.6.8 (memory map tag).
+**Design**: [`../design/MEMORY-LAYOUT.md`](../design/MEMORY-LAYOUT.md).
 
-- [x] 2.1 Parse the Multiboot2 information structure and extract the memory map (tag type 6) and the ELF section headers (tag type 9).
-- [x] 2.2 Implement a physical frame allocator (bitmap) covering all usable regions, reserving the kernel image, the Multiboot2 structures and the low 1 MiB.
-- [x] 2.3 Construct a permanent kernel page-table hierarchy, replacing the boot-time tables and removing the low identity map.
-- [x] 2.4 Implement a direct physical map region for kernel access to arbitrary frames.
-- [x] 2.5 Implement a kernel virtual-address-space allocator and a general-purpose kernel heap (slab allocator over a buddy-style page allocator).
-- [x] 2.6 Implement per-frame reference counting as the substrate for shared pages.
-- [x] 2.7 Implement the page-fault handler dispatch path (dependent upon Phase 3) and the copy-on-write fault resolution routine.
-- [x] 2.8 Implement address-space cloning that marks writable user pages read-only and increments frame reference counts.
+Sub-tasks 2.7 and 2.8 were deferred until Phase 3 supplied a page-fault handler;
+that is the one mutual dependency in the whole ordering, and
+[`../design/ARCHITECTURE.md`](../design/ARCHITECTURE.md), Section 4, records how
+it was discharged.
+
+| # | Sub-task | State | Asserted by |
+| - | -------- | ----- | ----------- |
+| 2.1 | Parse the Multiboot2 information structure and extract the memory map (tag type 6) and the ELF section headers (tag type 9). | Implemented | `verify_memory.c` (indirect) |
+| 2.2 | Implement a physical frame allocator (bitmap) covering all usable regions, reserving the kernel image, the Multiboot2 structures and the low 1 MiB. | Implemented | `verify_memory.c` |
+| 2.3 | Construct a permanent kernel page-table hierarchy, replacing the boot-time tables and removing the low identity map. | Implemented | `verify_memory.c` |
+| 2.4 | Implement a direct physical map region for kernel access to arbitrary frames. | Implemented | `verify_memory.c` |
+| 2.5 | Implement a kernel virtual-address-space allocator and a general-purpose kernel heap (slab allocator over a buddy-style page allocator). | Implemented | `verify_memory.c` |
+| 2.6 | Implement per-frame reference counting as the substrate for shared pages. | Implemented | `verify_memory.c` |
+| 2.7 | Implement the page-fault handler dispatch path (dependent upon Phase 3) and the copy-on-write fault resolution routine. | Implemented | `verify_memory.c` |
+| 2.8 | Implement address-space cloning that marks writable user pages read-only and increments frame reference counts. | Implemented | `verify_memory.c` |
 
 ---
 
@@ -350,14 +135,19 @@ exceptions, and accept keyboard input.
 
 **Specifications**: Intel SDM Volume 3A, Chapter 6; Intel 8259A datasheet;
 IBM PS/2 controller documentation.
+**Design**: [`../design/INTERRUPTS.md`](../design/INTERRUPTS.md),
+[`../devices/TIME.md`](../devices/TIME.md),
+[`../devices/KEYBOARD.md`](../devices/KEYBOARD.md).
 
-- [x] 3.1 Define the IDT and the 64-bit interrupt-gate descriptor format; load it with `lidt`.
-- [x] 3.2 Author assembly stubs for vectors 0–255, normalising the presence or absence of a processor-pushed error code.
-- [x] 3.3 Implement a C interrupt dispatcher operating on a formal trap frame structure.
-- [x] 3.4 Implement exception handlers with register and stack diagnostics emitted over the serial port.
-- [x] 3.5 Remap the 8259A PIC to vectors 32–47 and implement end-of-interrupt signalling.
-- [x] 3.6 Implement the Programmable Interval Timer as the initial timer source.
-- [x] 3.7 Implement the PS/2 keyboard driver: controller initialisation, scancode set 1 translation, modifier state and a circular input buffer.
+| # | Sub-task | State | Asserted by |
+| - | -------- | ----- | ----------- |
+| 3.1 | Define the IDT and the 64-bit interrupt-gate descriptor format; load it with `lidt`. | Implemented | `verify_interrupts.c` |
+| 3.2 | Author assembly stubs for vectors 0–255, normalising the presence or absence of a processor-pushed error code. | Implemented | `verify_interrupts.c` |
+| 3.3 | Implement a C interrupt dispatcher operating on a formal trap frame structure. | Implemented | `verify_interrupts.c` |
+| 3.4 | Implement exception handlers with register and stack diagnostics emitted over the serial port. | Implemented | `verify_interrupts.c`, `verify_faultscreen.c` |
+| 3.5 | Remap the 8259A PIC to vectors 32–47 and implement end-of-interrupt signalling. | Implemented | `verify_devices.c` |
+| 3.6 | Implement the Programmable Interval Timer as the initial timer source. | Implemented | `verify_devices.c` |
+| 3.7 | Implement the PS/2 keyboard driver: controller initialisation, scancode set 1 translation, modifier state and a circular input buffer. | Implemented | `verify_devices.c` |
 
 ---
 
@@ -368,16 +158,26 @@ subsequent user-facing subsystems.
 
 **Specifications**: PC16550D UART datasheet; ATA/ATAPI Command Set (ACS-3);
 PCI Local Bus Specification 3.0; Serial ATA Advanced Host Controller Interface
-1.3.1.
+1.3.1; SD Host Controller Simplified Specification 4.20.
+**Design**: [`../devices/`](../devices/) and [`../storage/`](../storage/).
 
-- [x] 4.1 Promote the early serial routine to a formal, interrupt-driven COM1 driver with configurable line parameters.
-- [x] 4.2 Promote the early VGA routine to a formal text-mode driver with scrolling, cursor control and colour attributes.
-- [x] 4.3 Implement PCI configuration-space enumeration by the legacy I/O port mechanism, with device and class identification.
-- [x] 4.4 Implement an ATA PIO driver: bus reset, `IDENTIFY DEVICE`, 28-bit and 48-bit LBA sector read and write.
-- [x] 4.5 Define a generic block-device abstraction layer above the ATA driver.
-- [x] 4.6 Implement a buffer cache for block devices.
-- [x] 4.7 Implement an AHCI driver, so that a machine whose firmware presents its SATA controller in AHCI mode has a disk at all. *(Added 2026-09-04, at the project owner's report that a machine which boots this kernel finds no disk upon it. Sub-task 4.4 drives the ATA command block registers, which is an IDE controller and nothing else; an AHCI controller's registers are memory-mapped and it answers at no I/O port, so the symptom is exactly the symptom of having no disk. The kernel now says which it is rather than leaving a person to guess — see `docs/storage/DISK.md`, Section 2.2 — but saying so is not driving it.)*
-- [x] 4.8 Implement an SD host controller driver, so that a machine whose system is upon an embedded MultiMediaCard part has storage at all. *(Added 2026-09-06, at the project owner's report of the machine the previous sub-task was added for: an inexpensive laptop with an Intel Celeron, four gibibytes of memory and no disk of any kind — its system upon an eMMC part, booted from a USB drive. Such a machine carries no mass-storage controller whatever, so sub-task 4.7 would not help it either. An eMMC part is attached to an SD host controller, class `0x08`, subclass `0x05`, which the kernel now names in its report; see `docs/storage/DISK.md`, Section 2.3. Reaching a USB drive is a longer road — a host controller, then the mass-storage class above it — and is not planned here.)*
+Sub-tasks 4.7 and 4.8 were added after the phase was otherwise complete, both at
+the project owner's report from a real machine that this kernel found no disk
+upon. The diagnosis and the reasoning are in
+[`../storage/DISK.md`](../storage/DISK.md), Sections 2.1 to 2.3; the short of it
+is that "no disk" had three indistinguishable causes and only one of them was
+the absence of a disk.
+
+| # | Sub-task | State | Asserted by |
+| - | -------- | ----- | ----------- |
+| 4.1 | Promote the early serial routine to a formal, interrupt-driven COM1 driver with configurable line parameters. | Implemented | `verify_devices.c` |
+| 4.2 | Promote the early VGA routine to a formal text-mode driver with scrolling, cursor control and colour attributes. | Implemented | `verify_devices.c` |
+| 4.3 | Implement PCI configuration-space enumeration by the legacy I/O port mechanism, with device and class identification. | Implemented | `verify_devices.c` |
+| 4.4 | Implement an ATA PIO driver: bus reset, `IDENTIFY DEVICE`, 28-bit and 48-bit LBA sector read and write. | Implemented | `verify_storage.c` |
+| 4.5 | Define a generic block-device abstraction layer above the ATA driver. | Implemented | `verify_storage.c` |
+| 4.6 | Implement a buffer cache for block devices. | Implemented | `verify_storage.c` |
+| 4.7 | Implement an AHCI driver, so that a machine whose firmware presents its SATA controller in AHCI mode has a disk at all. *(Added 2026-09-04.)* | Implemented | `verify_storage.c` |
+| 4.8 | Implement an SD host controller driver, so that a machine whose system is upon an embedded MultiMediaCard part has storage at all. *(Added 2026-09-06.)* | Implemented | `verify_storage.c` |
 
 ---
 
@@ -387,15 +187,19 @@ PCI Local Bus Specification 3.0; Serial ATA Advanced Host Controller Interface
 
 **Specifications**: The Second Extended File System (Poirier); Linux kernel
 documentation, `Documentation/filesystems/ext2.rst`.
+**Design**: [`../storage/EXT2.md`](../storage/EXT2.md),
+[`../storage/VFS.md`](../storage/VFS.md).
 
-- [x] 5.1 Parse the superblock and validate the EXT2 magic number and revision level.
-- [x] 5.2 Parse the block-group descriptor table.
-- [x] 5.3 Implement inode retrieval and the resolution of direct, singly, doubly and triply indirect block pointers.
-- [x] 5.4 Implement directory-entry traversal and absolute path resolution.
-- [x] 5.5 Implement file reading.
-- [x] 5.6 Implement block and inode allocation, file writing, extension and truncation.
-- [x] 5.7 Implement directory creation and entry insertion and removal.
-- [x] 5.8 Define a virtual filesystem layer and mount an EXT2 root volume.
+| # | Sub-task | State | Asserted by |
+| - | -------- | ----- | ----------- |
+| 5.1 | Parse the superblock and validate the EXT2 magic number and revision level. | Implemented | `ext2/format.c` |
+| 5.2 | Parse the block-group descriptor table. | Implemented | `ext2/format.c` |
+| 5.3 | Implement inode retrieval and the resolution of direct, singly, doubly and triply indirect block pointers. | Implemented | `ext2/format.c`, `ext2/file.c` |
+| 5.4 | Implement directory-entry traversal and absolute path resolution. | Implemented | `ext2/directory.c` |
+| 5.5 | Implement file reading. | Implemented | `ext2/file.c` |
+| 5.6 | Implement block and inode allocation, file writing, extension and truncation. | Implemented | `ext2/write.c` |
+| 5.7 | Implement directory creation and entry insertion and removal. | Implemented | `ext2/write.c` |
+| 5.8 | Define a virtual filesystem layer and mount an EXT2 root volume. | Implemented | `verify_vfs.c` |
 
 ---
 
@@ -408,69 +212,40 @@ them across multiple processors, and expose kernel services by system call.
 (`SYSCALL`/`SYSRET`); System V ABI for AMD64; Intel MultiProcessor
 Specification 1.4; ACPI Specification 6.5 (MADT); Multiboot2 Specification,
 Section 3.6.12 (framebuffer information tag); VESA BIOS Extensions 3.0.
+**Design**: [`../design/PRIVILEGE.md`](../design/PRIVILEGE.md),
+[`../design/GRAPHICS.md`](../design/GRAPHICS.md),
+[`../design/EXECUTABLE.md`](../design/EXECUTABLE.md),
+[`../design/PROCESS.md`](../design/PROCESS.md),
+[`../devices/MOUSE.md`](../devices/MOUSE.md).
 
-- [x] 6.1 Install the GDT and TSS required for privilege transition; configure IA32_STAR, IA32_LSTAR and IA32_FMASK. *(The kernel GDT and its null, code and data descriptors were established early, in Phase 3; what remained was the user-mode descriptors, the task state segment and the system-call MSRs. Designed in `docs/design/PRIVILEGE.md`.)*
-- [x] 6.2 Request a linear framebuffer by the Multiboot2 framebuffer tag and map it into kernel space. *(Designed in `docs/design/GRAPHICS.md`. The mode is the boot loader's to choose and GRUB ignores what it is asked for, so the kernel accepts whatever it is handed; the pages are given the write-combining memory type through entry 4 of `IA32_PAT`.)*
-- [x] 6.3 Implement 2D primitives: pixel, line, rectangle, blit and clipping. *(Upon a surface rather than upon the framebuffer, so that they may be asserted in memory upon a machine with no display. Clipping is treated as the memory-safety boundary it is; the line is clipped per pixel so that clipping does not move it. Designed in `docs/design/GRAPHICS.md`, Sections 11 to 17.)*
-- [x] 6.4 Implement a bitmap font renderer, and a graphical console above it that the diagnostic path may write to. *(The face is ninety-five glyphs of eight by eight, drawn for this project rather than obtained. The console replays what was written before the framebuffer could be mapped, scrolls by blitting the surface upon itself, and gives up the screen to the drawing figures when the command line asks for them. Measured afterwards at 15.2% of the whole boot and reduced to 4.5%; and given fault screens, one for each severe fault rather than one for all of them. Designed in `docs/design/GRAPHICS.md`, Sections 18 to 25.)*
-- [x] 6.5 Implement a PS/2 mouse driver upon the second device port of the 8042, and a cursor. *(The 8042 became a module of its own first: its configuration byte governs both ports and is written whole, so two drivers keeping their own idea of it would each undo the other's. The decoder frames the stream upon the bit that is set in every packet, extends the movement as the nine bits it is, and inverts the vertical sense once, where the device is known. The pointer keeps the pixels beneath it, there being no back buffer until 6.6. Designed in `docs/devices/MOUSE.md` and `docs/design/GRAPHICS.md`, Section 26.)*
-- [x] 6.6 Implement a compositing surface abstraction and double buffering. *(A back buffer in ordinary memory, an ordered list of layers composited over it as the changed region is carried to the display, and a damage rectangle that narrows what is carried. It collects four sub-tasks of promises at once: the clip stack and the blend of 6.3, the double buffering of 6.4, and the save-under of 6.5, which is gone entirely along with the concealment that made it safe. Nothing reads the framebuffer any more. Designed in `docs/design/GRAPHICS.md`, Section 27.)*
-- [x] 6.7 Implement the `SYSCALL` entry path, the system-call dispatch table and argument validation. *(The entry path swaps GS to reach a per-processor block, stores the caller's stack there because there is nowhere else, loads the kernel stack from it, and only then pushes anything — the order being the whole of the security of the path. Three calls, chosen so that one validates a range the kernel reads, one a range it writes, and one takes no argument at all. Establishing the first page accessible to privilege level 3 found a defect in the paging of Phase 2: intermediate entries never carried the user bit. Designed in `docs/design/PRIVILEGE.md`, Section 9.)*
-- [x] 6.8 Implement the ELF64 loader for statically linked executables. *(A loader does what an untrusted document tells it to, so its design is the list of things it refuses to be told: fifteen of them, each asserted by name. Nothing is overlaid — the format is read from a medium and is decoded byte by byte. The segments are placed through the direct physical map rather than by switching to the space, so a read-only segment is never writable, and the page a program's text shares with its data is written into rather than mapped over. Designed in `docs/design/EXECUTABLE.md`.)*
-- [x] 6.9 Define the process control block, the address-space descriptor and the thread structure. *(The structures, the tables that hold them, and the allocations each is given — and nothing that runs: no context is restored and no address space made active, so the shape can still be argued about before 6.10 writes assembly against its offsets. A thread is a structure of its own because two threads of one process share every page and must not share the stack the kernel is entered upon. Keeps three promises made to it: a guard page beneath each kernel stack, `rsp0` written when a thread becomes current, and the extent record an address space cannot hold. Designed in `docs/design/PROCESS.md`.)*
-- [x] 6.10 Implement context switching and the initial transition to user mode via `IRETQ`. *(A switch is an ordinary function call, so six registers and a stack pointer are the whole of a context and the return address upon the stack carries the instruction pointer. A thread that has never run is given a fabricated history: a return address and nothing else. The descent clears every register — what is in one at that moment is a kernel address as often as not — and pushes five quadwords with the requested privilege level of 3 that makes it a descent at all. A program of twenty-nine bytes now runs, writes through a system call, faults on purpose, and is ended. Designed in `docs/design/PROCESS.md`, Sections 9 and 10.)*
-- [ ] 6.11 Implement `fork()` upon the Phase 2 copy-on-write substrate, together with `execve()`, `exit()` and `wait()`.
-- [ ] 6.12 Parse the ACPI MADT; initialise the Local APIC and the I/O APIC; retire the 8259A PIC.
-- [ ] 6.13 Implement spinlocks, per-CPU data areas and inter-processor interrupts, including TLB shootdown. *(Ordered before the bring-up that needs them; see the note below.)*
-- [ ] 6.14 Implement application-processor bring-up by INIT-SIPI-SIPI and a real-mode trampoline.
-- [ ] 6.15 Implement a multiprocessor-aware round-robin scheduler with per-CPU run queues and processor affinity.
+| # | Sub-task | State | Asserted by |
+| - | -------- | ----- | ----------- |
+| 6.1 | Install the GDT and TSS required for privilege transition; configure IA32_STAR, IA32_LSTAR and IA32_FMASK. | Implemented | `verify_privilege.c` — **partial**, see note (a) |
+| 6.2 | Request a linear framebuffer by the Multiboot2 framebuffer tag and map it into kernel space. | Implemented | `verify_framebuffer.c` |
+| 6.3 | Implement 2D primitives: pixel, line, rectangle, blit and clipping. | Implemented | `verify_graphics.c` |
+| 6.4 | Implement a bitmap font renderer, and a graphical console above it that the diagnostic path may write to. | Implemented | `verify_console.c`, `verify_faultscreen.c` |
+| 6.5 | Implement a PS/2 mouse driver upon the second device port of the 8042, and a cursor. | Implemented | `verify_mouse.c` |
+| 6.6 | Implement a compositing surface abstraction and double buffering. | Implemented | `verify_compositor.c` |
+| 6.7 | Implement the `SYSCALL` entry path, the system-call dispatch table and argument validation. | Implemented | `verify_syscall.c` |
+| 6.8 | Implement the ELF64 loader for statically linked executables. | Implemented | `verify_elf.c` |
+| 6.9 | Define the process control block, the address-space descriptor and the thread structure. | Implemented | `verify_process.c` |
+| 6.10 | Implement context switching and the initial transition to user mode via `IRETQ`. | Implemented | `verify_usermode.c` |
+| 6.11 | Implement `fork()` upon the Phase 2 copy-on-write substrate, together with `execve()`, `exit()` and `wait()`. | **Planned — next** | — |
+| 6.12 | Parse the ACPI MADT; initialise the Local APIC and the I/O APIC; retire the 8259A PIC. | Planned | — |
+| 6.13 | Implement spinlocks, per-CPU data areas and inter-processor interrupts, including TLB shootdown. | Planned | — |
+| 6.14 | Implement application-processor bring-up by INIT-SIPI-SIPI and a real-mode trampoline. | Planned | — |
+| 6.15 | Implement a multiprocessor-aware round-robin scheduler with per-CPU run queues and processor affinity. | Planned | — |
 
-**Why 6.2 to 6.6 are here.** The framebuffer and the drawing above it were
-sub-tasks 9.1 to 9.5 until 2026-09-03, and `PROJECT_GUIDELINES.md`, Section 5,
-placed the whole of the graphical work after the shell. They are moved here at
-the project owner's decision, and the split is along a real line rather than an
-arbitrary one: **nothing in 6.2 to 6.6 depends upon a process existing.** A
-framebuffer is memory the boot loader describes and this kernel maps; primitives,
-a font and a compositing surface are arithmetic upon that memory; and a mouse is
-another device upon the 8042 controller, whose second port the keyboard driver of
-sub-task 3.7 already leaves alone. Every one of them is written, exercised and
-asserted with the machinery Phases 2 to 5 already provide.
+**(a)** Sub-task 6.1's self-test executed `SYSCALL` until sub-task 6.7 replaced
+the entry point with one returning by `SYSRET`, which returns to privilege level
+3 unconditionally. That assertion is recorded as lost rather than disguised, and
+[`../design/PRIVILEGE.md`](../design/PRIVILEGE.md), Section 9.4, says why no test
+hook was added to recover it. The configuration is asserted still; the
+instruction is now executed only by a user program.
 
-What genuinely does need processes is the half that stays in Phase 9: a window
-manager has nothing to manage, and a client protocol has no client, until there
-is something to run. That division is why this is a split and not a wholesale
-reordering.
-
-Two things are gained and one is given up. The diagnostic path acquires a console
-that is not eighty by twenty-five characters of text, and every phase from here
-to the end reports through it; and the choice between the VESA path and the UEFI
-Graphics Output Protocol is forced now, while Phase 12 can still be shaped around
-it, rather than in Phase 9 when it can no longer be. What is given up is that the
-surface abstraction of sub-task 6.6 is designed before any user-mode client
-exists to design it against, so its interface is a judgement rather than a
-response. That is recorded here so that the judgement is revisited in sub-task
-9.2 and not merely inherited.
-
-**Why 6.13 precedes 6.14.** These two stood in the opposite order until
-2026-09-03, and the order was wrong. Sub-task 6.14 starts processors; sub-task
-6.13 supplies the locks without which nothing they touch is safe. Every shared
-structure this kernel has — the frame allocator's bitmap and search hint, the
-heap, the buffer cache, the mount and node tables of the filesystem layer, the
-interrupt dispatch table — is presently unsynchronised, and each says so in its
-own file's header. Bringing a second processor up before the locks exist would
-produce a milestone that the testing mandate requires to be bootable and
-testable, and that cannot be either: it would either park the new processors
-immediately, in which case nothing is demonstrated, or let them run, in which
-case the machine is corrupt in a way no assertion here would catch.
-
-The reordering costs nothing, because everything in 6.8 can be exercised upon
-one processor. A spinlock's uncontended acquire and release, and the per-CPU
-data area reached through `GS`, are single-processor mechanisms outright. An
-inter-processor interrupt sent to one's own Local APIC is delivered like any
-other, so the shootdown handler may be made to run and the invalidation it
-performs observed — the same device as sub-task 6.1's execution of `SYSCALL`
-from privilege level 0, where the mechanism is exercised in full although the
-condition it exists for has not yet arrived.
+**Why 6.2 to 6.6 sit here rather than in Phase 9**, and **why 6.13 precedes
+6.14**: both orderings were chosen against the obvious one, and both arguments
+are in [`../design/ARCHITECTURE.md`](../design/ARCHITECTURE.md), Section 4.1.
 
 ---
 
@@ -480,13 +255,19 @@ condition it exists for has not yet arrived.
 
 **Specifications**: ISO/IEC 9899:2011; System V ABI for AMD64.
 
-- [ ] 7.1 Implement the freestanding string and memory functions (`<string.h>`).
-- [ ] 7.2 Implement system-call wrappers for the complete kernel interface.
-- [ ] 7.3 Implement a user-space heap allocator (`malloc`, `free`, `realloc`) above `brk`/`mmap`.
-- [ ] 7.4 Implement buffered input and output (`<stdio.h>`) and formatted conversion.
-- [ ] 7.5 Author the C runtime startup object (`crt0`) and the static-linking procedure for user programs.
-- [ ] 7.6 Implement the utilities `ls`, `cat`, `echo`, `mkdir` and `rm`.
-- [ ] 7.7 Construct an initial ramdisk containing the utilities and mount it as the early root.
+Phase 7 is also where the filesystem layer's open file table becomes per-process
+and `fork` must decide what a child inherits; a process has no file descriptors
+before it. See [`../storage/VFS.md`](../storage/VFS.md), limitation 2.
+
+| # | Sub-task | State | Asserted by |
+| - | -------- | ----- | ----------- |
+| 7.1 | Implement the freestanding string and memory functions (`<string.h>`). | Planned | — |
+| 7.2 | Implement system-call wrappers for the complete kernel interface. | Planned | — |
+| 7.3 | Implement a user-space heap allocator (`malloc`, `free`, `realloc`) above `brk`/`mmap`. | Planned | — |
+| 7.4 | Implement buffered input and output (`<stdio.h>`) and formatted conversion. | Planned | — |
+| 7.5 | Author the C runtime startup object (`crt0`) and the static-linking procedure for user programs. | Planned | — |
+| 7.6 | Implement the utilities `ls`, `cat`, `echo`, `mkdir` and `rm`. | Planned | — |
+| 7.7 | Construct an initial ramdisk containing the utilities and mount it as the early root. | Planned | — |
 
 ---
 
@@ -494,13 +275,15 @@ condition it exists for has not yet arrived.
 
 **Objective**: Provide an interactive command interpreter.
 
-- [ ] 8.1 Implement line editing with history.
-- [ ] 8.2 Implement the tokeniser and the command parser.
-- [ ] 8.3 Implement built-in commands (`cd`, `exit`, `export`, `pwd`).
-- [ ] 8.4 Implement external program execution by `fork()` and `execve()`.
-- [ ] 8.5 Implement input and output redirection.
-- [ ] 8.6 Implement pipelines.
-- [ ] 8.7 Implement job control, process groups and terminal signal delivery.
+| # | Sub-task | State | Asserted by |
+| - | -------- | ----- | ----------- |
+| 8.1 | Implement line editing with history. | Planned | — |
+| 8.2 | Implement the tokeniser and the command parser. | Planned | — |
+| 8.3 | Implement built-in commands (`cd`, `exit`, `export`, `pwd`). | Planned | — |
+| 8.4 | Implement external program execution by `fork()` and `execve()`. | Planned | — |
+| 8.5 | Implement input and output redirection. | Planned | — |
+| 8.6 | Implement pipelines. | Planned | — |
+| 8.7 | Implement job control, process groups and terminal signal delivery. | Planned | — |
 
 ---
 
@@ -518,25 +301,21 @@ in place of Phase 6.
 
 Phase 6 supplied the framebuffer, the primitives, the font, the pointer and the
 compositing surface — everything that can be built without a process to own it.
-What remains is everything that cannot, which is why this phase follows the
-shell and not the framebuffer.
+What remains is everything that cannot, which is why this phase follows the shell
+and not the framebuffer. This phase was the whole of the graphical work until
+2026-09-03; [`../design/ARCHITECTURE.md`](../design/ARCHITECTURE.md), Section
+4.1, records the division and what it cost.
 
-- [ ] 9.1 Implement a stacking window manager with focus and event routing.
-- [ ] 9.2 Implement the client protocol by which user processes create, draw and receive events upon windows. *(The surface interface of sub-task 6.6 is revisited here against its first real client, and revised if it does not survive one.)*
-- [ ] 9.3 Implement `init`: the first user process, the supervision of the services below it, and the orderly shutdown of both.
-- [ ] 9.4 Define the system configuration format, its parser, and the `/etc` hierarchy the services and the desktop read at start.
-- [ ] 9.5 Implement the session: the desktop root, the panel, the launcher, and the ownership of the display that decides who may draw upon it.
-- [ ] 9.6 Implement a terminal emulator window hosting the Phase 8 shell.
-- [ ] 9.7 Implement the utilities the desktop is not usable without: a file manager, a text viewer and a clock.
-- [ ] 9.8 Implement the settings application, by which the configuration of sub-task 9.4 is edited rather than hand-written.
-
-**What this phase is now.** Until 2026-09-03 this was the whole of the graphical
-work, from the framebuffer upward. Its first five sub-tasks were moved to Phase 6
-at the project owner's decision, upon the division recorded there: what needs no
-process was brought forward, and what does was left here. The phase is therefore
-no longer "graphics" — it is the desktop as a thing a person uses, and the
-system processes and configuration without which a window system is a
-demonstration rather than an environment.
+| # | Sub-task | State | Asserted by |
+| - | -------- | ----- | ----------- |
+| 9.1 | Implement a stacking window manager with focus and event routing. | Planned | — |
+| 9.2 | Implement the client protocol by which user processes create, draw and receive events upon windows. *(The surface interface of 6.6 is revisited here against its first real client.)* | Planned | — |
+| 9.3 | Implement `init`: the first user process, the supervision of the services below it, and the orderly shutdown of both. | Planned | — |
+| 9.4 | Define the system configuration format, its parser, and the `/etc` hierarchy the services and the desktop read at start. | Planned | — |
+| 9.5 | Implement the session: the desktop root, the panel, the launcher, and the ownership of the display that decides who may draw upon it. | Planned | — |
+| 9.6 | Implement a terminal emulator window hosting the Phase 8 shell. | Planned | — |
+| 9.7 | Implement the utilities the desktop is not usable without: a file manager, a text viewer and a clock. | Planned | — |
+| 9.8 | Implement the settings application, by which the configuration of 9.4 is edited rather than hand-written. | Planned | — |
 
 ---
 
@@ -549,12 +328,14 @@ symmetric encryption.
 (modes of operation); NIST SP 800-90A (deterministic random bit generators);
 Intel SDM Volume 2B (`RDRAND`, `RDSEED`).
 
-- [ ] 10.1 Implement an entropy pool seeded from `RDSEED`/`RDRAND` where available and from timer jitter otherwise.
-- [ ] 10.2 Implement a cryptographically secure deterministic random bit generator.
-- [ ] 10.3 Implement SHA-256 with the FIPS 180-4 test vectors.
-- [ ] 10.4 Implement AES-128 and AES-256 with the FIPS 197 test vectors.
-- [ ] 10.5 Implement CBC and CTR modes of operation.
-- [ ] 10.6 Expose the primitives to user space by system call and by a `/dev/random` device node.
+| # | Sub-task | State | Asserted by |
+| - | -------- | ----- | ----------- |
+| 10.1 | Implement an entropy pool seeded from `RDSEED`/`RDRAND` where available and from timer jitter otherwise. | Planned | — |
+| 10.2 | Implement a cryptographically secure deterministic random bit generator. | Planned | — |
+| 10.3 | Implement SHA-256 with the FIPS 180-4 test vectors. | Planned | — |
+| 10.4 | Implement AES-128 and AES-256 with the FIPS 197 test vectors. | Planned | — |
+| 10.5 | Implement CBC and CTR modes of operation. | Planned | — |
+| 10.6 | Expose the primitives to user space by system call and by a `/dev/random` device node. | Planned | — |
 
 ---
 
@@ -566,16 +347,18 @@ Intel SDM Volume 2B (`RDRAND`, `RDSEED`).
 RFC 768 (UDP); RFC 9293 (TCP); RFC 2131 (DHCP); Realtek RTL8139 or Intel 8254x
 datasheet.
 
-- [ ] 11.1 Implement an Ethernet controller driver (RTL8139 or Intel E1000) with descriptor rings and interrupt handling.
-- [ ] 11.2 Define the network buffer structure and the protocol layering framework.
-- [ ] 11.3 Implement Ethernet frame transmission and reception.
-- [ ] 11.4 Implement ARP with a resolution cache.
-- [ ] 11.5 Implement IPv4, including fragmentation and reassembly, and a routing table.
-- [ ] 11.6 Implement ICMP echo request and reply.
-- [ ] 11.7 Implement UDP.
-- [ ] 11.8 Implement TCP: the state machine, sequence-number handling, retransmission and flow control.
-- [ ] 11.9 Implement the BSD-style socket system-call interface.
-- [ ] 11.10 Implement DHCP client configuration and the `ping` utility.
+| # | Sub-task | State | Asserted by |
+| - | -------- | ----- | ----------- |
+| 11.1 | Implement an Ethernet controller driver (RTL8139 or Intel E1000) with descriptor rings and interrupt handling. | Planned | — |
+| 11.2 | Define the network buffer structure and the protocol layering framework. | Planned | — |
+| 11.3 | Implement Ethernet frame transmission and reception. | Planned | — |
+| 11.4 | Implement ARP with a resolution cache. | Planned | — |
+| 11.5 | Implement IPv4, including fragmentation and reassembly, and a routing table. | Planned | — |
+| 11.6 | Implement ICMP echo request and reply. | Planned | — |
+| 11.7 | Implement UDP. | Planned | — |
+| 11.8 | Implement TCP: the state machine, sequence-number handling, retransmission and flow control. | Planned | — |
+| 11.9 | Implement the BSD-style socket system-call interface. | Planned | — |
+| 11.10 | Implement DHCP client configuration and the `ping` utility. | Planned | — |
 
 ---
 
@@ -587,13 +370,19 @@ BIOS.
 **Specifications**: UEFI Specification 2.10; Microsoft PE/COFF Specification;
 ACPI Specification 6.5.
 
-- [ ] 12.1 Establish a PE32+ build path for a UEFI application image.
-- [ ] 12.2 Implement the UEFI entry point and parse the System Table.
-- [ ] 12.3 Retrieve the memory map, the ACPI RSDP and the Graphics Output Protocol framebuffer by Boot Services.
-- [ ] 12.4 Define a boot-protocol-neutral handoff structure consumed by the kernel, populated identically from Multiboot2 or from UEFI.
-- [ ] 12.5 Invoke `ExitBootServices` and transfer control to the kernel.
-- [ ] 12.6 Integrate UEFI Runtime Services: time and variable access.
-- [ ] 12.7 Produce a hybrid ISO image bootable by both BIOS and UEFI, and verify under OVMF.
+`make run-uefi` exists already and is expected to fail; it is provided in advance
+so that this phase has an established point of entry. Sub-task 12.7 renders it
+functional. See [`TESTING.md`](TESTING.md), Section 8.
+
+| # | Sub-task | State | Asserted by |
+| - | -------- | ----- | ----------- |
+| 12.1 | Establish a PE32+ build path for a UEFI application image. | Planned | — |
+| 12.2 | Implement the UEFI entry point and parse the System Table. | Planned | — |
+| 12.3 | Retrieve the memory map, the ACPI RSDP and the Graphics Output Protocol framebuffer by Boot Services. | Planned | — |
+| 12.4 | Define a boot-protocol-neutral handoff structure consumed by the kernel, populated identically from Multiboot2 or from UEFI. | Planned | — |
+| 12.5 | Invoke `ExitBootServices` and transfer control to the kernel. | Planned | — |
+| 12.6 | Integrate UEFI Runtime Services: time and variable access. | Planned | — |
+| 12.7 | Produce a hybrid ISO image bootable by both BIOS and UEFI, and verify under OVMF. | Planned | — |
 
 ---
 
@@ -603,92 +392,31 @@ ACPI Specification 6.5.
 
 **Specifications**: Intel SDM Volume 3A, Chapters 4 and 5 (SMEP, SMAP, NX).
 
-- [ ] 13.1 Profile interrupt latency, context-switch cost and filesystem throughput.
-- [ ] 13.2 Optimise the scheduler for fairness and the block layer for read-ahead.
-- [ ] 13.3 Enable NX, SMEP and SMAP; enforce write-exclusive-or-execute in kernel mappings.
-- [ ] 13.4 Implement kernel stack guard pages and stack-canary protection.
-- [ ] 13.5 Implement kernel address-space layout randomisation, if feasible.
-- [ ] 13.6 Complete and review the whole of the `docs/` corpus.
-- [ ] 13.7 Test on a minimum of three distinct physical machines, including UEFI systems.
-- [ ] 13.8 Extend the userland utility set and produce the final release image.
+Sub-task 13.3 is depended upon by name from two earlier documents:
+[`../design/PRIVILEGE.md`](../design/PRIVILEGE.md), limitation 8, and
+[`../design/EXECUTABLE.md`](../design/EXECUTABLE.md), limitation 4. The user
+mappings those protections exist for came into being at sub-task 6.10.
+
+| # | Sub-task | State | Asserted by |
+| - | -------- | ----- | ----------- |
+| 13.1 | Profile interrupt latency, context-switch cost and filesystem throughput. | Planned | — |
+| 13.2 | Optimise the scheduler for fairness and the block layer for read-ahead. | Planned | — |
+| 13.3 | Enable NX, SMEP and SMAP; enforce write-exclusive-or-execute in kernel mappings. | Planned | — |
+| 13.4 | Implement kernel stack guard pages and stack-canary protection. | Planned | — |
+| 13.5 | Implement kernel address-space layout randomisation, if feasible. | Planned | — |
+| 13.6 | Complete and review the whole of the `docs/` corpus. | Planned | — |
+| 13.7 | Test on a minimum of three distinct physical machines, including UEFI systems. | Planned | — |
+| 13.8 | Extend the userland utility set and produce the final release image. | Planned | — |
 
 ---
 
-## Revision History
+## Where the rest of the detail lives
 
-This table is an **index**, not an account. One row per change, in reverse order
-of commit, saying what changed and pointing at the two places that hold the
-detail: the commit, which records the change as it was made, and the design
-document, which records the reasoning and is revised as the design is.
-
-Rows are kept to about sixty words. They were not always: by sub-task 5.8 a
-single row had reached 1,564 words in one table cell, restating a design document
-that already existed and a commit message that already said the same thing, and
-this document had become 17,000 words of which the roadmap was 2,000. Three
-copies of an argument do not agree with each other for long.
-
-| Date | Phase | Change | Commit | Design |
-| ---- | ----- | ------ | ------ | ------ |
-| 2026-09-07 | All | The three files next largest after `kernel/fs/ext2.c` divided likewise, at the project owner's direction and by the rule that sub-task's division established. `kernel/fs/vfs.c`, 2,355 lines, becomes six units and a private header, along seams this document's own sections already marked. `kernel/test/verify_ext2.c`, 2,618 lines of which the entry point was the last 291, keeps that entry point and moves five chapters of assertions beneath it — `probe.c` among them, separated because a probe asserts nothing and the distinction was until now a matter of prose alone. `drivers/ata/ata.c`, 1,282 lines, becomes six units divided where the *symptoms* diverge: a timing rule broken, a disk never looked for in the right place, or the wrong sector returned. Nothing was rewritten, reordered or improved in passing, so that the check afterwards could be mechanical; it was, and nothing was lost. | `bc5078f` | [`../design/ARCHITECTURE.md`](../design/ARCHITECTURE.md) §2.2 |
-| 2026-09-07 | All | A review of the documentation and then of the code, at the project owner's direction, with no new sub-task begun. The corpus was corrected where it had fallen behind the code — chiefly `ARCHITECTURE.md`, frozen at sub-task 6.4, and limitations recorded as open that later sub-tasks had discharged. Five defects were then found by reading: `PagingReport` announced the boot identity mapping as `PRESENT (unexpected)` upon every healthy boot, having tested a root entry that any low mapping makes present rather than the translation itself; the ELF loader judged a segment of no memory size to be within user space whatever its address, and would map the null page; `ThreadDestroy` cleared the current thread but not the thread to return to; the termination guard was duplicated at two call sites with two messages, one of them stale; and the kernel's own banner and process report each stated something that had stopped being true at 6.10. `kernel/fs/ext2.c`, 4,325 lines and describing itself in its header as an implementation of the superblock, was divided into nine translation units and a private header. | `9c3c148` | [`../design/ARCHITECTURE.md`](../design/ARCHITECTURE.md) §2.2; [`../design/MEMORY-LAYOUT.md`](../design/MEMORY-LAYOUT.md) §8.4.1; [`../design/EXECUTABLE.md`](../design/EXECUTABLE.md) §§3.1, 6.3; [`../design/INTERRUPTS.md`](../design/INTERRUPTS.md) §8.1.3; [`../design/PROCESS.md`](../design/PROCESS.md) §8 |
-| 2026-09-06 | Phase 4 | Sub-task 4.7: an AHCI driver, so that a machine whose firmware presents its serial ATA controller in AHCI mode has a disk at all. The adaptor is found upon the bus, taken from the firmware where the handoff says the firmware still holds it, enabled, and each port its bitmap names is stopped, given a page of its own and restarted. A command is composed in memory as a frame information structure and the caller's buffer named to the device one page at a time, since a buffer contiguous to the processor need not be contiguous to the device; a write is followed by a cache flush within the same sequence. Three decisions no board here can produce — whether a port's link is up, what a signature names, and how the command header packs three fields into one word — are asserted directly. The disk self-test's own transfer assertion was strengthened in the course of it: two reads compared against each other passed with the region byte count halved, and the buffers are now seeded differently so that the device's silence is visible. | `bb530ea` | [`../storage/AHCI.md`](../storage/AHCI.md) |
-| 2026-09-06 | Phase 3 | The serial driver corrected in three places, all of them a status bit believed without having been seen to change. The presence probe read the receiver in the same breath as the write that fed it, so upon VirtualBox — whose adapter shifts the byte, as a real one does — the kernel concluded there was no adapter and had written nothing to COM1 since the driver was written. The loopback self-test entered loopback while the last character of the flushed boot log was still being shifted, and read it back as a surplus; and it trusted a data-ready flag left standing from the previous character, so it failed upon about half of all VirtualBox boots and upon none of QEMU's. The receiver is now emptied before each character, and the surplus check looks for a byte rather than a flag. | `c0ac856` | [`../devices/SERIAL.md`](../devices/SERIAL.md), Section 8.4 |
-| 2026-09-06 | Phase 4 | Sub-task 4.8: an SD host controller driver, so that a machine whose system is upon an embedded MultiMediaCard has storage at all. This is the machine the whole line of work was reported from, and neither of the two drivers before it could ever have reached it: an eMMC part sits behind a controller the assignment specification classes as a system peripheral, and such a machine carries no mass-storage controller whatever. The thing upon the bus is the controller and the thing holding the data is a card with a command set of its own, so most of the driver is that second conversation — a card is woken, asked what it is, given an address, asked how large it is and selected before a block may be read, and which power-up command it answers is how its kind is established. The capacity is the part most likely to be wrong and least likely to say so: two encodings chosen by a field of the same register, differing in where every other field sits and in the units of the answer, over a register the controller has already stripped eight bits from. Both are asserted, and asserted to disagree. | `1bff1fe` | [`../storage/SDCARD.md`](../storage/SDCARD.md) |
-| 2026-09-06 | Phase 6 | Sub-task 6.10: context switching, and the first descent to privilege level 3. A switch is an ordinary function call, so the calling convention's promise means six registers and a stack pointer are the whole of a context and the instruction pointer needs no field — the call put a return address upon the stack and saving the stack pointer saves it with it. A thread that has never run is given a fabricated history: a return address and nothing else, sixteen bytes below the top so that it is entered with the alignment a called function finds. The descent clears every register before IRETQ, what is left in one at that moment being a kernel address as often as not, and pushes the five quadwords with the requested privilege level of 3 that is what makes it a descent rather than a same-privilege return. A program of twenty-nine bytes, composed here and loaded by 6.8 into a space made by 6.9, writes a string through a system call and then executes an undefined instruction; the kernel ends it and carries on, which is the path `ExceptionTerminateProgram` has described since the dispositions were written and could only panic upon until there was somewhere to return to. Two faults were found: a prepared frame carrying six saved registers the switch does not pop, which returned to address zero, and a comment claiming the processor requires bit 1 of RFLAGS to be written, which it does not. | `9296c3f` | [`../design/PROCESS.md`](../design/PROCESS.md), Sections 9 and 10 |
-| 2026-09-06 | Phase 6 | Sub-task 6.9: the process control block, the thread structure and the saved context. Nothing here runs anything — no context is restored, no address space is made active, no thread has executed an instruction — and the division is deliberate: a structure that has never been switched to is one whose shape can still be argued about, and one that has is a structure with assembly written against its offsets. A thread is a structure of its own because two threads of one process share every page of memory and must not share the stack the kernel is entered upon, or a system call made by one returns into the other. Three promises made to this sub-task are kept: each thread's kernel stack comes from the arena with a guard page beneath it, mapped read-only so an overflow's push faults where before one stack ran into the double-fault stack by accident of placement; `ThreadSetCurrent` writes `rsp0`, `TssSetKernelStack` having existed and been uncalled since 6.1; and the extent an address space cannot record is recorded by the process, which is what put things there. Identifiers are numbers and never indices, so a parent outliving its child finds nobody rather than whoever was given that slot next. | `dc5ecd1` | [`../design/PROCESS.md`](../design/PROCESS.md) |
-| 2026-09-06 | Phase 6 | Sub-task 6.8: the ELF64 loader for statically linked executables. A loader takes its addresses, its lengths, its offsets and its entry point from the file, so it is a piece of the kernel that does what an untrusted document tells it to, and its design is the list of things it refuses to be told. Nothing is overlaid: the format is defined outside this project and read from a medium, so every field is assembled byte by byte. Every range test is a subtraction and not a sum, for the reason the system call's validation is. The image is judged whole before a page of it is mapped, and the segments are placed through the direct physical map rather than by switching to the space — so a read-only segment is never writable even for an instant, and the kernel never executes in a half-built address space. The page a program's text shares with its data is written into rather than mapped over, and takes the more permissive of the two segments' permissions. One negative test passed until the self-test was made to dirty its frames first: upon a freshly booted machine the allocator hands out frames that are already zero, so a loader that never zeroed anything looked correct. | `9e11d4d` | [`../design/EXECUTABLE.md`](../design/EXECUTABLE.md) |
-| 2026-09-06 | Phase 6 | Sub-task 6.7: the system-call entry path, the dispatch table and the validation of a caller's arguments. The entry path's first three instructions are the whole of its security and none may be moved — SWAPGS, because until it has run there is no addressable kernel state at all; the caller's stack stored into the per-processor block, because there is nowhere else to put it; and only then the kernel stack, because a path that pushed first would be writing to the caller's stack at privilege level 0. Establishing the first page accessible to privilege level 3 found a defect in the paging of Phase 2: intermediate entries were created present and writable and never user-accessible, so a leaf marked accessible to privilege level 3 was unreachable from it, the permissions of a translation being the conjunction of those at every level. It would have appeared at sub-task 6.10 as a fault at the first user instruction with a leaf entry that said USER. One assertion was lost and is recorded as lost: the self-test can no longer execute SYSCALL, the real path returning by SYSRET, and the alternative was a test hook in the one path where a test hook cannot be told from a privilege-escalation bug. | `687c14b` | [`../design/PRIVILEGE.md`](../design/PRIVILEGE.md), Section 9 |
-| 2026-09-06 | Phase 6 | Sub-task 6.6: the compositor. Four earlier sub-tasks deferred something here and all four deferred the same thing — the kernel drew directly upon the framebuffer, so anything that had to appear over something else had to remember what was beneath it, and anything that wanted to read what was there had to read it back through a mapping in which reads are uncached. A back buffer removes the cause: the display is composed in ordinary memory, layers are composited as the changed region is carried out, and what is beneath a thing is simply still there. The console's substitution is one line, `GraphicsSurfaceFromFramebuffer` becoming `CompositorSurface`, which is the abstraction of sub-task 6.3 collecting on an argument made four sub-tasks before there was anything to spend it on. The pointer lost its save-under, its concealment, and `KernelWriteString`'s knowledge that it existed; the clip gained a stack and the primitives a blend. Two of the four negative tests are invisible to every assertion available and were found by looking at the screen. | `3661dc4` | [`../design/GRAPHICS.md`](../design/GRAPHICS.md), Section 27 |
-| 2026-09-06 | Phase 6 | The graphical console's backspace corrected where it crosses a line separator. Reported from a real machine: backspacing over letters worked and backspacing over a line ending did not. The console put the cursor at the right-hand edge of the display when it crossed to the row above, so the erasure its caller composes wrote its space a hundred and fifty columns away from the text and the characters a person meant to delete stood where they were. The text-mode driver answers the same question by reading the characters back out of text memory; a console of pixels has none to read, so where each row's text ends is now recorded as it goes, moved with the text upon a scroll, and read when a row is re-entered from below. The self-test gained the first assertions it has that need a character drawn — which is why this path had never been exercised. | `e16de00` | [`../design/GRAPHICS.md`](../design/GRAPHICS.md), Section 19.2.1; [`../devices/DISPLAY.md`](../devices/DISPLAY.md), Section 7 |
-| 2026-09-06 | Phase 4 | The disk driver taught where a channel actually answers, and to say what storage it cannot reach. Reported from a real machine that boots this kernel and finds no disk. Three things were wrong at once. A channel in native PCI mode answers at the addresses its base address registers give, which this driver never read; it now does, taking the control block at offset 2 within the second of them. A firmware presenting its SATA controller in AHCI mode puts the disks behind memory-mapped registers this driver cannot reach at all, which had exactly the symptom of having no disk; the report now names every mass-storage controller and says why each was or was not reached. And the machine in question has no mass-storage controller of any kind — its system sits upon an eMMC part behind an SD host controller and it was booted from a USB drive — so the report said it had no disk, of a laptop that plainly has storage; storage outside the mass-storage class is now named too, with no firmware remedy offered where none exists. AHCI becomes sub-task 4.7 and the SD host controller sub-task 4.8. | `8ea8658` | [`../storage/DISK.md`](../storage/DISK.md), Sections 2.1, 2.2, 2.3, 7.2 and 7.3 |
-| 2026-09-04 | Phase 6 | Sub-task 6.5: the PS/2 mouse and the pointer. The 8042 was given an owner of its own before either device was driven, its configuration byte governing both ports and being written whole. The decoder frames upon the bit set in every packet — a driver that has lost the framing does not stop working, it reports plausible nonsense for ever — extends the movement as nine bits rather than eight, and inverts the vertical sense at the one place that knows the device disagrees with the display. The pointer keeps the pixels beneath it and is concealed by `KernelWriteString`, there being one surface until 6.6. | `e2774f7` | [`../devices/MOUSE.md`](../devices/MOUSE.md); [`../design/GRAPHICS.md`](../design/GRAPHICS.md), Section 26 |
-| 2026-09-04 | Phase 6 | Exceptions given a disposition, at the project owner's report that faults which threaten no more than one program were halting the machine. Resume, terminate the program, or fatal to the kernel, decided by the vector and the privilege level together; only the last draws a fault screen. The screens were narrowed from eleven to ten, re-titled as kernel faults, and given two assertions that no screen may exist for a fault that can never be the kernel's. | `0a21e34` | [`../design/INTERRUPTS.md`](../design/INTERRUPTS.md), Section 8.1; [`../design/GRAPHICS.md`](../design/GRAPHICS.md), Sections 24 and 25 |
-| 2026-09-04 | Phase 6 | Sub-task 6.4 continued: the console made fast, and given fault screens. Measurement by `RDTSC` — the interval timer being useless, seventeen ticks elapsing in the whole boot — put the console at 15.2% of it; a word-wide pixel path, a pattern block that clips a glyph once instead of sixty-four times, and a cell drawn in one pass rather than two bring it to 4.5%. The fault screens are one for each severe fault, each with its own colour, account and evidence, and the self-test requires that no two are alike. | `a75a965` | [`../design/GRAPHICS.md`](../design/GRAPHICS.md), Sections 23 to 25 |
-| 2026-09-04 | Phase 6 | Sub-task 6.4: the bitmap font and the graphical console, which end the blank screen sub-task 6.2 left. Ninety-five glyphs drawn for this project, not obtained. The console replays what was written before the framebuffer could be mapped, scrolls by blitting the surface upon itself, and stands down when the command line asks for the drawing figures. `KernelWriteString` becomes the only routine permitted to name an output device. | `5a755c9` | [`../design/GRAPHICS.md`](../design/GRAPHICS.md), Sections 18 to 22 |
-| 2026-09-03 | Phase 6 | Sub-task 6.3: the 2D primitives — pixel, line, rectangle, blit and clipping — upon a surface rather than upon the framebuffer, so that they are asserted in memory against a surface whose pitch exceeds its width and whose padding holds a sentinel. Clipping is the memory-safety boundary and is implemented once; the line is clipped per pixel so that clipping cannot displace it. | `7bcbc98` | [`../design/GRAPHICS.md`](../design/GRAPHICS.md), Sections 11 to 17 |
-| 2026-09-03 | Phase 6 | Sub-task 6.2: the linear framebuffer. The image carries the Multiboot2 request tag, optional bit set because the kernel can boot without one; what is supplied is validated, mapped by a new `KernelDeviceMap` that allocates no frame, and given the write-combining memory type through entry 4 of `IA32_PAT`, an entry no existing mapping selects. GRUB ignores `gfxpayload`, so the mode is accepted rather than chosen, and the text console is displaced until sub-task 6.4. | `cdf74b0` | [`../design/GRAPHICS.md`](../design/GRAPHICS.md) |
-| 2026-09-03 | Phases 6, 9 | Phase 9 split at the project owner's decision. Its first five sub-tasks — the framebuffer, the primitives, the font, the mouse and the compositing surface — become sub-tasks 6.2 to 6.6, none of them needing a process to exist; the window manager, the client protocol and the desktop services they support remain in Phase 9, which is now the desktop rather than graphics. Old 6.2 to 6.10 renumbered to 6.7 to 6.15, and every reference across 35 files with them. `PROJECT_GUIDELINES.md` §5 amended accordingly. | `1a42a8a` | [`PLAN.md`](PLAN.md), Phases 6 and 9 |
-| 2026-09-03 | Phase 6 | Sub-tasks 6.8 and 6.9 exchanged — their numbers that day; they are 6.13 and 6.14 since the renumbering above — so that spinlocks and per-CPU data precede the application-processor bring-up rather than following it. In the old order a milestone started processors against a kernel whose every shared structure was unsynchronised, and could be neither demonstrated nor asserted. Every reference to either number, in code and documentation alike, updated with it. | `c3befd8` | [`PLAN.md`](PLAN.md), Phase 6 |
-| 2026-09-03 | All | The boot-time self-tests moved out of `kernel.c` into `kernel/test/`, one file per subsystem. `kernel.c` fell from 9,050 lines to 708. `make verify` now fails when a self-test reports a failure, which it previously could not see. This revision history rewritten as an index rather than a third account of each change. | `8e778e2` | [`../../kernel/test/README.md`](../../kernel/test/README.md), [`TESTING.md`](TESTING.md) §1 |
-| 2026-09-03 | Phase 6 | Sub-task 6.1: the apparatus of a privilege transition. User-mode descriptors ordered by the arithmetic `SYSCALL` and `SYSRET` derive their selectors by; a task state segment with a stack for the double fault; `IA32_STAR`, `IA32_LSTAR` and `IA32_FMASK`. The interrupt stack table and the transition are exercised, not merely inspected. | `1903603` | [`../design/PRIVILEGE.md`](../design/PRIVILEGE.md) |
-| 2026-09-02 | Phase 5 | Sub-task 5.8: the virtual filesystem layer, and an EXT2 root volume mounted through it. A mount is found through the node it covers and never through a path prefix; a file reached twice is one node; a volume opened for writing is marked unclean before anything else is written to it. | `f83f498` | [`../storage/VFS.md`](../storage/VFS.md) |
-| 2026-09-02 | Phase 5 | **A defect in sub-task 5.7 found by `e2fsck`**, not by any assertion this kernel makes. `i_dtime` is overloaded — a deletion time, or the link to the next inode on the orphan list, distinguished by magnitude — so the constant 1 recorded for want of a clock made every freed inode appear orphaned. Now `UINT32_MAX`. | `f83f498` | [`../storage/VFS.md`](../storage/VFS.md) §11.1 |
-| 2026-09-02 | Phase 5 | Sub-task 5.7: names, and the creation of files. Directory entries inserted and removed, link counts maintained on both sides, and an inode freed only with its last name. | `ebc5987` | [`../storage/EXT2.md`](../storage/EXT2.md) |
-| 2026-09-02 | Phase 5 | Sub-task 5.6: allocation, file writing and truncation. Both bitmaps, the group summaries kept in step with them, and a write that leaves a hole where it skipped. | `c550424` | [`../storage/EXT2.md`](../storage/EXT2.md) |
-| 2026-09-02 | Phase 5 | Sub-task 5.5: file reading and symbolic links. Both forms of link — the target held within the inode and the target held in a block — distinguished as the volume itself records the distinction. | `4e453f1` | [`../storage/EXT2.md`](../storage/EXT2.md) |
-| 2026-09-02 | Phase 2 | `KernelPagesFree` now establishes that the whole range released lies within the arena, not merely its first page. A base at the last page with a count of 2^33 satisfied every check and corrupted the free list. | `08fcaeb` | [`../design/MEMORY-LAYOUT.md`](../design/MEMORY-LAYOUT.md) §11.7 |
-| 2026-09-02 | Phase 2 | Three integer-wrap defects corrected in the sub-task 2.5 allocators, found by review rather than by failure. Each computed a bound from a product that could wrap, so the guard could not trust the value it tested. Counts and sizes are now bounded before any arithmetic is performed upon them. | `00d5472` | [`../design/MEMORY-LAYOUT.md`](../design/MEMORY-LAYOUT.md) §§10.4, 11.4 |
-| 2026-09-02 | Phase 5 | Sub-task 5.4: directory traversal and path resolution. A directory is an ordinary file, so the work is entirely the validation of what its bytes claim. | `c9421d4` | [`../storage/EXT2.md`](../storage/EXT2.md) |
-| 2026-09-02 | Phase 5 | Sub-task 5.3: inode retrieval and block-pointer resolution, through the direct, indirect, doubly and triply indirect pointers. | `50fcf28` | [`../storage/EXT2.md`](../storage/EXT2.md) |
-| 2026-09-02 | Phase 5 | Sub-task 5.2: the block group descriptor table, read and validated. | `665a66d` | [`../storage/EXT2.md`](../storage/EXT2.md) |
-| 2026-09-01 | Phase 1 | The `LOAD` segments of the image separated by permission — an accepted condition since Phase 1, discharged ahead of sub-task 13.3. The linker had inferred the segments and given each the union of what it held, so read-only data was mapped writable. | `d52828d` | [`../design/MEMORY-LAYOUT.md`](../design/MEMORY-LAYOUT.md) |
-| 2026-09-01 | All | `INSPIRATIONS.md` added at the project owner's request, recording ToaruOS as the principal inspiration and stating expressly what is not taken from it. | `ad6da48` | [`INSPIRATIONS.md`](INSPIRATIONS.md) |
-| 2026-09-01 | Phase 5 | Sub-task 5.1: the EXT2 superblock, read through the buffer cache and decoded field by field from a buffer of bytes rather than by overlaying a structure. | `a000311` | [`../storage/EXT2.md`](../storage/EXT2.md) §3 |
-| 2026-09-01 | All | `docs/` reorganised into four groups at the project owner's request: `project/`, `design/`, `devices/` and `storage/`. The grouping is by subject and not by phase. | `50e72e6` | [`../README.md`](../README.md) |
-| 2026-09-01 | Phase 4 | Sub-task 4.6: the buffer cache, completing Phase 4. A buffer's identity is the device and the block number together. | `6a9c176` | [`../storage/BUFFER.md`](../storage/BUFFER.md) |
-| 2026-09-01 | Phase 4 | Sub-task 4.5: the generic block-device layer. Its purpose is the judgement it performs before a driver is reached. | `eea928c` | [`../storage/BLOCK.md`](../storage/BLOCK.md) |
-| 2026-09-01 | Phase 4 | Sub-task 4.4: the ATA driver in programmed input/output mode, in both the 28-bit and 48-bit addressing forms. | `792c9e5` | [`../storage/DISK.md`](../storage/DISK.md) |
-| 2026-09-01 | Phase 4 | Sub-task 4.3: PCI enumeration by access mechanism one. Buses are reached through bridges rather than swept, and each is recorded as visited so malformed hardware cannot induce a cycle. | `90c32aa` | [`../devices/PCI.md`](../devices/PCI.md) |
-| 2026-09-01 | Phase 4 | The backspace across a row boundary corrected: it consumed the separator and the character before it, so one keystroke deleted two things. | `bfbbf09` | [`../devices/DISPLAY.md`](../devices/DISPLAY.md) |
-| 2026-09-01 | Phase 4 | Sub-task 4.2: the formal text-mode display driver. The register configuration is read from the Miscellaneous Output Register rather than assumed. | `9f168cd` | [`../devices/DISPLAY.md`](../devices/DISPLAY.md) |
-| 2026-08-31 | Phase 4 | Sub-task 4.1: the interrupt-driven serial driver, claiming IR4. It keeps a polled path as well, and needs both: a panic reports with interrupts disabled and must not leave its message in a buffer nothing will drain. | `f0722ce` | [`../devices/SERIAL.md`](../devices/SERIAL.md) §4 |
-| 2026-08-31 | Phase 3 | The backspace key repaired. `VgaPutCharacter` had no case for it, so it was written into the frame buffer as whatever glyph stands at code point 0x08. | `96dc484` | [`../devices/DISPLAY.md`](../devices/DISPLAY.md) |
-| 2026-08-31 | Phase 3 | Sub-task 3.7: the PS/2 keyboard, completing Phase 3. The controller's configuration byte is written a second time after its self-test, that test resetting the controller upon some implementations. | `32ee3b4` | [`../devices/KEYBOARD.md`](../devices/KEYBOARD.md) |
-| 2026-08-31 | Phase 3 | Sub-task 3.6: the interval timer as a rate generator. Mode 2 rather than mode 3, the square-wave mode decrementing by two and so admitting only even divisors. | `28264d7` | [`../devices/TIME.md`](../devices/TIME.md) |
-| 2026-08-31 | Phase 3 | Sub-task 3.5: the 8259A pair remapped to vectors 32–47. The vectors the firmware leaves them presenting collide exactly with the architecture-defined exceptions, so a timer tick was indistinguishable from a double fault. | `421ac38` | [`../design/INTERRUPTS.md`](../design/INTERRUPTS.md) §9 |
-| 2026-08-31 | Phase 2 | Sub-task 2.8: address-space cloning, completing Phase 2. A clone shares the frames of the lower half, withdrawing write permission in both hierarchies and recording a reference for the new holder. | `8b05d27` | [`../design/MEMORY-LAYOUT.md`](../design/MEMORY-LAYOUT.md) |
-| 2026-08-31 | — | This document reviewed and corrected: the status section had accumulated as a chronological narrative duplicating this table, and is now a statement of present condition alone. | `e235f6f` | — |
-| 2026-08-30 | Phase 3 | Sub-task 3.4: the exception handlers and their diagnostics. `CR0.WP` set in `PagingInitialise`, without which the read-only kernel mappings were advisory only. | `80ba170` | [`../design/INTERRUPTS.md`](../design/INTERRUPTS.md) §8 |
-| 2026-08-30 | Phase 3 | Sub-task 3.3: the interrupt dispatcher, a table of 256 entries with a registration interface. | `b56ec8b` | [`../design/INTERRUPTS.md`](../design/INTERRUPTS.md) §7 |
-| 2026-08-30 | Phase 3 | Sub-task 3.2: a stub for each of the 256 vectors, normalising the vector number and the presence of an error code into a uniform trap frame. A kernel global descriptor table was established in the same work, the boot table lying at an address sub-task 2.3 had unmapped. | `35eaaa6` | [`../design/INTERRUPTS.md`](../design/INTERRUPTS.md) §§3–5 |
-| 2026-08-30 | Phase 3 | Sub-task 3.1: the interrupt descriptor table and the 64-bit gate descriptor, loaded with `LIDT` and read back with `SIDT`. | `6e8bccd` | [`../design/INTERRUPTS.md`](../design/INTERRUPTS.md) §2 |
-| 2026-08-30 | Phase 2 | Sub-task 2.7: copy-on-write fault resolution, using bit 9 of the page-table entry, which Intel SDM Table 4-19 records as ignored by the processor. | `c574fb2` | [`../design/MEMORY-LAYOUT.md`](../design/MEMORY-LAYOUT.md) |
-| 2026-08-30 | — | The project guidelines consolidated under `PROJECT_GUIDELINES.md` and the documentation index relocated to the repository root. | `48c678e` | [`../../PROJECT_GUIDELINES.md`](../../PROJECT_GUIDELINES.md) |
-| 2026-08-30 | Phase 2 | Sub-task 2.6: per-frame reference counting over a 255 KiB table. Sub-tasks 2.7 and 2.8 deferred until Phase 3 provided a page-fault handler. | `ed48893` | [`../design/MEMORY-LAYOUT.md`](../design/MEMORY-LAYOUT.md) |
-| 2026-08-30 | Phase 2 | Sub-task 2.5: the kernel virtual address allocator over the 32 TiB arena, and a slab heap above it. | `cfe5bad` | [`../design/MEMORY-LAYOUT.md`](../design/MEMORY-LAYOUT.md) §§10–11 |
-| 2026-08-30 | Phase 2 | Sub-task 2.4: the direct physical map at `0xFFFF800000000000` with 2 MiB pages. Paging structures are no longer confined to the first gibibyte. | `aff2abc` | [`../design/MEMORY-LAYOUT.md`](../design/MEMORY-LAYOUT.md) §9 |
-| 2026-08-30 | Phase 2 | Sub-task 2.3: the permanent kernel paging hierarchy constructed and activated, the text and read-only data mapped read-only, and the low identity mapping removed. | `d4c98ba` | [`../design/MEMORY-LAYOUT.md`](../design/MEMORY-LAYOUT.md) |
-| 2026-08-30 | Phase 2 | Sub-task 2.2: the bitmap physical frame allocator. 131,039 frames governed under QEMU with 512 MiB, of which 288 are reserved. | `b098c95` | [`../design/MEMORY-LAYOUT.md`](../design/MEMORY-LAYOUT.md) |
-| 2026-08-30 | Phase 2 | Sub-task 2.1: the Multiboot2 information structure parsed into the boot-protocol-neutral `BootInformation` description. | `7c379e5` | [`../design/BOOT.md`](../design/BOOT.md) |
-| 2026-08-30 | Phase 1 | `PROJECT_GUIDELINES.md` amended at the project owner's request by the addition of Section 10, requiring directory-level documentation. | `d97fa4d` | [`../../PROJECT_GUIDELINES.md`](../../PROJECT_GUIDELINES.md) §10 |
-| 2026-08-30 | Phase 1 | Project initialised. Directory structure, documentation corpus, boot code, kernel entry, VGA and serial output, build system and ISO generation. Boot verified under QEMU. | `64c4c42` | [`../design/BOOT.md`](../design/BOOT.md) |
+| Question | Document |
+| -------- | -------- |
+| What does the system do today, and where has it been observed to work? | [`STATUS.md`](STATUS.md) |
+| How did it come to be that way? | [`HISTORY.md`](HISTORY.md) |
+| Why is a subsystem built the way it is? | [`../design/`](../design/), [`../devices/`](../devices/), [`../storage/`](../storage/) |
+| Why are the phases in this order? | [`../design/ARCHITECTURE.md`](../design/ARCHITECTURE.md), Section 4 |
+| How is any of it tested, and what was the result? | [`TESTING.md`](TESTING.md) |
+| What are the conventions the work is bound by? | [`../../PROJECT_GUIDELINES.md`](../../PROJECT_GUIDELINES.md) |

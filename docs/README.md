@@ -24,7 +24,9 @@ complementary, and neither replaces the other.
 
 | Document | Subject |
 | -------- | ------- |
-| [`PLAN.md`](project/PLAN.md) | The thirteen-phase roadmap and the task tracker. The single source of truth for progress, and the document every other one cites its phase from. |
+| [`PLAN.md`](project/PLAN.md) | The thirteen-phase roadmap and the task tracker: where the work stands and what comes next. The single source of truth for progress, and the document every other one cites its phase from. |
+| [`STATUS.md`](project/STATUS.md) | The present condition of the system, one paragraph to a phase, and which environments each phase has been observed to work in. |
+| [`HISTORY.md`](project/HISTORY.md) | The revision history: one row per change, pointing at the commit and the design document that hold the detail. |
 | [`TESTING.md`](project/TESTING.md) | The verification procedure and the record of every test performed, with its date and its outcome. |
 | [`TOOLCHAIN.md`](project/TOOLCHAIN.md) | The cross-compilation toolchain and the build system. |
 | [`CODING-STANDARDS.md`](project/CODING-STANDARDS.md) | Style, naming, documentation, the diagnostic regime, and the register of compiler extensions relied upon. |

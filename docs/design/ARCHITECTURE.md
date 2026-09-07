@@ -277,6 +277,67 @@ switch and the descent to privilege level 3 (6.10), at which point a program
 first ran. Work continues at sub-task 6.11 — `fork()` upon the copy-on-write
 substrate of Phase 2, with `execve()`, `exit()` and `wait()` beside it.
 
+### 4.1 The two orderings chosen against the obvious one
+
+Most of the phase order follows from the diagram above without argument. Two
+places do not, and both were changed on 2026-09-03 at the project owner's
+decision. The arguments are recorded here rather than in
+[`../project/PLAN.md`](../project/PLAN.md), which states the order and not the
+reasoning for it.
+
+#### Why sub-tasks 6.2 to 6.6 are in Phase 6 and not in Phase 9
+
+The framebuffer and the drawing above it were sub-tasks 9.1 to 9.5, and
+`PROJECT_GUIDELINES.md`, Section 5, placed the whole of the graphical work after
+the shell. They were moved forward, and the split is along a real line rather
+than an arbitrary one: **nothing in 6.2 to 6.6 depends upon a process existing.**
+A framebuffer is memory the boot loader describes and this kernel maps;
+primitives, a font and a compositing surface are arithmetic upon that memory; and
+a mouse is another device upon the 8042 controller, whose second port the
+keyboard driver of sub-task 3.7 already leaves alone. Every one of them is
+written, exercised and asserted with the machinery Phases 2 to 5 already provide.
+
+What genuinely does need processes is the half that stays in Phase 9: a window
+manager has nothing to manage, and a client protocol has no client, until there
+is something to run. That division is why this is a split and not a wholesale
+reordering, and it is why Phase 9 is no longer "graphics" but the desktop as a
+thing a person uses — the window system, the services that maintain it, and the
+configuration they read.
+
+Two things are gained and one is given up. The diagnostic path acquires a console
+that is not eighty by twenty-five characters of text, and every phase from here
+to the end reports through it; and the choice between the VESA path and the UEFI
+Graphics Output Protocol is forced now, while Phase 12 can still be shaped around
+it, rather than in Phase 9 when it can no longer be. **What is given up** is that
+the surface abstraction of sub-task 6.6 is designed before any user-mode client
+exists to design it against, so its interface is a judgement rather than a
+response. That is recorded so that the judgement is revisited at sub-task 9.2 and
+not merely inherited.
+
+#### Why sub-task 6.13 precedes 6.14
+
+These two stood in the opposite order, and the order was wrong. Sub-task 6.14
+starts processors; sub-task 6.13 supplies the locks without which nothing they
+touch is safe. Every shared structure this kernel has — the frame allocator's
+bitmap and search hint, the heap, the buffer cache, the mount and node tables of
+the filesystem layer, the interrupt dispatch table — is presently unsynchronised,
+and each says so in its own file's header.
+
+Bringing a second processor up before the locks exist would produce a milestone
+that the testing mandate requires to be bootable and testable, and that could be
+neither: it would either park the new processors immediately, in which case
+nothing is demonstrated, or let them run, in which case the machine is corrupt in
+a way no assertion here would catch.
+
+The reordering costs nothing, because everything in 6.13 can be exercised upon
+one processor. A spinlock's uncontended acquire and release, and the per-CPU data
+area reached through `GS`, are single-processor mechanisms outright. An
+inter-processor interrupt sent to one's own Local APIC is delivered like any
+other, so the shootdown handler may be made to run and the invalidation it
+performs observed — the same device as sub-task 6.1's execution of `SYSCALL` from
+privilege level 0, where a mechanism is exercised in full although the condition
+it exists for has not yet arrived.
+
 ## 5. Privilege and address-space model
 
 The kernel occupies the upper half of the canonical 48-bit address space and is

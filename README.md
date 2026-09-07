@@ -16,12 +16,15 @@ four directories. [`docs/README.md`](docs/README.md) is its index.
 
 `docs/project/PLAN.md` states what is done and what is not; it is the single
 source of truth for progress, and nothing below restates it.
+`docs/project/STATUS.md` states what the system does today.
 
 ### [`docs/project/`](docs/project/) — how the work is conducted
 
 | Document | Subject |
 | -------- | ------- |
-| [`PLAN.md`](docs/project/PLAN.md) | The thirteen-phase roadmap and the task tracker. This is the single source of truth for progress. |
+| [`PLAN.md`](docs/project/PLAN.md) | The thirteen-phase roadmap and the task tracker: where the work stands and what comes next. This is the single source of truth for progress. |
+| [`STATUS.md`](docs/project/STATUS.md) | The present condition of the system, one paragraph to a phase, and which environments each phase has been observed to work in. |
+| [`HISTORY.md`](docs/project/HISTORY.md) | The revision history: one row per change, pointing at the commit and the design document that hold the detail. |
 | [`TESTING.md`](docs/project/TESTING.md) | The test procedure under QEMU, VirtualBox, OVMF and physical hardware, and the record of every test performed. |
 | [`TOOLCHAIN.md`](docs/project/TOOLCHAIN.md) | The cross-compilation toolchain, its construction, and the build system. |
 | [`CODING-STANDARDS.md`](docs/project/CODING-STANDARDS.md) | The mandatory conventions of style, naming, documentation and compiler diagnostics. |
