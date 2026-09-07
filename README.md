@@ -36,8 +36,10 @@ source of truth for progress, and nothing below restates it.
 | [`BOOT.md`](docs/design/BOOT.md) | The boot sequence, from the GRUB handover to the invocation of `KernelMain`. |
 | [`MEMORY-LAYOUT.md`](docs/design/MEMORY-LAYOUT.md) | The physical and virtual address space layout, the paging hierarchy, and the allocators above it. |
 | [`INTERRUPTS.md`](docs/design/INTERRUPTS.md) | The interrupt descriptor table, the stubs and the dispatcher, the exception handlers, and the 8259A interrupt controllers. |
-| [`GRAPHICS.md`](docs/design/GRAPHICS.md) | The framebuffer: how it is asked for, why its pages are write-combining, the drawing primitives above it, the font and console that draw the boot log upon it, the screen each severe fault draws when the machine stops, and the pointer, which is the first thing in this kernel that must draw over something and then take itself away. |
-| [`PRIVILEGE.md`](docs/design/PRIVILEGE.md) | The apparatus of a privilege transition: the user-mode descriptors, the task state segment and its trusted stacks, and the registers that configure `SYSCALL`. |
+| [`PRIVILEGE.md`](docs/design/PRIVILEGE.md) | The apparatus of a privilege transition: the user-mode descriptors, the task state segment and its trusted stacks, the registers that configure `SYSCALL`, and the entry path, dispatch table and argument validation built upon them. |
+| [`GRAPHICS.md`](docs/design/GRAPHICS.md) | The framebuffer: how it is asked for, why its pages are write-combining, the drawing primitives above it, the font and console that draw the boot log upon it, the screen each severe fault draws when the machine stops, the pointer, and the compositor that put a back buffer beneath all of it — after which nothing reads the framebuffer. |
+| [`EXECUTABLE.md`](docs/design/EXECUTABLE.md) | The ELF64 loader: a piece of the kernel that does what an untrusted document tells it to, so its design is the list of things it refuses to be told. |
+| [`PROCESS.md`](docs/design/PROCESS.md) | The process, the thread and the saved context; the switch that exchanges one for another, and the descent to privilege level 3 by which a program first ran. |
 
 ### [`docs/devices/`](docs/devices/) — the hardware the kernel drives
 
@@ -54,10 +56,13 @@ source of truth for progress, and nothing below restates it.
 
 | Document | Subject |
 | -------- | ------- |
-| [`DISK.md`](docs/storage/DISK.md) | The ATA disk in programmed input/output mode: the registers, the two addressing modes, and why a disk driver's failures are silent. |
+| [`DISK.md`](docs/storage/DISK.md) | The ATA disk in programmed input/output mode: the registers, the two addressing modes, why a disk driver's failures are silent, and what storage this driver cannot reach and how it says so rather than reporting no disk. |
+| [`AHCI.md`](docs/storage/AHCI.md) | The AHCI adaptor by first-party direct memory access: the handoff from the firmware, the ports, the command list, and the region descriptors that name a caller's own pages to the device. |
+| [`SDCARD.md`](docs/storage/SDCARD.md) | The SD card and the embedded MultiMediaCard: the host controller upon the bus, the second command set of the card behind it, and the two encodings of a card's capacity. |
 | [`BLOCK.md`](docs/storage/BLOCK.md) | The generic block-device layer: what a device is, what the layer refuses before a driver is reached, and why it is tested against memory. |
 | [`BUFFER.md`](docs/storage/BUFFER.md) | The buffer cache: how a block is found, what is discarded when the store is full, and when a modified block reaches its device. |
 | [`EXT2.md`](docs/storage/EXT2.md) | The EXT2 volume: the superblock, the block group descriptor table and the inode, their decoding, and which volumes this kernel refuses to address. |
+| [`VFS.md`](docs/storage/VFS.md) | The virtual filesystem layer: the mount found through the node it covers, the file that is one node however many callers reach it, and the mark a mount leaves upon a volume it has open for writing. |
 
 ## Directory-level documentation
 

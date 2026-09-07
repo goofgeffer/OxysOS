@@ -13,7 +13,9 @@
 [`../../kernel/include/oxys/syscall.h`](../../kernel/include/oxys/syscall.h),
 [`../../kernel/include/oxys/msr.h`](../../kernel/include/oxys/msr.h).
 **Asserted by**: `KernelVerifyPrivilege` in
-[`../../kernel/kernel.c`](../../kernel/kernel.c).
+[`../../kernel/test/verify_privilege.c`](../../kernel/test/verify_privilege.c),
+and — for the dispatch and validation of Section 9 — `KernelVerifySyscall` in
+[`../../kernel/test/verify_syscall.c`](../../kernel/test/verify_syscall.c).
 
 **Specifications**: Intel 64 and IA-32 Architectures Software Developer's Manual,
 Volume 3A, Sections 3.4.5, 5.8.8, 6.14.4, 8.2.3 and 8.7, and Table 2-1; Volume
@@ -618,8 +620,11 @@ range the kernel **reads**; `version`, which exercises a range the kernel
 needing no validation performs none.
 
 `exit`, `fork`, `execve` and the rest are not stubbed. A stub returning an error
-is a promise the kernel does not keep, and they arrive with the process control
-block at sub-task 6.9 and the process calls at 6.11.
+is a promise the kernel does not keep. The process control block they act upon
+arrived at sub-task 6.9 and the calls themselves arrive at 6.11; the table is
+still the three named above. A program that ends does so at present because it
+faulted and the exception path called `ThreadTerminateCurrent` for it, not
+because it asked — see [`PROCESS.md`](PROCESS.md), Section 10.1.
 
 The numbers and the error values are this kernel's own. Inventing agreement with
 a library that does not exist would be inventing a compatibility nobody had
@@ -627,12 +632,15 @@ tested.
 
 ## 10. Present limitations
 
-1. **The entry point is a placeholder.** It records and returns; it dispatches
-   nothing, validates nothing and switches no stack. Sub-task 6.7 replaces it.
-   See Section 5.
-2. **`IA32_KERNEL_GS_BASE` is not written.** The real entry path needs `SWAPGS`
-   to reach the per-processor data it will load the kernel stack from. The
-   register is defined in `msr.h` and used by nothing; sub-task 6.7 writes it.
+1. ~~**The entry point is a placeholder.**~~ Resolved at sub-task 6.7. It swaps
+   `GS`, stores the caller's stack in the per-processor block, loads the kernel
+   stack from it, dispatches through the table, and returns by `SYSRET`. See
+   Sections 5 and 9.
+2. ~~**`IA32_KERNEL_GS_BASE` is not written.**~~ Resolved at sub-task 6.7:
+   `SyscallInitialise` writes it with the address of the per-processor block,
+   which is what `SWAPGS` exchanges `GS.base` with and what makes any kernel
+   state addressable at all in the first instructions of the entry path. See
+   Section 9.1.
 3. **`IA32_CSTAR` is not written.** It is the entry point for `SYSCALL` from
    compatibility mode, which this kernel does not support. A 32-bit program is
    not something this kernel can run at all, so an unwritten `CSTAR` is not a
@@ -646,15 +654,19 @@ tested.
 5. **One task state segment, one processor.** See Section 3.3.
 6. ~~**`rsp0` is written once and never updated.**~~ Resolved at sub-task 6.9:
    `ThreadSetCurrent` writes it, so it names the stack of whichever thread is
-   current. `TssSetKernelStack` is no longer uncalled. What remains is that
-   nothing yet *becomes* current in the course of running — 6.10 is what will
-   call it at a switch.
+   current. `TssSetKernelStack` is no longer uncalled. Sub-task 6.10 closed the
+   remainder: `ThreadSwitchTo` calls it upon every switch, before the registers
+   and the stack are exchanged, so `rsp0` follows the incoming thread rather
+   than the outgoing one. See [`PROCESS.md`](PROCESS.md), Section 9.
 7. **Six interrupt stack table entries are unused.** Only the double fault has
    one. The non-maskable interrupt and the machine-check exception are the
    conventional next candidates, both being deliverable at moments when the
    current stack cannot be trusted; neither is handled meaningfully yet.
 8. **`CR4.SMAP` and `CR4.SMEP` are not set.** The `AC` bit is cleared in
    `IA32_FMASK` in anticipation of `SMAP`, but the feature itself is not enabled,
-   so a supervisor access to a user page does not presently fault. Enabling them
-   belongs with sub-task 6.10, where the first user mapping exists to be protected
-   from.
+   so a supervisor access to a user page does not presently fault. The user
+   mappings that would be protected now exist, sub-task 6.10 having run a
+   program in them; enabling the features is sub-task 13.3, which does so
+   together with `IA32_EFER.NXE` — the same bit
+   [`EXECUTABLE.md`](EXECUTABLE.md), limitation 4, waits upon, there being no
+   sense in enforcing two of the three and not the third.

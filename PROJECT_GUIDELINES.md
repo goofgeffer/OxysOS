@@ -26,7 +26,7 @@ practices that are prohibited.
 - **Toolchain**: `x86_64-elf-gcc`, `x86_64-elf-ld`, `nasm`, `grub-mkrescue`, `make`. All must be installed and functional in the WSL2 environment.
 - **Boot Protocol**: Multiboot2 (GRUB as the bootloader) for legacy BIOS; UEFI boot path (PE32+ image) added later.
 - **Kernel Image**: ELF64, linked according to `linker.ld`. Higher-half kernel layout is recommended.
-- **Build System**: GNU Make with explicit targets: `all`, `clean`, `iso`, `run-qemu`, `run-vbox`, `run-uefi` (for OVMF testing).
+- **Build System**: GNU Make with explicit targets: `all`, `clean`, `iso`, `run-qemu`, `run-vbox`, `run-uefi` (for OVMF testing), `verify` (the automated regression run required by the Testing Mandate of Section 2) and `toolcheck`.
 - **Debugging**: Serial output over COM1 shall be implemented in the earliest device-driver stage to enable remote debugging.
 
 ## 4. Code and Documentation Standards
@@ -47,7 +47,7 @@ The roadmap is enumerated in full in `docs/project/PLAN.md`, which is the single
 of truth for progress. It comprises 13 major phases, ordered by dependency:
 
 1. **Bootstrapping & Early Output** — Cross-compiler, Multiboot2, long-mode, VGA text output, ISO generation.
-2. **Memory Management (incl. Copy‑on‑Write)** — Physical frame allocator, paging, higher-half kernel, virtual allocator, COW page fault handler with reference counting.
+2. **Memory Management (including Copy-on-Write)** — Physical frame allocator, paging, higher-half kernel, virtual allocator, COW page fault handler with reference counting.
 3. **Interrupts, Exceptions & Keyboard Input** — IDT, PIC/APIC, interrupt dispatcher, PS/2 keyboard driver.
 4. **Basic Device Drivers** — Serial (COM1), VGA text mode, ATA PIO, PCI enumeration.
 5. **EXT2 Filesystem** — Superblock, group descriptors, inodes, directories, read/write support, mounting.

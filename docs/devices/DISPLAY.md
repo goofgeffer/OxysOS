@@ -1,7 +1,7 @@
 # The Text-Mode Display
 
 **Phase**: 4, sub-task 4.2, of [`PLAN.md`](../project/PLAN.md). The routine upon which this
-driver was built belongs to Phase 1, sub-task 1.8. Sub-task 6.2 displaced it; see
+driver was built belongs to Phase 1, sub-task 1.7. Sub-task 6.2 displaced it; see
 Section 1.1.
 
 **Authority**: `PROJECT_GUIDELINES.md`, Sections 2, 3 and 6. Every assertion of

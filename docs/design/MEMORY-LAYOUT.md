@@ -357,6 +357,41 @@ named by the gate's selector. The consequence and the remedy are recorded in
 structure the processor reads directly must remain mapped for as long as the
 processor may read it, and such reads are not visible in the source.
 
+#### 8.4.1 How the removal is reported, and the alarm that had to be corrected
+
+`PagingReport` states whether the identity mapping is still standing, and it asks
+the question **of a translation** rather than of the root entry that happens to
+lead to one. It reports whether `LOW_MEMORY_LIMIT` — one mebibyte, the kernel's
+own load address, within the range the boot mapping covered and an address
+nothing else has reason to map — still translates.
+
+It tested index 0 of the root table until the review that followed sub-task 6.10,
+and that test was wrong for a reason worth recording. **That entry spans the
+first 512 gibibytes, so it is present whenever anything at all is mapped low** —
+and something transiently is: the self-test of sub-task 6.7 maps a page at one
+gibibyte, to assert the validation of a caller's arguments against a real mapping
+rather than against a description, and then unmaps it. Unmapping clears the leaf
+and leaves the three tables above it standing, as it must, those being the tables
+any later low mapping would need. The root entry therefore remains present for
+the rest of the machine's life.
+
+The consequence was that every healthy boot printed
+`Low identity mapping: PRESENT (unexpected)` — of a mapping that had in fact been
+removed some two hundred lines of log earlier, and had been correctly reported as
+removed by the same routine when it ran the first time. **An alarm about the one
+condition in this subsystem whose survival would be catastrophic, raised falsely
+upon every boot, is worse than no alarm at all**: it is the mechanism by which a
+reader learns to disregard the line. The two reports now agree, and both say
+`removed.`
+
+The intermediate tables are still not reclaimed when the last leaf beneath them
+goes, and that is deliberate: the kernel arena is long-lived, so a scheme that
+tore down a page table upon every unmap would rebuild it upon the next map, and
+the tables retained are three frames for each region ever mapped rather than
+three for each mapping. It is nevertheless the reason the report cannot infer the
+mapping's absence from the root entry, and any later accounting of the hierarchy
+must treat a present intermediate as evidence of nothing but history.
+
 ### 8.5 Verification
 
 The hierarchy is verified by walking it in software rather than by dereferencing

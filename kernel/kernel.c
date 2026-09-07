@@ -1106,8 +1106,15 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
     AddressSpaceReport();
 
     VgaSetColour(VGA_COLOUR_LIGHT_GREEN, VGA_COLOUR_BLACK);
-    KernelWriteString("Phase 6 initialisation complete: the apparatus of a "
-                      "privilege transition stands and has been exercised.\n");
+    /*
+     * The words "initialisation complete." are what the `verify` target of the
+     * Makefile greps the serial log for, and are therefore load-bearing: they
+     * establish that the kernel reached the end of its initialisation rather
+     * than faulting, hanging or resetting on the way. What follows them says
+     * which sub-task the boot got as far as, and must be revised with the boot.
+     */
+    KernelWriteString("Phase 6 initialisation complete: a program has been loaded, "
+                      "run at privilege level 3, and ended.\n");
 
     VgaSetColour(VGA_COLOUR_LIGHT_GREY, VGA_COLOUR_BLACK);
 

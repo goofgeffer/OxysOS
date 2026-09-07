@@ -1,7 +1,7 @@
 # The Serial Adapter
 
 **Phase**: 4, sub-task 4.1, of [`PLAN.md`](../project/PLAN.md). The polled subset upon which
-this driver was built belongs to Phase 1, sub-task 1.9.
+this driver was built belongs to Phase 1, sub-task 1.7.
 
 **Authority**: `PROJECT_GUIDELINES.md`, Sections 2, 3 and 6. Every assertion of
 hardware behaviour below carries a citation, and every specification named is
@@ -231,8 +231,8 @@ for one that could not arrive.
 
 ### 8.1 The boot-time self-test
 
-`KernelVerifySerial`, in `kernel/kernel.c`, asserts the following. Each is a
-failure that would otherwise be silent.
+`KernelVerifySerial`, in `kernel/test/verify_devices.c`, asserts the following.
+Each is a failure that would otherwise be silent.
 
 | Property | The silent failure it guards |
 | -------- | ---------------------------- |

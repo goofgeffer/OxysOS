@@ -55,6 +55,29 @@ reason one step further in. The readers are little endian by construction, so a
 big-endian image decoded by them yields numbers that are wrong in a way nothing
 else would notice: a byte count of sixteen million where the file said sixteen.
 
+### 3.1 A segment of no memory size is judged and then skipped
+
+The generic ABI permits `p_memsz` to be zero. Such a segment is not malformed and
+is not refused: it simply has no memory image, and a loader steps over it.
+
+**It is judged first and skipped afterwards**, and the order is the point. The
+validation of a segment's address returned "within user space" for *any* address
+whatever so long as the size was zero, so a segment nominally in the kernel's
+half passed the one check that exists to keep a program out of it. Nothing came
+of that, because the loader's page arithmetic happened to produce an empty page
+range for such a segment and mapped nothing — but a validation that holds only
+because of what its caller does with the answer is not a validation, and the
+self-test now asserts the order rather than the outcome.
+
+Skipping it is also what keeps the arithmetic below safe. `ElfLoadSegment`
+computes the last page of a segment as `virtual_address + (memory_size - 1)`,
+which underflows when the size is zero. For a page-aligned address the wrapped
+sum yields a last page *below* the first and the loop maps nothing — harmless by
+luck. For an unaligned one it yields a last page *equal* to the first, and the
+loader maps a whole frame for a segment that asked for no bytes at all, then
+records an end address equal to its start, so the next segment may legitimately
+claim a page this one has already mapped.
+
 ## 4. What is refused
 
 | Refused | Because |
@@ -70,6 +93,7 @@ else would notice: a byte count of sixteen million where the file said sixteen.
 | A segment whose contents lie beyond the end of the file | The same, per segment |
 | A segment larger in the file than in memory | The reverse is ordinary — it is what a zero-filled section is — but this direction has the loader copy more bytes than it reserved pages for |
 | Any byte of a segment at or above `SYSCALL_USER_LIMIT` | A program is loaded into the half a user may occupy. The test is against the limit and not against the last address, so a segment *beginning* below it and *ending* above is refused too — which is the case a check of the starting address alone admits |
+| A segment occupying the first page of the address space | A program in which a null pointer is a valid address. A dereference of one would succeed quietly and read whatever the segment put there, instead of raising the page fault that is the only thing making a null pointer a detectable mistake rather than a silent wrong answer. It also removes an ambiguity: the lowest address of an image is recorded with zero standing for "none recorded yet", and the entry point is checked against that record |
 | Segments not in ascending order of address | The specification requires it, and this loader depends upon it for the shared page of Section 5. A table out of order would have it reuse a page belonging to a segment it had not reached |
 | An entry point outside every segment | A program whose first instruction fetch faults, at an address nothing in the image accounts for |
 
@@ -173,6 +197,25 @@ Each was applied to `kernel/exec/elf.c`, confirmed, and reverted.
 | The shared page left with the first segment's permissions. | `the page the two segments share is not writable` |
 | The frame not zeroed before the contents are copied into it. | `the memory beyond a segment's file contents was not zeroed` — **and only after Section 6.1**. Before the frames were dirtied it passed. |
 
+### 6.3 What the review after sub-task 6.10 added
+
+Three assertions were added, and one of them caught a defect in the change that
+introduced it — which is recorded because it is the clearest demonstration
+available of why the assertion was worth writing.
+
+| Property asserted | The silent failure it would catch |
+| ----------------- | --------------------------------- |
+| A segment occupying the first page of the address space is refused | Section 4: a program in which a null pointer is a valid address |
+| A segment of no memory size **in the kernel's half** is refused | Section 3.1: the address left unjudged because the size was zero |
+| A segment of no memory size at a legitimate address is **accepted**, and contributes no pages | The other half of it. A loader that refused an empty segment outright would reject images the generic ABI permits |
+
+The second of those failed when it was first run, and it failed against the very
+change it was written for: the skip had been placed *before* the address check
+rather than after it, so the empty segment escaped judgement exactly as it had
+before. The assertion was written from the specification rather than from the
+code, which is why it disagreed with the code; had it been written to match what
+the loader did, it would have passed and established nothing.
+
 ## 7. Limitations
 
 1. **Statically linked executables only.** A dynamically linked program, a
@@ -180,7 +223,10 @@ Each was applied to `kernel/exec/elf.c`, confirmed, and reverted.
    name. Relocation and an interpreter are a loader of their own.
 2. **The image is read whole into the heap**, bounded at `ELF_FILE_MAXIMUM`. A
    loader reading it piecewise would be validating offsets against a length it
-   had already used, and demand paging from a file is Phase 8's.
+   had already used. Demand paging from a file is a loader of a different kind
+   and is in no phase of [`../project/PLAN.md`](../project/PLAN.md); it needs the
+   page-fault path to consult a file, which
+   [`INTERRUPTS.md`](INTERRUPTS.md), limitation 1, records as not existing.
 3. **`PT_LOAD` and nothing else.** A thread-local segment, a note, a stack
    description: read, reported, and not acted upon. Nothing yet has threads to
    give local storage to.
@@ -196,6 +242,12 @@ Each was applied to `kernel/exec/elf.c`, confirmed, and reverted.
 6. **A partly loaded address space is not cleaned up.** Failure returns and the
    space is the caller's to destroy, because destroying it here would mean a
    loader that frees an address space it did not create.
-7. **Nothing has been executed.** The loader places a program and sub-task 6.10
-   is what transfers to one. Until then the entry point is a number this kernel
-   has checked and never jumped to.
+7. ~~**Nothing has been executed.**~~ Resolved at sub-task 6.10, which transfers
+   to the entry point this loader reports. A program of twenty-nine bytes is
+   composed, wrapped in an ELF image, loaded by this loader into an address space
+   of its own, and entered at privilege level 3, where it writes a string through
+   a system call and then faults on purpose. See
+   [`PROCESS.md`](PROCESS.md), Section 10.2. What has not happened is a program
+   loaded **from a volume** — `ElfLoadFile` exists and the self-test composes its
+   image in memory, there being no executable upon any volume this kernel mounts
+   until the userland of Phase 7.

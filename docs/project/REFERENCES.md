@@ -35,29 +35,33 @@ Sections relied upon:
   32-bit reserved field; the common tag header of a 32-bit type and a 32-bit
   size; the rule that a tag's size excludes its trailing padding and that each
   tag begins at an 8-byte aligned address.
+- **3.1.10**, the framebuffer request tag placed in the image header: type 5,
+  size 20, a flags field whose bit 0 marks the request optional, and width,
+  height and depth of which zero means no preference. Its presence is what
+  obliges the boot loader to emit the framebuffer information tag below.
 - **3.6.7**, the ELF-Symbols tag, type 9. Note the discrepancy recorded in
   `kernel/include/oxys/multiboot2.h`: the prose of this section and the reference
   C header in the same document disagree upon the widths of the `num`, `entsize`
   and `shndx` fields.
-- **3.1.10**, the framebuffer request tag placed in the image header: type 5,
-  size 20, a flags field whose bit 0 marks the request optional, and width,
-  height and depth of which zero means no preference. Its presence is what
-  obliges the boot loader to emit the tag below.
-- **3.6.12**, the framebuffer information tag, type 8: the 64-bit address, the
-  pitch, the width, the height, the bits per pixel, the framebuffer kind
-  (0 indexed, 1 RGB, 2 EGA text), and the **sixteen-bit** reserved field, after
-  which the colour description begins at offset 32. The width of the reserved
-  field is settled by the reference implementation's
-  `struct multiboot_tag_framebuffer_common`, the prose diagram being ambiguous
-  upon it.
 - **3.6.8**, the memory map tag, type 6: the `entry_size` and `entry_version`
   fields; the guarantee that `entry_size` is a multiple of eight; the entry
   layout of `base_addr`, `length`, `type` and `reserved`; the region type values,
   of which 1 denotes available memory; and the warning that the map includes the
   regions occupied by the kernel and by the boot information structure, which the
   kernel must take care not to overwrite.
+- **3.6.12**, the framebuffer information tag, type 8: the 64-bit address, the
+  pitch, the width, the height, the bits per pixel, the framebuffer kind
+  (0 indexed, 1 RGB, 2 EGA text), and the **sixteen-bit** reserved field, after
+  which the colour description begins at offset 32. The width of the reserved
+  field is settled by the reference implementation's
+  `struct multiboot_tag_framebuffer_common`, the prose diagram being ambiguous
+  upon it: the prose shows a `u8` reserved and the header a `multiboot_uint16_t`,
+  and only the latter puts the colour description at the offset the fixed
+  32-byte prefix requires.
 
-Used by: `boot/boot.asm`, `kernel/kernel.c`, `linker.ld`, `boot/grub/grub.cfg`.
+Used by: `boot/boot.asm`, `kernel/multiboot2.c`,
+`kernel/include/oxys/multiboot2.h`, `kernel/kernel.c`, `linker.ld`,
+`boot/grub/grub.cfg`.
 
 ### Intel 64 and IA-32 Architectures Software Developer's Manual
 Intel Corporation. `https://www.intel.com/sdm`
@@ -946,7 +950,7 @@ Sections relied upon:
 - **Byte order**: every quantity upon the volume is stored least significant byte
   first, irrespective of the machine.
 
-Used by: `kernel/fs/ext2.c`, `kernel/include/oxys/ext2.h`.
+Used by: `kernel/fs/ext2/`, `kernel/include/oxys/ext2.h`.
 
 ### Linux kernel documentation, the ext2 filesystem
 Linux kernel source, `Documentation/filesystems/ext2.rst`.
@@ -963,7 +967,7 @@ filename was longer than 256 characters". That last sentence is the reason this
 kernel decides the width of `name_len` from the feature flag alone and not from
 the revision; see [`../storage/EXT2.md`](../storage/EXT2.md), Section 10.2.
 
-Used by: `kernel/fs/ext2.c`, `kernel/include/oxys/ext2.h`.
+Used by: `kernel/fs/ext2/`, `kernel/include/oxys/ext2.h`.
 
 ### Linux kernel documentation, the ext4 superblock, group descriptor and inode
 Linux kernel source, `Documentation/filesystems/ext4/super.rst`,
@@ -989,7 +993,7 @@ and ext4 reuses as `bg_flags`. This kernel reads it in neither sense, so the
 divergence does not bear upon it; it is recorded because a reader comparing the
 two tables will meet it.
 
-Used by: `kernel/fs/ext2.c`, `kernel/include/oxys/ext2.h`.
+Used by: `kernel/fs/ext2/`, `kernel/include/oxys/ext2.h`.
 
 ### IEEE Std 1003.1-2017, the Portable Operating System Interface
 The Open Group and IEEE. Technical Standard Base Specifications, Issue 7,

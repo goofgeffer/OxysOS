@@ -64,7 +64,13 @@ read-only unless the operator chose the GRUB entry that permits writing. See
 [`../storage/EXT2.md`](../storage/EXT2.md) and
 [`../storage/VFS.md`](../storage/VFS.md).
 
-**Phase 6 has begun; sub-task 6.1 is complete.** The apparatus a privilege
+**Phase 6 is complete as far as sub-task 6.10.** Sub-tasks 6.1 to 6.10 are done
+and 6.11 is next. The paragraphs below state the condition of each; where a
+sub-task's substance is already carried by its entry in the Phase 6 list and by
+the Revision History, it is not restated a third time here, for the reason the
+Revision History gives at the foot of this document.
+
+**Sub-task 6.1 is complete.** The apparatus a privilege
 transition is performed out of now stands, and has been exercised rather than
 merely built. The global descriptor table holds the user-mode descriptors, whose
 order is fixed by the arithmetic `SYSCALL` and `SYSRET` derive their selectors
@@ -73,10 +79,13 @@ stack loaded upon entry from user mode and, in its first interrupt stack table
 entry, a separate stack the double fault is delivered upon; its I/O map base lies
 beyond the segment limit, which is what denies every port to user mode.
 `IA32_STAR`, `IA32_LSTAR` and `IA32_FMASK` are written before `IA32_EFER.SCE` is
-set. Both the interrupt stack table and the transition itself are exercised —
-`SYSCALL` being executable from privilege level 0, where it raises no privilege
-but performs every other part of the transition — so the mechanism is proved with
-no user program in existence.
+set. The interrupt stack table is exercised rather than inspected. The transition
+itself was exercised too, at the time, `SYSCALL` being executable from privilege
+level 0 against the placeholder entry point this sub-task installed — but sub-task
+6.7 replaced that entry point with one that returns by `SYSRET`, which returns to
+privilege level 3 unconditionally, so **the self-test no longer executes
+`SYSCALL`** and the assertion is recorded as lost rather than disguised. See
+[`../design/PRIVILEGE.md`](../design/PRIVILEGE.md), Section 9.4.
 
 **Sub-task 6.2 is complete.** The image asks the boot loader for a linear
 framebuffer, and what it is given is validated, mapped and described. Two
@@ -247,6 +256,31 @@ and the position; whether the division was drawn in the right place is a questio
 that sub-task answers rather than one argued here. See
 [`../devices/MOUSE.md`](../devices/MOUSE.md).
 
+**Sub-tasks 6.6 to 6.10 are complete, and between them the kernel acquired a
+display it composes rather than writes to, and a program.** The compositor of 6.6
+put a back buffer in ordinary memory beneath everything that draws, which
+discharged at once the clip stack and the blend of 6.3, the double buffering 6.4
+asked for, and the save-under of 6.5 — the last removed outright, along with the
+concealment that made it safe and `KernelWriteString`'s knowledge that a pointer
+existed. Nothing reads the framebuffer any more. Sub-task 6.7 supplied the
+`SYSCALL` entry path, whose first three instructions are the whole of its
+security, a dispatch table of three calls and the validation of a caller's
+arguments; establishing the first page reachable from privilege level 3 found a
+defect in the paging of Phase 2, intermediate entries never having carried the
+user bit. Sub-task 6.8 supplied the ELF64 loader, whose design is the list of
+fifteen things it refuses to be told. Sub-task 6.9 defined the process control
+block, the thread and the saved context without running any of them, so that the
+shape could still be argued about before assembly was written against its
+offsets; and sub-task 6.10 wrote that assembly. A program of twenty-nine bytes
+now runs at privilege level 3, writes a string through a system call, executes an
+undefined instruction on purpose, and is ended — which made
+`ExceptionTerminateProgram` a path that terminates rather than one that panics
+for want of anywhere to return to. See
+[`../design/GRAPHICS.md`](../design/GRAPHICS.md), Section 27,
+[`../design/PRIVILEGE.md`](../design/PRIVILEGE.md), Section 9,
+[`../design/EXECUTABLE.md`](../design/EXECUTABLE.md) and
+[`../design/PROCESS.md`](../design/PROCESS.md).
+
 **The testing arrangement**, which is not a phase and governs every one of them:
 there is no test harness and there will be none before Phase 7, so the kernel
 asserts its own properties at boot, in the order the subsystems are initialised.
@@ -295,7 +329,8 @@ Chapters 2, 4 and 9; System V ABI for AMD64.
 provide the copy-on-write primitives upon which `fork()` will later depend.
 
 **Specifications**: Intel SDM Volume 3A, Chapter 4 (Paging) and Section 6.15
-(Page-Fault Exception); Multiboot2 Specification, Section 3.6 (memory map tag).
+(Page-Fault Exception); Multiboot2 Specification, Sections 3.6.7 (ELF-Symbols
+tag) and 3.6.8 (memory map tag).
 
 - [x] 2.1 Parse the Multiboot2 information structure and extract the memory map (tag type 6) and the ELF section headers (tag type 9).
 - [x] 2.2 Implement a physical frame allocator (bitmap) covering all usable regions, reserving the kernel image, the Multiboot2 structures and the low 1 MiB.
@@ -594,6 +629,7 @@ copies of an argument do not agree with each other for long.
 
 | Date | Phase | Change | Commit | Design |
 | ---- | ----- | ------ | ------ | ------ |
+| 2026-09-07 | All | A review of the documentation and then of the code, at the project owner's direction, with no new sub-task begun. The corpus was corrected where it had fallen behind the code — chiefly `ARCHITECTURE.md`, frozen at sub-task 6.4, and limitations recorded as open that later sub-tasks had discharged. Five defects were then found by reading: `PagingReport` announced the boot identity mapping as `PRESENT (unexpected)` upon every healthy boot, having tested a root entry that any low mapping makes present rather than the translation itself; the ELF loader judged a segment of no memory size to be within user space whatever its address, and would map the null page; `ThreadDestroy` cleared the current thread but not the thread to return to; the termination guard was duplicated at two call sites with two messages, one of them stale; and the kernel's own banner and process report each stated something that had stopped being true at 6.10. `kernel/fs/ext2.c`, 4,325 lines and describing itself in its header as an implementation of the superblock, was divided into nine translation units and a private header. | — | [`../design/ARCHITECTURE.md`](../design/ARCHITECTURE.md) §2.2; [`../design/MEMORY-LAYOUT.md`](../design/MEMORY-LAYOUT.md) §8.4.1; [`../design/EXECUTABLE.md`](../design/EXECUTABLE.md) §§3.1, 6.3; [`../design/INTERRUPTS.md`](../design/INTERRUPTS.md) §8.1.3; [`../design/PROCESS.md`](../design/PROCESS.md) §8 |
 | 2026-09-06 | Phase 4 | Sub-task 4.7: an AHCI driver, so that a machine whose firmware presents its serial ATA controller in AHCI mode has a disk at all. The adaptor is found upon the bus, taken from the firmware where the handoff says the firmware still holds it, enabled, and each port its bitmap names is stopped, given a page of its own and restarted. A command is composed in memory as a frame information structure and the caller's buffer named to the device one page at a time, since a buffer contiguous to the processor need not be contiguous to the device; a write is followed by a cache flush within the same sequence. Three decisions no board here can produce — whether a port's link is up, what a signature names, and how the command header packs three fields into one word — are asserted directly. The disk self-test's own transfer assertion was strengthened in the course of it: two reads compared against each other passed with the region byte count halved, and the buffers are now seeded differently so that the device's silence is visible. | `bb530ea` | [`../storage/AHCI.md`](../storage/AHCI.md) |
 | 2026-09-06 | Phase 3 | The serial driver corrected in three places, all of them a status bit believed without having been seen to change. The presence probe read the receiver in the same breath as the write that fed it, so upon VirtualBox — whose adapter shifts the byte, as a real one does — the kernel concluded there was no adapter and had written nothing to COM1 since the driver was written. The loopback self-test entered loopback while the last character of the flushed boot log was still being shifted, and read it back as a surplus; and it trusted a data-ready flag left standing from the previous character, so it failed upon about half of all VirtualBox boots and upon none of QEMU's. The receiver is now emptied before each character, and the surplus check looks for a byte rather than a flag. | `c0ac856` | [`../devices/SERIAL.md`](../devices/SERIAL.md), Section 8.4 |
 | 2026-09-06 | Phase 4 | Sub-task 4.8: an SD host controller driver, so that a machine whose system is upon an embedded MultiMediaCard has storage at all. This is the machine the whole line of work was reported from, and neither of the two drivers before it could ever have reached it: an eMMC part sits behind a controller the assignment specification classes as a system peripheral, and such a machine carries no mass-storage controller whatever. The thing upon the bus is the controller and the thing holding the data is a card with a command set of its own, so most of the driver is that second conversation — a card is woken, asked what it is, given an address, asked how large it is and selected before a block may be read, and which power-up command it answers is how its kind is established. The capacity is the part most likely to be wrong and least likely to say so: two encodings chosen by a field of the same register, differing in where every other field sits and in the units of the answer, over a register the controller has already stripped eight bits from. Both are asserted, and asserted to disagree. | `1bff1fe` | [`../storage/SDCARD.md`](../storage/SDCARD.md) |

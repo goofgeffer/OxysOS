@@ -133,7 +133,15 @@ C_SOURCES := kernel/kernel.c \
              kernel/cpu/exceptions.c \
              kernel/exec/elf.c \
              kernel/proc/process.c \
-             kernel/fs/ext2.c \
+             kernel/fs/ext2/core.c \
+             kernel/fs/ext2/superblock.c \
+             kernel/fs/ext2/group.c \
+             kernel/fs/ext2/inode.c \
+             kernel/fs/ext2/file.c \
+             kernel/fs/ext2/alloc.c \
+             kernel/fs/ext2/directory.c \
+             kernel/fs/ext2/path.c \
+             kernel/fs/ext2/name.c \
              kernel/fs/ext2_vfs.c \
              kernel/fs/vfs.c \
              drivers/vga/vga.c \

@@ -53,6 +53,17 @@ static uint64_t ProcessTerminations;
 
 static Thread *ProcessCurrentThread;
 
+/*
+ * The thread that started a program and is waiting to be returned to when it
+ * ends, of sub-task 6.10.
+ *
+ * Declared here beside the current thread rather than beside the switching code
+ * that sets it, because ThreadDestroy must clear both and for the same reason:
+ * either pointer left naming a destroyed thread names a released slot, and a
+ * kernel stack that has gone back to the arena.
+ */
+static Thread *ProcessReturnThread;
+
 /* ------------------------------------------------------------------ helpers */
 
 static void ProcessCopyName(char *destination, const char *source)
@@ -423,6 +434,22 @@ void ThreadDestroy(Thread *thread)
     }
 
     /*
+     * And a thread that was the one to return to is that no longer, for the same
+     * reason and with a worse consequence.
+     *
+     * ProcessReturnThread is what ThreadTerminateCurrent switches to when a
+     * program ends. Left naming a destroyed thread, that switch would load a
+     * stack pointer out of a context structure belonging to a released slot and
+     * resume execution upon a kernel stack the arena has given to somebody else
+     * — which is not a fault but a machine that continues, wrongly, with no
+     * indication that anything happened.
+     */
+    if (ProcessReturnThread == thread)
+    {
+        ProcessReturnThread = NULL;
+    }
+
+    /*
      * Only a stack this thread took. The thread describing the kernel's own
      * execution runs upon the boot stack, which the linker established and which
      * the arena never gave out; handing it to KernelPagesFree would be releasing
@@ -530,9 +557,6 @@ extern void ThreadSwitchContext(ThreadContext *from, ThreadContext *to);
 extern void ThreadEnterUser(uint64_t entry, uint64_t user_stack, uint64_t code_selector,
                             uint64_t stack_selector);
 extern void ThreadTrampoline(void);
-
-/* The thread that entered user mode, and is waiting to be returned to. */
-static Thread *ProcessReturnThread;
 
 /*
  * Prepares a thread's kernel stack so that switching to it lands in the
@@ -949,8 +973,24 @@ void ProcessReport(void)
         KernelWriteHexadecimal(ProcessCurrentThread->kernel_stack_top);
         KernelWriteString(".\n");
     }
+    else if (ProcessTerminations > 0U)
+    {
+        /*
+         * No thread is current, but things have run.
+         *
+         * This is the ordinary state at the end of a boot: the self-tests adopt
+         * a thread, switch away from it, switch back, and give everything up
+         * before they return, so nothing is current by the time this report is
+         * reached. Saying "nothing has run" here would be a false statement
+         * printed immediately below the log of a program running, which is the
+         * one place a reader can see that it is false.
+         */
+        KernelWriteString("Processes: no thread is current; ");
+        KernelWriteDecimal(ProcessTerminations);
+        KernelWriteString(" program(s) have run and ended.\n");
+    }
     else
     {
-        KernelWriteString("Processes: no thread is current; nothing has run.\n");
+        KernelWriteString("Processes: no thread is current, and nothing has run.\n");
     }
 }

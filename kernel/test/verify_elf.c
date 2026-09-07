@@ -286,6 +286,48 @@ void KernelVerifyElf(void)
     KernelElfPut64(ELF_HEADER_BYTES + 16U, KERNEL_ELF_TEXT_ADDRESS);
     KernelElfPut64(ELF_HEADER_BYTES + 40U, KERNEL_ELF_TEXT_BYTES);
 
+    /*
+     * A segment occupying the first page of the address space.
+     *
+     * Refused, so that a null pointer stays a fault rather than becoming a valid
+     * address that quietly reads whatever the segment put there. The address is
+     * set below one page rather than to zero exactly, so that the assertion
+     * covers the whole first page and not merely its first byte.
+     */
+    KernelElfPut64(ELF_HEADER_BYTES + 16U, PAGE_SIZE - 8U);
+    KernelElfRequire(ElfValidate(KernelElfImage, KERNEL_ELF_IMAGE_BYTES) == ELF_BAD_ADDRESS,
+                     "a segment occupying the first page of the address space was "
+                     "accepted");
+    KernelElfPut64(ELF_HEADER_BYTES + 16U, KERNEL_ELF_TEXT_ADDRESS);
+
+    /*
+     * A segment of no memory size at an address in the kernel's half.
+     *
+     * The generic ABI permits a loadable segment to occupy no memory, so this is
+     * not malformed and must not be refused; what it must not do is escape the
+     * check that keeps a program out of the kernel's half. The validation tested
+     * the size before the address until this was written, and returned "within
+     * user space" for any address whatever so long as the size was zero.
+     *
+     * The image is expected to remain acceptable — the *other* segment is still
+     * well formed, and this one is skipped — so what is asserted is that the
+     * refusal above is not reached, and that the empty segment contributes no
+     * pages when the image is loaded, which the loading assertions establish.
+     */
+    KernelElfPut64(ELF_HEADER_BYTES + ELF_PROGRAM_HEADER_BYTES + 16U, DIRECT_MAP_BASE);
+    KernelElfPut64(ELF_HEADER_BYTES + ELF_PROGRAM_HEADER_BYTES + 32U, 0U);
+    KernelElfPut64(ELF_HEADER_BYTES + ELF_PROGRAM_HEADER_BYTES + 40U, 0U);
+    KernelElfRequire(ElfValidate(KernelElfImage, KERNEL_ELF_IMAGE_BYTES) == ELF_BAD_ADDRESS,
+                     "a segment of no memory size in the kernel's half was accepted");
+    KernelElfPut64(ELF_HEADER_BYTES + ELF_PROGRAM_HEADER_BYTES + 16U,
+                   KERNEL_ELF_DATA_ADDRESS);
+    KernelElfRequire(ElfValidate(KernelElfImage, KERNEL_ELF_IMAGE_BYTES) == ELF_OK,
+                     "a segment of no memory size at a legitimate address was refused");
+    KernelElfPut64(ELF_HEADER_BYTES + ELF_PROGRAM_HEADER_BYTES + 32U,
+                   KERNEL_ELF_DATA_FILE_BYTES);
+    KernelElfPut64(ELF_HEADER_BYTES + ELF_PROGRAM_HEADER_BYTES + 40U,
+                   KERNEL_ELF_DATA_MEMORY_BYTES);
+
     /* Segments out of order, which the loader depends upon for the shared page
      * and which the specification requires of a valid image. */
     KernelElfPut64(ELF_HEADER_BYTES + ELF_PROGRAM_HEADER_BYTES + 16U,

@@ -14,7 +14,7 @@ complementary, and neither replaces the other.
 | Directory | Holds | Read it when |
 | --------- | ----- | ------------ |
 | [`project/`](project/) | How the work is conducted: the plan, the tests, the toolchain, the standards, the bibliography. | You are about to make a change, or want to know what is done and what is not. |
-| [`design/`](design/) | The kernel itself: its architecture, its boot, its address space, its interrupts, the apparatus of a privilege transition, and the framebuffer and the drawing upon it. | You want to know how the machine is brought up and how it is arranged once it is. |
+| [`design/`](design/) | The kernel itself: its architecture, its boot, its address space, its interrupts, the apparatus of a privilege transition, the framebuffer and the drawing upon it, and the executable and the process that runs one. | You want to know how the machine is brought up and how it is arranged once it is. |
 | [`devices/`](devices/) | The hardware the kernel drives, one document per device. | You are working upon a driver, or want to know what a device does and why the driver treats it so. |
 | [`storage/`](storage/) | The path from a medium to a caller: the disk, the block layer above it, the cache above that, and the filesystem above that. | You are working anywhere between a sector and a file. |
 
@@ -39,8 +39,10 @@ complementary, and neither replaces the other.
 | [`BOOT.md`](design/BOOT.md) | From the GRUB handover to `KernelMain`. |
 | [`MEMORY-LAYOUT.md`](design/MEMORY-LAYOUT.md) | The physical and virtual address spaces, the paging hierarchy, and the allocators above it. |
 | [`INTERRUPTS.md`](design/INTERRUPTS.md) | The descriptor table, the stubs, the dispatcher, the exceptions and the 8259A controllers. |
-| [`GRAPHICS.md`](design/GRAPHICS.md) | The framebuffer and its memory type, the primitives and clipping that draw upon it, the bitmap font and graphical console drawn with those, the measurement that made the console fast enough, the fault screens a severe fault draws, and the pointer of sub-task 6.5 seen from the drawing it is built upon. |
-| [`PRIVILEGE.md`](design/PRIVILEGE.md) | The user-mode descriptors, the task state segment and its trusted stacks, and the registers that configure `SYSCALL`. |
+| [`PRIVILEGE.md`](design/PRIVILEGE.md) | The user-mode descriptors, the task state segment and its trusted stacks, the registers that configure `SYSCALL`, and the entry path, dispatch table and argument validation above them. |
+| [`GRAPHICS.md`](design/GRAPHICS.md) | The framebuffer and its memory type, the primitives and clipping that draw upon it, the bitmap font and graphical console drawn with those, the measurement that made the console fast enough, the fault screens a severe fault draws, the pointer, and the compositor beneath all of them. |
+| [`EXECUTABLE.md`](design/EXECUTABLE.md) | The ELF64 loader for statically linked executables: the list of things it refuses to be told by an untrusted document, and how a segment reaches an address space. |
+| [`PROCESS.md`](design/PROCESS.md) | The process control block, the thread and the saved context; the switch that exchanges one thread for another, and the descent to privilege level 3. |
 
 ### [`devices/`](devices/)
 
@@ -57,10 +59,12 @@ complementary, and neither replaces the other.
 
 | Document | Subject | Implementation |
 | -------- | ------- | -------------- |
-| [`DISK.md`](storage/DISK.md) | The ATA disk in programmed input/output mode. | `drivers/ata/` |
+| [`DISK.md`](storage/DISK.md) | The ATA disk in programmed input/output mode, and what storage the driver cannot reach and how it says so. | `drivers/ata/` |
+| [`AHCI.md`](storage/AHCI.md) | The AHCI disk by first-party direct memory access: the handoff from the firmware, the ports, and the command list. | `drivers/ahci/` |
+| [`SDCARD.md`](storage/SDCARD.md) | The SD card and the embedded MultiMediaCard, and the host controller they are reached through. | `drivers/sdhci/` |
 | [`BLOCK.md`](storage/BLOCK.md) | The generic block-device layer. | `drivers/block/block.c` |
 | [`BUFFER.md`](storage/BUFFER.md) | The buffer cache. | `drivers/block/buffer.c` |
-| [`EXT2.md`](storage/EXT2.md) | The EXT2 volume: its superblock, its group descriptors, its inodes, its directories, the resolution of a path, the reading and writing of a file, and the creation and destruction of files and directories. | `kernel/fs/ext2.c` |
+| [`EXT2.md`](storage/EXT2.md) | The EXT2 volume: its superblock, its group descriptors, its inodes, its directories, the resolution of a path, the reading and writing of a file, and the creation and destruction of files and directories. | `kernel/fs/ext2/` |
 | [`VFS.md`](storage/VFS.md) | The virtual filesystem layer: the mount, the node, the open file, and the one tree that several volumes are joined into. | `kernel/fs/vfs.c`, `kernel/fs/ext2_vfs.c` |
 
 ## The form of a document

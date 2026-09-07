@@ -252,8 +252,9 @@ Sub-task 3.4 registers a handler for every architecture-defined vector.
 Every architecture-defined exception has one of three dispositions, and
 `ExceptionDispositionOf` decides which from **the vector and the privilege level
 together**. It is a pure function of those two, which is what lets the whole of
-it be asserted without raising a single exception — including the half that
-concerns a privilege level this kernel does not yet run code at.
+it be asserted without raising a single exception — and what let the half
+concerning privilege level 3 be asserted at sub-task 6.4, six sub-tasks before
+anything ran there.
 
 | Disposition | Meaning |
 | ----------- | ------- |
@@ -299,22 +300,49 @@ arrived would blame the wrong thing.
 kernel's own data. Whoever tripped over a malformed one, terminating them would
 leave the same malformed descriptor in place for the next program to meet.
 
-### 8.1.2 Nothing can yet be terminated
+### 8.1.2 What `TERMINATE` does, and what it did before there was anything to terminate
 
-There are no programs. Until sub-task 6.10 runs code at privilege level 3 there
-is nothing outside the kernel to raise such a fault and nothing to destroy, so
-`TERMINATE` is at present unreachable — and a fault that did reach it would mean
-the machine is at a privilege level this kernel does not know it has, which is
-reported as such rather than ignored.
-
-The classification is made now regardless, because it is what decides whether a
-fault screen is drawn, and because it can be asserted now: the self-test asks
-`ExceptionDispositionOf` about every vector at both privilege levels. That is the
-same idiom sub-task 6.1 used to exercise `SYSCALL` from privilege level 0 —
+**The classification was written at sub-task 6.4, when it could not be reached.**
+There were no programs then, so nothing outside the kernel could raise such a
+fault and there was nothing to destroy; `TERMINATE` was unreachable, and
+`ExceptionTerminateProgram` panicked upon arrival because there was nothing to
+end and nowhere to return to. It was classified anyway, because the disposition
+is what decides whether a fault screen is drawn, and because it could be
+asserted without being reached: `ExceptionDispositionOf` is a pure function of a
+vector and a privilege level, so the self-test asks it about every vector at
+both levels. That is the same idiom sub-task 6.1 used upon `SYSCALL` —
 exercising a mechanism where the condition it exists for has not yet arrived.
 
-From Phase 7 the `TERMINATE` path becomes ordinary: the process is destroyed, its
-address space released, the scheduler picks another, and no screen is drawn.
+**Sub-task 6.10 supplied the condition.** A program now runs at privilege level
+3, and a fault it raises reaches this path: `ThreadTerminateCurrent` marks the
+thread ended, records the exit status as the vector negated, and switches back to
+whichever thread started it. The machine carries on and no screen is drawn. The
+self-test of that sub-task ends its program by an undefined instruction on
+purpose and asserts an exit status of −6, which is what establishes that the
+program reached its last instruction rather than merely its first.
+
+What is still absent is the rest of the ordinary path: the process is marked
+`PROCESS_EXITED` but its address space is not released, nobody collects the
+status, and there is no scheduler to pick another thread. Those arrive with
+`exit()` and `wait()` at sub-task 6.11 and the scheduler at 6.15.
+
+### 8.1.3 Where the judgement is made when there is nobody to return to
+
+`ThreadTerminateCurrent` returns false where nothing started the thread that
+faulted, which means privilege level 3 was reached by something that did not go
+through `ThreadStart`. That cannot be continued from: returning would return
+through the dispatcher to `IRETQ`, which restarts the faulting instruction, which
+faults again — the machine reporting the same fault for ever without progress,
+which is exactly the hazard the fatal handler exists to avoid, arriving by a
+different route.
+
+**The judgement is made once, in `ExceptionTerminateProgram`**, which is the
+function that knows whether the termination succeeded. It was made at each of the
+two call sites until the review that followed sub-task 6.10, and the duplication
+had already begun to rot: the two sites panicked with two different messages, and
+one of them said the fault had been "raised before any program exists", which
+ceased to be true at 6.10. A condition tested in two places is a condition
+described in two places, and they do not stay in agreement.
 
 ### 8.2 The two error-code formats
 

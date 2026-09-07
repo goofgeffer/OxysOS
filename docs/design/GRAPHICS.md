@@ -1,21 +1,27 @@
-# The Framebuffer, the Primitives, the Console and the Fault Screens
+# The Framebuffer, the Primitives, the Console, the Fault Screens and the Compositor
 
-**Corresponding phase**: 6, sub-tasks 6.2, 6.3 and 6.4, which open the graphical
-work. Sections 1 to 10 concern the framebuffer; Sections 11 to 17 the primitives
-that draw upon it; Sections 18 to 22 the font and the console drawn with them;
-Section 23 the measurement that made the console fast enough and what it
-directed; Sections 24 and 25 the fault screens.
+**Corresponding phase**: 6, sub-tasks 6.2 to 6.6, which are the whole of the
+graphical work that needs no process to exist. Sections 1 to 10 concern the
+framebuffer (6.2); Sections 11 to 17 the primitives that draw upon it (6.3);
+Sections 18 to 22 the font and the console drawn with them, Section 23 the
+measurement that made the console fast enough, and Sections 24 and 25 the fault
+screens (6.4); Section 26 the pointer (6.5); and Section 27 the compositor (6.6),
+which is where several of the earlier sections' limitations are discharged.
 **Authority**: `PROJECT_GUIDELINES.md`, Sections 2 and 4.
 **Implemented by**: [`../../graphics/framebuffer.c`](../../graphics/framebuffer.c),
 [`../../graphics/draw.c`](../../graphics/draw.c),
 [`../../graphics/font.c`](../../graphics/font.c),
 [`../../graphics/console.c`](../../graphics/console.c),
 [`../../graphics/faultscreen.c`](../../graphics/faultscreen.c),
+[`../../graphics/cursor.c`](../../graphics/cursor.c),
+[`../../graphics/compositor.c`](../../graphics/compositor.c),
 [`../../kernel/include/oxys/graphics.h`](../../kernel/include/oxys/graphics.h),
 [`../../kernel/include/oxys/framebuffer.h`](../../kernel/include/oxys/framebuffer.h),
 [`../../kernel/include/oxys/font.h`](../../kernel/include/oxys/font.h),
 [`../../kernel/include/oxys/console.h`](../../kernel/include/oxys/console.h),
 [`../../kernel/include/oxys/faultscreen.h`](../../kernel/include/oxys/faultscreen.h),
+[`../../kernel/include/oxys/cursor.h`](../../kernel/include/oxys/cursor.h),
+[`../../kernel/include/oxys/compositor.h`](../../kernel/include/oxys/compositor.h),
 [`../../kernel/multiboot2.c`](../../kernel/multiboot2.c),
 [`../../boot/boot.asm`](../../boot/boot.asm),
 [`../../kernel/mm/vmm.c`](../../kernel/mm/vmm.c).
@@ -25,8 +31,12 @@ directed; Sections 24 and 25 the fault screens.
 [`../../kernel/test/verify_graphics.c`](../../kernel/test/verify_graphics.c),
 `KernelVerifyConsole` in
 [`../../kernel/test/verify_console.c`](../../kernel/test/verify_console.c),
-and `KernelVerifyFaultScreen` in
-[`../../kernel/test/verify_faultscreen.c`](../../kernel/test/verify_faultscreen.c).
+`KernelVerifyFaultScreen` in
+[`../../kernel/test/verify_faultscreen.c`](../../kernel/test/verify_faultscreen.c),
+`KernelVerifyCursor` in
+[`../../kernel/test/verify_mouse.c`](../../kernel/test/verify_mouse.c),
+and `KernelVerifyCompositing` and `KernelVerifyCompositor` in
+[`../../kernel/test/verify_compositor.c`](../../kernel/test/verify_compositor.c).
 
 **Specifications**: Multiboot2 Specification 2.0, Sections 3.1.10 and 3.6.12;
 Intel 64 and IA-32 Architectures Software Developer's Manual, Volume 3A,
@@ -526,7 +536,7 @@ caused it.
 | A pixel outside the surface writes nothing and reads as zero | The boundary is not enforced on either path. |
 | A fill covers exactly its area, reaches its corners, and stops one short of its extent | The commonest off-by-one, in both directions. |
 | A rectangle straddling the top-left corner leaves exactly the 5×5 that remains | A fill that dropped the whole rectangle because part fell outside would look identical from the point of view of memory. |
-| An outline of 6×4 is exactly 16 pixels | Doubled corners, or short edges. Doubling is harmless for an opaque colour and will not be once sub-task 6.6 admits blending. |
+| An outline of 6×4 is exactly 16 pixels | Doubled corners, or short edges. Doubling is harmless for an opaque colour and ceased to be harmless at sub-task 6.6, which admitted blending: a corner written twice is blended twice and is the wrong colour. |
 | An outline is hollow | It is a fill. |
 | `GraphicsClear` fills the clip, not the surface | It could not be used to erase one region of a screen. |
 | **The padding is intact after every one of these** | A row was addressed by the width instead of the pitch. |
@@ -588,10 +598,14 @@ written into the row padding. The edit was then reverted.
    processors drawing upon one surface require that sub-task's lock. It is not
    taken here: a primitive is far too small a thing to own a lock, and the right
    place is the surface's owner.
-6. **No fast path uses the pixel size.** A four-byte fill writes four separate
-   bytes rather than one word. It is correct at every depth and slower than it
-   needs to be at the common one; the measurement that would justify specialising
-   it does not exist yet.
+6. ~~**No fast path uses the pixel size.**~~ Resolved in the course of sub-task
+   6.4, by the measurement of Section 23, which is the specialisation this
+   limitation said did not yet exist a justification for. A surface records
+   `whole_words` — four bytes to the pixel, a word-aligned base and a pitch that
+   is a multiple of four — and where it holds, the pixel, the fill, the pattern
+   block and the blit each take a word-wide loop of their own rather than a test
+   inside the byte loop. The byte path remains and is what a surface of any other
+   depth still uses.
 
 ---
 
@@ -664,7 +678,7 @@ cell as it was. The background is the caller's business — a console fills the
 cell before calling this; a caller drawing text over an image does not, and gets
 the character stencilled upon what was already there. Drawing the background here
 would be one pass instead of two and would make it impossible to draw a character
-over anything, which is what a cursor does and what sub-task 6.6 will want.
+over anything, which is what a cursor does and what sub-task 6.6 duly wanted.
 
 Every pixel goes through `GraphicsPutPixel`, so every pixel is clipped by
 Section 13's boundary. A glyph at the edge of a surface is cut off rather than
@@ -840,7 +854,7 @@ the kernel deny having a framebuffer three lines after describing one in detail.
 3. **There is no text cursor drawn.** The position is tracked and reported and
    nothing marks it upon the screen. Sub-task 6.6 supplied the compositing needed
    to remove one again — a cursor is a layer — but nothing yet has a use for it:
-   the echo loop is legible without, and a shell is Phase 7. See Section 27.7.
+   the echo loop is legible without, and a shell is Phase 8. See Section 27.7.
 4. **There are no colours per character.** `ConsoleSetColour` sets the pair used
    from that point onward; there is no attribute stored with a cell, so a scroll
    cannot repaint what it moved and does not need to.
@@ -1384,9 +1398,15 @@ Every edit was reverted.
 ## 26. The pointer of sub-task 6.5
 
 The device that moves the pointer is documented in
-[`../devices/MOUSE.md`](../devices/MOUSE.md), which also carries the shape, the
-save-under and every assertion made upon them. What belongs here is what the
-pointer says about the drawing this document describes.
+[`../devices/MOUSE.md`](../devices/MOUSE.md), which also carries the shape and
+every assertion made upon it — and, as history, the save-under that sub-task 6.6
+removed. What belongs here is what the pointer says about the drawing this
+document describes.
+
+*This section was written at sub-task 6.5, when there was one surface and no back
+buffer. Section 27 is what became of it, and the parts superseded there are
+marked where they stand rather than deleted: the argument is why the compositor
+was necessary.*
 
 ### 26.1 It is the first thing that composites
 
@@ -1628,7 +1648,7 @@ suspends the display has stopped the machine.
 2. **No text cursor yet.** Section 20.3 named this sub-task as the one with the
    compositing needed to remove a text cursor again, and the compositing now
    exists — a cursor is a layer, and a layer is removed by hiding it. Nothing
-   yet has a use for one: the echo loop does not need it, and a shell is Phase 7.
+   yet has a use for one: the echo loop does not need it, and a shell is Phase 8.
 3. **The presentation is synchronous.** It happens where it is asked for and
    nothing waits for the adapter's vertical blank, so a large presentation can be
    seen to arrive. There is nothing to synchronise against without an interrupt

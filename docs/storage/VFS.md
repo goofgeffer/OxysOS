@@ -6,7 +6,8 @@
 [`../../kernel/fs/ext2_vfs.c`](../../kernel/fs/ext2_vfs.c),
 [`../../kernel/include/oxys/vfs.h`](../../kernel/include/oxys/vfs.h),
 [`../../kernel/include/oxys/ext2_vfs.h`](../../kernel/include/oxys/ext2_vfs.h).
-**Asserted by**: `KernelVerifyVfs` in [`../../kernel/kernel.c`](../../kernel/kernel.c).
+**Asserted by**: `KernelVerifyVfs` in
+[`../../kernel/test/verify_vfs.c`](../../kernel/test/verify_vfs.c).
 
 ---
 
@@ -59,24 +60,25 @@ copied in.
      |   neutral type <-> i_mode, refusal <-> code                          |
      +----------------------------------|-----------------------------------+
                                         |
-                          kernel/fs/ext2.c   (the format)
+                          kernel/fs/ext2/    (the format)
                                         |
                      drivers/block/buffer.c  (the cache)
                      drivers/block/block.c   (the device)
                      drivers/ata/ata.c       (the disk)
 ```
 
-The layer knows nothing of EXT2 and `ext2.c` knows nothing of the layer.
-`ext2_vfs.c` is the only file in the project that knows both, and it is short
-because everything in it is translation.
+The layer knows nothing of EXT2 and nothing in `kernel/fs/ext2/` knows anything
+of the layer. `ext2_vfs.c` is the only file in the project that knows both, and
+it is short because everything in it is translation.
 
-That division is why `ext2_vfs.c` is a file of its own rather than a chapter of
-`ext2.c`. The two answer different questions. `ext2.c` answers what the format
-is: where a structure lies, how its bytes are ordered, what makes a volume
-contradict itself. `ext2_vfs.c` answers how that format is presented as one
-filesystem among several. Declaring the binding in `ext2.h` would have made every
-consumer of the format compile against the filesystem layer as well, and the
-direction of the dependency would no longer be legible from the includes.
+That division is why `ext2_vfs.c` is a file of its own rather than a part of the
+format's own directory. The two answer different questions. `kernel/fs/ext2/`
+answers what the format is: where a structure lies, how its bytes are ordered,
+what makes a volume contradict itself. `ext2_vfs.c` answers how that format is
+presented as one filesystem among several. Declaring the binding in `ext2.h`
+would have made every consumer of the format compile against the filesystem layer
+as well, and the direction of the dependency would no longer be legible from the
+includes.
 
 ## 3. The operations a filesystem supplies
 
@@ -514,13 +516,18 @@ the mount count, so the field is now written as well.
 
 1. **There is no working directory, so no relative path is resolved.** Every path
    given to this layer must be absolute. A working directory is a property of a
-   process and there are none before Phase 6. A relative *symbolic link target*
-   is resolved, against the directory holding the link, that directory being
-   known.
-2. **The open file table is global.** In sub-task 6.9 it becomes per-process: a
-   descriptor is an index into a process's own table, and the description it
-   names is shared between the processes a fork produced. Nothing here assumes
-   otherwise; the table is simply global while there is one thread of control.
+   process, and although processes exist from sub-task 6.9 none of them has one:
+   the process control block carries no filesystem state at all. A relative
+   *symbolic link target* is resolved, against the directory holding the link,
+   that directory being known.
+2. **The open file table is global.** Sub-task 6.9 was expected to make it
+   per-process and did not: a process there is an address space and its threads,
+   with **no file descriptors** — see
+   [`../design/PROCESS.md`](../design/PROCESS.md), limitation 6. Joining the two
+   is Phase 7's, where `fork` must decide what a child inherits and a descriptor
+   becomes an index into a process's own table naming a description that may be
+   shared. Nothing here assumes otherwise; the table is simply global while there
+   is one thread of control.
 3. **Nothing is cached between one use and the next.** A node whose last
    reference goes is released, so opening the same file twice reads its inode
    twice. See Section 6.1: it is the right trade for a kernel with no

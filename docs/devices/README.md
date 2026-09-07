@@ -8,8 +8,8 @@ stands.
 | Document | Device | Driver | Phase |
 | -------- | ------ | ------ | ----- |
 | [`TIME.md`](TIME.md) | Counter 0 of the 8253 programmable interval timer, and the system tick derived from it. | [`../../drivers/pit/`](../../drivers/pit/) | 3.6 |
-| [`DISPLAY.md`](DISPLAY.md) | The VGA text-mode display: its register configuration, cursor, attributes and control characters — and, since sub-task 6.2, the graphics mode that displaces it. | [`../../drivers/vga/`](../../drivers/vga/) | 1.8, 4.2 |
-| [`SERIAL.md`](SERIAL.md) | The 16550 serial adapter at COM1, the channel every automated test reads. | [`../../drivers/serial/`](../../drivers/serial/) | 1.9, 4.1 |
+| [`DISPLAY.md`](DISPLAY.md) | The VGA text-mode display: its register configuration, cursor, attributes and control characters — and, since sub-task 6.2, the graphics mode that displaces it. | [`../../drivers/vga/`](../../drivers/vga/) | 1.7, 4.2 |
+| [`SERIAL.md`](SERIAL.md) | The 16550 serial adapter at COM1, the channel every automated test reads. | [`../../drivers/serial/`](../../drivers/serial/) | 1.7, 4.1 |
 | [`KEYBOARD.md`](KEYBOARD.md) | The PS/2 keyboard upon the controller's first port, and the controller it is reached through. | [`../../drivers/ps2/`](../../drivers/ps2/), [`../../drivers/keyboard/`](../../drivers/keyboard/) | 3.7 |
 | [`MOUSE.md`](MOUSE.md) | The PS/2 mouse upon the controller's second port, and the pointer drawn from it. | [`../../drivers/mouse/`](../../drivers/mouse/), [`../../graphics/cursor.c`](../../graphics/cursor.c) | 6.5 |
 | [`PCI.md`](PCI.md) | The PCI bus: how a machine is asked what it contains. | [`../../drivers/pci/`](../../drivers/pci/) | 4.3 |

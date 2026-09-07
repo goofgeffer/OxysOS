@@ -214,14 +214,25 @@ static bool ElfRangeIsWithinFile(uint64_t offset, uint64_t size, uint64_t length
 /* Whether a range of the address space is one a user program may occupy. */
 static bool ElfRangeIsWithinUserSpace(uint64_t address, uint64_t size)
 {
-    if (size == 0U)
-    {
-        return true;
-    }
-
     if (address >= SYSCALL_USER_LIMIT)
     {
         return false;
+    }
+
+    /*
+     * The address is tested before the size, and an empty range at an address
+     * outside the half is refused rather than admitted.
+     *
+     * The reverse order admitted any address whatever so long as the size was
+     * zero — a segment nominally at a kernel address passed the check that
+     * exists to keep a program out of the kernel's half. Nothing came of it,
+     * because the loader's page arithmetic happened to produce an empty page
+     * range for such a segment and map nothing; but a validation that is correct
+     * only because of what its caller does with the answer is not a validation.
+     */
+    if (size == 0U)
+    {
+        return true;
     }
 
     /*
@@ -336,6 +347,61 @@ static ElfResult ElfReadSegments(const uint8_t *bytes, uint64_t length,
         if (!ElfRangeIsWithinUserSpace(segment.virtual_address, segment.memory_size))
         {
             return ELF_BAD_ADDRESS;
+        }
+
+        /*
+         * No segment may occupy the first page of the address space.
+         *
+         * A program with a page mapped at address zero is one in which a null
+         * pointer is a valid address: a dereference of one succeeds quietly and
+         * reads whatever the segment put there, instead of raising the page
+         * fault that is the only thing which makes a null pointer a detectable
+         * mistake rather than a silent wrong answer. No toolchain produces such
+         * an image; a file that asks for one is either damaged or is asking for
+         * exactly that property, and neither is a request to grant.
+         *
+         * It also removes an ambiguity this loader would otherwise carry. The
+         * lowest address of an image is recorded with zero standing for "none
+         * recorded yet", so a segment genuinely at zero would leave the record
+         * indistinguishable from an empty one — and the entry point is checked
+         * against that record.
+         */
+        if (segment.virtual_address < PAGE_SIZE)
+        {
+            return ELF_BAD_ADDRESS;
+        }
+
+        /*
+         * A loadable segment occupying no memory is skipped rather than loaded,
+         * and skipped *here* — after every judgement upon its address and its
+         * contents, and before it is allowed to influence anything.
+         *
+         * The generic ABI permits `p_memsz` to be zero, so such a segment is not
+         * malformed and must not be refused; it simply has no memory image, and
+         * a loader steps over it. This one must step over it for a reason of its
+         * own besides: ElfLoadSegment computes the last page of a segment as
+         * `virtual_address + (memory_size - 1)`, which underflows when the size
+         * is zero. The wrapped sum yields a last page below the first for an
+         * aligned address — harmless by luck — but for an *unaligned* one it
+         * yields a last page equal to the first, and the loader maps a whole
+         * frame for a segment that asked for no bytes at all, then records an
+         * end address equal to its start, so the next segment may legitimately
+         * claim a page this one has already mapped.
+         *
+         * The order matters and was got wrong first: skipping before the address
+         * was judged let a segment nominally in the kernel's half through the
+         * one check that exists to keep a program out of it. Nothing would have
+         * come of it, the segment being skipped — but a validation that holds
+         * only because of what is done with its answer is not one, and the
+         * self-test now asserts this order rather than the outcome.
+         *
+         * It takes no part in the ascending-order check below, having no extent
+         * to overlap with: `previous_end` is left where the last segment with a
+         * memory image put it.
+         */
+        if (segment.memory_size == 0U)
+        {
+            continue;
         }
 
         /*
@@ -535,6 +601,17 @@ ElfResult ElfLoad(AddressSpace *space, const void *image, uint64_t length,
     for (size_t index = 0U; index < ElfSegmentsRead; ++index)
     {
         if (ElfSegments[index].type != ELF_SEGMENT_LOAD)
+        {
+            continue;
+        }
+
+        /*
+         * Skipped for the reason ElfReadSegments skips it, and skipped here as
+         * well because the two walks are separate: the validation steps over a
+         * segment of no memory size, and this loop would otherwise load the very
+         * segment the validation declined to judge.
+         */
+        if (ElfSegments[index].memory_size == 0U)
         {
             continue;
         }

@@ -54,7 +54,9 @@
 /*
  * The kernel stack each thread is given, in pages, and the guard beneath it.
  *
- * Sixteen kibibytes is four pages and is what the boot stack has been all along.
+ * Sixteen kibibytes is four pages, and is the size TSS_KERNEL_STACK_SIZE has
+ * given the stack named by `rsp0` since sub-task 6.1. (The boot stack is larger
+ * — 64 KiB, established in `boot/boot.asm` — and is not one of these.)
  * The guard is one page below it, and it exists because
  * `docs/design/PRIVILEGE.md` promised it here: with one stack an overflow ran
  * into the `.bss` and happened to be caught by the double-fault stack, which was
@@ -332,11 +334,12 @@ bool ThreadStart(Thread *thread);
 /*
  * Ends the running thread and returns to whoever started it.
  *
- * Does not return. Called from the system-call path when a program asks to end,
- * and from the exception path when a program is ended for it — which is what
- * `docs/design/INTERRUPTS.md` has called terminating the program since the
- * dispositions were written, and what could not be done until there was
- * somewhere to return to.
+ * Does not return. Its one caller is the exception path, where a program is
+ * ended for it — which is what `docs/design/INTERRUPTS.md` has called
+ * terminating the program since the dispositions were written, and what could
+ * not be done until there was somewhere to return to. There is no `exit` system
+ * call by which a program may ask to end; the table holds `write`, `ticks` and
+ * `version` alone until sub-task 6.11.
  *
  * Returns false, having done nothing, where there is nobody to return to.
  */

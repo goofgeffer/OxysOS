@@ -875,8 +875,6 @@ void PagingReleaseStructure(PhysicalAddress table)
 
 void PagingReport(void)
 {
-    const uint64_t *entries = PagingTableAt(PagingRootTable);
-
     KernelWriteString("Kernel paging hierarchy: root at ");
     KernelWriteHexadecimal(PagingRootTable);
     KernelWriteString(", ");
@@ -899,8 +897,33 @@ void PagingReport(void)
     KernelWriteDecimal(PagingCopyOnWriteSoleOwners);
     KernelWriteString(".\n");
 
+    /*
+     * Whether the boot loader's identity mapping is still standing.
+     *
+     * The question is asked of a translation and not of the root entry that
+     * happens to lead to it, and that distinction is the whole of this report's
+     * correctness. PML4[0] spans the first 512 GiB, so it is present whenever
+     * *anything* is mapped low — and something transiently is: the self-test of
+     * sub-task 6.7 maps a page at 1 GiB to assert the validation of a caller's
+     * arguments against a real mapping, then unmaps it. Unmapping clears the
+     * leaf and leaves the three tables above it standing, as it must, since they
+     * are the tables every later low mapping would need; so PML4[0] remains
+     * present for the rest of the machine's life.
+     *
+     * Reading that as the identity mapping had this report announce
+     * "PRESENT (unexpected)" upon every boot, of a mapping that had in fact been
+     * removed two hundred lines of log earlier — an alarm about the one thing in
+     * this subsystem whose failure would be catastrophic, raised on every
+     * healthy boot, which is how a reader learns to disregard it.
+     *
+     * What is asked instead is whether a representative address the boot mapping
+     * covered still translates. boot/boot.asm identity-mapped [0, 1 GiB); the
+     * kernel's own load address is the natural probe, being within that range,
+     * being an address nothing else has any reason to map, and being the one
+     * whose identity translation would be most dangerous to retain.
+     */
     KernelWriteString("Low identity mapping: ");
-    KernelWriteString((entries[0] & PAGE_ENTRY_PRESENT) != 0U
+    KernelWriteString(PagingTranslate(LOW_MEMORY_LIMIT) != 0U
                           ? "PRESENT (unexpected)\n"
                           : "removed.\n");
 }

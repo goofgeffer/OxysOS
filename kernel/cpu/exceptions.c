@@ -377,8 +377,18 @@ static void ExceptionTerminateProgram(TrapFrame *frame)
      * means privilege level 3 was reached by something that did not go through
      * ThreadStart, and that is still a condition the machine cannot continue
      * from.
+     *
+     * The result must therefore be acted upon and not discarded. Returning from
+     * here would return through the dispatcher to IRETQ, which restarts the
+     * faulting instruction at privilege level 3; the same fault would be raised
+     * again, reported again, and the machine would print this message for ever
+     * without making progress. That is precisely the hazard ExceptionFatalHandler
+     * below is written to avoid, arriving by a different route.
      */
-    (void)ThreadTerminateCurrent(-(int64_t)frame->vector);
+    if (!ThreadTerminateCurrent(-(int64_t)frame->vector))
+    {
+        KernelPanic("A fault outside the kernel was raised by nothing this kernel started.");
+    }
 }
 
 /*
@@ -408,9 +418,11 @@ static void ExceptionFatalHandler(TrapFrame *frame)
      */
     if (disposition != EXCEPTION_DISPOSITION_FATAL)
     {
+        /* Does not return: it either ends the program and resumes whoever
+         * started it, or panics because there was nobody to return to. The
+         * judgement is made there, where the result of the termination is
+         * known, rather than being repeated at each call site. */
         ExceptionTerminateProgram(frame);
-        KernelPanic("A fault outside the kernel was raised by nothing this kernel "
-                    "started.");
         return;
     }
 
@@ -466,9 +478,11 @@ static void ExceptionPageFaultHandler(TrapFrame *frame)
     if (ExceptionDispositionOf(frame->vector, frame->cs) !=
         EXCEPTION_DISPOSITION_FATAL)
     {
+        /* As above: this does not return. The message it panics with, where
+         * there is nobody to return to, is the one that describes the condition
+         * — not a claim that no program exists, which ceased to be true at
+         * sub-task 6.10. */
         ExceptionTerminateProgram(frame);
-        KernelPanic("A page fault outside the kernel was raised before any program "
-                    "exists.");
         return;
     }
 

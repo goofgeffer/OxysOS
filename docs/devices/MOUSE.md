@@ -196,10 +196,14 @@ from one it had measured.
 
 ## 7. The pointer, and the pixels beneath it
 
+*Written at sub-task 6.5 and superseded by 6.6, which is recorded in Section 8.2
+and in [`../design/GRAPHICS.md`](../design/GRAPHICS.md), Section 27. It is kept
+because the difficulty it describes is why the compositor was written.*
+
 A pointer is not drawn once. It is drawn, then it moves, and what was beneath it
-must reappear — and until sub-task 6.6 there is one surface and no back buffer to
-redraw the display from. The pixels beneath are therefore read before it is drawn
-and written back before it is drawn elsewhere.
+must reappear — and until sub-task 6.6 there was one surface and no back buffer
+to redraw the display from. The pixels beneath were therefore read before it was
+drawn and written back before it was drawn elsewhere.
 
 The shape is two bitmaps rather than one, because a pointer needs three states
 and one bitmap offers two: transparent, outline, or interior. That is what makes
@@ -398,4 +402,9 @@ report.
 4. **A USB mouse is invisible.** Machines that present one through the firmware's
    PS/2 emulation work; those that do not will report no mouse. The same is true
    of the keyboard and has been since sub-task 3.7.
-5. **The save-under is a single-surface expedient.** Sub-task 6.6 replaces it.
+5. ~~**The save-under is a single-surface expedient.**~~ Removed by sub-task 6.6,
+   which replaced the whole arrangement rather than improving it. The pointer is
+   a compositor layer: `CursorConceal`, `CursorReveal`, the concealment count and
+   the store of saved pixels are gone, and `KernelWriteString` no longer knows a
+   pointer exists. See Section 8.2 and
+   [`../design/GRAPHICS.md`](../design/GRAPHICS.md), Section 27.

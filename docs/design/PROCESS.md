@@ -144,6 +144,20 @@ The arena measurement is the one that catches the widest class of fault. Every
 other assertion here is about a field; that one is about whether the whole
 sequence of allocations and releases balanced.
 
+**One guard here is not asserted, and is recorded as unasserted.** `ThreadDestroy`
+clears `ProcessCurrentThread` where it named the thread being destroyed, and the
+table above asserts that. It did not clear `ProcessReturnThread`, which
+sub-task 6.10 introduced beside it and which is worse to leave dangling:
+`ThreadTerminateCurrent` switches to whatever it names, so a destroyed thread
+there means loading a stack pointer out of a released slot's context and resuming
+upon a kernel stack the arena has since given to somebody else — which does not
+fault, but continues, wrongly, with nothing to indicate that anything happened.
+The review after 6.10 added the clearing. Asserting it would need an accessor for
+a variable that has no other reader, and the mechanism cannot be reached at all
+while there is one thread of control (limitation 3); it becomes assertable, and
+must be asserted, when the scheduler of sub-task 6.15 makes more than one
+program's death possible.
+
 ### 7.1 The negative tests
 
 Each was applied to `kernel/proc/process.c`, confirmed, and reverted.
@@ -154,6 +168,37 @@ Each was applied to `kernel/proc/process.c`, confirmed, and reverted.
 | A process destroyed without destroying its threads. | `a thread outlived the process that owned it` **and** `the arena did not return to what it held before` — the second being the one that would have caught it even had the first been thought unnecessary |
 | `TssSetKernelStack` not called when a thread becomes current. | `making a thread current did not point rsp0 at its stack` and `rsp0 did not follow the thread that became current` |
 
+## 8. Observed state
+
+`ProcessReport` is emitted at the end of the self-tests, and upon QEMU with the
+`q35` machine and 512 MiB it reads:
+
+```
+Processes: 0 of 64, threads 0 of 128; created 4 and 6 since the start.
+Processes: no thread is current; 1 program(s) have run and ended.
+```
+
+**Both numbers matter and the second pair of the first line is the one worth
+reading.** Zero occupied slots against four processes and six threads created is
+the assertion of Section 7 restated by the tables themselves: everything the
+self-tests of this sub-task and of 6.10 built was given back, so a leak would
+show here as a non-zero occupancy long before it showed as an exhausted arena.
+The counts are cumulative and never decrease, which is what makes them useful for
+that comparison.
+
+**The second line said `nothing has run` until the review that followed sub-task
+6.10.** It was printed immediately below the log of a program running — the
+program's own line of output, and the trace of the fault it raised on purpose,
+stand a few lines above it. The statement was defensible on a narrow reading, no
+thread being current at the moment the report is reached: the tests adopt a
+thread, switch away from it, switch back, and release everything before they
+return. But a report is read by whoever is looking at the log, not by whoever
+wrote the condition, and a line that contradicts the evidence directly above it
+teaches its reader that the report is not to be trusted.
+
+The two facts are now separated. Whether a thread is current is one question;
+whether anything has run is another, and the termination count already answered
+it. The kernel says `nothing has run` only when nothing has.
 
 ## 9. The switch, of sub-task 6.10
 
@@ -277,6 +322,7 @@ register**. And `RCX` holding the return address with `R11` holding the flags is
 | The termination not performed upon a fault outside the kernel. | `KERNEL PANIC: A fault outside the kernel was raised by nothing this kernel started.` Which is what this path did before this sub-task, so the panic is the previous behaviour restored |
 | The six preserved registers written onto the prepared frame. | **Found during development, not as a deliberate test.** A return to address zero; see Section 9.2 |
 | `RFLAGS` pushed without bit 1. | Nothing. The processor forces the bit whether or not it is written, so the assertion this was meant to justify does not exist and the comment says so instead |
+
 ## 11. Limitations
 
 1. ~~**Nothing has run.**~~ A program has: see Section 10.2. What has not

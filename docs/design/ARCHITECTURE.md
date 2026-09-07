@@ -48,6 +48,32 @@ than as later additions, in accordance with `PROJECT_GUIDELINES.md`, Section 5:
 | `uefi/` | The UEFI application entry point and the UEFI handoff path. | Phase 12 |
 | `docs/` | The documentation corpus, grouped by subject into `project/`, `design/`, `devices/` and `storage/` and indexed by [`docs/README.md`](../README.md). | Phase 1 |
 
+### 2.2 When a subsystem becomes a directory
+
+`kernel/fs/ext2/` is the first subsystem here to occupy a directory of its own
+rather than a file, and the rule it establishes is worth stating once.
+
+A translation unit is divided when it stops being readable as one thing.
+`kernel/fs/ext2.c` reached 4,325 lines, and the evidence that it had outgrown
+itself was in its own header block: the `Purpose` said it implemented "the
+reading and validation of an EXT2 superblock", which had been true when it was
+written and described about a twelfth of what the file had become. A header that
+no longer describes its file is not a documentation defect to be corrected in
+place — it is the file telling you it has become several.
+
+The division is along the lines the *faults* fall upon and not merely the lines
+the functions group by: a fault in `path.c` resolves a name to the wrong file, a
+fault in `name.c` leaves a volume malformed, a fault in `alloc.c` leaves the
+bitmaps disagreeing with the summaries. Each is a different kind of wrongness
+with a different way of being found.
+
+Such a directory carries an `internal.h` beside its sources and **not** in
+`kernel/include/oxys/`. The public corpus is what a consumer may depend upon;
+what the parts of one subsystem share between themselves is not that. Those
+declarations were file-scope statics before the division and would be statics
+still if C offered any way to share them among a chosen few, and placing the
+header beside the implementation is the whole of what records that limit.
+
 ### 2.1 The grouping of `docs/`
 
 | Directory | Holds |
@@ -64,8 +90,10 @@ complementary and neither replaces the other.
 
 ## 3. Present composition
 
-As of the completion of Phase 5 and of sub-tasks 6.1 to 6.4, the system comprises
-the following translation units.
+As of the completion of Phase 5 and of sub-tasks 6.1 to 6.10, the system
+comprises the following translation units. The list is the `C_SOURCES` and
+`ASM_SOURCES` of the `Makefile` and must be revised in the same change as
+either.
 
 | Unit | Role |
 | ---- | ---- |
@@ -76,8 +104,13 @@ the following translation units.
 | `kernel/cpu/gdt.c`, `kernel/cpu/gdt.asm` | The kernel global descriptor table and the reloading of the segment registers. |
 | `kernel/cpu/idt.c` | The interrupt descriptor table: its storage, the installation of a gate, the assignment of an interrupt stack table entry to a gate, and the loading of the table. |
 | `kernel/cpu/tss.c` | The task state segment: the stacks the processor loads when it needs one it can trust, its descriptor within the global descriptor table, and the loading of the task register. |
-| `kernel/cpu/syscall.c` | The configuration of the fast system-call mechanism: `IA32_STAR`, `IA32_LSTAR`, `IA32_FMASK` and the enabling bit of `IA32_EFER`. |
-| `kernel/cpu/syscall_entry.asm` | The entry point `IA32_LSTAR` names. Provisional in sub-task 6.1; replaced by the dispatch path of sub-task 6.7. |
+| `kernel/cpu/syscall.c` | The configuration of the fast system-call mechanism — `IA32_STAR`, `IA32_LSTAR`, `IA32_FMASK`, `IA32_KERNEL_GS_BASE` and the enabling bit of `IA32_EFER` — and, from sub-task 6.7, the dispatch table, the three calls it holds and the validation of a caller's arguments. |
+| `kernel/cpu/syscall_entry.asm` | The entry point `IA32_LSTAR` names. Provisional in sub-task 6.1; replaced at sub-task 6.7 by the path that swaps `GS`, loads the kernel stack from the per-processor block, dispatches, and returns by `SYSRET`. |
+| `kernel/exec/elf.c` | The ELF64 loader for statically linked executables: the decoding of the file and program headers, the fifteen refusals an image must survive whole before a page of it is mapped, and the placing of its segments into an address space through the direct physical map. |
+| `kernel/proc/process.c` | The process control block, the thread and the saved context: the two tables, the address space a process is given, the kernel stack and guard page a thread is given, the writing of `rsp0` when a thread becomes current, the switch, the descent to privilege level 3 and the termination that returns from it. |
+| `kernel/proc/switch.asm` | `ThreadSwitchContext`, which exchanges six registers and a stack pointer; `ThreadTrampoline`, where a thread that has never run begins; and `ThreadEnterUser`, which clears every register and descends to privilege level 3 by `IRETQ`. |
+| `graphics/compositor.c` | The compositor: the back buffer that stands in for the framebuffer, the ordered layers composited over it, the damage rectangle that narrows what is carried to the display, and the suspension a fault screen imposes. |
+| `graphics/cursor.c` | The pointer: its two-bitmap shape, and the layer the compositor draws it as. |
 | `graphics/draw.c` | The two-dimensional primitives upon a surface: rectangle arithmetic and clipping, the pixel, the filled and outlined rectangle, the integer line, and the blit. |
 | `graphics/framebuffer.c` | The framebuffer the boot loader supplies: its validation, the write-combining memory type given to its pages, its mapping into the kernel arena, and the description every later phase draws through. |
 | `graphics/font.c` | The bitmap face — ninety-five glyphs of eight by eight, drawn for this project — and the drawing of one glyph upon a surface. |
@@ -91,6 +124,12 @@ the following translation units.
 | `kernel/test/verify_console.c` | The self-tests of the bitmap face against its own metrics, of a glyph drawn upon a surface against its own bytes, and of the four control characters upon the live console. |
 | `kernel/test/verify_faultscreen.c` | The self-tests of the fault screen table: that every severe fault has a screen of its own and that no two of them are alike. |
 | `kernel/test/verify_privilege.c` | The self-tests of the descriptors, the task state segment, the interrupt stack table and the system-call configuration. |
+| `kernel/test/verify_syscall.c` | The self-tests of the system-call dispatch table and of the validation of a caller's arguments. |
+| `kernel/test/verify_elf.c` | The self-tests of the ELF64 loader, upon an image composed in memory so that every field may be made wrong on purpose. |
+| `kernel/test/verify_process.c` | The self-tests of the process and thread tables, the per-thread kernel stack and its guard, and the balance of the arena. |
+| `kernel/test/verify_usermode.c` | The self-tests of the context switch, and of a program composed, loaded, entered at privilege level 3 and ended. |
+| `kernel/test/verify_compositor.c` | The self-tests of the clip stack, the blend, the damage arithmetic and the layer table. |
+| `kernel/test/verify_mouse.c` | The self-tests of the mouse's packet decoder, driven without a mouse, and of the pointer upon a surface in memory. |
 | `kernel/test/verify_devices.c` | The self-tests of the interrupt controllers, the interval timer, the keyboard, the serial adapter, the display and the bus. |
 | `kernel/test/verify_storage.c` | The self-tests of the disk, the block layer and the buffer cache. |
 | `kernel/test/verify_ext2.c` | The self-tests of the EXT2 format, and the report upon a real volume. |
@@ -100,7 +139,16 @@ the following translation units.
 | `kernel/mm/paging.c` | The permanent kernel paging hierarchy: its construction, activation, software translation and copy-on-write fault resolution. |
 | `kernel/mm/addrspace.c` | The address space: its creation, its cloning by the copy-on-write discipline, its activation and its destruction. |
 | `kernel/mm/pmm.c` | The physical frame allocator: a bitmap of every 4 KiB frame below the highest usable address. |
-| `kernel/fs/ext2.c` | The EXT2 volume: the reading, decoding and validation of its structures, the resolution of a path within it, the reading and writing of a file, and the creation and destruction of the names that reach one. |
+| `kernel/fs/ext2/internal.h` | What the nine translation units below share with one another and with nothing else: the record of the last refusal, the accounting, the decoders and encoders of the volume's byte order, and the block-level transfer. |
+| `kernel/fs/ext2/core.c` | The shared state, the refusals, the decoding and encoding of the stored byte order, the block-level transfer in both directions, and the accounting accessors. |
+| `kernel/fs/ext2/superblock.c` | The superblock: its reading, its validation, the geometry derived from it, its writing, and the judgement of whether a volume may be read, written, or addressed at all. |
+| `kernel/fs/ext2/group.c` | The block group descriptor table: the geometry of the groups, one descriptor read and written, and the validation of the whole table. |
+| `kernel/fs/ext2/inode.c` | The inode: its retrieval and writing, the resolution of a file's block index through every level of indirection, and the allocation of the blocks a file grows into. |
+| `kernel/fs/ext2/file.c` | The contents of a file: reading a range of its bytes, the two forms of symbolic link, the writing that extends it, and the truncation that releases what it no longer covers. |
+| `kernel/fs/ext2/alloc.c` | The two bitmaps: the testing and setting of a bit, the search for a free one, and the group and superblock summaries kept in step with every allocation. |
+| `kernel/fs/ext2/directory.c` | The record a directory is made of: the file types, the decoding and validation of one entry, the traversal, and the search for a name. |
+| `kernel/fs/ext2/path.c` | The resolution of an absolute path to the inode it names, across symbolic links and with a bound upon how many may be followed. |
+| `kernel/fs/ext2/name.c` | The names themselves: the insertion and removal of a record, and the creation and destruction of files, directories and hard links. |
 | `kernel/fs/vfs.c` | The virtual filesystem layer: the registry of filesystem types, the mount table that joins several volumes into one tree, the node cache that gives one file one identity, the resolution of a path across mount points, and the open file with a position that advances. |
 | `kernel/fs/ext2_vfs.c` | The binding of the EXT2 implementation to that layer: the operations vector, the translation between the format's mode and the layer's neutral node type, and the mark a mount leaves upon a volume it has open. |
 | `kernel/multiboot2.c` | The Multiboot2 parser, reducing the boot loader's structure to the neutral `BootInformation` description. |
@@ -113,7 +161,11 @@ the following translation units.
 | `drivers/block/block.c` | The generic block-device layer: the registry of devices that transfer fixed-size blocks, and the validated path through which every caller above reaches a driver. |
 | `drivers/ata/ata.c` | The ATA driver in programmed input/output mode: the reset of a channel, the identification of its devices, and sector transfer by 28-bit and 48-bit addressing. |
 | `drivers/pci/pci.c` | The PCI configuration-space enumeration by access mechanism one: the walk of buses, devices and functions, and the searches by which a driver finds its hardware. |
-| `drivers/keyboard/keyboard.c` | The 8042 controller and the PS/2 keyboard: initialisation, the decoding of scan code set 1, the modifier state and the circular event buffer. |
+| `drivers/ps2/ps2.c` | The 8042 controller itself: its configuration byte, written whole by the one module that owns it, and the two device ports it presents. |
+| `drivers/keyboard/keyboard.c` | The PS/2 keyboard upon the controller's first port: initialisation, the decoding of scan code set 1, the modifier state and the circular event buffer. |
+| `drivers/mouse/mouse.c` | The PS/2 mouse upon the controller's second port: the framing of a packet stream that has none, the nine-bit movement, the single inversion of the vertical sense, and the position the driver keeps. |
+| `drivers/ahci/ahci.c` | The AHCI adaptor by first-party direct memory access: the handoff from the firmware, the ports it implements, the command list, and the region descriptors that name a caller's pages to the device. |
+| `drivers/sdhci/sdhci.c` | The SD host controller and the card behind it: the card's own command set, the two encodings of its capacity, and the transfer through the buffer data port. |
 | `linker.ld` | The link script establishing the higher-half image layout. |
 
 ## 4. Subsystem dependency ordering
@@ -160,25 +212,27 @@ Phase 3 is installed. The dependency is resolved by implementing the memory
 management structures of sub-tasks 2.1 to 2.6 first, then Phase 3, and finally
 returning to sub-tasks 2.7 and 2.8.
 
-**Status.** Phases 2 to 5 are complete, and Phase 6 has begun. The dependency
-described above has been discharged: sub-task 3.4 supplied the fault handler,
-sub-task 2.7 the copy-on-write resolution beneath it, and sub-task 2.8 the
-address-space cloning that creates the shared pages the resolution acts upon.
-Sub-task 3.5 has since remapped the interrupt controllers, so that a device may
-be heard; sub-task 3.6 supplied the first device that speaks; and sub-task 3.7
-the first that a person operates. Phase 4 supplied the devices beneath a
-filesystem and Phase 5 the filesystem itself, which sub-task 5.8 completed by
-mounting an EXT2 volume through a virtual filesystem layer. Sub-task 6.1 has
-since established the apparatus a privilege transition is performed out of, and
-exercised it, and sub-task 6.2 has acquired the linear framebuffer the boot
-loader supplies and mapped it write-combining, and sub-task 6.3 has supplied the
-primitives that draw into it, and sub-task 6.4 the font and the console that draw
-the boot log upon it — which ends the blank screen the framebuffer had cost. And
-sub-task 6.5 has given the machine a pointer, which required the 8042 controller
-to become a module of its own first, its configuration byte governing two ports
-and admitting only one owner. Work continues at sub-task 6.6, the compositing
-surface, and thence to sub-task 6.7, whose system calls are the operations of the
-filesystem layer with a user's arguments copied in.
+**Status.** Phases 2 to 5 are complete, and Phase 6 is complete as far as
+sub-task 6.10. The mutual dependency described above has been discharged:
+sub-task 3.4 supplied the fault handler, sub-task 2.7 the copy-on-write
+resolution beneath it, and sub-task 2.8 the address-space cloning that creates
+the shared pages the resolution acts upon. Sub-task 3.5 remapped the interrupt
+controllers, so that a device may be heard; 3.6 supplied the first device that
+speaks and 3.7 the first that a person operates. Phase 4 supplied the devices
+beneath a filesystem and Phase 5 the filesystem itself, which sub-task 5.8
+completed by mounting an EXT2 volume through a virtual filesystem layer.
+
+Phase 6 has since established the apparatus a privilege transition is performed
+out of (6.1); acquired the linear framebuffer, mapped write-combining (6.2); the
+primitives that draw into it (6.3); the font and console that put the boot log
+back upon the screen the framebuffer had displaced (6.4); the pointer, which
+required the 8042 controller to become a module of its own first (6.5); the
+compositor beneath all of it, after which nothing reads the framebuffer (6.6);
+the `SYSCALL` entry path, its dispatch table and its argument validation (6.7);
+the ELF64 loader (6.8); the process, the thread and the context (6.9); and the
+switch and the descent to privilege level 3 (6.10), at which point a program
+first ran. Work continues at sub-task 6.11 — `fork()` upon the copy-on-write
+substrate of Phase 2, with `execve()`, `exit()` and `wait()` beside it.
 
 ## 5. Privilege and address-space model
 
@@ -191,9 +245,12 @@ The machinery of the transition between the two privilege levels — the user-mo
 descriptors and the order the processor's own arithmetic imposes upon them, the
 task state segment holding the stacks the processor loads when it needs one it
 can trust, and the three registers that configure `SYSCALL` — was established by
-sub-task 6.1 and is recorded in `PRIVILEGE.md`. Everything above privilege level
-0 remains prospective until sub-task 6.10: the apparatus stands and has been
-exercised, but no program yet runs in it.
+sub-task 6.1 and is recorded in `PRIVILEGE.md`. Sub-task 6.7 supplied the entry
+path and the dispatch above it, and sub-task 6.10 the descent itself: a program
+is loaded into an address space of its own, entered at privilege level 3 by
+`IRETQ`, returned to by `SYSRET` when it makes a system call, and ended when it
+faults. What does not yet exist is pre-emption — nothing takes a processor away
+from a thread that has not given it up — which is the scheduler of sub-task 6.15.
 
 ## 6. Diagnostic policy
 

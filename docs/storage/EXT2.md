@@ -6,8 +6,29 @@
 the format carries a citation, and the specifications are registered in
 [`../project/REFERENCES.md`](../project/REFERENCES.md).
 
-**Implementation**: [`../../kernel/fs/ext2.c`](../../kernel/fs/ext2.c),
-[`../../kernel/include/oxys/ext2.h`](../../kernel/include/oxys/ext2.h).
+**Implementation**: [`../../kernel/fs/ext2/`](../../kernel/fs/ext2/), which holds
+nine translation units and the private header between them:
+[`core.c`](../../kernel/fs/ext2/core.c) (the shared state, the byte order and the
+block-level transfer),
+[`superblock.c`](../../kernel/fs/ext2/superblock.c),
+[`group.c`](../../kernel/fs/ext2/group.c),
+[`inode.c`](../../kernel/fs/ext2/inode.c),
+[`file.c`](../../kernel/fs/ext2/file.c),
+[`alloc.c`](../../kernel/fs/ext2/alloc.c) (the two bitmaps),
+[`directory.c`](../../kernel/fs/ext2/directory.c) (the record and its traversal),
+[`path.c`](../../kernel/fs/ext2/path.c) (a path resolved to an inode),
+[`name.c`](../../kernel/fs/ext2/name.c) (the names, and the files they reach), and
+[`internal.h`](../../kernel/fs/ext2/internal.h).
+The public interface is
+[`../../kernel/include/oxys/ext2.h`](../../kernel/include/oxys/ext2.h) and is
+unchanged by the division.
+
+This was a single file of 4,325 lines until the review that followed sub-task
+6.10. The sections of this document correspond to those units and always did —
+which is the reason the division was possible without rewriting anything, and the
+sign that the file had been several things for some time.
+[`../design/ARCHITECTURE.md`](../design/ARCHITECTURE.md), Section 2.2, records
+the rule the division establishes.
 
 ## 1. Why the superblock comes first
 
