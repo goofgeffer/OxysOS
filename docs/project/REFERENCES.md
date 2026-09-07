@@ -266,11 +266,40 @@ Sections relied upon:
 - **Section 3.2.2**, the stack pointer is sixteen-byte aligned at a function's
   entry, which is why the stacks the task state segment names are aligned and
   sized in multiples of sixteen.
-- The ELF64 object file format.
+- The ELF64 object file format, and the machine identifier 62 by which an
+  object states that it is for this architecture.
 
 Used by: `boot/boot.asm`, `linker.ld`, `Makefile`, `kernel/cpu/tss.c`,
 `kernel/include/oxys/tss.h`, `kernel/include/oxys/syscall.h`,
-`docs/design/PRIVILEGE.md`.
+`kernel/exec/elf.c`, `docs/design/PRIVILEGE.md`.
+
+### Executable and Linking Format Specification, version 1.2
+Tool Interface Standard, together with the **ELF-64 Object File Format**,
+version 1.5 draft 2.
+
+Sections relied upon:
+
+- **The identification**: bytes 0 to 3 of the file are `7Fh 'E' 'L' 'F'`; byte 4
+  the class, 2 being a 64-bit object; byte 5 the data encoding, 1 being two's
+  complement little endian; byte 6 the file version, 1 being current.
+- **The file header**, which is 64 bytes: the type at offset 16, the machine at
+  18, the version at 20, the entry at 24, the program header offset at 32, the
+  section header offset at 40, the flags at 48, the header's own size at 52, the
+  program header entry size at 54 and their number at 56.
+- **The file types**: 1 relocatable, 2 executable, 3 a shared object — which is
+  what a position-independent executable is, its addresses being offsets from
+  wherever it is placed.
+- **The program header**, which is 56 bytes: the type at offset 0, the flags at
+  4, the offset within the file at 8, the virtual address at 16, the physical
+  address at 24, the size within the file at 32, the size in memory at 40 and the
+  alignment at 48.
+- **The segment types**: 1 a loadable segment, 3 the name of an interpreter,
+  which marks a program as dynamically linked.
+- **The segment permissions**: 1 execute, 2 write, 4 read.
+- **The ordering requirement**: loadable segments appear in the program header
+  table in ascending order of virtual address.
+
+Used by: `kernel/exec/elf.c`, `kernel/include/oxys/elf.h`.
 
 ### ISO/IEC 9899:2011, Programming languages — C
 International Organization for Standardization.
@@ -1018,6 +1047,7 @@ Used by: `boot/grub/grub.cfg`, `Makefile`.
 | PCI Local Bus Specification 3.0 | 4 | Configuration space and device enumeration. |
 | ATA/ATAPI Command Set (ACS-3) | 4 | `IDENTIFY DEVICE`; 28-bit and 48-bit logical block addressing. |
 | Serial ATA AHCI 1.3.1 | 4 | The host bus adaptor: the generic host control and port registers, the command list, and the region descriptors by which a caller's pages are named to the device. |
+| Executable and Linking Format 1.2, with ELF-64 1.5 draft 2 | 6 | The file header, the program header table, and what a statically linked executable is as against a position-independent one. |
 | SD Host Controller Simplified Specification 4.20 | 4 | The host controller registers, the command register, and the presentation of a response. |
 | SD Physical Layer Simplified Specification 8.00 | 4 | The card's own command set, the operating conditions register, and the two encodings of a capacity. |
 | JEDEC JESD84-B51 | 4 | The two respects in which an embedded MultiMediaCard differs from an SD card in the identification sequence. |

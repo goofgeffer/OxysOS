@@ -23,6 +23,7 @@ are separate.
 | `test/` | The boot-time self-tests, one file per subsystem, and the composed volume they are conducted upon. Described by [`test/README.md`](test/README.md). |
 | `include/oxys/verify.h` | The self-test entry points `KernelMain` calls, in the order it calls them; the parsed boot information; and the reading of the boot loader's command line. |
 | `include/oxys/testvolume.h` | The fixture: the two memory-backed block devices, the geometry of the composed EXT2 volume, and the routines that address a field of it directly. |
+| `exec/elf.c` | The ELF64 loader for statically linked executables: the decoding of a file header and its program headers, the validation an image must survive before a page of it is mapped, and the placing of its segments into an address space through the direct physical map. `ElfDecode`, `ElfValidate`, `ElfLoad`, `ElfLoadFile`, `ElfResultName`, `ElfSegmentAt`, `ElfReport`. |
 | `cpu/exceptions.c` | The exception handlers, the decoding of both error-code formats, `ExceptionInstallInterruptStacks`, which gives the double fault a stack of its own, and `ExceptionReportState`. |
 | `include/oxys/exceptions.h` | The error-code flags of both formats, the vector of the double fault, and the exception interface. |
 | `include/oxys/cpu.h` | Accessors for the control registers `CR0`, `CR2`, `CR3` and `CR4`, and for `RFLAGS`, by which a driver determines whether an interrupt it means to wait for could be delivered at all. |

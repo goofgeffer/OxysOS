@@ -1,6 +1,6 @@
 # `docs/design/` — The Kernel Itself
 
-How the machine is brought up, and how it is arranged once it is. These six
+How the machine is brought up, and how it is arranged once it is. These seven
 documents describe the parts of the kernel that no device driver may assume the
 absence of.
 
@@ -11,6 +11,7 @@ absence of.
 | [`MEMORY-LAYOUT.md`](MEMORY-LAYOUT.md) | The physical and virtual address spaces, the permanent paging hierarchy, the frame allocator, the kernel arena, the heap, reference counting and copy-on-write. | 2 |
 | [`INTERRUPTS.md`](INTERRUPTS.md) | The interrupt descriptor table, the 256 stubs and the uniform trap frame, the dispatcher, the exception handlers, and the pair of 8259A controllers with their routing and end-of-interrupt protocol. | 3 |
 | [`GRAPHICS.md`](GRAPHICS.md) | The framebuffer: how it is asked for, why its pages are write-combining rather than write-back, the primitives that draw upon it, the font and console that put the boot log back on the screen it displaced, the page a severe fault draws there, and the pointer that is the first thing to read the surface it draws upon. | 6 |
+| [`EXECUTABLE.md`](EXECUTABLE.md) | The ELF64 loader for statically linked executables: what a file is refused for, and how its segments reach an address space. | [`../../kernel/exec/elf.c`](../../kernel/exec/elf.c) | 6.8 |
 | [`PRIVILEGE.md`](PRIVILEGE.md) | The apparatus a privilege transition is performed out of: the user-mode descriptors and the order the processor's arithmetic imposes upon them, the task state segment with its trusted stacks and its interrupt stack table, and the three registers that configure `SYSCALL`. | 6 |
 
 Read them in that order if you are new to the project: each depends upon the one

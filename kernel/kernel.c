@@ -82,6 +82,7 @@
 #include <oxys/sdhci.h>
 #include <oxys/block.h>
 #include <oxys/buffer.h>
+#include <oxys/elf.h>
 #include <oxys/ext2.h>
 #include <oxys/vfs.h>
 #include <oxys/ext2_vfs.h>
@@ -969,6 +970,14 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
      */
     KernelVerifyPrivilege();
     KernelVerifySyscall();
+
+    /*
+     * The loader that will turn a file into a program. It composes an image in
+     * memory and an address space to put it in, so it needs the frame allocator,
+     * the paging hierarchy and the address spaces of Phase 2 — all of which are
+     * established and asserted well above this line — and nothing of Phase 4.
+     */
+    KernelVerifyElf();
 
     /*
      * Phase 4 begins here. The serial adapter was configured in the first

@@ -123,6 +123,7 @@ void KernelVerifyGraphics(void);
  * stack table and the three registers that configure SYSCALL. */
 void KernelVerifyPrivilege(void);
 void KernelVerifySyscall(void);
+void KernelVerifyElf(void);
 
 /* Phases 3 and 4: the devices. */
 void KernelVerifyPic(void);
