@@ -16,8 +16,9 @@ divided into atomic sub-tasks, and every milestone must be bootable and testable
 
 ## Where we are
 
-**Phases 1 to 5 are complete but for sub-task 1.12** (boot from a physical USB
-medium). **Phase 6 is complete as far as sub-task 6.10**: a statically linked
+**Phases 1 to 5 are complete.** Sub-task 1.12 closed on 2026-09-07: the kernel
+has booted from a USB medium upon real hardware, and the boot log was read there.
+**Phase 6 is complete as far as sub-task 6.10**: a statically linked
 ELF64 program is loaded into an address space of its own, entered at privilege
 level 3, returned to by `SYSRET` when it makes a system call, and ended when it
 faults.
@@ -45,14 +46,21 @@ some assertion actually covers.
 
 So `Implemented` means the code exists and builds under the full diagnostic
 regime. It does not mean tested, and it does not mean verified upon any
-particular machine. Sub-task 1.12 is the clearest case: everything around it is
-implemented and nothing about it is, because the sub-task *is* the verification.
+particular machine.
+
+Sub-task 6.1 is the case that shows why the columns are separate. It is
+`Implemented`, and it has been since the phase opened; but its self-test stopped
+executing `SYSCALL` when sub-task 6.7 replaced the entry point, so what it
+asserts today is narrower than what it asserted then. One marker could not have
+shown that change at all. Sub-task 1.12 was the other such case until it was
+closed: everything around it was implemented and nothing about it was, the
+sub-task being the verification itself.
 
 ## The thirteen phases
 
 | Phase | Subject | State |
 | ----- | ------- | ----- |
-| [1](#phase-1--bootstrapping-and-early-output) | Bootstrapping and early output | Implemented; 1.12 open |
+| [1](#phase-1--bootstrapping-and-early-output) | Bootstrapping and early output | Implemented |
 | [2](#phase-2--memory-management-including-copy-on-write) | Memory management, including copy-on-write | Implemented |
 | [3](#phase-3--interrupts-exceptions-and-keyboard-input) | Interrupts, exceptions and keyboard input | Implemented |
 | [4](#phase-4--basic-device-drivers) | Basic device drivers | Implemented |
@@ -96,7 +104,7 @@ Chapters 2, 4 and 9; System V ABI for AMD64.
 | 1.9 | Author the `Makefile` with the targets `all`, `clean`, `iso`, `run-qemu`, `run-vbox` and `run-uefi`. | Implemented | — |
 | 1.10 | Generate the ISO image and verify boot under QEMU. | Implemented | `make verify` |
 | 1.11 | Verify boot under VirtualBox. | Implemented | [`TESTING.md`](TESTING.md) §9 |
-| 1.12 | Verify boot on physical hardware from a USB medium. | **Planned** | — |
+| 1.12 | Verify boot on physical hardware from a USB medium. | Implemented | [`TESTING.md`](TESTING.md) §10.1–10.2 |
 
 ---
 

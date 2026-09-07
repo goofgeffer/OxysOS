@@ -524,7 +524,11 @@ incorrect name will destroy the contents of the named device.
 Physical testing requires a machine offering a legacy BIOS or a compatibility
 support module, since the UEFI boot path is not implemented until Phase 12.
 Diagnostic output should be captured through a serial adapter where the machine
-provides one. Sub-task 1.12 remains open.
+provides one, and read from the screen where it does not.
+
+**Sub-task 1.12 is closed**, upon the criterion the project owner set on
+2026-09-07: **one machine, booted from a USB medium, with the boot log read and
+recorded**. The machine and the run are Section 10.1.
 
 ### 10.1 The machine the storage work was reported from
 
@@ -555,9 +559,44 @@ It has **four cores**, where the QEMU configuration this project verifies agains
 runs two. The application-processor bring-up of sub-task 6.14 will therefore
 first meet a real machine with more processors than any test has used.
 
-It is a **UEFI-era machine**, which is what makes sub-task 1.12 a question rather
-than a formality: the kernel has no UEFI boot path until Phase 12, so booting it
-here depends upon the firmware's compatibility support module.
+It is a **UEFI-era machine**, and the kernel has no UEFI boot path until Phase
+12, so booting it here went through the firmware's compatibility support module.
+That is the one thing about this result which does not generalise: a machine
+whose firmware offers no such module cannot boot this kernel at all before
+sub-task 12.7.
+
+### 10.2 How the boot log was read, there being no serial channel
+
+**The machine has no serial adapter, and this kernel cannot give it one.** Its
+external ports are USB Type-C and Type-A, HDMI, a headphone jack and the power
+connector; there is no DE-9 port and no 16550 at `0x3F8` for `SerialInitialise`
+to find. A USB-to-serial adapter would not help, there being no USB stack in this
+kernel to drive one — and reaching a USB device is a longer road than this
+project has taken, as [`../storage/DISK.md`](../storage/DISK.md), Section 2.3,
+records.
+
+So the log was read **from the screen**, upon the graphical console of sub-task
+6.4. This is the same condition VirtualBox presents and it has the same two
+consequences, set out in Section 9.1: the automated assertion of Section 1 cannot
+be performed here, that assertion being made upon serial output; and the kernel
+emits more of the log than the screen holds, so a particular line must be caught
+before it scrolls away by the procedure of Section 9.2.
+
+**That is what closes sub-task 1.12 rather than a serial capture**, and the
+criterion was set knowing it. It is also the clearest vindication of sub-task
+6.4: between sub-tasks 6.2 and 6.4 this machine would have booted and shown
+nothing whatever, the framebuffer request having put the adapter into a graphics
+mode with no console upon it. A boot that cannot be read is not a boot that has
+been verified.
+
+**What the run established** is that the kernel boots from a USB medium upon real
+hardware, reaches the end of its initialisation, and draws its log where a person
+can read it. **What it did not establish** is anything about the phases it passed
+through on the way: nothing was inspected there beyond the storage report, which
+is why Section 3 of [`STATUS.md`](STATUS.md) records those phases as reached and
+not as examined. The faults that run did find are Sections 2.1 to 2.3 of
+[`../storage/DISK.md`](../storage/DISK.md), and they are the reason sub-tasks 4.7
+and 4.8 exist.
 
 ## 11. Debugging with GDB
 

@@ -33,7 +33,9 @@ start a second processor.
 **Phase 1 — bootstrapping.** The kernel builds without diagnostics under the full
 warning regime, is confirmed Multiboot2 compliant by `grub-file`, and boots under
 QEMU and VirtualBox alike, presenting its banner upon the console and COM1.
-Sub-task 1.12, boot from a physical USB medium, remains open. See
+It has also booted from a USB medium upon real hardware, which closed sub-task
+1.12 on 2026-09-07; the machine and the run are
+[`TESTING.md`](TESTING.md), Sections 10.1 and 10.2. See
 [`../design/BOOT.md`](../design/BOOT.md).
 
 **Phase 2 — memory.** A bitmap allocator governs every physical frame; a permanent
@@ -127,7 +129,7 @@ The physical machine is one machine — the HP Laptop 14-dq0052dx specified in
 
 | Phase | QEMU | VirtualBox | OVMF (UEFI) | Physical hardware |
 | ----- | ---- | ---------- | ----------- | ----------------- |
-| 1 Bootstrapping | Yes | Yes | No — no UEFI path until Phase 12 | Booted, on one machine; **1.12 not closed** — see below |
+| 1 Bootstrapping | Yes | Yes | No — no UEFI path until Phase 12 | **Yes**, on one machine — 1.12 |
 | 2 Memory | Yes | Yes | — | Reached, not examined |
 | 3 Interrupts | Yes | Yes | — | Reached, not examined |
 | 4 Device drivers | Yes | Yes, less the serial adapter | — | **Yes, and it found two faults** — see below |
@@ -139,13 +141,19 @@ have, the storage report of Phase 4 coming after all of it — but nothing about
 those phases was inspected or recorded there. It is not evidence that they are
 correct upon real hardware; it is only evidence that they did not stop it.
 
-**Sub-task 1.12 remains open although the kernel has booted upon hardware**, and
-the distinction is deliberate rather than an oversight. What has happened is that
-a kernel booted from a USB drive on one machine and its output was read. What
-1.12 asks for has not been settled: whether a single machine suffices, whether
-the boot must be captured through a serial adapter, and what is to be recorded.
-That is the project owner's to decide, and until it is decided the sub-task is
-better left open than marked done on a technicality.
+**Sub-task 1.12 is closed**, upon the criterion the project owner set on
+2026-09-07: **one machine, booted from a USB medium, with the boot log read and
+recorded**. It is met by the run described above. The criterion is written down
+because it was a judgement rather than a deduction — a stricter one, several
+machines or a serial capture, would have been equally defensible — and a
+sub-task closed against an unrecorded standard cannot be reopened against one.
+
+**No serial capture was possible, and that is part of the result.** The machine
+has no 16550 for the kernel to find and no USB stack exists to drive an adapter,
+so the log was read from the graphical console of sub-task 6.4 — the same
+condition VirtualBox presents. [`TESTING.md`](TESTING.md), Section 10.2, records
+what follows from it, including that the automated assertion of Section 1 cannot
+be performed there.
 
 Three qualifications, each of which cost something to learn:
 
@@ -155,8 +163,9 @@ displaced the text console and the serial port being absent. Sub-task 6.4's
 graphical console is what restored it.
 [`TESTING.md`](TESTING.md), Section 9.1.
 
-**The storage drivers are the one part with real-hardware evidence**, and it is
-evidence of failure rather than of success. One machine has run this kernel — an
+**The storage drivers are the one part real hardware has changed the design of**,
+and the evidence was of failure rather than of success. One machine has run this
+kernel — an
 **HP Laptop 14-dq0052dx**, Intel Celeron N4120, 4 GB of memory, 64 GB of eMMC
 storage and no disk of any other kind, booted from a USB drive — and it reported
 no disk. The cause was neither a fault in the driver nor an absent disk: it was a
