@@ -267,6 +267,12 @@ Phase 7 is also where the filesystem layer's open file table becomes per-process
 and `fork` must decide what a child inherits; a process has no file descriptors
 before it. See [`../storage/VFS.md`](../storage/VFS.md), limitation 2.
 
+**Sub-task 7.2 carries an obligation from the licensing.** The userland is `MIT`
+and the kernel `LGPL-3.0-or-later`, so a C library cannot include a header that
+mixes the user-visible interface with the kernel's implementation of it — and
+`kernel/include/oxys/syscall.h` presently does. It must be divided before the
+wrappers are written. See [`../../LICENSING.md`](../../LICENSING.md), Section 2.1.
+
 | # | Sub-task | State | Asserted by |
 | - | -------- | ----- | ----------- |
 | 7.1 | Implement the freestanding string and memory functions (`<string.h>`). | Planned | — |

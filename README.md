@@ -7,7 +7,24 @@ under QEMU and VirtualBox.
 The conventions binding upon all work in this repository are set out in
 [`PROJECT_GUIDELINES.md`](PROJECT_GUIDELINES.md). In accordance with its
 Section 2, no code change is final until the documents affected by it have been
-updated.
+updated. [`CONTRIBUTING.md`](CONTRIBUTING.md) is the working procedure that
+follows from them.
+
+## Licensing
+
+Three licences apply, one to each kind of thing here.
+[`LICENSING.md`](LICENSING.md) is the map and the texts are in
+[`LICENSES/`](LICENSES/).
+
+| Path | Licence |
+| ---- | ------- |
+| `boot/`, `kernel/`, `drivers/`, `graphics/` | `LGPL-3.0-or-later` |
+| `libc/`, `userland/` | `MIT` |
+| `docs/`, the `README.md` files, this one included | `CC0-1.0` |
+
+**Using this kernel's services through the system-call interface does not make a
+program a derivative work of it.** `LICENSING.md`, Section 2, states the position
+and its one outstanding consequence.
 
 ## Documentation
 
@@ -85,7 +102,16 @@ by subject. The two are complementary.
 
 The directories `libc/`, `userland/`, `crypto/`, `net/` and `uefi/` are presently
 empty and acquire their documents when material is first placed within them.
-`graphics/` was among them until sub-task 6.2.
+`graphics/` was among them until sub-task 6.2. `LICENSES/` holds licence texts
+alone and carries no `README.md`; [`LICENSING.md`](LICENSING.md) describes it.
+
+## Root documents
+
+| Document | Subject |
+| -------- | ------- |
+| [`PROJECT_GUIDELINES.md`](PROJECT_GUIDELINES.md) | The conventions binding upon all work here. Amended only by explicit decision of the project owner. |
+| [`CONTRIBUTING.md`](CONTRIBUTING.md) | The working procedure those conventions imply: the order of work, what a change must carry before it is complete, and the standards a test, a document and a commit are held to. |
+| [`LICENSING.md`](LICENSING.md) | Which licence applies to which path, why the three were chosen, and where the boundary between the kernel and a program running upon it falls. |
 
 ## Document conventions
 
