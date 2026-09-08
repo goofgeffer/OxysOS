@@ -12,7 +12,7 @@ practices that are prohibited.
 - **Primary Language**: C11 for kernel and userland; NASM assembly for boot and architecture-specific routines.
 
 ## 2. Absolute Rules of Engagement
-- **Formality**: All communication, documentation, code comments, and commit messages must adopt a strictly formal, technical, and objective tone. The use of emojis, slang, humour, or any informal expression is strictly prohibited.
+- **Formality**: All communication, documentation, code comments, and commit messages must adopt a strictly formal, technical, and objective tone. The use of emojis, slang, humour, or any informal expression is strictly prohibited. This rule governs the register of the **work**. The standard of conduct between persons is governed by `CODE_OF_CONDUCT.md`, whose Section 2 records where the line between the two falls; neither document relaxes the other, and the formality required here is not a licence to be disagreeable nor the conduct standard a bar to plain technical judgement.
 - **Specification-Driven Development**: Before implementing any subsystem, the contributor must retrieve and cite the official authoritative specifications (e.g., Intel manuals, Multiboot2, EXT2, System V ABI, UEFI Specification, relevant RFCs). No implementation shall proceed without referenced specification.
 - **Synchronous Documentation**: Every single code change must be immediately reflected in:
   - Updated inline comments and file-header blocks.
