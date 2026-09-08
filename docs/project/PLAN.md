@@ -319,9 +319,16 @@ in place of Phase 6.
 Phase 6 supplied the framebuffer, the primitives, the font, the pointer and the
 compositing surface — everything that can be built without a process to own it.
 What remains is everything that cannot, which is why this phase follows the shell
-and not the framebuffer. This phase was the whole of the graphical work until
-2026-09-03; [`../design/ARCHITECTURE.md`](../design/ARCHITECTURE.md), Section
-4.1, records the division and what it cost.
+and not the framebuffer. The division of the graphical work between Phase 6 and
+this phase is argued in [`../design/ARCHITECTURE.md`](../design/ARCHITECTURE.md),
+Section 4.1, which records what it cost.
+
+**The appearance of what 9.5 to 9.8 present** is not decided here, but the
+preference it is to be designed against is written down:
+[`INSPIRATIONS.md`](INSPIRATIONS.md), Section 3 — a contemporary playful
+minimalism, modernist and playfully geometric. A retro-styled desktop is
+expressly not wanted, that section stating why the prohibition is written down
+rather than left implied.
 
 | # | Sub-task | State | Asserted by |
 | - | -------- | ----- | ----------- |

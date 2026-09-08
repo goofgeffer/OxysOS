@@ -30,9 +30,11 @@ it ought to feel like to use. That is a real influence upon the work, most of
 all upon the phases that have not been reached, and a project whose stated
 practice is to write down its reasons should write this one down too.
 
-The three systems below are named because the project owner names them. They are
-listed in the order of their weight, and each entry states plainly what is taken
-and, where it matters, what is not.
+The two systems below are named because the project owner names them, and are
+listed in the order of their weight; each entry states plainly what is taken
+and, where it matters, what is not. Section 3 stands between them and names no
+system: the appearance this project intends is nobody else's, and it is recorded
+here because it is a matter of taste, and taste is what this document holds.
 
 ## 2. ToaruOS — the principal inspiration
 
@@ -68,25 +70,55 @@ not decided by reference to how ToaruOS looks. The distinction this section
 draws is between the *structure* of a graphical environment, which is taken, and
 the *appearance* of one, which is not.
 
-## 3. SerenityOS — the retro graphical style
+## 3. The appearance intended
 
-[SerenityOS](https://serenityos.org/) is taken as a smaller inspiration, and for
-one thing: its retro graphical style. Its deliberate adoption of the visual
-idiom of the graphical desktops of the nineteen-nineties — the raised and
-recessed bevels, the solid colours, the plain rectilinear decorations, the
-absence of ornament that is not also a control — is the direction Oxys-OS
-prefers for its own appearance.
+The systems named above and below are named for what they demonstrate and for
+how they are conducted. This section names no system, because the appearance of
+Oxys-OS is taken from none: it is a preference of the project owner's, stated
+here so that Phase 9 is designed against something written down rather than
+something recalled.
 
-This is a preference of taste and it is stated as one. It is not a decision
+The direction is contemporary: **playful minimalism** — modernist, and playfully
+geometric. What that commits the work to, stated as qualities rather than as
+pixels:
+
+- **Flat surfaces.** Depth is expressed, where it is expressed at all, by
+  spacing, by scale and by the stacking order itself, not by simulated bevels,
+  gradients or shadows imitating a physical control.
+- **A modernist restraint.** Nothing is drawn that is not a control, a boundary
+  or a label. Ornament is not added to fill space; space is left.
+- **Geometry as the character.** The playfulness is carried by shape and
+  proportion — circles, arcs, rounded rectangles, deliberate asymmetry — rather
+  than by decoration applied on top of an otherwise plain form. The result
+  should read as light without reading as unserious.
+- **Colour used sparingly and deliberately.** A small palette, mostly quiet,
+  with colour reserved for the few things that must be distinguished at a
+  glance. A palette is a decision of Phase 9 and is not made here.
+- **Legibility first.** Where a playful choice and a legible one disagree, the
+  legible one is taken. A desktop that is pleasant to look at and hard to read
+  has failed at the thing it exists to do.
+
+**A retro-styled desktop is not wanted**, now or at any later point: not the
+visual idiom of the nineteen-nineties desktops, not raised and recessed bevels,
+and not a retro theme offered beside a contemporary one. The prohibition is
+written down rather than left implied because that idiom is where a system
+written from nothing drifts if nobody stops it. It is the cheapest appearance to
+reach with the primitives Phase 6 already has — a rectangle fill, two lines of a
+lighter colour and two of a darker, and a control looks raised — so it arrives
+by default, and an appearance arrived at by default is indistinguishable,
+afterwards, from one that was chosen. This section is what makes the difference
+visible.
+
+This remains a preference of taste and is stated as one. It is not a decision
 already made about any particular pixel; Phase 9 has not been reached, and no
-part of it has been designed. It is recorded here so that when Phase 9 is
-designed the preference is already written down rather than recalled, and so
-that the resulting appearance may be judged against a stated intention.
+part of it has been designed. When it is designed, what is actually built is
+recorded in its own document under [`../design/`](../design/), and this section
+is judged against it.
 
-## 4. BSD — the third inspiration
+## 4. BSD — the second inspiration
 
 The BSD family — the system that descends from the Berkeley Software
-Distribution, and its present derivatives — is the third inspiration, and the
+Distribution, and its present derivatives — is the second inspiration, and the
 one that bears least upon appearance and most upon conduct.
 
 What is admired there is the coherence of a system developed as a whole: kernel,
@@ -119,7 +151,7 @@ implements, the specification is retrieved and cited as
 | ----- | --------- |
 | The demonstration that a wholly original system of this scope is achievable. | Any part of the source of any such system. |
 | The style of graphical environment: compositing, a window manager, a client protocol. | The theme, palette, iconography or visual identity of ToaruOS. |
-| The preference for a retro graphical idiom. | Any asset, font or specific design of SerenityOS. |
+| Nothing. The appearance is this project's own, and Section 3 states the preference it is designed against. | The retro graphical idiom, and any asset, font or specific design of another system. |
 | The practice of a coherent system maintained as one thing. | Any BSD interface adopted without its specification being retrieved and cited. |
 
 The line is the same in every row. What may be taken from another project is a
@@ -136,7 +168,7 @@ of behaviour that exists. When they are reached, what is actually built is
 recorded in its own document under [`../design/`](../design/), and this document
 is revised to record how much of the intention survived contact with the work.
 
-The characterisations of the three systems above are stated in general terms
+The characterisations of the two systems above are stated in general terms
 deliberately. This project cites specifications for its assertions about
 hardware; it makes no comparable claim of authority about the internals of
 another project, and so it describes them only at the level at which the

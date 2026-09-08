@@ -46,7 +46,7 @@ source of truth for progress, and nothing below restates it.
 | [`TOOLCHAIN.md`](docs/project/TOOLCHAIN.md) | The cross-compilation toolchain, its construction, and the build system. |
 | [`CODING-STANDARDS.md`](docs/project/CODING-STANDARDS.md) | The mandatory conventions of style, naming, documentation and compiler diagnostics. |
 | [`REFERENCES.md`](docs/project/REFERENCES.md) | The bibliography of authoritative specifications consulted by the project. |
-| [`INSPIRATIONS.md`](docs/project/INSPIRATIONS.md) | The systems this project takes its character from — ToaruOS principally, SerenityOS and BSD besides — and the line between an inspiration and a source of code. |
+| [`INSPIRATIONS.md`](docs/project/INSPIRATIONS.md) | The systems this project takes its character from — ToaruOS principally, BSD besides — the appearance the desktop is intended to have, and the line between an inspiration and a source of code. |
 
 ### [`docs/design/`](docs/design/) — the kernel itself
 

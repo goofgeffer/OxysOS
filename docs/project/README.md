@@ -13,13 +13,13 @@ explains how the kernel functions; that is [`../design/`](../design/),
 | [`TOOLCHAIN.md`](TOOLCHAIN.md) | The `x86_64-elf` cross-toolchain, its construction, and the build system that uses it. |
 | [`CODING-STANDARDS.md`](CODING-STANDARDS.md) | Style, naming, file headers, the `-Wall -Wextra -Werror` regime, and the register of compiler extensions relied upon with the justification of each. |
 | [`REFERENCES.md`](REFERENCES.md) | Every specification the project relies upon, with the sections relied upon named and, where a specification is not publicly distributed, a note of how its details were cross-verified. |
-| [`INSPIRATIONS.md`](INSPIRATIONS.md) | The systems this project takes its character from — ToaruOS principally, SerenityOS and BSD besides — what is taken from each, what is not, and the rule that separates an inspiration from a source of code. |
+| [`INSPIRATIONS.md`](INSPIRATIONS.md) | The systems this project takes its character from — ToaruOS principally, BSD besides — what is taken from each, what is not, the appearance Phase 9 is to be designed against, and the rule that separates an inspiration from a source of code. |
 
-## The three that were one
+## The three that answer three questions
 
-`PLAN.md` held all three of the above until 2026-09-07, and had become hard to
-scan: the roadmap it exists to be was 2,000 words inside a document of 17,000.
-The division answers three different questions and keeps each in one place.
+The first three documents above are kept apart because they answer three
+different questions, and a document that answers two of them at once is scanned
+for neither. Each question has one place:
 
 - **Where are we, and what comes next?** — `PLAN.md`.
 - **What does it do today, and where has it been seen to work?** — `STATUS.md`.

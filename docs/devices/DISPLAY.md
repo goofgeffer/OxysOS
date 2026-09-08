@@ -197,13 +197,13 @@ composed by the caller rather than performed by the driver: the two devices woul
 otherwise need different treatment for the same keystroke.
 
 **The position preceding the first column of a row is the end of the row above.**
-This is the part that was previously not implemented. A backspace in the first
-column formerly did nothing at all, on the stated grounds that the driver could
-not tell a row the user had typed from a row the kernel had printed, and would
-otherwise consume the boot log a character at a time.
+A backspace that crosses rows raises an objection the driver cannot answer from
+the frame buffer alone: it cannot tell a row the user has typed from a row the
+kernel has printed, and a held backspace would otherwise consume the boot log a
+character at a time.
 
-The objection was sound and the remedy was to supply the missing knowledge rather
-than to refuse the movement. The driver now holds an **erase limit**: a position
+The objection is answered by supplying the missing knowledge rather than by
+refusing the movement. The driver holds an **erase limit**: a position
 before which the cursor will not retreat under any backspace. `VgaSetEraseLimit`
 records the current cursor position as that limit, and whoever is reading input
 calls it where the input is to begin — `KernelEchoLoop` does so immediately after

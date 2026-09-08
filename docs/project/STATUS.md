@@ -5,9 +5,7 @@ functional change is made, in accordance with `PROJECT_GUIDELINES.md`, Section 7
 
 **Where this sits**: [`PLAN.md`](PLAN.md) is the roadmap and the authority upon
 what state each sub-task is in. This document says what the system *does* today,
-one paragraph to a phase, and where each phase has been observed to work. It was
-the opening section of `PLAN.md` until 2026-09-07 and was moved out so that the
-roadmap could be scanned.
+one paragraph to a phase, and where each phase has been observed to work.
 
 **The authority where two documents differ** is the design document cited in each
 paragraph, which is revised as the design is. Nothing here restates an argument
