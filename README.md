@@ -20,6 +20,35 @@ Section 2, no code change is final until the documents affected by it have been
 updated. [`CONTRIBUTING.md`](CONTRIBUTING.md) is the working procedure that
 follows from them.
 
+## Building
+
+Upon a Debian or Ubuntu machine with nothing installed:
+
+```sh
+./build_all.sh
+```
+
+That installs the host packages, builds the `x86_64-elf` cross-toolchain from
+source, builds the ISO and runs the verification under QEMU. The first run takes
+twenty to forty minutes, nearly all of it the compiler; there is no package for
+it, which is why it is built rather than installed.
+
+The three stages are separately invocable, and the `make` targets are the usual
+way to work once the toolchain stands:
+
+| Command | What it does |
+| ------- | ------------ |
+| [`./build_deps.sh`](build_deps.sh) | Installs the host packages the build and the verification require. |
+| [`./build_toolchain.sh`](build_toolchain.sh) | Builds binutils and GCC for `x86_64-elf` into `~/opt/cross`. Exits at once if they are there already. |
+| [`./build_all.sh`](build_all.sh) | The three stages above in order, then `make iso` and `make verify`. |
+| `make verify` | Boots the ISO under QEMU with no display and asserts upon the serial output. **This is the gate**: `PROJECT_GUIDELINES.md`, Section 2, requires it to pass before a change is final. |
+| `make clang-check` | Compiles every translation unit with a second compiler, for its diagnostics alone. Builds nothing. |
+
+The toolchain is not placed upon the default `PATH`.
+[`docs/project/TOOLCHAIN.md`](docs/project/TOOLCHAIN.md) states the whole of the
+build system, the flags and their justifications, and the workflow that runs the
+same verification upon GitHub.
+
 ## Licensing
 
 Three licences apply, one to each kind of thing here.
@@ -31,6 +60,7 @@ Three licences apply, one to each kind of thing here.
 | `boot/`, `kernel/`, `drivers/`, `graphics/` | `LGPL-3.0-or-later` |
 | `libc/`, `userland/` | `MIT` |
 | `docs/`, the `README.md` files, this one included | `CC0-1.0` |
+| `Makefile`, `build_*.sh`, `.gitignore`, `.gitattributes`, `.github/` | `CC0-1.0` |
 
 **Using this kernel's services through the system-call interface does not make a
 program a derivative work of it.** `LICENSING.md`, Section 2, states the position
@@ -109,12 +139,15 @@ by subject. The two are complementary.
 | [`drivers/README.md`](drivers/README.md) | The device drivers, one subdirectory per device class. |
 | [`graphics/README.md`](graphics/README.md) | The framebuffer and the drawing above it. |
 | [`docs/README.md`](docs/README.md) | The documentation corpus itself: what the four groups hold, and the form every document takes. Each group carries a `README.md` of its own. |
-| [`.github/README.md`](.github/README.md) | The automation that runs upon GitHub: the workflow that builds the kernel, runs the second compiler and executes `make verify` upon a machine nobody here has configured. |
 
 The directories `libc/`, `userland/`, `crypto/`, `net/` and `uefi/` are presently
 empty and acquire their documents when material is first placed within them.
 `graphics/` was among them until sub-task 6.2. `LICENSES/` holds licence texts
 alone and carries no `README.md`; [`LICENSING.md`](LICENSING.md) describes it.
+`.github/` likewise carries none: it holds the configuration by which GitHub
+runs the verification, not material of the system, and
+[`docs/project/TOOLCHAIN.md`](docs/project/TOOLCHAIN.md), Section 10, describes
+it.
 
 ## Root documents
 

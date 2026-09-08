@@ -1,0 +1,91 @@
+# ==============================================================================
+# File: .gitattributes
+#
+# Purpose:
+#   Fixes the form every tracked file takes in the working tree and in a diff.
+#   Two classes of defect are addressed, and both are of the kind this project
+#   exists to make visible rather than to tolerate: a line ending that changes
+#   between one contributor's checkout and another's, and a file whose contents
+#   a textual diff would corrupt or merely obscure.
+#
+# Contents:
+#   1. Line endings.
+#   2. Files that are not text.
+#   3. Diff and language attributes.
+#
+# References:
+#   - gitattributes(5): the `text`, `eol`, `binary`, `diff` and `export-ignore`
+#     attributes, and the `linguist-*` attributes GitHub reads.
+#   - docs/project/CODING-STANDARDS.md, Section 4: indentation is four spaces
+#     and tabulation characters appear only where GNU Make requires them.
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# 1. Line endings.
+#
+# Every text file is stored with LF in the repository and checked out with LF,
+# on every platform. `eol=lf` is stated rather than left to core.autocrlf
+# because the failure it prevents is silent and remote: this repository is
+# presently worked upon from WSL, where a checkout carrying CRLF produces an
+# assembler that reports an error at a line that looks correct, a shell script
+# that fails with an unprintable character in the message, and a linker script
+# whose fault is visible to nobody reading it.
+# ------------------------------------------------------------------------------
+
+*               text=auto eol=lf
+
+*.c             text eol=lf
+*.h             text eol=lf
+*.asm           text eol=lf
+*.s             text eol=lf
+*.S             text eol=lf
+*.ld            text eol=lf
+*.sh            text eol=lf
+*.md            text eol=lf
+*.yml           text eol=lf
+*.yaml          text eol=lf
+*.cfg           text eol=lf
+Makefile        text eol=lf
+.gitignore      text eol=lf
+.gitattributes  text eol=lf
+
+# ------------------------------------------------------------------------------
+# 2. Files that are not text.
+#
+# These are marked so that git neither converts their line endings nor attempts
+# a textual merge upon them. A bootable image or a font whose bytes a merge had
+# rewritten would fail at the machine rather than at the tool.
+# ------------------------------------------------------------------------------
+
+*.iso           binary
+*.img           binary
+*.bin           binary
+*.elf           binary
+*.o             binary
+*.a             binary
+*.psf           binary
+*.fd            binary
+*.vdi           binary
+*.qcow2         binary
+*.png           binary
+
+# ------------------------------------------------------------------------------
+# 3. Diff and language attributes.
+#
+# `diff=cpp` gives the hunk headers of a C diff the enclosing function's name,
+# which is the difference between reading a patch and locating it first.
+#
+# The linguist attributes govern the language summary GitHub presents. The
+# documentation of this project is a large part of it by volume and is meant to
+# be; counted as source it would report the repository as chiefly prose, and
+# `linguist-documentation` keeps it out of the count without hiding it from a
+# search. The licence texts are nobody's work here and are marked vendored.
+# ------------------------------------------------------------------------------
+
+*.c             diff=cpp
+*.h             diff=cpp
+
+*.md            linguist-documentation
+docs/**         linguist-documentation
+LICENSES/**     linguist-vendored
+.github/**      linguist-vendored

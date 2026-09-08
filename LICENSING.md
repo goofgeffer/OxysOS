@@ -18,7 +18,7 @@ intended to be used differently.
 | `boot/`, `kernel/`, `drivers/`, `graphics/`, `linker.ld` | GNU Lesser General Public License, version 3 or later | `LGPL-3.0-or-later` |
 | `libc/`, `userland/` | MIT License | `MIT` |
 | `docs/`, every `README.md`, `PROJECT_GUIDELINES.md`, this file | Creative Commons CC0 1.0 Universal | `CC0-1.0` |
-| `Makefile`, `boot/grub/grub.cfg`, `.gitignore` | CC0 1.0 Universal, as documentation of how the work is built rather than part of it | `CC0-1.0` |
+| `Makefile`, `build_*.sh`, `boot/grub/grub.cfg`, `.gitignore`, `.gitattributes`, `.github/` | CC0 1.0 Universal, as documentation of how the work is built rather than part of it | `CC0-1.0` |
 
 `libc/` and `userland/` are empty at the time of writing; they acquire material
 in Phase 7. The licence is declared in advance so that the first file placed

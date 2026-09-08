@@ -203,6 +203,17 @@ nothing else.
 | Second compiler | `make clang-check`, the target of Section 9. | `clang` alone. It builds nothing, so it reports in about a minute and is the first thing to look at when a run fails. |
 | Build and verify | `make toolcheck`, `make iso`, then `make verify`. | The cross-toolchain of Section 1, `nasm`, `grub-mkrescue`, `xorriso` and QEMU. |
 
+The workflow needs no revision when a phase advances. `make verify` greps the
+serial output for the word a failing self-test emits rather than naming each
+test, so a self-test written in a later phase is covered by the workflow on the
+day it is written.
+
+Its steps install nothing and build nothing themselves: each delegates to the
+script of Section 11 that owns that stage, so that the workflow and a
+contributor's machine cannot be given two different recipes. `.github/` carries
+no `README.md` of its own — it holds no material of the system, and this section
+is its documentation.
+
 ### 10.1 Why the toolchain is built rather than installed
 
 No package index carries `x86_64-elf-gcc`, so the workflow builds binutils and
@@ -234,3 +245,45 @@ machine that has none of a contributor's configuration upon it, which is the one
 thing a contributor cannot test for locally: a build that passes because of
 something installed long ago passes silently, and does so in exactly the same
 way as a build that is correct.
+
+## 11. The build scripts
+
+Three scripts stand at the repository root. They exist because the steps that
+precede `make` were, until they were written, recorded in three places that had
+no way of agreeing with one another: the prose of Section 1, the steps of
+`.github/workflows/ci.yml`, and the memory of whoever configured the machine
+this project is developed upon. The workflow now calls the same scripts a
+contributor does, so a build that works here and fails there is a difference
+between two machines rather than between two recipes.
+
+| Script | What it does | What it does not do |
+| ------ | ------------ | ------------------- |
+| [`../../build_deps.sh`](../../build_deps.sh) | Installs the host packages of Section 1 with `apt-get`, and the prerequisites of a compiler build. Reports the optional `clang` separately, its absence being no fault. | It does not install the cross-compiler, no index carrying one. Upon a machine without `apt-get` it names the packages and stops rather than guessing at an equivalent. |
+| [`../../build_toolchain.sh`](../../build_toolchain.sh) | Builds binutils and GCC for `x86_64-elf` into `PREFIX`, which defaults to `~/opt/cross`. Twenty to forty minutes. | It exits at once, reporting the versions it found, when the toolchain is already present. `FORCE=1` overrides that. It does not edit any profile: the `PATH` of Section 8 remains the contributor's to export. |
+| [`../../build_all.sh`](../../build_all.sh) | The two above in order, then `make iso` and `make verify`. `SKIP_DEPS`, `SKIP_TOOLCHAIN` and `SKIP_VERIFY` each omit a stage. | It builds nothing itself. Every stage is delegated to the script or the target that owns it, so that this file cannot drift from them; what it adds is the order and the reporting. |
+
+### 11.1 Why the versions are defaults rather than constants
+
+`build_toolchain.sh` reads `BINUTILS_VERSION` and `GCC_VERSION` from the
+environment and falls back upon the versions Section 1 records as present here.
+The workflow restates the same two in its `env` block, because there they are
+the cache key and a cache keyed upon less would serve a compiler other than the
+one the key names.
+
+That is one duplication left standing deliberately, and it is the only one. It
+is visible in two files that are read together, and the alternative — a workflow
+that asked the script which versions it intended before it knew what to restore
+— would be a cache key computed from the thing it is meant to identify.
+
+### 11.2 What a script may assume
+
+`build_all.sh` resolves the repository root from its own location rather than
+from the working directory, so it behaves the same when it is invoked by an
+absolute path from elsewhere. The other two touch no file in the repository at
+all, and may be run from anywhere.
+
+Only `build_deps.sh` raises `sudo`, and only for the one command that installs
+packages; `build_toolchain.sh` installs beneath the invoking user's home
+directory and needs no privilege whatever. A script that asked for privilege it
+did not need would be a script a contributor reads once and then runs without
+reading, which is the habit this project would rather not establish.
