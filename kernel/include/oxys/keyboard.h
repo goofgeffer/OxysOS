@@ -95,7 +95,7 @@ typedef struct KeyEvent
  * every wait upon the controller is bounded, so a machine that has none proceeds
  * unimpeded rather than blocking upon a status flag that will never change.
  *
- * The interrupt controller must have been initialised by PicInitialise before
+ * The interrupt controller must have been initialised by IrqInitialise before
  * this is called.
  */
 bool KeyboardInitialise(void);

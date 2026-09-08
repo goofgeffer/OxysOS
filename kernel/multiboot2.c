@@ -334,6 +334,49 @@ static void Multiboot2ParseElfSections(const Multiboot2ElfSectionsTag *tag,
     information->elf_section_count = tag->entry_count;
 }
 
+/*
+ * Records the copy of the Root System Description Pointer that a boot loader may
+ * supply as tag type 14 or 15.
+ *
+ * The two tags are treated alike but not equally. Multiboot2, Sections 3.6.16
+ * and 3.6.17, distinguishes them by the specification the copy conforms to: the
+ * older carries the twenty bytes ACPI 1.0 defined, the newer the thirty-six of
+ * ACPI 2.0 and later. A machine supplying both is supplying two descriptions of
+ * one thing, and the newer is preferred because only it names the XSDT, whose
+ * 64-bit entries are the only ones that can address a table above four
+ * gibibytes.
+ *
+ * Nothing is validated here beyond the length of the tag. The checksums and the
+ * signature are the business of kernel/acpi/acpi.c, which must apply them to a
+ * pointer found by searching just as much as to one supplied here, and a rule
+ * applied in one place cannot come to disagree with itself.
+ */
+static void Multiboot2ParseAcpiPointer(const Multiboot2Tag *tag, bool extended,
+                                       BootInformation *information)
+{
+    const uint8_t *const copy =
+        (const uint8_t *)tag + MULTIBOOT2_ACPI_RSDP_OFFSET;
+    const uint32_t least = MULTIBOOT2_ACPI_RSDP_OFFSET +
+                           (extended ? MULTIBOOT2_ACPI_RSDP_EXTENDED_LENGTH
+                                     : MULTIBOOT2_ACPI_RSDP_LEGACY_LENGTH);
+
+    if (tag->size < least)
+    {
+        KernelWriteString("  An ACPI pointer tag is shorter than the structure it "
+                          "declares; it is ignored.\n");
+        return;
+    }
+
+    if (!extended && information->acpi_rsdp_address != 0U)
+    {
+        return;
+    }
+
+    information->acpi_rsdp_address =
+        VirtualToPhysical((VirtualAddress)(uintptr_t)copy);
+    information->acpi_rsdp_revision = copy[MULTIBOOT2_ACPI_RSDP_OFFSET_REVISION];
+}
+
 bool BootInformationParseMultiboot2(uint32_t information_address,
                                     BootInformation *information)
 {
@@ -413,6 +456,14 @@ bool BootInformationParseMultiboot2(uint32_t information_address,
 
         case MULTIBOOT2_TAG_TYPE_ELF_SECTIONS:
             Multiboot2ParseElfSections((const Multiboot2ElfSectionsTag *)tag, information);
+            break;
+
+        case MULTIBOOT2_TAG_TYPE_ACPI_OLD_RSDP:
+            Multiboot2ParseAcpiPointer(tag, false, information);
+            break;
+
+        case MULTIBOOT2_TAG_TYPE_ACPI_NEW_RSDP:
+            Multiboot2ParseAcpiPointer(tag, true, information);
             break;
 
         case MULTIBOOT2_TAG_TYPE_BOOT_LOADER:
@@ -514,4 +565,18 @@ void BootInformationReport(const BootInformation *information)
     KernelWriteString(" - ");
     KernelWriteHexadecimal(information->boot_information_end);
     KernelWriteString(".\n");
+
+    KernelWriteString("ACPI pointer: ");
+
+    if (information->acpi_rsdp_address == 0U)
+    {
+        KernelWriteString("not supplied by the boot loader; it will be searched for.\n");
+    }
+    else
+    {
+        KernelWriteHexadecimal(information->acpi_rsdp_address);
+        KernelWriteString(", revision ");
+        KernelWriteDecimal((uint64_t)information->acpi_rsdp_revision);
+        KernelWriteString(".\n");
+    }
 }

@@ -17,11 +17,12 @@ made there; each paragraph says what stands, and points at the reasoning.
 
 The kernel boots from a Multiboot2 ISO into long mode at a higher-half address,
 manages physical and virtual memory with copy-on-write, services interrupts and
-exceptions, drives a serial adapter, a display, a keyboard, a mouse, three kinds
-of storage controller and the PCI bus, mounts and writes an EXT2 volume through a
-virtual filesystem layer, draws upon a composited linear framebuffer, and loads
-and runs a statically linked ELF64 program at privilege level 3 — which returns
-to the kernel by system call and is ended when it faults.
+exceptions through the machine's own Local APIC and I/O APIC, drives a serial
+adapter, a display, a keyboard, a mouse, three kinds of storage controller and
+the PCI bus, mounts and writes an EXT2 volume through a virtual filesystem layer,
+draws upon a composited linear framebuffer, and loads and runs a statically
+linked ELF64 program at privilege level 3 — which returns to the kernel by system
+call and is ended when it faults.
 
 What it does not yet do is pre-empt that program, run more than one of them, or
 start a second processor.
@@ -50,10 +51,12 @@ each of the 256 vectors constructs a uniform trap frame whatever the vector; a
 dispatch table routes each vector to a registered handler that may alter the
 frame it returns through; every architecture-defined exception has a handler that
 decodes its error code and a **disposition** deciding whether the fault is
-resumed, costs the program that raised it, or is fatal to the machine; and the
-cascaded 8259A pair is remapped clear of the exceptions, with each line masked
-until a driver claims it. See
-[`../design/INTERRUPTS.md`](../design/INTERRUPTS.md).
+resumed, costs the program that raised it, or is fatal to the machine; and a
+device driver claims a request line through one controller-neutral layer that
+knows which interrupt controller is answering — the cascaded 8259A pair, remapped
+clear of the exceptions, until sub-task 6.12 retires it in favour of the APIC.
+See [`../design/INTERRUPTS.md`](../design/INTERRUPTS.md).
+A
 
 **Phase 4 — device drivers.** The serial adapter is interrupt-driven and keeps a
 polled path it reverts to whenever the interrupt flag is clear, a panic reporting
@@ -86,7 +89,7 @@ the GRUB entry that permits writing. See
 [`../storage/VFS.md`](../storage/VFS.md).
 
 **Phase 6 — graphics, system calls, processes, SMP.** Complete as far as sub-task
-6.11; 6.12 to 6.15 are the multiprocessing half, none of it begun.
+6.12; 6.13 to 6.15 are the remainder of the multiprocessing half.
 
 - The apparatus a privilege transition is performed out of stands and has been
   exercised: user-mode descriptors in the order `SYSCALL` and `SYSRET` derive
@@ -116,11 +119,23 @@ the GRUB entry that permits writing. See
   read from a volume; `exit` ends a program upon its own request; and `wait`
   collects what a child ended with. A child runs when its parent waits for it,
   there being one thread of control until the scheduler of sub-task 6.15.
+- **The machine's own interrupt controllers are in use.** The firmware's ACPI
+  tables are found, checksummed and read; the Multiple APIC Description Table
+  says where the Local APIC and the I/O APIC are, which processors exist, and
+  which of the sixteen ISA request lines have been moved. The Local APIC is
+  enabled at both of its two separate enables and completes every interrupt; the
+  I/O APIC's redirection table carries each claimed line to the vector it has
+  always had; and **the 8259A pair is masked and retired**. A device driver
+  observed none of this: it claims a line number through one layer, and that
+  layer is the only thing that knows which controller is answering.
 
 See [`../design/PRIVILEGE.md`](../design/PRIVILEGE.md),
 [`../design/GRAPHICS.md`](../design/GRAPHICS.md),
-[`../design/EXECUTABLE.md`](../design/EXECUTABLE.md) and
-[`../design/PROCESS.md`](../design/PROCESS.md).
+[`../design/EXECUTABLE.md`](../design/EXECUTABLE.md),
+[`../design/PROCESS.md`](../design/PROCESS.md),
+[`../design/INTERRUPTS.md`](../design/INTERRUPTS.md), Section 10,
+[`../devices/ACPI.md`](../devices/ACPI.md) and
+[`../devices/APIC.md`](../devices/APIC.md).
 
 ## 3. Where it has been observed to work
 
@@ -139,7 +154,19 @@ The physical machine is one machine — the HP Laptop 14-dq0052dx specified in
 | 3 Interrupts | Yes | Yes | — | Reached, not examined |
 | 4 Device drivers | Yes | Yes, less the serial adapter | — | **Yes, and it found two faults** — see below |
 | 5 EXT2 | Yes | Yes | — | Reached, not examined |
-| 6 Graphics and processes | Yes | Yes | — | Reached, not examined |
+| 6 Graphics and processes | Yes | Yes, as far as sub-task 6.11 | — | Reached, not examined |
+| 6.12 The APIC | Yes | **Not yet run** | — | **Not yet run** |
+
+**Sub-task 6.12 has its own row because it is the change most likely to differ by
+machine.** Everything it does is programmed from tables the firmware wrote, and
+no two firmwares write the same tables. Several paths this kernel now contains
+have never been taken by any run: the XSDT, no machine having yet presented one;
+the Local APIC Address Override; a second I/O APIC; and every interrupt source
+override but the five QEMU declares. They are written from the specification and
+asserted only so far as a machine that does not exercise them permits.
+
+Nothing here has been run anywhere but QEMU, and it is recorded as such rather
+than assumed from a sibling row.
 
 "Reached, not examined" means the kernel ran that far upon the machine — it must
 have, the storage report of Phase 4 coming after all of it — but nothing about

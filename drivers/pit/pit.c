@@ -51,7 +51,7 @@
  */
 
 #include <oxys/pit.h>
-#include <oxys/pic.h>
+#include <oxys/irq.h>
 #include <oxys/interrupts.h>
 #include <oxys/io.h>
 #include <oxys/kernel.h>
@@ -190,7 +190,7 @@ void PitInitialise(uint32_t frequency)
     PortWriteByte(PIT_CHANNEL0_DATA, (uint8_t)(divisor & 0xFFU));
     PortWriteByte(PIT_CHANNEL0_DATA, (uint8_t)((divisor >> 8) & 0xFFU));
 
-    PicInstallHandler(PIT_IRQ, PitHandleTick, "interval timer");
+    IrqInstallHandler(PIT_IRQ, PitHandleTick, "interval timer");
 
     PitRunning = true;
 
@@ -199,7 +199,7 @@ void PitInitialise(uint32_t frequency)
      * registered, a request arriving in between would be counted as unclaimed,
      * and the first tick would be lost.
      */
-    PicUnmaskLine(PIT_IRQ);
+    IrqUnmaskLine(PIT_IRQ);
 }
 
 uint64_t PitTickCount(void)
@@ -305,6 +305,6 @@ void PitReport(void)
     KernelWriteString(", elapsed ");
     KernelWriteDecimal(PitMillisecondsElapsed());
     KernelWriteString(" ms, line ");
-    KernelWriteString(PicLineIsMasked(PIT_IRQ) ? "masked" : "unmasked");
+    KernelWriteString(IrqLineIsMasked(PIT_IRQ) ? "masked" : "unmasked");
     KernelWriteString(".\n");
 }

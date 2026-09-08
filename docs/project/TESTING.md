@@ -1365,10 +1365,142 @@ are both this project's and can share a misconception — as they did until
 sub-task 6.7, when intermediate entries were found never to have carried the user
 bit.
 
-## 23. Test record
+## 23. Verification of the interrupt controllers
+
+Sub-task 6.12 replaced the pair of 8259A controllers with the machine's own Local
+APIC and I/O APIC, programmed from what the firmware's ACPI tables declare. The
+reasoning is in [`../devices/ACPI.md`](../devices/ACPI.md) and
+[`../devices/APIC.md`](../devices/APIC.md); what follows is how it is tested.
+
+### 23.1 Why this change needs more than an automated pass
+
+An interrupt controller that is programmed wrongly reports nothing. It produces a
+device that is silent, and a silent device is indistinguishable from a device
+that is absent, from a driver that was never initialised, and from a machine with
+nothing attached.
+
+Worse, most of the machine goes on working. When this sub-task was first run, the
+interval timer's input had been taken by another line and the timer had stopped —
+and the kernel booted to its banner, echoed keystrokes, and carried its serial
+log exactly as before. Nothing in the boot log said anything was wrong, because
+nothing was wrong with any of the things the boot log was reporting on.
+
+The self-tests are written against that, and the assertion that catches it is the
+one that lets the timer run and counts its ticks.
+
+### 23.2 What `make verify` asserts
+
+Five routines, in the order `KernelMain` runs them.
+
+| Routine | When it runs | What it establishes |
+| ------- | ------------ | ------------------- |
+| `KernelVerifyPic` | After `IrqInitialise` | The 8259A device: its mask registers respond, the cascade is unmasked with any slave line, and — the one assertion that cannot be made by inspection — the remapping took effect. |
+| `KernelVerifyIrq` | Immediately after | The routing layer while the 8259A still answers: a claimed line reaches its handler, an unclaimed one is acknowledged and counted, and a spurious request upon IR7 is neither routed nor acknowledged. |
+| `KernelVerifyAcpi` | After `AcpiInitialise` | That a parse claiming success is coherent: a pointer and a directory were found, at least one processor and one local controller address were declared, every override names the ISA bus, and every line without an override resolves to the global interrupt of its own number. |
+| `KernelVerifyLocalApic` | After `LocalApicInitialise` | Both enables set, the spurious vector reading back as programmed, the task priority accepting every class, neither LINT pin in the external delivery mode, the local timer masked, the version register reading as an APIC's, and no error reported. |
+| `KernelVerifyIoApic` | After `IoApicInitialise` | Every unit reporting between 1 and 240 inputs, and every input above the request lines masked. |
+| `KernelVerifyApicRouting` | After `IrqAdoptApic` | The 8259A fully masked and reporting itself retired; every claimed line's redirection entry carrying the vector that line has always had, naming this processor, and masked exactly as its driver asked; and **the interval timer still ticking**. |
+
+The tables in [`../devices/ACPI.md`](../devices/ACPI.md), Section 7, and
+[`../devices/APIC.md`](../devices/APIC.md), Section 8, pair each assertion with
+the silent failure it exists to catch.
+
+### 23.3 What the log should say
+
+The passage worth reading is the one between the ACPI report and the request
+layer's final report. Under QEMU with `-machine q35 -cpu qemu64 -smp cores=2`:
+
+```
+ACPI table self-test passed.
+ACPI: pointer at 0x15EA60, revision 0, from the boot loader's copy.
+ACPI: directory RSDT at 0x1FFE2369, tables 5: FACP APIC HPET MCFG WAET.
+ACPI: local controllers at 0xFEE00000, processors 2 of which usable 2, 8259A pair declared present.
+  I/O APIC 0 at 0xFEC00000, global interrupts from 0.
+  ISA request 0 is carried by global interrupt 2, flags 0x0.
+  ...
+Local APIC self-test passed.
+Local APIC: identifier 0, version 0x14, local vector entries 6, registers at 0xFEE00000, the bootstrap processor.
+Local APIC: spurious vector 255, error vector 254, LINT0 0x10000, LINT1 0x400.
+I/O APIC self-test passed.
+I/O APIC: 1 unit(s), 24 interrupt inputs between them.
+Interrupt requests: no I/O APIC input carries line 2.
+APIC routing self-test passed.
+8259A: retired in favour of the APIC; mask 0xFFFF.
+  Global interrupt 2 presents vector 32 to processor 0, active high, edge triggered.
+Interrupt requests: answered by the I/O APIC and the Local APIC, vectors 32 to 47, lines claimed 4.
+  Line 0 (vector 32): interval timer, global interrupt 2, unmasked.
+```
+
+Three lines of it are the substance and are worth naming.
+
+**`ISA request 0 is carried by global interrupt 2`** is the firmware saying the
+timer is not upon the input its number would suggest. A kernel that did not read
+that would programme input 0 and never hear a tick.
+
+**`no I/O APIC input carries line 2`** is the consequence: global interrupt 2 now
+belongs to line 0, so line 2 — the 8259A's cascade, which is not a device line
+under any controller — has nothing. Its absence is correct and is reported rather
+than passed over.
+
+**`Line 0 (vector 32): interval timer, global interrupt 2, unmasked`** is the
+whole change in one line: the same driver, upon the same line, at the same
+vector, carried by a different controller through a different pin.
+
+### 23.4 The negative tests
+
+Each was performed by editing the source, rebuilding, executing under QEMU,
+reading the log, and reverting. What is recorded is what the log said.
+
+| The edit | What was observed |
+| -------- | ----------------- |
+| **None.** The ownership rule of `IrqLineOwnsItsInput` did not exist when the sub-task was first run | `A claimed line is routed to the wrong vector.`, and the report showed `Line 0 (vector 32): interval timer, global interrupt 2, masked` — line 2 having overwritten line 0's entry. The machine booted to its banner, echoed keystrokes and carried its serial log throughout, with the timer dead. **This is not a contrived negative test but the defect the self-test caught on its first run**; it is recorded in [`../design/INTERRUPTS.md`](../design/INTERRUPTS.md), Section 10.7. |
+| Omit `PicDisable` from the adoption | `The 8259A pair is not fully masked.` and `APIC routing self-test FAILED.` |
+| Give the redirection entries a vector below 16 | `Interrupt requests: no I/O APIC input carries line 0, which a driver has claimed.`, then `A claimed line is routed to the wrong vector.` four times. `IoApicRouteGlobalInterrupt` refuses the vector rather than programming it, so no entry is written at all and the four claimed lines keep the masked entries the initialisation left. The refusal is what makes this loud: without it the Local APIC would record an illegal vector in a register nothing reads. |
+| Skip the write to the task priority register | Nothing. `make verify` passed unchanged, QEMU's firmware leaving the register clear. The assertion exists for a firmware that does not, and cannot be provoked upon one that behaves — which is recorded rather than glossed, an assertion that cannot fail here being an assertion this environment does not test. |
+| Leave the spurious vector's software enable clear | `The software enable of the spurious vector register is clear.` and `Local APIC self-test FAILED.`, then `The interval timer stopped when the I/O APIC took over its request line.` Every device goes silent at once. |
+| Name a destination other than this processor's local APIC identifier | `A claimed line is directed at another processor.` four times, then `The interval timer stopped when the I/O APIC took over its request line.` This is what sub-task 6.14's characteristic failure will look like when it arrives. |
+| Ignore the boot loader's ACPI tag, forcing the low-memory search | `ACPI: pointer at 0xF52C0, revision 0, from the BIOS read-only memory.` — a different address, by a different route, naming the same `RSDT at 0x1FFE2369` and the same five tables, and every self-test passed. This is a **positive** negative test: it is the only thing that exercises the search of ACPI 6.5, Section 5.2.5.1, at all, GRUB always supplying the tag. |
+| Write the redirection entry low half first | **Not attempted.** The window is a few instructions wide and the interrupt flag is clear throughout the adoption, so there is nothing to observe. The order is prevented by construction and recorded in [`../devices/APIC.md`](../devices/APIC.md), Section 4.3, rather than asserted. |
+
+**One of these changed the kernel.** Naming the wrong destination made the run
+outlast this target's twenty-five second timeout, so the failure was reported as
+a kernel that never reached its banner rather than as a timer that had stopped —
+`PitWaitTicks` is bounded by iterations *per tick awaited*, and a dead timer
+makes it spin for a multiple of a bound chosen to be generous. The routing
+self-test now waits by a fixed spin instead, which costs the same whether the
+timer runs or not. The negative test was then repeated and produced the message
+recorded above.
+
+### 23.5 What is not tested, and cannot presently be
+
+Several paths are written and have never been taken by any run, because no
+machine this kernel has been booted upon presents the conditions:
+
+- **The XSDT.** GRUB supplies the ACPI 1.0 tag under a legacy BIOS boot, so the
+  RSDT is what is walked. The XSDT path awaits either a machine whose firmware
+  is ACPI 2.0 throughout or the UEFI boot of Phase 12.
+- **A Local APIC Address Override.** No machine has declared one.
+- **A second I/O APIC**, and any global system interrupt base above zero.
+- **Processor Local x2APIC structures.** QEMU declares type 0 for both
+  processors.
+- **A level-triggered or active-low request line.** QEMU declares four such
+  overrides — ISA 5, 9, 10 and 11 — but no driver in this kernel claims any of
+  those lines, so the flags are read and recorded and never programmed.
+
+These are recorded rather than glossed. [`STATUS.md`](STATUS.md), Section 3,
+carries the same list against the environments column, which is where a reader
+looking for what has actually been run will look.
+
+## 24. Test record
 
 | Date | Test | Result |
 | ---- | ---- | ------ |
+| 2026-09-08 | `make verify` — **sub-task 6.12, the ACPI tables** | Passed. The boot loader's copy of the pointer is validated and used; the RSDT is walked and its five tables named — `FACP APIC HPET MCFG WAET` — with no checksum failure and no unrecognised MADT entry. The table declares two usable processors, one I/O APIC at `0xFEC00000`, five interrupt source overrides and a non-maskable interrupt upon LINT1 of every processor. What is asserted is coherence rather than agreement with a value written here: that at least one processor is declared, the machine plainly having one; that every override names the ISA bus, Section 5.2.12.5 admitting no other; and that every line without an override resolves to the global interrupt of its own number. |
+| 2026-09-08 | `make verify` — **the Local APIC and the I/O APIC** | Passed. Both enables are set and read back; the spurious vector reads back as the 255 programmed, which is what establishes that the hardwired low four bits of Section 10.9 did not alter it; the task priority accepts every class; neither LINT pin is in the external delivery mode, LINT0 reading `0x10000` masked and LINT1 `0x400`, the non-maskable delivery mode the firmware asked for; the local timer is masked; the version reads `0x14` with six local vector table entries; and no error was recorded. The one I/O APIC reports 24 inputs, and every input above the sixteen request lines is masked. |
+| 2026-09-08 | `make verify` — **the retirement of the 8259A**, which is the sub-task | Passed. The pair is masked to `0xFFFF` and reports itself retired; each of the four claimed lines carries the vector it has always had, names this processor, and is masked exactly as its driver had asked. **The assertion that matters is the last**: the interval timer is let run for a bounded interval and its ticks counted, and it ticks. Nothing else establishes that a device pin still reaches its driver, and the log of a machine whose timer had died would otherwise be indistinguishable from the log of one whose timer had not — as the first run of this sub-task demonstrated. |
+| 2026-09-08 | QEMU — **the interrupt source override, read in the log** | The three lines worth reading are `ISA request 0 is carried by global interrupt 2`, which is the firmware saying the timer is not upon the input its number suggests; `no I/O APIC input carries line 2`, which is the consequence, global interrupt 2 now belonging to line 0 and the 8259A's cascade having nothing; and `Line 0 (vector 32): interval timer, global interrupt 2, unmasked`, which is the whole change in one line — the same driver, upon the same line, at the same vector, carried by a different controller through a different pin. |
+| 2026-09-08 | `make verify` — sub-task 6.12, **the negative tests** | Passed, six of six attempted, and recorded field by field in Section 23.4. Two are worth naming here. Ignoring the boot loader's ACPI tag forced the low-memory search of Section 5.2.5.1 and found the pointer at `0xF52C0` in the BIOS read-only memory — a different address by a different route, naming the same directory and the same five tables — which is the only thing that exercises that path at all, GRUB always supplying the tag. Naming a destination other than this processor's local APIC identifier made the run **outlast this target's timeout**, `PitWaitTicks` being bounded per tick awaited; the routing self-test now waits by a fixed spin, and the repeated test reported `The interval timer stopped when the I/O APIC took over its request line.` |
+| 2026-09-08 | `make clang-check` — after sub-task 6.12 | Passed. Eighty-five translation units, five of them new, compile without a diagnostic under the second compiler as well as the first. |
 | 2026-09-04 | `make verify` — **sub-task 6.5, the mouse decoder** | Passed. The packet arithmetic is asserted without a mouse and without anybody moving one: a plain packet yields its movement, position and buttons; the vertical sense is inverted at the one place that knows the device meant otherwise; magnitude `0xFF` with the sign bit is −1 and magnitude `0x00` with the sign bit is **−256**, which is the case an eight-bit sign extension turns into zero; the position stops at each of the four edges; a button transition is named once and not twice; an overflowed movement is discarded while its buttons are kept; a byte lacking the always-set bit is refused, counted, and the stream recovers with the next packet; a flush abandons a partial packet; and a full buffer discards the newest and counts exactly what it discarded. |
 | 2026-09-04 | `make verify` — the mouse decoder, **the negative tests** | Passed, both. Forwarding the device's vertical sign gave `A movement was decoded with the wrong sense or magnitude.` Sign-extending the magnitude as eight bits gave `A movement of minus 256 was decoded as zero.` — the failure being invisible for every movement but the largest a hand can make in one report period. Both edits reverted. |
 | 2026-09-04 | `make verify` — **the pointer**, upon a surface composed in memory | Passed. The shape is well formed — no interior pixel that is not opaque, which is how the two masks would drift apart with no symptom — and the hot spot is part of it. The opaque pixels hold their colours **and the transparent ones still hold the background**, so a pointer drawn as a solid rectangle fails. Showing twice draws once; a move restores the old position; a pointer at the edge draws what fits and writes nothing into the row padding; a concealment nests, so one reveal of two does nothing; a move made while concealed takes effect on the reveal; and draws equal restores once it is hidden. |

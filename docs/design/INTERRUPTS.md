@@ -1,12 +1,21 @@
 # Interrupt and Exception Handling
 
-**Corresponding phase**: Phase 3, sub-tasks 3.1 to 3.5.
+**Corresponding phase**: Phase 3, sub-tasks 3.1 to 3.5, and Phase 6, sub-task
+6.12, which added the controller-neutral request layer of Section 11.
 
 **Specifications**: Intel 64 and IA-32 Architectures Software Developer's Manual,
 Volume 3A, Chapter 6; Volume 3A, Sections 3.4 and 3.5; Volume 2A, `LGDT/LIDT`,
 `SGDT/SIDT` and `IRET/IRETQ`; Intel 8259A Programmable Interrupt Controller
 datasheet, sections "INITIALIZATION COMMAND WORDS (ICWS)" and "OPERATION COMMAND
-WORDS (OCWS)"; IBM Personal Computer AT technical reference.
+WORDS (OCWS)"; IBM Personal Computer AT technical reference; ACPI Specification
+6.5, Sections 5.2.12.4 and 5.2.12.5.
+
+The two controllers that supersede the 8259A pair are documented apart, in
+[`../devices/APIC.md`](../devices/APIC.md), and the tables that describe them in
+[`../devices/ACPI.md`](../devices/ACPI.md). What is here is the kernel's side of
+the arrangement: the descriptor table, the stubs, the dispatcher, the exception
+handlers, and the layer through which a device driver claims a request line
+whichever controller is answering.
 
 ## 1. The path an interrupt takes
 
@@ -509,8 +518,9 @@ unmasks IR0 and sub-task 3.7 unmasks IR1.
 
 ### 9.4 Why the controller owns the end-of-interrupt
 
-The signalling is performed by the routing layer of `pic.c` upon the return of
-the device handler, and a device driver neither may nor need perform it.
+`PicSendEndOfInterrupt` is written once, in `pic.c`, and is called by the routing
+layer of Section 11 upon the return of the device handler. A device driver
+neither may nor need call it.
 
 The alternative — each driver signalling for itself — distributes a piece of
 protocol that belongs to the controller across every driver that will ever exist,
@@ -554,7 +564,9 @@ the master alone is signalled and the slave is not.
 
 ### 9.6 Verification
 
-`KernelVerifyPic` asserts the properties whose violation would be silent.
+`KernelVerifyPic` asserts the properties of the device whose violation would be
+silent. The routing above it is asserted by `KernelVerifyIrq`, in Section 10.6;
+both halves were asserted here until sub-task 6.12 separated them.
 
 | Assertion | The failure it detects |
 | --------- | ---------------------- |
@@ -562,9 +574,6 @@ the master alone is signalled and the slave is not.
 | Nothing is in service before a line is unmasked | The in-service register is not being read as intended. |
 | Unmasking IR1 clears exactly its bit | A mask read-modify-write that disturbs its neighbours. |
 | Unmasking IR12 also unmasks the cascade | A slave line permitted at the slave whose requests can never reach the processor — a device that simply never interrupts. |
-| A request upon a claimed line enters its handler | The routing layer confusing the vector with the request line, delivering every interrupt to the wrong driver. |
-| A request upon an unclaimed line is counted and acknowledged | An unclaimed device silencing every line beneath it. |
-| A request upon IR7 with an empty in-service register is counted spurious, not routed, and not acknowledged | The lost-interrupt defect of Section 9.5. |
 | The interrupt flag may be set with every line masked, and nothing is delivered | **The remapping itself.** |
 
 The last deserves comment, because it is the only assertion that establishes the
@@ -584,21 +593,189 @@ the mask is honoured.
 | -------- | ----- |
 | Vectors | 32 to 47 |
 | Mask after initialisation | `0xFFFF` |
-| Requests dispatched by the self-test | 2 |
-| Of which unclaimed | 1 |
-| Spurious recognised | 1 |
+| Mask after sub-task 6.12 retires the pair | `0xFFFF` |
 
 ### 9.8 Limitations
 
-1. The controller is not disabled in favour of the Local APIC and the I/O APIC until sub-task 6.12. `PicDisable` exists for that purpose and is
-   not yet called.
-2. Nothing here is safe against concurrent access. The read-modify-write of a
-   mask register is not atomic, and from sub-task 6.13 both it and the
-   registration of a handler require the spinlock governing this device.
-3. The routing layer names its interface after the 8259A. When the I/O APIC supersedes it in sub-task 6.12, the device drivers of Phases 3 and 4
-   will require their registration calls to be redirected to the successor.
+1. Nothing here is safe against concurrent access. The read-modify-write of a
+   mask register is not atomic, and from sub-task 6.13 it requires the spinlock
+   governing this device.
+2. **The pair is retired, not removed.** `PicDisable` masks both mask registers
+   and clears the flag that governs the report; the controllers are still
+   remapped and still hold their initialisation. Nothing re-enables them, and
+   there is no path back to them once the APIC has been adopted — a machine whose
+   I/O APIC failed to initialise never leaves the 8259A in the first place.
+3. The pair is initialised upon every machine, including one whose MADT declares
+   `PCAT_COMPAT` clear and therefore has no such pair to initialise. The writes
+   go to ports nothing decodes and are harmless; what is not harmless is
+   *unmasking* a line there, which nothing does before the APIC is adopted.
 
-## 10. Present limitations
+## 10. The interrupt request layer
+
+Sub-task 6.12 introduced `kernel/cpu/irq.c` and the interface of
+`kernel/include/oxys/irq.h`. It is the one place a device driver claims a request
+line through, whichever controller is presently delivering it.
+
+### 10.1 Why it exists
+
+Until that sub-task every driver called `PicInstallHandler` and `PicUnmaskLine`.
+That named the 8259A in the source of a keyboard driver, a mouse driver, a timer
+driver and a serial driver, none of which has anything to do with the 8259A. It
+was nevertheless accurate, there being one controller.
+
+The moment a second controller exists it stops being accurate, and two things go
+wrong at once. Every one of those calls becomes a statement that is no longer
+true; and each driver acquires a decision — *which controller am I upon?* — that
+is not its business and that four drivers would answer four times, in four places
+that would not stay in agreement.
+
+**The line number is the durable fact.** IR1 is the keyboard whether the request
+arrives from a 8259A as vector 33 or from an I/O APIC input carrying global
+system interrupt 1 as vector 33. ACPI 6.5, Section 5.2.12.4, is what guarantees
+it: upon a machine supporting both models the first sixteen global system
+interrupts carry the 8259A request lines, save where an override says otherwise —
+and the override is resolved here, not by the driver.
+
+### 10.2 What it owns and what it does not
+
+| Owned here | Owned by the controller driver |
+| ---------- | ------------------------------ |
+| The table of handlers, by line number | The mask registers, and the writes to them |
+| The vector each line is presented upon | The initialisation sequence of the device |
+| The routing of a vector to a handler | The recognition of a spurious request |
+| Which controller is answering | The end-of-interrupt command itself |
+| The mask each driver asked for | — |
+
+The division follows from what each fact belongs to. That a request of the
+8259A's slave stands in the in-service register of both controllers is a property
+of that device, and `pic.c` keeps it. That IR1 belongs to the keyboard is a
+property of the machine, and does not change when the controller does.
+
+### 10.3 Why the layer signals the completion, and not the driver
+
+The argument of Section 9.4 survives the change of controller and gains a second
+part.
+
+The first part is unchanged: the signalling is a property of the controller
+rather than of any device, so there is no reason for a device to decide it, and
+the consequence of forgetting it is not a local defect but the silencing of every
+line of lower priority.
+
+The second part is new. **The command differs by controller.** Under the 8259A it
+is an operation command word written to one or both of two I/O ports; under the
+APIC it is a write to the Local APIC's end-of-interrupt register, and there is no
+cascade to consider. A driver that signalled for itself would have to know which,
+which is precisely the knowledge this layer exists to hold.
+
+### 10.4 The adoption
+
+`IrqAdoptApic` is the whole of the retirement, and it happens in one place.
+
+```
+   Requires: the Local APIC enabled, at least one I/O APIC mapped,
+             and the interrupt flag clear.
+
+1. PicDisable                      Both mask registers set to 0xFF.
+2. For each of the sixteen lines:
+     resolve the line to its global system interrupt
+     programme the redirection entry: vector 32 + line,
+       destination this processor, polarity and trigger from ACPI
+     set the mask to what the line's claimant asked for
+3. Record the APIC as the controller answering.
+```
+
+A driver observes nothing. It keeps the same line number, the same vector and the
+same handler, and its device keeps interrupting.
+
+**The interrupt flag must be clear.** Between step 1 and step 2 there is no
+controller that will deliver a device's request, and one raised in that interval
+would simply be lost. `KernelMain` performs the adoption while the flag is still
+clear, which it is for the whole of the initialisation.
+
+**The 8259A is masked first, and not last.** ACPI 6.5, Table 5.20, requires it of
+any machine declaring `PCAT_COMPAT`. Two controllers presenting one device upon
+one vector would deliver every request twice, and the second delivery would be
+acknowledged at a controller that had not sent it.
+
+**A line that cannot be carried is reported and skipped**, and the adoption
+continues. It is not a reason to abandon the change: the lines that do have
+inputs are better served by them than by a controller that has just been masked.
+
+### 10.5 The recorded mask state, and why it exists
+
+A controller's mask register is the truth while that controller is answering, and
+`IrqLineIsMasked` reads it rather than any copy. The layer nevertheless records
+what each driver asked for.
+
+The record exists for one instant: the adoption, at which the old controller's
+registers are about to be abandoned and the new controller's have never been
+written. Something must carry the answer across.
+
+It must be a record of what each driver *asked for* rather than a copy of the old
+registers. A line the 8259A was withholding for a reason of its own — a slave line
+whose cascade was masked, say — must not become a line the I/O APIC withholds for
+ever.
+
+### 10.6 Verification
+
+`KernelVerifyIrq` asserts the routing while the 8259A is still answering. It is
+the half of the old `KernelVerifyPic` that was about the layer rather than about
+the device.
+
+| Assertion | The failure it detects |
+| --------- | ---------------------- |
+| The 8259A is recorded as the controller answering | An adoption that ran before the drivers claimed their lines. |
+| A request upon a claimed line enters its handler | The layer confusing the vector with the request line, delivering every interrupt to the wrong driver. |
+| A request upon an unclaimed line is counted and acknowledged | An unclaimed device silencing every line beneath it. |
+| A request upon IR7 with an empty in-service register is counted spurious, not routed, and above all not acknowledged | The lost-interrupt defect of Section 9.5. |
+
+`KernelVerifyApicRouting` asserts the same path after the adoption, and is
+described in [`../devices/APIC.md`](../devices/APIC.md), Section 8. The assertion
+that matters there is the last: the interval timer is let run and its ticks
+counted, which is the only thing that establishes the whole path from a device
+pin to a handler.
+
+### 10.7 The defect the self-test found on its first run
+
+It is recorded because the reasoning that produced the fault was reasonable and
+the fault was invisible from every direction but one.
+
+The lines were programmed in ascending order, each resolved to its global system
+interrupt. QEMU's tables declare that ISA request 0 — the interval timer — is
+carried by global interrupt 2. Request line 2 has no override, so it resolves by
+the identity mapping to global interrupt 2 as well.
+
+Line 2 was therefore programmed after line 0 and over it. The timer's input was
+left presenting line 2's vector, masked; the machine kept running, because the
+serial adapter and the keyboard were unaffected, and lost its tick.
+
+**The resolution from line to global interrupt is not injective**, and an
+override displaces a line as well as moving one. The rule is that an explicit
+declaration wins over the implicit identity mapping: a line owns its global
+interrupt unless some other line was expressly declared to be carried by it. Line
+2 accordingly has no input, which is the truth — it is the cascade of the 8259A
+and is not a device line under any controller.
+
+The rule is applied at three places and not one: when the entries are programmed,
+when a line is masked, and when a line is unmasked. Masking line 2 without it
+would mask the timer.
+
+### 10.8 Limitations
+
+1. **Sixteen lines.** An I/O APIC input above the fifteenth cannot be claimed;
+   [`../devices/APIC.md`](../devices/APIC.md), limitation 1, records why and what
+   would be needed to lift it.
+2. **The handler table and the recorded mask state are unsynchronised.** From
+   sub-task 6.13 both require the spinlock governing this layer, an interrupt
+   handler and an application processor each being able to enter either.
+3. **A line may be claimed by one driver only.** `IrqInstallHandler` replaces
+   whatever was registered rather than refusing, and shared interrupt lines —
+   which PCI requires — have no representation here at all. Phase 11 is where
+   that becomes a real want.
+4. **There is no path back to the 8259A.** A machine whose APIC could not be
+   initialised never leaves it; a machine that has left it cannot return.
+
+## 11. Present limitations
 
 1. Only a copy-on-write fault is resolved. Every other page fault is reported
    and fatal; demand paging and stack growth do not exist. The handler tests the

@@ -50,7 +50,7 @@
 #include <oxys/keyboard.h>
 #include <oxys/ps2.h>
 #include <oxys/mouse.h>
-#include <oxys/pic.h>
+#include <oxys/irq.h>
 #include <oxys/interrupts.h>
 #include <oxys/kernel.h>
 
@@ -441,8 +441,8 @@ bool KeyboardInitialise(void)
      * keystroke arriving between the two cannot be recorded as an unclaimed
      * request and lost.
      */
-    PicInstallHandler(KEYBOARD_IRQ, KeyboardHandleInterrupt, "PS/2 keyboard");
-    PicUnmaskLine(KEYBOARD_IRQ);
+    IrqInstallHandler(KEYBOARD_IRQ, KeyboardHandleInterrupt, "PS/2 keyboard");
+    IrqUnmaskLine(KEYBOARD_IRQ);
 
     return true;
 }
@@ -536,7 +536,7 @@ void KeyboardReport(void)
     }
 
     KernelWriteString("present, scan code set 1 by controller translation, line ");
-    KernelWriteString(PicLineIsMasked(KEYBOARD_IRQ) ? "masked" : "unmasked");
+    KernelWriteString(IrqLineIsMasked(KEYBOARD_IRQ) ? "masked" : "unmasked");
     KernelWriteString(".\n");
 
     KernelWriteString("PS/2 keyboard: scancodes ");

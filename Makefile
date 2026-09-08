@@ -130,6 +130,7 @@ C_SOURCES := kernel/kernel.c \
              kernel/test/ext2/write.c \
              kernel/test/ext2/probe.c \
              kernel/test/verify_vfs.c \
+             kernel/test/verify_apic.c \
              kernel/mm/pmm.c \
              kernel/mm/paging.c \
              kernel/mm/addrspace.c \
@@ -140,7 +141,9 @@ C_SOURCES := kernel/kernel.c \
              kernel/cpu/tss.c \
              kernel/cpu/syscall.c \
              kernel/cpu/interrupts.c \
+             kernel/cpu/irq.c \
              kernel/cpu/exceptions.c \
+             kernel/acpi/acpi.c \
              kernel/exec/elf.c \
              kernel/proc/process.c \
              kernel/fs/ext2/core.c \
@@ -162,6 +165,8 @@ C_SOURCES := kernel/kernel.c \
              drivers/vga/vga.c \
              drivers/serial/serial.c \
              drivers/pic/pic.c \
+             drivers/apic/lapic.c \
+             drivers/apic/ioapic.c \
              drivers/pit/pit.c \
              drivers/ps2/ps2.c \
              drivers/keyboard/keyboard.c \

@@ -15,6 +15,10 @@
  *     32-bit type and a 32-bit size; the size excludes trailing padding; tags
  *     follow one another padded so that each begins at an 8-byte aligned
  *     address; the series is terminated by a tag of type 0 and size 8.
+ *   - Multiboot2 Specification 2.0, Sections 3.6.16 (ACPI old RSDP) and 3.6.17
+ *     (ACPI new RSDP): tag types 14 and 15, each carrying, after the common type
+ *     and size fields, a copy of the Root System Description Pointer as the ACPI
+ *     1.0 and the ACPI 2.0 or later specifications respectively define it.
  *   - Multiboot2 Specification 2.0, Section 3.6.7 (ELF-Symbols): tag type 9.
  *   - Multiboot2 Specification 2.0, Section 3.6.8 (Memory map): tag type 6, its
  *     entry_size and entry_version fields, and the entry layout of base_addr,
@@ -35,6 +39,8 @@
 #define MULTIBOOT2_TAG_TYPE_BASIC_MEMORY  UINT32_C(4)
 #define MULTIBOOT2_TAG_TYPE_MEMORY_MAP    UINT32_C(6)
 #define MULTIBOOT2_TAG_TYPE_FRAMEBUFFER   UINT32_C(8)
+#define MULTIBOOT2_TAG_TYPE_ACPI_OLD_RSDP  UINT32_C(14)
+#define MULTIBOOT2_TAG_TYPE_ACPI_NEW_RSDP  UINT32_C(15)
 #define MULTIBOOT2_TAG_TYPE_ELF_SECTIONS  UINT32_C(9)
 
 /*
@@ -189,6 +195,22 @@ typedef struct Multiboot2FramebufferTag
 /* The least a tag must measure to carry the common fields, and to carry an RGB
  * description as well. */
 #define MULTIBOOT2_FRAMEBUFFER_SIZE_COMMON 32U
+
+/*
+ * The ACPI pointer tags of Sections 3.6.16 and 3.6.17.
+ *
+ * The copy begins immediately after the common type and size fields, at offset
+ * 8. No structure is declared for it, and deliberately: the Root System
+ * Description Pointer contains a 64-bit field at offset 24 and a 32-bit field at
+ * offset 16, and the tag it is copied into is only guaranteed to be 8-byte
+ * aligned as a whole, so the fields are read by offset in kernel/acpi/acpi.c
+ * rather than through a structure whose members the compiler would assume to be
+ * aligned. The one field read here is a single byte and has no such difficulty.
+ */
+#define MULTIBOOT2_ACPI_RSDP_OFFSET           8U
+#define MULTIBOOT2_ACPI_RSDP_OFFSET_REVISION 15U
+#define MULTIBOOT2_ACPI_RSDP_LEGACY_LENGTH   20U
+#define MULTIBOOT2_ACPI_RSDP_EXTENDED_LENGTH 36U
 #define MULTIBOOT2_FRAMEBUFFER_SIZE_RGB    38U
 
 /* A tag whose payload is a null-terminated string: types 1 and 2. */

@@ -147,6 +147,21 @@ typedef struct BootInformation
     /* The number of ELF section headers reported, and their aggregate extent. */
     uint32_t elf_section_count;
 
+    /*
+     * The physical address of the Root System Description Pointer the boot
+     * loader supplied, and the revision that copy declares; zero and zero where
+     * it supplied none.
+     *
+     * The address is that of the boot loader's *copy*, which lies within the
+     * boot information structure rather than in the firmware's own memory. That
+     * is not a defect: Multiboot2, Sections 3.6.16 and 3.6.17, defines the tag
+     * as carrying a copy, and a copy is the only thing a UEFI boot could supply,
+     * the pointer there being a field of the EFI System Table and not a
+     * structure lying at a fixed physical address.
+     */
+    PhysicalAddress acpi_rsdp_address;
+    uint8_t acpi_rsdp_revision;
+
     char boot_loader_name[BOOT_STRING_MAXIMUM];
     char command_line[BOOT_STRING_MAXIMUM];
 

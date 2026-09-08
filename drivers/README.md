@@ -24,7 +24,9 @@ memory and is not.
 | ---- | ------ | --------- | ----- |
 | `vga/vga.c` | The VGA text-mode display, mode 3. Displaced by the framebuffer of sub-task 6.2 wherever the boot loader leaves the adapter in a graphics mode; see `docs/devices/DISPLAY.md`, Section 1.1. | `<oxys/vga.h>` | 1, 4.2 |
 | `serial/serial.c` | The 16550-compatible UART at COM1, interrupt-driven. | `<oxys/serial.h>` | 1, 4.1 |
-| `pic/pic.c` | The pair of cascaded 8259A interrupt controllers. | `<oxys/pic.h>` | 3 |
+| `pic/pic.c` | The pair of cascaded 8259A interrupt controllers. Retired at sub-task 6.12; it holds no handler table and routes nothing. | `<oxys/pic.h>` | 3, 6.12 |
+| `apic/lapic.c` | The Local APIC: one per logical processor, and what completes every interrupt from sub-task 6.12 onward. | `<oxys/lapic.h>` | 6.12 |
+| `apic/ioapic.c` | The I/O APIC: the redirection table that decides what vector an interrupt input presents, and to which processor. | `<oxys/ioapic.h>` | 6.12 |
 | `pit/pit.c` | Counter 0 of the 8253 interval timer, the system tick. | `<oxys/pit.h>` | 3 |
 | `ps2/ps2.c` | The 8042 keyboard controller itself, and the two device ports it presents. | `<oxys/ps2.h>` | 3, 6.5 |
 | `keyboard/keyboard.c` | The PS/2 keyboard upon the controller's first port. | `<oxys/keyboard.h>` | 3 |
@@ -262,28 +264,49 @@ regression test possible, which is why its polled subset was implemented in
 Phase 1 rather than being deferred with the rest of Phase 4. The design is
 recorded in [`../docs/devices/SERIAL.md`](../docs/devices/SERIAL.md).
 
-### `pic/` — the interrupt controllers
+### `pic/` — the 8259A interrupt controllers
 
 Remaps the pair of cascaded 8259A controllers from their reset vectors, which
 collide exactly with the architecture-defined exceptions, to vectors 32 to 47.
-Masks every request line until a driver claims it, routes a request to the driver
-that has, recognises a spurious request by the absence of its bit from the
-in-service register, and signals the end-of-interrupt to both controllers where
-the cascade requires it.
+Masks every request line until a driver claims it, recognises a spurious request
+by the absence of its bit from the in-service register, signals the
+end-of-interrupt to both controllers where the cascade requires it, and — from
+sub-task 6.12 — masks the pair entirely when the APIC supersedes it.
 
-This driver differs from the others in that it is not a peripheral but the
-mechanism by which every other peripheral will be heard. It consequently owns the
+This driver differs from the others in that it is not a peripheral but a
+mechanism by which other peripherals are heard. It consequently owns the
 end-of-interrupt protocol on behalf of all of them, for the reasons set out in
-[`../docs/design/INTERRUPTS.md`](../docs/design/INTERRUPTS.md), Section 9.4. A device driver
-registers its handler with `PicInstallHandler` and unmasks its own line; it does
-not signal completion.
+[`../docs/design/INTERRUPTS.md`](../docs/design/INTERRUPTS.md), Section 9.4.
+
+**It holds no handler table and routes nothing.** Sub-task 6.12 moved that to
+`kernel/cpu/irq.c`, because which driver claims IR1 is a property of the machine
+and not of this device: the same line is delivered by an I/O APIC upon a machine
+where this pair has been retired. A device driver calls `IrqInstallHandler` and
+`IrqUnmaskLine`, names a line number rather than a controller, and does not
+signal completion.
+
+### `apic/` — the controllers that supersede it
+
+Two devices that are always named together and are not alike. `lapic.c` drives
+the Local APIC, of which there is one per logical processor and which completes
+every interrupt from sub-task 6.12 onward. `ioapic.c` drives the I/O APIC, of
+which there are one or a few in the chipset, and whose redirection table decides
+what vector each interrupt input presents and to which processor.
+
+Both are programmed from what the firmware's ACPI tables declare, which
+`kernel/acpi/acpi.c` reads. The reasoning throughout — why the 8259A is retired
+rather than kept beside them, why the register pages are uncacheable, why a
+redirection entry is written high half first, and why the spurious vector is
+`0xFF` — is in [`../docs/devices/APIC.md`](../docs/devices/APIC.md).
 
 ### `pit/` — the interval timer
 
 Programmes counter 0 of the 8253 as a rate generator and counts the interrupts it
 raises upon IR0, providing the kernel's only notion of elapsed time. It is the
 first device to claim a request line, and so the first demonstration that the
-path from a device through the controller to a driver is sound.
+path from a device through the controller to a driver is sound — and, at sub-task
+6.12, the device whose ticks establish that the path still holds once the I/O
+APIC has taken the line over.
 
 Mode 2 is used in preference to mode 3 because the square wave mode decrements
 the count by two and therefore admits only even divisors, while nothing here has
@@ -369,6 +392,9 @@ whoever knows the display, a mouse having no idea what it is pointing at.
 | 8042 controller and PS/2 device command sets | The controller commands 0x20 and 0x60 reading and writing the configuration byte, 0xAD/0xAE and 0xA7/0xA8 enabling and disabling the two device ports, 0xAA the controller self-test answered by 0x55, 0xAB and 0xA9 the ports' tests answered by 0x00, and 0xD4 directing a byte to the second port; the configuration byte's interrupt-enable, clock-disable and translation bits, and status bit 5 naming the port a byte came from; the device commands 0xFF reset, 0xF4/0xF5 reporting, 0xF6 defaults, 0xF3 sample rate, 0xF2 identifier, 0xE8 resolution and 0xE6 linear scaling, and the answers 0xFA acknowledge and 0xFE resend. |
 | PS/2 auxiliary device movement packet | The three-byte packet, its always-set framing bit, its nine-bit two's complement movements with their signs and overflow indications in the first byte, and its upward vertical sense; the sample-rate sequence 200, 100, 80 that interrogates for a wheel, and the four-byte packet a device answering 0x03 sends thereafter. |
 | Intel 8254 datasheet, sections "Programming the 8254", "Mode 2: Rate Generator" and "Counter Latch Command" | The control word fields; the two-byte transfer of the count, least significant first; the periodic reload of the rate generator and the illegality of a count of one within it; the latching of a running count for reading. |
+| Intel SDM, Volume 3A, Chapter 10 (Chapter 11 in a current edition) | The Local APIC: the register page at `0xFEE00000` and its uncacheable mapping; the two enables, in `IA32_APIC_BASE` bit 11 and in bit 8 of the spurious-interrupt vector register; the local vector table entry; the end-of-interrupt register; the task priority register; and the spurious vector whose low four bits are hardwired. |
+| Intel 82093AA I/O APIC datasheet, Sections 3.1 and 3.2 | The indirect register pair `IOREGSEL` and `IOWIN`; the identification, version and maximum-redirection-entry registers; and the 64-bit redirection table entry with its vector, delivery mode, destination mode, polarity, trigger mode, mask and destination. |
+| ACPI Specification 6.5, Sections 5.2.5.3, 5.2.6 to 5.2.8 and 5.2.12 | The Root System Description Pointer and its two checksums; the description header every table begins with; the RSDT and the XSDT; and the Multiple APIC Description Table with its processor, I/O APIC, interrupt source override and local NMI structures. |
 | Intel SDM, Volume 1, Section 18.3 | The programmed input/output address space through which both devices are reached. |
 
 Full citations are held in [`../docs/project/REFERENCES.md`](../docs/project/REFERENCES.md).

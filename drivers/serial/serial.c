@@ -60,7 +60,7 @@
 #include <oxys/kernel.h>
 #include <oxys/io.h>
 #include <oxys/cpu.h>
-#include <oxys/pic.h>
+#include <oxys/irq.h>
 #include <oxys/interrupts.h>
 
 /* Register offsets from the adapter's I/O base address. */
@@ -852,9 +852,9 @@ void SerialActivateInterrupts(void)
     SerialInterruptEnableShadow = (uint8_t)(SERIAL_INTERRUPT_ENABLE_RECEIVED_DATA |
                                             SERIAL_INTERRUPT_ENABLE_LINE_STATUS);
 
-    PicInstallHandler(SERIAL_COM1_IRQ, SerialHandleInterrupt, "16550 serial adapter");
+    IrqInstallHandler(SERIAL_COM1_IRQ, SerialHandleInterrupt, "16550 serial adapter");
     SerialWrite(SERIAL_REGISTER_INTERRUPT_ENABLE, SerialInterruptEnableShadow);
-    PicUnmaskLine(SERIAL_COM1_IRQ);
+    IrqUnmaskLine(SERIAL_COM1_IRQ);
 
     SerialInterruptsEnabled = true;
 }
@@ -1201,7 +1201,7 @@ void SerialReport(void)
     {
         KernelWriteString("interrupt-driven upon line ");
         KernelWriteDecimal((uint64_t)SERIAL_COM1_IRQ);
-        KernelWriteString(PicLineIsMasked(SERIAL_COM1_IRQ) ? ", masked.\n" : ", unmasked.\n");
+        KernelWriteString(IrqLineIsMasked(SERIAL_COM1_IRQ) ? ", masked.\n" : ", unmasked.\n");
     }
 
     KernelWriteString("Serial adapter: transmitted ");

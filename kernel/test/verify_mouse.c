@@ -34,7 +34,7 @@
 #include <oxys/cursor.h>
 #include <oxys/graphics.h>
 #include <oxys/framebuffer.h>
-#include <oxys/pic.h>
+#include <oxys/irq.h>
 #include <oxys/ps2.h>
 /* The bounds the decoder is exercised within. Small, so that a movement can
  * reach an edge in one packet and the clamping is provoked rather than hoped
@@ -78,13 +78,13 @@ void KernelVerifyMouse(void)
 
     if (MouseIsPresent())
     {
-        if (PicRegisteredHandler(MOUSE_IRQ) == NULL)
+        if (IrqRegisteredHandler(MOUSE_IRQ) == NULL)
         {
             KernelWriteString("  The mouse did not claim its request line.\n");
             succeeded = false;
         }
 
-        if (PicLineIsMasked(MOUSE_IRQ))
+        if (IrqLineIsMasked(MOUSE_IRQ))
         {
             KernelWriteString("  The mouse's request line is masked.\n");
             succeeded = false;

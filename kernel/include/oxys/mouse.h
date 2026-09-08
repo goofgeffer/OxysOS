@@ -130,7 +130,7 @@ typedef struct MouseEvent
  * answers upon it, in which case nothing is claimed and no line is unmasked. A
  * missing mouse is not a fault.
  *
- * Ps2Initialise must have run, and PicInitialise before that. This driver does
+ * Ps2Initialise must have run, and IrqInitialise before that. This driver does
  * not configure the controller: it is shared with the keyboard, and a driver
  * that reset it would silence a keyboard already reporting.
  */

@@ -73,7 +73,7 @@
  * generally not the frequency requested, the divisor being an integer;
  * PitRealisedFrequencyMilliHertz reports what was obtained.
  *
- * The interrupt controller must have been initialised by PicInitialise before
+ * The interrupt controller must have been initialised by IrqInitialise before
  * this is called. Interrupts need not be enabled; no tick is counted until they
  * are.
  */

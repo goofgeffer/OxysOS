@@ -10,7 +10,8 @@
  *          KernelVerifyExceptions, KernelVerifyPrivilege, KernelVerifySyscall,
  *          KernelVerifyElf, KernelVerifyProcess, KernelVerifyContextSwitch,
  *          KernelVerifyUserMode, KernelVerifyFork, KernelVerifyLifecycle,
- *          KernelVerifyPic,
+ *          KernelVerifyPic, KernelVerifyIrq, KernelVerifyAcpi,
+ *          KernelVerifyLocalApic, KernelVerifyIoApic, KernelVerifyApicRouting,
  *          KernelVerifyPit, KernelVerifyKeyboard, KernelVerifySerial,
  *          KernelVerifyVga, KernelVerifyPci, KernelVerifyAta, KernelVerifyBlock,
  *          KernelVerifyBuffer, KernelVerifyExt2, KernelVerifyVfs,
@@ -135,6 +136,28 @@ void KernelVerifyLifecycle(void);
 
 /* Phases 3 and 4: the devices. */
 void KernelVerifyPic(void);
+
+/* Phase 3, and sub-task 6.12: the layer through which a driver claims a request
+ * line, whichever controller is presently delivering it. */
+void KernelVerifyIrq(void);
+
+/*
+ * Phase 6, sub-task 6.12: the firmware's description tables, the Local APIC, the
+ * I/O APIC, and the routing of the request lines through them once the 8259A
+ * pair has been retired.
+ *
+ * The first three assert what was programmed. The fourth asserts that a device
+ * pin still reaches its driver afterwards, which is the only thing the change
+ * was for and the only property whose failure a machine cannot report: a
+ * controller programmed wrongly produces a device that is silent, and a silent
+ * device looks exactly like an absent one.
+ */
+void KernelVerifyAcpi(void);
+void KernelVerifyLocalApic(void);
+void KernelVerifyIoApic(void);
+void KernelVerifyApicRouting(void);
+
+/* Phases 3 and 4: the remaining devices. */
 void KernelVerifyPit(void);
 void KernelVerifyKeyboard(void);
 void KernelVerifySerial(void);

@@ -13,6 +13,8 @@ stands.
 | [`KEYBOARD.md`](KEYBOARD.md) | The PS/2 keyboard upon the controller's first port, and the controller it is reached through. | [`../../drivers/ps2/`](../../drivers/ps2/), [`../../drivers/keyboard/`](../../drivers/keyboard/) | 3.7 |
 | [`MOUSE.md`](MOUSE.md) | The PS/2 mouse upon the controller's second port, and the pointer drawn from it. | [`../../drivers/mouse/`](../../drivers/mouse/), [`../../graphics/cursor.c`](../../graphics/cursor.c) | 6.5 |
 | [`PCI.md`](PCI.md) | The PCI bus: how a machine is asked what it contains. | [`../../drivers/pci/`](../../drivers/pci/) | 4.3 |
+| [`ACPI.md`](ACPI.md) | The firmware's description tables: how a machine is asked what interrupt controllers it has. | [`../../kernel/acpi/`](../../kernel/acpi/) | 6.12 |
+| [`APIC.md`](APIC.md) | The Local APIC and the I/O APIC, which retire the 8259A pair. | [`../../drivers/apic/`](../../drivers/apic/) | 6.12 |
 
 The storage devices are documented apart, in [`../storage/`](../storage/), because
 the disk is the bottom of a stack rather than a device on its own. The framebuffer
@@ -20,6 +22,11 @@ is documented apart likewise, in
 [`../design/GRAPHICS.md`](../design/GRAPHICS.md), because nothing programs it:
 the boot loader sets the mode and hands over an address, and there is no
 conversation with hardware to describe.
+
+[`ACPI.md`](ACPI.md) crosses that line from the other side. The tables are not a
+device and nothing programs them, but they answer the question [`PCI.md`](PCI.md)
+answers — how a machine is asked what it contains — and [`APIC.md`](APIC.md),
+which is unambiguously a device document, cannot be read without them.
 
 [`MOUSE.md`](MOUSE.md) is the one document here that crosses that line, and says
 where the line is: the mouse is a device in the sense these documents mean, while

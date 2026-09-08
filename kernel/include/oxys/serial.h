@@ -114,7 +114,7 @@ bool SerialConfigure(const SerialConfiguration *configuration);
 /*
  * Promotes the driver from the polled mode to the interrupt-driven one, claiming
  * the adapter's request line and unmasking it. It must be called after
- * PicInitialise, and has no effect if no adapter is in use.
+ * IrqInitialise, and has no effect if no adapter is in use.
  */
 void SerialActivateInterrupts(void);
 

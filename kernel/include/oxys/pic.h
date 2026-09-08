@@ -3,16 +3,15 @@
  * Purpose: Declares the interface of the 8259A programmable interrupt controller
  *          driver: the remapping of the two cascaded controllers clear of the
  *          architecture-defined exception vectors, the masking of individual
- *          interrupt request lines, the routing of a request to a device
- *          handler, and the end-of-interrupt signalling that the controller
- *          requires before it will present a further request of equal or lower
- *          priority.
+ *          interrupt request lines, the recognition of a spurious request, the
+ *          end-of-interrupt signalling that the controller requires before it
+ *          will present a further request of equal or lower priority, and the
+ *          silencing of the pair when the APIC supersedes it.
  * Key definitions: PIC_MASTER_VECTOR_BASE, PIC_SLAVE_VECTOR_BASE, PIC_IRQ_COUNT,
- *          PicInitialise, PicInstallHandler, PicRemoveHandler,
- *          PicRegisteredHandler, PicMaskLine, PicUnmaskLine, PicLineIsMasked,
+ *          PicInitialise, PicMaskLine, PicUnmaskLine, PicLineIsMasked,
  *          PicMaskValue, PicInServiceRegister, PicRequestRegister,
- *          PicRequestCount, PicSpuriousCount, PicUnclaimedCount, PicDisable,
- *          PicReport.
+ *          PicRequestIsSpurious, PicSendEndOfInterrupt, PicIsInitialised,
+ *          PicDisable, PicReport.
  * References:
  *   - Intel 8259A Programmable Interrupt Controller datasheet (order number
  *     231468-003), section "INITIALIZATION COMMAND WORDS (ICWS)": the
@@ -36,13 +35,25 @@
  *     architecture-defined exceptions and vectors 32 to 255 are available, which
  *     is why the controllers must be remapped before any request line is
  *     unmasked.
+ *   - ACPI Specification 6.5, Table 5.20: where the firmware declares that the
+ *     machine also carries this pair, its vectors must be masked before the APIC
+ *     is enabled. PicDisable is what performs that.
+ *
+ * What this driver is not.
+ *
+ *   It holds no handler table and routes nothing. A device driver claims a
+ *   request line through <oxys/irq.h>, which owns the routing for whichever
+ *   controller is answering and calls this one for the parts that are properties
+ *   of this device: the mask registers, the spurious request, and the
+ *   end-of-interrupt. The division was made at sub-task 6.12, when a second
+ *   controller made "install a handler upon the 8259A" a statement a keyboard
+ *   driver had no business making.
  */
 
 #ifndef OXYS_PIC_H
 #define OXYS_PIC_H
 
 #include <oxys/types.h>
-#include <oxys/interrupts.h>
 
 /*
  * The vectors to which the two controllers are remapped.
@@ -58,7 +69,9 @@
  *
  * Thirty-two is the first vector Intel SDM, Volume 3A, Section 6.2, leaves
  * available, and the 8259A requires a base divisible by eight, the low three
- * bits of the vector being supplied by the request level.
+ * bits of the vector being supplied by the request level. They are the same
+ * vectors <oxys/irq.h> presents its lines upon, and deliberately: a line keeps
+ * its vector across the change of controller.
  */
 #define PIC_MASTER_VECTOR_BASE UINT8_C(32)
 #define PIC_SLAVE_VECTOR_BASE  UINT8_C(40)
@@ -78,37 +91,18 @@
 
 /*
  * Remaps the two controllers to PIC_MASTER_VECTOR_BASE and
- * PIC_SLAVE_VECTOR_BASE, installs the routing handler for the sixteen vectors so
- * produced, and masks every request line, the cascade included.
+ * PIC_SLAVE_VECTOR_BASE and masks every request line, the cascade included.
  *
  * Every line is left masked because a device whose driver does not yet exist
  * would otherwise raise a request that nothing could service or silence, and the
  * controller withholds every request of equal or lower priority until the one in
  * service is acknowledged. A driver unmasks its own line when it is ready.
  *
- * The interrupt descriptor table must have been loaded and the stubs installed
- * before this is called.
+ * It is called by IrqInitialise, which installs the routing handler for the
+ * vectors this remapping produces; calling it alone would remap a controller
+ * whose requests had nowhere to go.
  */
 void PicInitialise(void);
-
-/*
- * Registers the handler to be entered when the given request line is presented,
- * replacing any handler previously registered for it.
- *
- * The handler is entered with the end-of-interrupt not yet signalled, and must
- * not signal it: the routing layer does so upon the handler's return, for the
- * reason recorded in the header of drivers/pic/pic.c.
- *
- * name: a short description used in diagnostic output. The string is not copied
- *     and must therefore have static storage duration.
- */
-void PicInstallHandler(uint8_t irq, InterruptHandler handler, const char *name);
-
-/* Removes the handler registered for a request line, if any. */
-void PicRemoveHandler(uint8_t irq);
-
-/* The handler registered for a request line, or NULL if none is registered. */
-InterruptHandler PicRegisteredHandler(uint8_t irq);
 
 /*
  * Withholds and permits the delivery of a request line by setting and clearing
@@ -136,16 +130,38 @@ uint16_t PicMaskValue(void);
 uint16_t PicInServiceRegister(void);
 uint16_t PicRequestRegister(void);
 
-/* The number of requests dispatched, and the number found to be spurious. */
-uint64_t PicRequestCount(void);
-uint64_t PicSpuriousCount(void);
-
-/* The number of times a request line with no registered handler was presented. */
-uint64_t PicUnclaimedCount(void);
+/*
+ * Determines whether a request upon the lowest priority line of either
+ * controller is spurious, and releases the master where the slave's is.
+ *
+ * A spurious request must not be acknowledged, and this is the only means of
+ * recognising one; see the commentary upon the implementation. It is called by
+ * the routing layer of kernel/cpu/irq.c before a handler is entered, and by
+ * nothing else.
+ */
+bool PicRequestIsSpurious(uint8_t irq);
 
 /*
- * Masks every line of both controllers. Used in Phase 6, sub-task 6.12, when the
- * Local APIC and the I/O APIC supersede this device.
+ * Signals the completion of a request at whichever controllers accepted it.
+ *
+ * Called by the routing layer upon the return of a device handler. A device
+ * driver neither may nor need call it: the signalling is a property of this
+ * controller rather than of any device, and forgetting it would silence not the
+ * device but every line of lower priority. See docs/design/INTERRUPTS.md,
+ * Section 9.4.
+ */
+void PicSendEndOfInterrupt(uint8_t irq);
+
+/* Whether PicInitialise has run and PicDisable has not. */
+bool PicIsInitialised(void);
+
+/*
+ * Masks every line of both controllers, retiring the device.
+ *
+ * Called by IrqAdoptApic at sub-task 6.12, before the redirection tables of the
+ * I/O APIC are programmed. ACPI 6.5, Table 5.20, requires it of any machine that
+ * declares both interrupt models: two controllers presenting one device upon one
+ * vector would deliver every request twice.
  */
 void PicDisable(void);
 

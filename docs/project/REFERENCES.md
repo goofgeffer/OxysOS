@@ -58,10 +58,16 @@ Sections relied upon:
   upon it: the prose shows a `u8` reserved and the header a `multiboot_uint16_t`,
   and only the latter puts the colour description at the offset the fixed
   32-byte prefix requires.
+- **3.6.16 and 3.6.17**, the ACPI old and new RSDP tags, types 14 and 15: each
+  carries, after the common type and size fields, a copy of the Root System
+  Description Pointer as ACPI 1.0 and as ACPI 2.0 or later respectively define
+  it. The copy lies within the boot information structure and not in the
+  firmware's own memory, which is what makes the tag the only source a UEFI boot
+  could supply.
 
 Used by: `boot/boot.asm`, `kernel/multiboot2.c`,
-`kernel/include/oxys/multiboot2.h`, `kernel/kernel.c`, `linker.ld`,
-`boot/grub/grub.cfg`.
+`kernel/include/oxys/multiboot2.h`, `kernel/kernel.c`, `kernel/acpi/acpi.c`,
+`kernel/include/oxys/bootinfo.h`, `linker.ld`, `boot/grub/grub.cfg`.
 
 ### Intel 64 and IA-32 Architectures Software Developer's Manual
 Intel Corporation. `https://www.intel.com/sdm`
@@ -203,7 +209,54 @@ Sections relied upon:
   are distinguished only by the level at which the entry stands.
 - **Volume 2A, "CPUID"**, leaf 1, EDX bit 16: whether the page attribute table is
   present at all.
-- **Volume 4**, the model-specific registers `IA32_PAT` (`0x277`),
+- **Volume 3A, Chapter 10 (Advanced Programmable Interrupt Controller)**, and
+  within it:
+  - **Section 10.4.1**, the registers are memory mapped to a 4 KiB region whose
+    initial address is `0xFEE00000`, and that region must be mapped strong
+    uncacheable.
+  - **Table 10-1**, the register address map: the identifier at `0x020`, the
+    version at `0x030`, the task priority at `0x080`, the end-of-interrupt at
+    `0x0B0`, the spurious-interrupt vector at `0x0F0`, the error status at
+    `0x280`, the interrupt command at `0x300`, and the local vector table
+    entries from `0x2F0` to `0x370`.
+  - **Section 10.4.2**, CPUID leaf 1 reports an on-chip local APIC in EDX bit 9.
+  - **Sections 10.4.3 and 10.4.4 and Figure 10-5**, `IA32_APIC_BASE` at MSR
+    `0x1B`: bit 8 the bootstrap processor flag, bit 11 the global enable, bits
+    35:12 the base address. There are two enables and they are separate
+    mechanisms; the software one is bit 8 of the spurious-interrupt vector
+    register.
+  - **Section 10.4.7.1**, the state after reset: every local vector table entry
+    masked, and the spurious-interrupt vector register holding `0x000000FF`,
+    whose bit 8 is clear — so the controller arrives software-disabled.
+  - **Section 10.4.8**, the version register, and the count of local vector table
+    entries it reports as the field's value plus one.
+  - **Section 10.5.1 and Figure 10-8**, the local vector table entry: the vector
+    in bits 7:0, the delivery mode in bits 10:8, the pin polarity in bit 13, the
+    trigger mode in bit 15 and the mask in bit 16.
+  - **Section 10.5.2**, vectors 16 to 255 are valid; a vector below 16 is
+    recorded as illegal in the error status register.
+  - **Section 10.8.5**, every handler save those entered by the non-maskable,
+    system-management, initialisation and external delivery modes must write the
+    end-of-interrupt register before returning; for a level-triggered interrupt
+    the local APIC additionally sends an end-of-interrupt message to the I/O
+    APICs.
+  - **Section 10.8.6**, the task priority register blocks every interrupt of a
+    priority class at or below the value it holds; zero blocks none.
+  - **Section 10.9 and Figure 10-23**, the spurious interrupt: its handler must
+    return without an end-of-interrupt, bit 8 of the register is the software
+    enable, and upon the P6 family and the Pentium the low four bits of the
+    vector are hardwired to one.
+
+  **The chapter number depends upon the edition.** This corpus cites the edition
+  in which Memory Cache Control is Chapter 11 and the page attribute table is
+  Section 11.12.2, and in that edition the APIC is Chapter 10. Intel has since
+  renumbered: in a current manual the APIC is Chapter 11 and Memory Cache Control
+  is Chapter 12, and every `10.x` above becomes `11.x`. The earlier numbering is
+  used throughout because the rest of this document already does, and a corpus
+  citing two editions at once would send a reader to the wrong chapter roughly
+  half the time.
+- **Volume 4**, the model-specific registers `IA32_APIC_BASE` (`0x1B`),
+  `IA32_PAT` (`0x277`),
   `IA32_EFER` (`0xC0000080`),
   `IA32_STAR` (`0xC0000081`), `IA32_LSTAR` (`0xC0000082`), `IA32_CSTAR`
   (`0xC0000083`), `IA32_FMASK` (`0xC0000084`), `IA32_FS_BASE` (`0xC0000100`),
@@ -211,6 +264,8 @@ Sections relied upon:
 
 Used by: `boot/boot.asm`, `linker.ld`, `Makefile`, `kernel/include/oxys/io.h`,
 `kernel/kernel.c`, `kernel/include/oxys/pic.h`, `kernel/include/oxys/pit.h`,
+`kernel/include/oxys/lapic.h`, `drivers/apic/lapic.c`, `kernel/cpu/irq.c`,
+`docs/devices/APIC.md`,
 `kernel/cpu/gdt.c`, `kernel/cpu/tss.c`, `kernel/cpu/syscall.c`,
 `kernel/cpu/syscall_entry.asm`, `kernel/include/oxys/tss.h`,
 `kernel/include/oxys/syscall.h`, `kernel/include/oxys/msr.h`,
@@ -418,6 +473,89 @@ Sections relied upon:
   sixteen-bit count would be sampled at different instants.
 
 Used by: `drivers/pit/pit.c`, `kernel/include/oxys/pit.h`, `kernel/kernel.c`.
+
+### Intel 82093AA I/O Advanced Programmable Interrupt Controller datasheet
+Intel Corporation, order number 290566-001, May 1996.
+
+Sections relied upon:
+
+- **Section 3.1**, the two memory-mapped registers through which every other is
+  reached: `IOREGSEL` at offset `0x00`, whose bits 7:0 "specify the IOAPIC
+  register to be read/written via the IOWIN Register", and `IOWIN` at offset
+  `0x10`, whose "memory references ... are mapped to the APIC register specified
+  by the contents of the IOREGSEL Register".
+- **Section 3.2.1**, `IOAPICID` at index `0x00`, the identification occupying
+  bits 27:24.
+- **Section 3.2.2**, `IOAPICVER` at index `0x01`: bits 7:0 the implementation
+  version, and bits 23:16 the maximum redirection entry, being "the entry number
+  (0 being the lowest entry) of the highest entry in the I/O Redirection Table.
+  The value is equal to the number of interrupt input pins for the IOAPIC minus
+  one. The range of values is 0 through 239."
+- **Section 3.2.4**, the redirection table registers at indices `0x10` upward,
+  two 32-bit registers to each 64-bit entry, and the fields of an entry:
+  destination in bits 63:56, mask in bit 16, trigger mode in bit 15 where one is
+  level sensitive, remote in-service in bit 14, input polarity in bit 13 where
+  one is active low, delivery status in bit 12, destination mode in bit 11,
+  delivery mode in bits 10:8, and vector in bits 7:0.
+
+The datasheet is marked "PRELIMINARY" and describes one implementation of an
+interface every chipset since has reproduced. Where it and the ACPI
+specification both speak — the count of interrupt inputs, for instance — the
+register is read and the table is not, ACPI 6.5, Section 5.2.12.3, expressly
+referring the reader to this register.
+
+Used by: `drivers/apic/ioapic.c`, `kernel/include/oxys/ioapic.h`,
+`docs/devices/APIC.md`.
+
+### Advanced Configuration and Power Interface Specification, version 6.5
+UEFI Forum, August 2022. `https://uefi.org/specs/ACPI/6.5/`
+
+Sections relied upon:
+
+- **Section 5.2.5.1**, finding the Root System Description Pointer upon an IA-PC
+  system: the first kibibyte of the Extended BIOS Data Area, whose segment
+  address is the two bytes at `0x40E`, and the read-only memory between
+  `0x0E0000` and `0x0FFFFF`, both searched upon 16-byte boundaries.
+- **Section 5.2.5.2**, upon a UEFI system the pointer is instead a field of the
+  EFI System Table. This is why the boot loader's copy is preferred to a search.
+- **Section 5.2.5.3 and Table 5.3**, the RSDP: the signature `"RSD PTR "` with
+  its trailing space, the checksum over bytes 0 to 19, the revision at offset 15,
+  the 32-bit RSDT address at 16, and — from revision 2 — the length at 20, the
+  64-bit XSDT address at 24 and the extended checksum at 32.
+- **Section 5.2.6 and Table 5.4**, the 36-byte description header every table
+  begins with, and that "the entire table, including the checksum field, must add
+  to zero to be considered valid".
+- **Sections 5.2.7 and 5.2.8**, the RSDT with 32-bit entries and the XSDT with
+  64-bit ones; "an ACPI-compatible OS must use the XSDT if present".
+- **Section 5.2.12 and Table 5.19**, the Multiple APIC Description Table: the
+  32-bit local interrupt controller address at offset 36, the flags at 40 and the
+  list of interrupt controller structures from 44.
+- **Table 5.20**, the `PCAT_COMPAT` flag: "A one indicates that the system also
+  has a PC-AT-compatible dual-8259 setup. The 8259 vectors must be disabled (that
+  is, masked) when enabling the ACPI APIC operation."
+- **Table 5.21**, the interrupt controller structure types, of which this kernel
+  acts upon 0, 1, 2, 4, 5 and 9.
+- **Section 5.2.12.2 and Tables 5.22 and 5.23**, the Processor Local APIC
+  structure and its Enabled and Online Capable flags.
+- **Section 5.2.12.3 and Table 5.24**, the I/O APIC structure: the identifier,
+  the 32-bit address, and the global system interrupt its first input carries.
+- **Section 5.2.12.4**, that global system interrupts 0 to 15 carry the 8259A
+  request lines 0 to 15 except where an override says otherwise. This is what
+  allows one line number to mean the same device under either controller.
+- **Section 5.2.12.5 and Table 5.25**, the Interrupt Source Override structure,
+  and that "this specification only supports overriding ISA interrupt sources".
+- **Table 5.26**, the MPS INTI flags: polarity in bits 1:0, trigger mode in bits
+  3:2, and `00` in either meaning the source conforms to the convention of its
+  bus.
+- **Section 5.2.12.7 and Table 5.28**, the Local APIC NMI structure, and that a
+  processor identifier of `0xFF` applies the entry to every processor.
+- **Section 5.2.12.8 and Table 5.29**, the Local APIC Address Override structure,
+  which supersedes the MADT header's 32-bit field for every local controller.
+- **Section 5.2.12.12 and Table 5.34**, the Processor Local x2APIC structure.
+
+Used by: `kernel/acpi/acpi.c`, `kernel/include/oxys/acpi.h`, `kernel/cpu/irq.c`,
+`drivers/apic/lapic.c`, `drivers/apic/ioapic.c`, `docs/devices/ACPI.md`,
+`docs/devices/APIC.md`, `docs/design/INTERRUPTS.md`.
 
 ### IBM Personal Computer AT technical reference
 International Business Machines Corporation. The system technical reference for
@@ -1057,8 +1195,6 @@ Used by: `boot/grub/grub.cfg`, `Makefile`.
 | JEDEC JESD84-B51 | 4 | The two respects in which an embedded MultiMediaCard differs from an SD card in the identification sequence. |
 | IEEE Std 1003.1-2017, System Interfaces | 6, 7 | `fork()`, `exec()`, `wait()` and the file-descriptor semantics a fork imposes upon the open file table. |
 | Intel MultiProcessor Specification 1.4 | 6 | Application processor bring-up. |
-| Intel SDM, Volume 3A, Chapter 11 | 6 | The Local APIC and the I/O APIC, which retire the 8259A. |
-| ACPI Specification 6.5 | 6, 12 | The Multiple APIC Description Table; the Root System Description Pointer. |
 | VESA BIOS Extensions 3.0 | 6 | Linear framebuffer modes under legacy BIOS, should this kernel ever need to set one for itself rather than accept what the boot loader chose. |
 | UEFI Specification 2.10, Section 12.9 | 9, 12 | The Graphics Output Protocol. |
 | FIPS 180-4 | 10 | SHA-256. |

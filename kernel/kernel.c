@@ -64,6 +64,10 @@
 #include <oxys/exceptions.h>
 #include <oxys/cpu.h>
 #include <oxys/pic.h>
+#include <oxys/irq.h>
+#include <oxys/acpi.h>
+#include <oxys/lapic.h>
+#include <oxys/ioapic.h>
 #include <oxys/pit.h>
 #include <oxys/ps2.h>
 #include <oxys/keyboard.h>
@@ -891,10 +895,18 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
      * The controllers are remapped only now, after the exception handlers exist.
      * Remapping them earlier would have placed device vectors clear of the
      * exceptions without providing anywhere for them to go.
+     *
+     * IrqInitialise performs the remapping and installs the routing above it. The
+     * 8259A pair is what answers here and for the whole of the initialisation
+     * that follows; sub-task 6.12 retires it in favour of the APIC only once
+     * every driver has claimed the line it wants, which is after the serial
+     * adapter is promoted to interrupts below.
      */
-    PicInitialise();
+    IrqInitialise();
     KernelVerifyPic();
+    KernelVerifyIrq();
     PicReport();
+    IrqReport();
 
     /*
      * The timer is the first device to claim a request line, and therefore the
@@ -1020,6 +1032,40 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
     VgaReport();
 
     /*
+     * Sub-task 6.12: the firmware's description tables, the two APICs, and the
+     * retirement of the 8259A pair.
+     *
+     * It stands here, and not among the interrupt work of Phase 3, because of
+     * what it needs on either side. It needs the kernel arena, which is why it
+     * cannot precede Phase 2; and it needs every driver that will ever claim a
+     * request line to have claimed it, because the adoption carries the claimed
+     * lines across and a line claimed afterwards would have to be programmed by
+     * a second path. The serial adapter, immediately above, is the last of them.
+     *
+     * The interrupt flag is clear throughout, as IrqAdoptApic requires: between
+     * the masking of the 8259A and the programming of the redirection tables
+     * there is no controller that would deliver a device's request, and one
+     * raised in that interval would be lost.
+     */
+    (void)AcpiInitialise(&KernelBootInformation);
+    KernelVerifyAcpi();
+    AcpiReport();
+
+    (void)LocalApicInitialise();
+    KernelVerifyLocalApic();
+    LocalApicReport();
+
+    (void)IoApicInitialise();
+    KernelVerifyIoApic();
+    IoApicReport();
+
+    (void)IrqAdoptApic();
+    KernelVerifyApicRouting();
+    PicReport();
+    IoApicReport();
+    IrqReport();
+
+    /*
      * The bus is enumerated once every device driven so far is working, so that
      * a failure in the enumeration is reported through channels already proved.
      * Nothing is claimed or configured here; the enumeration only establishes
@@ -1124,7 +1170,8 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
 
     KernelMountRootVolume();
 
-    PicReport();
+    IrqReport();
+    LocalApicReport();
     InterruptReport();
     PagingReport();
     AddressSpaceReport();
@@ -1140,7 +1187,9 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
     KernelWriteString("Phase 6 initialisation complete: a program has been loaded, "
                       "run at privilege level 3,\nhas made a child of itself, replaced "
                       "that child's program with one read from a\nvolume, collected "
-                      "what it ended with, and ended.\n");
+                      "what it ended with, and ended; and every device request is now "
+                      "delivered\nby the I/O APIC and completed at the Local APIC, the "
+                      "8259A pair having been retired.\n");
 
     VgaSetColour(VGA_COLOUR_LIGHT_GREY, VGA_COLOUR_BLACK);
 

@@ -40,7 +40,7 @@ complementary, and neither replaces the other.
 | [`ARCHITECTURE.md`](design/ARCHITECTURE.md) | The structure of the system, the source tree, and the dependency ordering that fixes the phases. |
 | [`BOOT.md`](design/BOOT.md) | From the GRUB handover to `KernelMain`. |
 | [`MEMORY-LAYOUT.md`](design/MEMORY-LAYOUT.md) | The physical and virtual address spaces, the paging hierarchy, and the allocators above it. |
-| [`INTERRUPTS.md`](design/INTERRUPTS.md) | The descriptor table, the stubs, the dispatcher, the exceptions and the 8259A controllers. |
+| [`INTERRUPTS.md`](design/INTERRUPTS.md) | The descriptor table, the stubs, the dispatcher, the exceptions, the 8259A controllers, and the layer through which a driver claims a request line whichever controller is answering. |
 | [`PRIVILEGE.md`](design/PRIVILEGE.md) | The user-mode descriptors, the task state segment and its trusted stacks, the registers that configure `SYSCALL`, and the entry path, dispatch table and argument validation above them. |
 | [`GRAPHICS.md`](design/GRAPHICS.md) | The framebuffer and its memory type, the primitives and clipping that draw upon it, the bitmap font and graphical console drawn with those, the measurement that made the console fast enough, the fault screens a severe fault draws, the pointer, and the compositor beneath all of them. |
 | [`EXECUTABLE.md`](design/EXECUTABLE.md) | The ELF64 loader for statically linked executables: the list of things it refuses to be told by an untrusted document, and how a segment reaches an address space. |
@@ -56,6 +56,8 @@ complementary, and neither replaces the other.
 | [`KEYBOARD.md`](devices/KEYBOARD.md) | The PS/2 keyboard, and the 8042 controller it is reached through. | `drivers/ps2/`, `drivers/keyboard/` |
 | [`MOUSE.md`](devices/MOUSE.md) | The PS/2 mouse, and the pointer drawn from it. | `drivers/mouse/`, `graphics/cursor.c` |
 | [`PCI.md`](devices/PCI.md) | The PCI bus enumeration. | `drivers/pci/` |
+| [`ACPI.md`](devices/ACPI.md) | The firmware's description tables, and the one of them the kernel reads. | `kernel/acpi/` |
+| [`APIC.md`](devices/APIC.md) | The Local APIC and the I/O APIC, which retire the 8259A pair. | `drivers/apic/` |
 
 ### [`storage/`](storage/)
 

@@ -18,17 +18,20 @@ divided into atomic sub-tasks, and every milestone must be bootable and testable
 
 **Phases 1 to 5 are complete.** Sub-task 1.12 closed on 2026-09-07: the kernel
 has booted from a USB medium upon real hardware, and the boot log was read there.
-**Phase 6 is complete as far as sub-task 6.11**: a statically linked
+**Phase 6 is complete as far as sub-task 6.12**: a statically linked
 ELF64 program is loaded into an address space of its own, entered at privilege
 level 3, returned to by `SYSRET` when it makes a system call, and ended when it
 faults or when it asks — and it may now make a child of itself upon the
 copy-on-write substrate of Phase 2, replace that child's program with one read
-from a volume, and collect what it ended with.
+from a volume, and collect what it ended with. Since sub-task 6.12 the machine's
+own interrupt controllers are the Local APIC and the I/O APIC, programmed from
+what the firmware's ACPI tables declare; the 8259A pair is masked and retired.
 
-**Next: sub-task 6.12** — the multiprocessing half of Phase 6: the ACPI tables
-and the APIC, then the locks, the bring-up and the scheduler. The scheduler is
-what a child presently waits for: there is one thread of control, so a forked
-child runs when its parent waits for it rather than beside it.
+**Next: sub-task 6.13** — the locks, the per-processor data and the
+inter-processor interrupt, then the bring-up of 6.14 and the scheduler of 6.15.
+The scheduler is what a child presently waits for: there is one thread of
+control, so a forked child runs when its parent waits for it rather than beside
+it.
 
 For what the system does today, and where it has been observed to do it, see
 [`STATUS.md`](STATUS.md). For how it came to be that way, see
@@ -68,7 +71,7 @@ sub-task being the verification itself.
 | [3](#phase-3--interrupts-exceptions-and-keyboard-input) | Interrupts, exceptions and keyboard input | Implemented |
 | [4](#phase-4--basic-device-drivers) | Basic device drivers | Implemented |
 | [5](#phase-5--ext2-filesystem) | EXT2 filesystem | Implemented |
-| [6](#phase-6--graphics-system-calls-process-management-and-symmetric-multi-processing) | Graphics, system calls, processes, SMP | **In progress** — 6.1 to 6.11 done |
+| [6](#phase-6--graphics-system-calls-process-management-and-symmetric-multi-processing) | Graphics, system calls, processes, SMP | **In progress** — 6.1 to 6.12 done |
 | [7](#phase-7--userland-and-minimal-c-library) | Userland and minimal C library | Planned |
 | [8](#phase-8--shell) | Shell | Planned |
 | [9](#phase-9--the-desktop-its-system-services-and-its-configuration) | The desktop, its services and its configuration | Planned |
@@ -219,15 +222,20 @@ documentation, `Documentation/filesystems/ext2.rst`.
 **Objective**: Present a graphical display, execute user-mode programs, schedule
 them across multiple processors, and expose kernel services by system call.
 
-**Specifications**: Intel SDM Volume 3A, Chapters 5, 8 and 11, and Volume 2B
-(`SYSCALL`/`SYSRET`); System V ABI for AMD64; Intel MultiProcessor
-Specification 1.4; ACPI Specification 6.5 (MADT); Multiboot2 Specification,
-Section 3.6.12 (framebuffer information tag); VESA BIOS Extensions 3.0.
+**Specifications**: Intel SDM Volume 3A, Chapters 5, 8 and 10, and Volume 2B
+(`SYSCALL`/`SYSRET`); System V ABI for AMD64; Intel 82093AA I/O APIC datasheet;
+Intel MultiProcessor Specification 1.4; ACPI Specification 6.5 (the RSDP, the
+table directory and the MADT); Multiboot2 Specification, Sections 3.6.12
+(framebuffer information tag), 3.6.16 and 3.6.17 (the ACPI pointer tags); VESA
+BIOS Extensions 3.0.
 **Design**: [`../design/PRIVILEGE.md`](../design/PRIVILEGE.md),
 [`../design/GRAPHICS.md`](../design/GRAPHICS.md),
 [`../design/EXECUTABLE.md`](../design/EXECUTABLE.md),
 [`../design/PROCESS.md`](../design/PROCESS.md),
-[`../devices/MOUSE.md`](../devices/MOUSE.md).
+[`../design/INTERRUPTS.md`](../design/INTERRUPTS.md), Section 10,
+[`../devices/MOUSE.md`](../devices/MOUSE.md),
+[`../devices/ACPI.md`](../devices/ACPI.md),
+[`../devices/APIC.md`](../devices/APIC.md).
 
 | # | Sub-task | State | Asserted by |
 | - | -------- | ----- | ----------- |
@@ -242,8 +250,8 @@ Section 3.6.12 (framebuffer information tag); VESA BIOS Extensions 3.0.
 | 6.9 | Define the process control block, the address-space descriptor and the thread structure. | Implemented | `verify_process.c` |
 | 6.10 | Implement context switching and the initial transition to user mode via `IRETQ`. | Implemented | `verify_usermode.c` |
 | 6.11 | Implement `fork()` upon the Phase 2 copy-on-write substrate, together with `execve()`, `exit()` and `wait()`. | Implemented | `verify_lifecycle.c` |
-| 6.12 | Parse the ACPI MADT; initialise the Local APIC and the I/O APIC; retire the 8259A PIC. | **Planned — next** | — |
-| 6.13 | Implement spinlocks, per-CPU data areas and inter-processor interrupts, including TLB shootdown. | Planned | — |
+| 6.12 | Parse the ACPI MADT; initialise the Local APIC and the I/O APIC; retire the 8259A PIC. | Implemented | `verify_apic.c`, `verify_devices.c` — see note (b) |
+| 6.13 | Implement spinlocks, per-CPU data areas and inter-processor interrupts, including TLB shootdown. | **Planned — next** | — |
 | 6.14 | Implement application-processor bring-up by INIT-SIPI-SIPI and a real-mode trampoline. | Planned | — |
 | 6.15 | Implement a multiprocessor-aware round-robin scheduler with per-CPU run queues and processor affinity. | Planned | — |
 
@@ -253,6 +261,12 @@ the entry point with one returning by `SYSRET`, which returns to privilege level
 [`../design/PRIVILEGE.md`](../design/PRIVILEGE.md), Section 9.4, says why no test
 hook was added to recover it. The configuration is asserted still; the
 instruction is now executed only by a user program.
+
+**(b)** Sub-task 6.12 is asserted by four routines in `verify_apic.c` — the ACPI
+parse, the Local APIC, the I/O APIC and the routing after the adoption — and by
+`KernelVerifyIrq` in `verify_devices.c`, which asserts the routing layer while
+the 8259A pair still answers. The division is deliberate: the same path is
+asserted under each controller, so a failure says which of them broke it.
 
 **Why 6.2 to 6.6 sit here rather than in Phase 9**, and **why 6.13 precedes
 6.14**: both orderings were chosen against the obvious one, and both arguments

@@ -39,6 +39,7 @@ than as later additions, in accordance with `PROJECT_GUIDELINES.md`, Section 5:
 | `kernel/` | The architecture-independent kernel core: entry, memory management, the privilege apparatus, scheduling, system calls, and the virtual filesystem. | Phase 1 |
 | `kernel/include/oxys/` | The kernel's internal header corpus. | Phase 1 |
 | `kernel/test/` | The boot-time self-tests, one file per subsystem, and the composed volume they are conducted upon. | Phase 2 |
+| `kernel/acpi/` | The reading of the firmware's ACPI description tables. | Phase 6 (sub-task 6.12) |
 | `drivers/` | Device drivers, one subdirectory per device class. | Phase 1 |
 | `libc/` | The minimal C library linked into user programs. | Phase 7 |
 | `userland/` | User programs: the utilities and the shell. | Phase 7 |
@@ -115,7 +116,7 @@ complementary and neither replaces the other.
 
 ## 3. Present composition
 
-As of the completion of Phase 5 and of sub-tasks 6.1 to 6.10, the system
+As of the completion of Phase 5 and of sub-tasks 6.1 to 6.12, the system
 comprises the following translation units. The list is the `C_SOURCES` and
 `ASM_SOURCES` of the `Makefile` and must be revised in the same change as
 either.
@@ -126,11 +127,13 @@ either.
 | `kernel/cpu/exceptions.c` | The handlers for the architecture-defined exceptions and the diagnostic report. |
 | `kernel/cpu/interrupt_stubs.asm` | The 256 per-vector entry stubs and the common stub that saves the registers and calls the dispatcher. |
 | `kernel/cpu/interrupts.c` | The installation of the stubs, the dispatch table and the routing of each vector to its registered handler. |
+| `kernel/cpu/irq.c` | The interrupt request layer: the handlers claimed by request line rather than by vector, the routing of a request to the driver that claimed it, the signalling of completion at whichever controller delivered it, and the retirement of the 8259A pair in favour of the APIC. |
 | `kernel/cpu/gdt.c`, `kernel/cpu/gdt.asm` | The kernel global descriptor table and the reloading of the segment registers. |
 | `kernel/cpu/idt.c` | The interrupt descriptor table: its storage, the installation of a gate, the assignment of an interrupt stack table entry to a gate, and the loading of the table. |
 | `kernel/cpu/tss.c` | The task state segment: the stacks the processor loads when it needs one it can trust, its descriptor within the global descriptor table, and the loading of the task register. |
 | `kernel/cpu/syscall.c` | The configuration of the fast system-call mechanism — `IA32_STAR`, `IA32_LSTAR`, `IA32_FMASK`, `IA32_KERNEL_GS_BASE` and the enabling bit of `IA32_EFER` — and, from sub-task 6.7, the dispatch table and the validation of a caller's arguments; the table holds three calls from 6.7 and seven from sub-task 6.11, which adds `fork`, `execve`, `exit` and `wait`. |
 | `kernel/cpu/syscall_entry.asm` | The entry point `IA32_LSTAR` names. Provisional in sub-task 6.1; replaced at sub-task 6.7 by the path that swaps `GS`, loads the kernel stack from the per-processor block, dispatches, and returns by `SYSRET`. |
+| `kernel/acpi/acpi.c` | The firmware's ACPI description tables: the discovery and validation of the Root System Description Pointer, the walk of the RSDT or XSDT, and the parse of the Multiple APIC Description Table. |
 | `kernel/exec/elf.c` | The ELF64 loader for statically linked executables: the decoding of the file and program headers, the fifteen refusals an image must survive whole before a page of it is mapped, and the placing of its segments into an address space through the direct physical map. |
 | `kernel/proc/process.c` | The process control block, the thread and the saved context: the two tables, the address space a process is given, the kernel stack and guard page a thread is given, the writing of `rsp0` when a thread becomes current, the switch, the descent to privilege level 3, the termination that returns from it, and — from sub-task 6.11 — `fork`, `execve`, `exit` and `wait`. |
 | `kernel/proc/switch.asm` | `ThreadSwitchContext`, which exchanges six registers and a stack pointer; `ThreadTrampoline`, where a thread that has never run begins; `ThreadEnterUser`, which clears every register and descends to privilege level 3 by `IRETQ`; and `ThreadResumeUser`, which descends with a whole saved register set restored, as a thread made by `fork` requires. |
@@ -193,7 +196,9 @@ either.
 | `kernel/kernel.c` | `KernelMain`, which validates the boot loader handover, initialises every subsystem in the dependency order of Section 4, runs the self-tests, mounts a root volume and enters the echo loop. `KernelPanic`, the unrecoverable-error path. |
 | `drivers/vga/vga.c` | The VGA text-mode display driver: the control characters, the scrolling, the colour attributes, the hardware cursor and the erase limit that bounds a backspace. |
 | `drivers/serial/serial.c` | The interrupt-driven COM1 serial driver used for diagnostics and input. |
-| `drivers/pic/pic.c` | The pair of cascaded 8259A interrupt controllers: their remapping, the masking of request lines, the routing of a request to the driver that claims it, and the end-of-interrupt protocol. |
+| `drivers/pic/pic.c` | The pair of cascaded 8259A interrupt controllers: their remapping, the masking of request lines, the recognition of a spurious request, the end-of-interrupt protocol, and the silencing of the pair when the APIC supersedes it. |
+| `drivers/apic/lapic.c` | The Local APIC: its detection, the mapping of its register page as uncacheable memory, its two enables, the local vector table entries this kernel programmes, and the end-of-interrupt every handler owes it. |
+| `drivers/apic/ioapic.c` | The I/O APIC: the indirect register pair its registers are reached through, and the redirection table entry that decides what vector an interrupt input presents and to which processor. |
 | `drivers/pit/pit.c` | Counter 0 of the 8253 interval timer: the system tick, the elapsed-time conversion and the bounded wait. |
 | `drivers/block/buffer.c` | The buffer cache above the block layer: the hash, the recency list, the reference discipline and the write-back policy. |
 | `drivers/block/block.c` | The generic block-device layer: the registry of devices that transfer fixed-size blocks, and the validated path through which every caller above reaches a driver. |

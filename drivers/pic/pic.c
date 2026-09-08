@@ -3,14 +3,13 @@
  * Purpose: Implements the driver for the pair of cascaded Intel 8259A
  *          programmable interrupt controllers of the IBM Personal Computer AT:
  *          their remapping clear of the architecture-defined exception vectors,
- *          the masking of individual request lines, the routing of a request to
- *          the driver that claims it, the detection of a spurious request, and
- *          the end-of-interrupt signalling the device requires.
- * Key functions: PicInitialise, PicInstallHandler, PicRemoveHandler,
- *          PicRegisteredHandler, PicMaskLine, PicUnmaskLine, PicLineIsMasked,
+ *          the masking of individual request lines, the detection of a spurious
+ *          request, the end-of-interrupt signalling the device requires, and the
+ *          silencing of the pair when the APIC supersedes it.
+ * Key functions: PicInitialise, PicMaskLine, PicUnmaskLine, PicLineIsMasked,
  *          PicMaskValue, PicInServiceRegister, PicRequestRegister,
- *          PicRequestCount, PicSpuriousCount, PicUnclaimedCount, PicDisable,
- *          PicReport.
+ *          PicRequestIsSpurious, PicSendEndOfInterrupt, PicIsInitialised,
+ *          PicDisable, PicReport.
  * References:
  *   - Intel 8259A Programmable Interrupt Controller datasheet (order number
  *     231468-003), section "INITIALIZATION COMMAND WORDS (ICWS)": a write to the
@@ -44,26 +43,34 @@
  *   - Intel SDM, Volume 3A, Section 6.2: vectors 0 to 31 are reserved to the
  *     architecture-defined exceptions; 32 to 255 are available.
  *
- * Why this module owns the end-of-interrupt.
+ * Why this module owns the end-of-interrupt, and why it does not own the routing.
  *
  *   The controller withholds every request of equal or lower priority until the
  *   bit standing in its in-service register is reset. A driver that neglected to
  *   signal completion would therefore silence its own device permanently, and,
  *   the timer being the highest priority line, would in most cases silence the
  *   whole machine. The signalling is a property of the controller rather than of
- *   any device, so it is performed here, once, upon the return of the handler,
- *   and a device driver neither may nor need perform it.
+ *   any device, so PicSendEndOfInterrupt is written here, once, and a device
+ *   driver neither may nor need call it.
  *
  *   The same reasoning governs the cascade. A request of the slave controller
  *   stands in the in-service register of both, the master having accepted it upon
  *   IR2, so both must be signalled; sending only the slave's would leave the
  *   master withholding every line of priority below IR2.
  *
- * Concurrency. The mask registers and the routing table are unsynchronised. Until
- * the interrupt flag is set there is one flow of control and the question does
- * not arise; from sub-task 6.13 the read-modify-write of a mask register and the
- * registration of a handler both require the spinlock governing this device,
- * since an interrupt handler and an application processor may enter either.
+ *   The table of device handlers is the other half of that argument and comes
+ *   out the other way. Which driver claims IR1 is a property of the machine and
+ *   not of this device: from sub-task 6.12 the same line is delivered by an I/O
+ *   APIC upon a machine where this pair has been retired, and a table held here
+ *   would have to be read out and carried across, or duplicated. It is therefore
+ *   held in kernel/cpu/irq.c, which calls into this file for the two operations
+ *   above and for the mask registers.
+ *
+ * Concurrency. The mask registers are unsynchronised. Until the interrupt flag is
+ * set there is one flow of control and the question does not arise; from sub-task
+ * 6.13 the read-modify-write of a mask register requires the spinlock governing
+ * this device, since an interrupt handler and an application processor may both
+ * enter it.
  */
 
 #include <oxys/pic.h>
@@ -111,18 +118,13 @@
 /* Every line masked, both controllers. */
 #define PIC_MASK_ALL UINT8_C(0xFF)
 
-/* The handler registered for each request line, and its name. */
-static InterruptHandler PicHandlerTable[PIC_IRQ_COUNT];
-static const char *PicHandlerNames[PIC_IRQ_COUNT];
-
-/* Accounting. */
-static uint64_t PicRequestsDispatched;
-static uint64_t PicSpuriousRequests;
-static uint64_t PicUnclaimedRequests;
-
-/* Whether PicInitialise has run. Reported, and consulted by PicReport so that a
- * summary taken before initialisation cannot be mistaken for one taken after. */
+/* Whether PicInitialise has run and PicDisable has not. Reported, and consulted
+ * by PicReport so that a summary taken before initialisation, or after the
+ * device was retired, cannot be mistaken for one taken while it was answering. */
 static bool PicInitialised;
+
+/* Whether PicDisable has retired the pair in favour of the APIC. */
+static bool PicRetired;
 
 /*
  * Reads one of the two status registers of both controllers through OCW3.
@@ -234,7 +236,7 @@ void PicUnmaskLine(uint8_t irq)
  * the hardware but the slave is taken first for consistency with the order in
  * which the two accepted the request.
  */
-static void PicSendEndOfInterrupt(uint8_t irq)
+void PicSendEndOfInterrupt(uint8_t irq)
 {
     if (irq >= 8U)
     {
@@ -262,7 +264,7 @@ static void PicSendEndOfInterrupt(uint8_t irq)
  * does hold a bit in its own in-service register, so the master alone is
  * signalled.
  */
-static bool PicRequestIsSpurious(uint8_t irq)
+bool PicRequestIsSpurious(uint8_t irq)
 {
     uint16_t in_service;
 
@@ -285,75 +287,6 @@ static bool PicRequestIsSpurious(uint8_t irq)
     }
 
     return true;
-}
-
-/*
- * Receives every vector to which the controllers were remapped, routes the
- * request to the driver that claims it, and signals completion.
- *
- * A line with no registered handler is counted and acknowledged rather than
- * reported as fatal. The device is real and its request must be released, or the
- * controller would withhold every line of lower priority for the remainder of the
- * machine's life; and the condition is not an error in the kernel but a device
- * the kernel has not yet been taught to drive.
- */
-static void PicRouteRequest(TrapFrame *frame)
-{
-    const uint8_t irq = (uint8_t)(frame->vector - (uint64_t)PIC_MASTER_VECTOR_BASE);
-    InterruptHandler handler;
-
-    if (PicRequestIsSpurious(irq))
-    {
-        ++PicSpuriousRequests;
-        return;
-    }
-
-    ++PicRequestsDispatched;
-
-    handler = PicHandlerTable[irq];
-
-    if (handler != NULL)
-    {
-        handler(frame);
-    }
-    else
-    {
-        ++PicUnclaimedRequests;
-    }
-
-    PicSendEndOfInterrupt(irq);
-}
-
-void PicInstallHandler(uint8_t irq, InterruptHandler handler, const char *name)
-{
-    if (irq >= PIC_IRQ_COUNT)
-    {
-        return;
-    }
-
-    PicHandlerTable[irq] = handler;
-    PicHandlerNames[irq] = name;
-}
-
-void PicRemoveHandler(uint8_t irq)
-{
-    if (irq >= PIC_IRQ_COUNT)
-    {
-        return;
-    }
-
-    PicHandlerTable[irq] = NULL;
-    PicHandlerNames[irq] = NULL;
-}
-
-InterruptHandler PicRegisteredHandler(uint8_t irq)
-{
-    if (irq >= PIC_IRQ_COUNT)
-    {
-        return NULL;
-    }
-
-    return PicHandlerTable[irq];
 }
 
 void PicInitialise(void)
@@ -398,18 +331,6 @@ void PicInitialise(void)
     PortWriteByte(PIC_MASTER_DATA, PIC_MASK_ALL);
     PortWriteByte(PIC_SLAVE_DATA, PIC_MASK_ALL);
 
-    /*
-     * Route every vector the controllers now present to this module. The routing
-     * handler is installed for all sixteen rather than only for the lines a
-     * driver claims, so that a request arriving upon an unclaimed line is
-     * acknowledged rather than left to stand in the in-service register.
-     */
-    for (uint8_t irq = 0U; irq < (uint8_t)PIC_IRQ_COUNT; ++irq)
-    {
-        InterruptRegisterHandler((uint8_t)(PIC_MASTER_VECTOR_BASE + irq),
-                                 PicRouteRequest, "8259A request");
-    }
-
     PicInitialised = true;
 }
 
@@ -420,47 +341,38 @@ void PicDisable(void)
 
     /*
      * The device is retired, not merely quiescent, so the flag that governs the
-     * report is cleared with it. Were it left set, PicReport would continue to
-     * describe a controller that is remapped and claimed after sub-task 6.12 had
-     * superseded it, which is precisely the sort of stale diagnostic that sends
-     * an investigation in the wrong direction.
+     * report is cleared with it and a second flag records why. Were the first
+     * left set, PicReport would continue to describe a controller that is
+     * remapped and answering after the APIC had superseded it, which is
+     * precisely the sort of stale diagnostic that sends an investigation in the
+     * wrong direction.
      */
     PicInitialised = false;
+    PicRetired = true;
 }
 
-uint64_t PicRequestCount(void)
+bool PicIsInitialised(void)
 {
-    return PicRequestsDispatched;
-}
-
-uint64_t PicSpuriousCount(void)
-{
-    return PicSpuriousRequests;
-}
-
-uint64_t PicUnclaimedCount(void)
-{
-    return PicUnclaimedRequests;
+    return PicInitialised;
 }
 
 void PicReport(void)
 {
-    const uint16_t mask = PicMaskValue();
-    size_t claimed = 0U;
-
-    for (size_t irq = 0U; irq < PIC_IRQ_COUNT; ++irq)
-    {
-        if (PicHandlerTable[irq] != NULL)
-        {
-            ++claimed;
-        }
-    }
-
     KernelWriteString("8259A: ");
 
     if (!PicInitialised)
     {
-        KernelWriteString("not initialised.\n");
+        /*
+         * The two cases are distinguished because they mean opposite things. A
+         * pair that was never initialised is a kernel that has not got that far;
+         * a pair that was retired is a machine running upon its APIC, which is
+         * the intended state and not a defect. A single "not initialised" would
+         * have sent a reader of the log looking for the wrong fault.
+         */
+        KernelWriteString(PicRetired ? "retired in favour of the APIC; mask "
+                                     : "not initialised; mask ");
+        KernelWriteHexadecimal((uint64_t)PicMaskValue());
+        KernelWriteString(".\n");
         return;
     }
 
@@ -469,41 +381,15 @@ void PicReport(void)
     KernelWriteString(" to ");
     KernelWriteDecimal((uint64_t)PIC_MASTER_VECTOR_BASE + PIC_IRQ_COUNT - 1U);
     KernelWriteString(", mask ");
-    KernelWriteHexadecimal((uint64_t)mask);
-    KernelWriteString(", lines claimed ");
-    KernelWriteDecimal((uint64_t)claimed);
+    KernelWriteHexadecimal((uint64_t)PicMaskValue());
+    KernelWriteString(", in service ");
+    KernelWriteHexadecimal((uint64_t)PicInServiceRegister());
     KernelWriteString(".\n");
 
     /*
-     * The claimed lines are named individually. The name a driver supplies to
-     * PicInstallHandler is required to have static storage duration, and it
-     * would be improper to impose that upon every caller for a string nothing
-     * ever emitted; more practically, a machine whose keyboard does not respond
-     * is diagnosed far more quickly by a report that says which lines are
-     * claimed and by what than by one that says only how many.
+     * Which lines are claimed, and by what, is reported by IrqReport: the
+     * claimants are recorded there and not here, for the reason given in the
+     * header of this file. This report is confined to what only this device can
+     * answer — the vectors it presents, and the state of its registers.
      */
-    for (uint8_t irq = 0U; irq < (uint8_t)PIC_IRQ_COUNT; ++irq)
-    {
-        if (PicHandlerTable[irq] == NULL)
-        {
-            continue;
-        }
-
-        KernelWriteString("  IR");
-        KernelWriteDecimal((uint64_t)irq);
-        KernelWriteString(" (vector ");
-        KernelWriteDecimal((uint64_t)PIC_MASTER_VECTOR_BASE + irq);
-        KernelWriteString("): ");
-        KernelWriteString(PicHandlerNames[irq] != NULL ? PicHandlerNames[irq]
-                                                       : "unnamed");
-        KernelWriteString(PicLineIsMasked(irq) ? ", masked.\n" : ", unmasked.\n");
-    }
-
-    KernelWriteString("8259A: requests ");
-    KernelWriteDecimal(PicRequestsDispatched);
-    KernelWriteString(", unclaimed ");
-    KernelWriteDecimal(PicUnclaimedRequests);
-    KernelWriteString(", spurious ");
-    KernelWriteDecimal(PicSpuriousRequests);
-    KernelWriteString(".\n");
 }

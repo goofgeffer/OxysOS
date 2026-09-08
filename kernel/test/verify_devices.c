@@ -1,13 +1,15 @@
 /*
  * File: kernel/test/verify_devices.c
  * Purpose: Asserts the device drivers of Phases 3 and 4: the pair of 8259A
- *          interrupt controllers, the interval timer, the PS/2 keyboard, the
- *          16550 serial adapter, the VGA text-mode display, and the enumeration
- *          of the PCI configuration space.
- * Key functions: KernelVerifyPic, KernelVerifyPit, KernelVerifyKeyboard,
- *          KernelVerifySerial, KernelVerifyVga, KernelVerifyPci.
+ *          interrupt controllers, the request layer above them, the interval
+ *          timer, the PS/2 keyboard, the 16550 serial adapter, the VGA text-mode
+ *          display, and the enumeration of the PCI configuration space.
+ * Key functions: KernelVerifyPic, KernelVerifyIrq, KernelVerifyPit,
+ *          KernelVerifyKeyboard, KernelVerifySerial, KernelVerifyVga,
+ *          KernelVerifyPci.
  * References:
    - docs/design/INTERRUPTS.md, Section 9.6: the controller assertions.
+ *   - docs/design/INTERRUPTS.md, Section 10.6: the request layer's assertions.
  *   - docs/devices/TIME.md, docs/devices/KEYBOARD.md, docs/devices/SERIAL.md,
  *     docs/devices/DISPLAY.md and docs/devices/PCI.md: each has a verification
  *     section pairing the assertions below with what their failure would mean.
@@ -21,6 +23,7 @@
 #include <oxys/kernel.h>
 #include <oxys/verify.h>
 #include <oxys/pic.h>
+#include <oxys/irq.h>
 #include <oxys/pit.h>
 #include <oxys/keyboard.h>
 #include <oxys/vga.h>
@@ -31,32 +34,31 @@
 #include <oxys/cpu.h>
 #include <oxys/io.h>
 
-/* State recorded by the probe handler of the interrupt controller self-test. */
-static uint64_t KernelPicProbeCount;
+/* State recorded by the probe handler of the interrupt request layer's self-test. */
+static uint64_t KernelIrqProbeCount;
 
 /* A probe handler standing in for a device driver upon a request line. */
-static void KernelPicProbeHandler(TrapFrame *frame)
+static void KernelIrqProbeHandler(TrapFrame *frame)
 {
     (void)frame;
-    ++KernelPicProbeCount;
+    ++KernelIrqProbeCount;
 }
 
 /*
  * Exercises the 8259A driver, being sub-task 3.5.
  *
- * Three properties are asserted, and the failure of each would present quite
- * differently. A mask register that did not respond would leave a device unable
- * to interrupt, or unable to stop; a routing layer that mistook the vector for
- * the request line would deliver every interrupt to the wrong driver; and an
- * end-of-interrupt sent upon a spurious request would reset the bit of whatever
- * line was genuinely in service, losing a real interrupt at a rate governed by
- * electrical noise and therefore reproducible nowhere.
+ * What is asserted here is the device: that its mask registers respond and
+ * address the controller that owns each line, that the cascade is unmasked with
+ * any slave line, and — the assertion that cannot be made by inspection — that
+ * the remapping took effect. A mask register that did not respond would leave a
+ * device unable to interrupt, or unable to stop.
+ *
+ * The routing above the device is asserted by KernelVerifyIrq, which follows.
+ * The division is that of sub-task 6.12, which took the handler table out of
+ * this driver; before it, both halves were asserted here.
  */
 void KernelVerifyPic(void)
 {
-    const uint64_t spurious_before = PicSpuriousCount();
-    const uint64_t requests_before = PicRequestCount();
-    const uint64_t unclaimed_before = PicUnclaimedCount();
     bool succeeded = true;
 
     /* --- Every line is withheld until a driver claims it. --- */
@@ -114,76 +116,6 @@ void KernelVerifyPic(void)
     PicMaskLine(12U);
     PicMaskLine(PIC_CASCADE_IRQ);
 
-    /* --- A request is routed to the driver that claims its line. --- */
-
-    PicInstallHandler(3U, KernelPicProbeHandler, "self-test probe");
-
-    if (PicRegisteredHandler(3U) != KernelPicProbeHandler)
-    {
-        KernelWriteString("  The claimed line did not record its handler.\n");
-        succeeded = false;
-    }
-
-    /*
-     * Vector 35 is the third request line of the master. Raising it by software
-     * exercises the routing arithmetic without requiring a device to be present.
-     * The end-of-interrupt this provokes is harmless: per the 8259A datasheet,
-     * section "OPERATION COMMAND WORDS (OCWS)", a non-specific command resets the
-     * highest priority bit set in the in-service register, and no bit is set.
-     */
-    __asm__ __volatile__("int $35" : : : "memory");
-
-    if (KernelPicProbeCount != 1U)
-    {
-        KernelWriteString("  The claimed line's handler was not entered.\n");
-        succeeded = false;
-    }
-
-    if (PicRequestCount() != (requests_before + 1U))
-    {
-        KernelWriteString("  The request was not counted.\n");
-        succeeded = false;
-    }
-
-    PicRemoveHandler(3U);
-
-    /* An unclaimed line must still be acknowledged, and counted as unclaimed. */
-    __asm__ __volatile__("int $35" : : : "memory");
-
-    if (KernelPicProbeCount != 1U)
-    {
-        KernelWriteString("  A removed handler was entered.\n");
-        succeeded = false;
-    }
-
-    if (PicUnclaimedCount() != (unclaimed_before + 1U))
-    {
-        KernelWriteString("  An unclaimed request was not counted.\n");
-        succeeded = false;
-    }
-
-    /* --- A spurious request is recognised and not acknowledged. --- */
-
-    /*
-     * Vector 39 is the master's lowest priority line, upon which a spurious
-     * request is delivered. No line is in service, so the in-service register
-     * bit is clear and the request must be recognised as spurious: counted, not
-     * routed, and above all not acknowledged.
-     */
-    __asm__ __volatile__("int $39" : : : "memory");
-
-    if (PicSpuriousCount() != (spurious_before + 1U))
-    {
-        KernelWriteString("  A spurious request was not recognised.\n");
-        succeeded = false;
-    }
-
-    if (PicRequestCount() != (requests_before + 2U))
-    {
-        KernelWriteString("  A spurious request was counted as a genuine one.\n");
-        succeeded = false;
-    }
-
     /* --- The remapping holds with the interrupt flag set. --- */
 
     /*
@@ -210,7 +142,7 @@ void KernelVerifyPic(void)
 
     __asm__ __volatile__("cli" : : : "memory");
 
-    if (PicRequestCount() != (requests_before + 2U))
+    if (PicInServiceRegister() != 0U)
     {
         KernelWriteString("  A masked line was nevertheless delivered.\n");
         succeeded = false;
@@ -219,6 +151,108 @@ void KernelVerifyPic(void)
     KernelWriteString(succeeded
                           ? "Interrupt controller self-test passed.\n"
                           : "Interrupt controller self-test FAILED.\n");
+}
+
+/*
+ * Exercises the interrupt request layer of sub-task 6.12 while the 8259A pair is
+ * still the controller answering.
+ *
+ * The three properties asserted here were asserted of drivers/pic/pic.c until
+ * that sub-task moved the routing out of it, and they are asserted of the layer
+ * that now performs it. The failure of each would present quite differently: a
+ * routing layer that mistook the vector for the request line would deliver every
+ * interrupt to the wrong driver; an unclaimed line left unacknowledged would
+ * withhold every line beneath it for the remainder of the machine's life; and an
+ * end-of-interrupt sent upon a spurious request would reset the bit of whatever
+ * line was genuinely in service, losing a real interrupt at a rate governed by
+ * electrical noise and therefore reproducible nowhere.
+ */
+void KernelVerifyIrq(void)
+{
+    const uint64_t spurious_before = IrqSpuriousCount();
+    const uint64_t requests_before = IrqRequestCount();
+    const uint64_t unclaimed_before = IrqUnclaimedCount();
+    bool succeeded = true;
+
+    if (IrqActiveController() != IRQ_CONTROLLER_8259A)
+    {
+        KernelWriteString("  The 8259A pair is not the controller answering.\n");
+        succeeded = false;
+    }
+
+    /* --- A request is routed to the driver that claims its line. --- */
+
+    IrqInstallHandler(3U, KernelIrqProbeHandler, "self-test probe");
+
+    if (IrqRegisteredHandler(3U) != KernelIrqProbeHandler)
+    {
+        KernelWriteString("  The claimed line did not record its handler.\n");
+        succeeded = false;
+    }
+
+    /*
+     * Vector 35 is the third request line of the master. Raising it by software
+     * exercises the routing arithmetic without requiring a device to be present.
+     * The end-of-interrupt this provokes is harmless: per the 8259A datasheet,
+     * section "OPERATION COMMAND WORDS (OCWS)", a non-specific command resets the
+     * highest priority bit set in the in-service register, and no bit is set.
+     */
+    __asm__ __volatile__("int $35" : : : "memory");
+
+    if (KernelIrqProbeCount != 1U)
+    {
+        KernelWriteString("  The claimed line's handler was not entered.\n");
+        succeeded = false;
+    }
+
+    if (IrqRequestCount() != (requests_before + 1U))
+    {
+        KernelWriteString("  The request was not counted.\n");
+        succeeded = false;
+    }
+
+    IrqRemoveHandler(3U);
+
+    /* An unclaimed line must still be acknowledged, and counted as unclaimed. */
+    __asm__ __volatile__("int $35" : : : "memory");
+
+    if (KernelIrqProbeCount != 1U)
+    {
+        KernelWriteString("  A removed handler was entered.\n");
+        succeeded = false;
+    }
+
+    if (IrqUnclaimedCount() != (unclaimed_before + 1U))
+    {
+        KernelWriteString("  An unclaimed request was not counted.\n");
+        succeeded = false;
+    }
+
+    /* --- A spurious request is recognised and not acknowledged. --- */
+
+    /*
+     * Vector 39 is the master's lowest priority line, upon which a spurious
+     * request is delivered. No line is in service, so the in-service register
+     * bit is clear and the request must be recognised as spurious: counted, not
+     * routed, and above all not acknowledged.
+     */
+    __asm__ __volatile__("int $39" : : : "memory");
+
+    if (IrqSpuriousCount() != (spurious_before + 1U))
+    {
+        KernelWriteString("  A spurious request was not recognised.\n");
+        succeeded = false;
+    }
+
+    if (IrqRequestCount() != (requests_before + 2U))
+    {
+        KernelWriteString("  A spurious request was counted as a genuine one.\n");
+        succeeded = false;
+    }
+
+    KernelWriteString(succeeded
+                          ? "Interrupt request layer self-test passed.\n"
+                          : "Interrupt request layer self-test FAILED.\n");
 }
 
 /*
@@ -317,13 +351,13 @@ void KernelVerifyPit(void)
 
     /* --- The line is claimed and permitted. --- */
 
-    if (PicRegisteredHandler(PIT_IRQ) == NULL)
+    if (IrqRegisteredHandler(PIT_IRQ) == NULL)
     {
         KernelWriteString("  The timer did not claim its request line.\n");
         succeeded = false;
     }
 
-    if (PicLineIsMasked(PIT_IRQ))
+    if (IrqLineIsMasked(PIT_IRQ))
     {
         KernelWriteString("  The timer's request line is masked.\n");
         succeeded = false;
@@ -374,13 +408,13 @@ void KernelVerifyPit(void)
      * mean the handler was being entered by some path other than the one the
      * controller uses, and the end-of-interrupt would not be being sent.
      */
-    if (PicRequestCount() == 0U)
+    if (IrqRequestCount() == 0U)
     {
         KernelWriteString("  The controller recorded no request for the timer.\n");
         succeeded = false;
     }
 
-    if (PicUnclaimedCount() > 1U)
+    if (IrqUnclaimedCount() > 1U)
     {
         KernelWriteString("  A timer request was recorded as unclaimed.\n");
         succeeded = false;
@@ -401,7 +435,7 @@ void KernelVerifyPit(void)
 
     /* --- Masking the line stops the ticks, and unmasking resumes them. --- */
 
-    PicMaskLine(PIT_IRQ);
+    IrqMaskLine(PIT_IRQ);
 
     ticks_while_masked = PitTickCount();
 
@@ -416,7 +450,7 @@ void KernelVerifyPit(void)
         succeeded = false;
     }
 
-    PicUnmaskLine(PIT_IRQ);
+    IrqUnmaskLine(PIT_IRQ);
 
     if (!PitWaitTicks(2U))
     {
@@ -484,13 +518,13 @@ void KernelVerifyKeyboard(void)
 
     /* --- The controller was configured and the line claimed. --- */
 
-    if (PicRegisteredHandler(KEYBOARD_IRQ) == NULL)
+    if (IrqRegisteredHandler(KEYBOARD_IRQ) == NULL)
     {
         KernelWriteString("  The keyboard did not claim its request line.\n");
         succeeded = false;
     }
 
-    if (PicLineIsMasked(KEYBOARD_IRQ))
+    if (IrqLineIsMasked(KEYBOARD_IRQ))
     {
         KernelWriteString("  The keyboard's request line is masked.\n");
         succeeded = false;
@@ -815,13 +849,13 @@ void KernelVerifySerial(void)
         succeeded = false;
     }
 
-    if (PicRegisteredHandler(SERIAL_COM1_IRQ) == NULL)
+    if (IrqRegisteredHandler(SERIAL_COM1_IRQ) == NULL)
     {
         KernelWriteString("  The serial adapter did not claim its request line.\n");
         succeeded = false;
     }
 
-    if (PicLineIsMasked(SERIAL_COM1_IRQ))
+    if (IrqLineIsMasked(SERIAL_COM1_IRQ))
     {
         KernelWriteString("  The serial adapter's request line is masked.\n");
         succeeded = false;

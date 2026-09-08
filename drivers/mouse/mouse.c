@@ -58,7 +58,7 @@
 #include <oxys/mouse.h>
 #include <oxys/keyboard.h>
 #include <oxys/ps2.h>
-#include <oxys/pic.h>
+#include <oxys/irq.h>
 #include <oxys/interrupts.h>
 #include <oxys/kernel.h>
 
@@ -497,8 +497,8 @@ bool MouseInitialise(void)
      * keyboard's is. IR12 belongs to the slave controller, whose cascade upon
      * the master's IR2 the interrupt controller driver unmasks with it.
      */
-    PicInstallHandler(MOUSE_IRQ, MouseHandleInterrupt, "PS/2 mouse");
-    PicUnmaskLine(MOUSE_IRQ);
+    IrqInstallHandler(MOUSE_IRQ, MouseHandleInterrupt, "PS/2 mouse");
+    IrqUnmaskLine(MOUSE_IRQ);
 
     return true;
 }
@@ -625,7 +625,7 @@ void MouseReport(void)
     KernelWriteString(MouseWheelPresent ? "present with a wheel, four-byte packets"
                                         : "present, three-byte packets");
     KernelWriteString(", line ");
-    KernelWriteString(PicLineIsMasked(MOUSE_IRQ) ? "masked" : "unmasked");
+    KernelWriteString(IrqLineIsMasked(MOUSE_IRQ) ? "masked" : "unmasked");
     KernelWriteString(".\n");
 
     KernelWriteString("PS/2 mouse: bytes ");
