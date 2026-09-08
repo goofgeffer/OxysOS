@@ -117,6 +117,12 @@ first run.
 **Prose.** Formal, technical, objective. No emoji, no slang, no informality — in
 documents, comments and commit messages alike.
 
+This register is directed at work and not at people, and
+[`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md), Section 2, says where the line
+between the two falls. Review here is blunt by design: that document exists in
+part to keep it so, a code of conduct read as forbidding plain technical
+judgement being a way of putting objections out of reach.
+
 The distinctive convention is worth stating because it cannot be guessed:
 **explain a decision by the failure it prevents, not by what it does.** "The line
 is clipped per pixel, because clipping at the endpoints moves the line by a pixel
@@ -173,3 +179,4 @@ owner's decision.
 | Why the phases are in this order | [`docs/design/ARCHITECTURE.md`](docs/design/ARCHITECTURE.md), Section 4 |
 | How anything is tested | [`docs/project/TESTING.md`](docs/project/TESTING.md) |
 | The rules that bind all of it | [`PROJECT_GUIDELINES.md`](PROJECT_GUIDELINES.md) |
+| What is expected of conduct, as against of work | [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) |
