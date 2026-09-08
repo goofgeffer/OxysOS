@@ -190,3 +190,47 @@ under GCC for every file, this one included.
 It is a compiler's opinion of the source and nothing more. It executes no code,
 asserts no behaviour, and passing it means only that two independent front ends
 agree the sources are well formed. `make verify` remains the gate.
+
+## 10. Continuous integration
+
+[`../../.github/workflows/ci.yml`](../../.github/workflows/ci.yml) runs upon
+every push to `main`, every pull request, and upon request. It performs two of
+the assertions this document and [`TESTING.md`](TESTING.md) describe, and
+nothing else.
+
+| Job | What it runs | What it needs |
+| --- | ------------ | ------------- |
+| Second compiler | `make clang-check`, the target of Section 9. | `clang` alone. It builds nothing, so it reports in about a minute and is the first thing to look at when a run fails. |
+| Build and verify | `make toolcheck`, `make iso`, then `make verify`. | The cross-toolchain of Section 1, `nasm`, `grub-mkrescue`, `xorriso` and QEMU. |
+
+### 10.1 Why the toolchain is built rather than installed
+
+No package index carries `x86_64-elf-gcc`, so the workflow builds binutils and
+GCC from source at the versions named in its `env` block — `2.42` and `13.2.0`,
+which are the versions Section 1 records as present in the working environment.
+It then caches the result under those versions as the key.
+
+The versions are pinned rather than left to float for the reason Section 9 gives
+for running two compilers at all, read the other way about. A difference between
+two compilers is informative when it is the only difference; a workflow that
+built whatever GCC was newest would report the newest GCC's opinion of this
+kernel as though it were a defect introduced by whoever pushed. When the
+toolchain is to move, the `env` block is edited, and the difference that appears
+is attributable to that edit.
+
+### 10.2 What it does not assert
+
+It does not run under KVM — a hosted runner provides none, so QEMU emulates,
+which is how the target is run locally also. It does not perform the interactive
+tests, the VirtualBox target, or the physical hardware procedure of
+[`TESTING.md`](TESTING.md), Section 10: each of those requires a display, a
+hypervisor or a machine that a hosted runner does not have. Those runs are
+recorded by hand and this workflow does not replace them.
+
+**A passing run is not a substitute for `make verify` before a commit.**
+`PROJECT_GUIDELINES.md`, Section 2, requires the verification before the change
+is final, and a workflow reports after the fact. What the workflow adds is a
+machine that has none of a contributor's configuration upon it, which is the one
+thing a contributor cannot test for locally: a build that passes because of
+something installed long ago passes silently, and does so in exactly the same
+way as a build that is correct.

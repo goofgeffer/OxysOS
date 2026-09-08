@@ -1,0 +1,141 @@
+# ==============================================================================
+# File: .github/workflows/ci.yml
+#
+# Purpose:
+#   Executes the verification procedure of docs/project/TESTING.md upon every
+#   push and every pull request, so that the assertion `make verify` makes upon
+#   a contributor's machine is made again upon a machine nobody has configured.
+#
+# Jobs:
+#   clang-check - Compiles every translation unit with the second compiler of
+#                 docs/project/TOOLCHAIN.md, Section 9. Builds nothing. Requires
+#                 no cross-toolchain, clang being multi-target by construction,
+#                 and so reports within about a minute.
+#   verify      - Builds the cross-toolchain, builds the ISO, executes it under
+#                 QEMU without a display and asserts upon the serial output.
+#                 This is `make verify`, unmodified.
+#
+# References:
+#   - docs/project/TOOLCHAIN.md, Sections 1 and 9: the tools required and the
+#     second compiler.
+#   - docs/project/TESTING.md: the verification procedure this workflow runs.
+#   - PROJECT_GUIDELINES.md, Section 2: no change is final until it has been
+#     verified and the documents affected by it have been updated.
+# ==============================================================================
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  # The versions the toolchain of docs/project/TOOLCHAIN.md is built from. They
+  # are named here rather than left to float because a compiler that differs
+  # from the one a contributor runs is a difference this workflow would report
+  # as a defect in the kernel.
+  BINUTILS_VERSION: "2.42"
+  GCC_VERSION: "13.2.0"
+  CROSS_TARGET: x86_64-elf
+
+jobs:
+  clang-check:
+    name: Second compiler
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install clang
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y clang
+
+      - name: Compile every translation unit for its diagnostics
+        run: make clang-check
+
+  verify:
+    name: Build and verify
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install the build and emulation tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y \
+            nasm grub-common grub-pc-bin xorriso mtools qemu-system-x86
+
+      # The cross-toolchain is the expensive part of this job and the part that
+      # does not change: it is keyed upon the two versions above, so it is built
+      # once and restored thereafter.
+      - name: Restore the cross-toolchain
+        id: cross-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/opt/cross
+          key: cross-${{ runner.os }}-binutils${{ env.BINUTILS_VERSION }}-gcc${{ env.GCC_VERSION }}-v1
+
+      - name: Install the prerequisites of a compiler build
+        if: steps.cross-cache.outputs.cache-hit != 'true'
+        run: |
+          sudo apt-get install --no-install-recommends -y \
+            build-essential bison flex texinfo \
+            libgmp-dev libmpc-dev libmpfr-dev libisl-dev
+
+      - name: Build the cross-toolchain
+        if: steps.cross-cache.outputs.cache-hit != 'true'
+        run: |
+          set -eux
+          PREFIX="$HOME/opt/cross"
+          mkdir -p "$HOME/src" && cd "$HOME/src"
+
+          curl -fLO "https://ftpmirror.gnu.org/binutils/binutils-${BINUTILS_VERSION}.tar.xz"
+          tar -xf "binutils-${BINUTILS_VERSION}.tar.xz"
+          mkdir build-binutils && cd build-binutils
+          "../binutils-${BINUTILS_VERSION}/configure" \
+            --target="$CROSS_TARGET" --prefix="$PREFIX" \
+            --with-sysroot --disable-nls --disable-werror
+          make -j"$(nproc)"
+          make install
+          cd "$HOME/src"
+
+          curl -fLO "https://ftpmirror.gnu.org/gcc/gcc-${GCC_VERSION}/gcc-${GCC_VERSION}.tar.xz"
+          tar -xf "gcc-${GCC_VERSION}.tar.xz"
+          (cd "gcc-${GCC_VERSION}" && ./contrib/download_prerequisites)
+          mkdir build-gcc && cd build-gcc
+          "../gcc-${GCC_VERSION}/configure" \
+            --target="$CROSS_TARGET" --prefix="$PREFIX" \
+            --disable-nls --enable-languages=c --without-headers --disable-werror
+          make -j"$(nproc)" all-gcc all-target-libgcc
+          make install-gcc install-target-libgcc
+
+      - name: Put the cross-toolchain upon the PATH
+        run: echo "$HOME/opt/cross/bin" >> "$GITHUB_PATH"
+
+      - name: Report which tools are present
+        run: make toolcheck
+
+      - name: Build the kernel and the ISO
+        run: make iso
+
+      # `make verify` boots the ISO under QEMU with no display, asserts that the
+      # banner appears upon the serial port, and asserts that no self-test
+      # reported a failure. There is no KVM upon a hosted runner, so QEMU
+      # emulates; that is how the target is run locally also.
+      - name: Verify under QEMU
+        run: make verify
+
+      # The serial log is the evidence. It is kept whether the run passed or
+      # failed, a verification that fails without its log being unactionable.
+      - name: Keep the serial log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: serial-log
+          path: build/serial.log
+          if-no-files-found: warn

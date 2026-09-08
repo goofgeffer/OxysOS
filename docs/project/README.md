@@ -10,7 +10,7 @@ explains how the kernel functions; that is [`../design/`](../design/),
 | [`STATUS.md`](STATUS.md) | The present condition of the system: what it does today, one paragraph to a phase, and the table of which environments each phase has actually been observed to work in. |
 | [`HISTORY.md`](HISTORY.md) | The revision history: one row per change, pointing at the commit that made it and the design document that reasons about it. |
 | [`TESTING.md`](TESTING.md) | How the kernel is verified — the `make verify` procedure, the interactive and machine-specific runs, and the dated record of every test performed with its outcome. |
-| [`TOOLCHAIN.md`](TOOLCHAIN.md) | The `x86_64-elf` cross-toolchain, its construction, and the build system that uses it. |
+| [`TOOLCHAIN.md`](TOOLCHAIN.md) | The `x86_64-elf` cross-toolchain, its construction, the build system that uses it, and the GitHub workflow that runs the verification upon a machine nobody here has configured. |
 | [`CODING-STANDARDS.md`](CODING-STANDARDS.md) | Style, naming, file headers, the `-Wall -Wextra -Werror` regime, and the register of compiler extensions relied upon with the justification of each. |
 | [`REFERENCES.md`](REFERENCES.md) | Every specification the project relies upon, with the sections relied upon named and, where a specification is not publicly distributed, a note of how its details were cross-verified. |
 | [`INSPIRATIONS.md`](INSPIRATIONS.md) | The systems this project takes its character from — ToaruOS principally, BSD besides — what is taken from each, what is not, the appearance Phase 9 is to be designed against, and the rule that separates an inspiration from a source of code. |

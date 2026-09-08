@@ -1,5 +1,15 @@
 # Oxys-OS
 
+[![CI](https://github.com/goofgeffer/OxysOS/actions/workflows/ci.yml/badge.svg)](https://github.com/goofgeffer/OxysOS/actions/workflows/ci.yml)
+[![Version](https://img.shields.io/badge/version-v0.1.0-blue)](docs/project/HISTORY.md)
+[![Language](https://img.shields.io/badge/C-C11-blue?logo=c)](docs/project/CODING-STANDARDS.md)
+[![Assembly](https://img.shields.io/badge/asm-NASM-6E4C13)](boot/)
+[![Architecture](https://img.shields.io/badge/arch-x86__64-lightgrey)](docs/design/ARCHITECTURE.md)
+[![Boot](https://img.shields.io/badge/boot-Multiboot2-lightgrey)](docs/design/BOOT.md)
+[![Kernel licence](https://img.shields.io/badge/kernel-LGPL--3.0--or--later-green)](LICENSES/)
+[![Userland licence](https://img.shields.io/badge/userland-MIT-green)](LICENSES/)
+[![Docs licence](https://img.shields.io/badge/docs-CC0--1.0-green)](LICENSES/)
+
 Oxys-OS is a monolithic, Unix-like operating system for x86_64, written from
 scratch in ISO C11 and NASM assembly. It targets real hardware and is tested
 under QEMU and VirtualBox.
@@ -43,7 +53,7 @@ source of truth for progress, and nothing below restates it.
 | [`STATUS.md`](docs/project/STATUS.md) | The present condition of the system, one paragraph to a phase, and which environments each phase has been observed to work in. |
 | [`HISTORY.md`](docs/project/HISTORY.md) | The revision history: one row per change, pointing at the commit and the design document that hold the detail. |
 | [`TESTING.md`](docs/project/TESTING.md) | The test procedure under QEMU, VirtualBox, OVMF and physical hardware, and the record of every test performed. |
-| [`TOOLCHAIN.md`](docs/project/TOOLCHAIN.md) | The cross-compilation toolchain, its construction, and the build system. |
+| [`TOOLCHAIN.md`](docs/project/TOOLCHAIN.md) | The cross-compilation toolchain, its construction, the build system, and the workflow that runs the verification upon GitHub. |
 | [`CODING-STANDARDS.md`](docs/project/CODING-STANDARDS.md) | The mandatory conventions of style, naming, documentation and compiler diagnostics. |
 | [`REFERENCES.md`](docs/project/REFERENCES.md) | The bibliography of authoritative specifications consulted by the project. |
 | [`INSPIRATIONS.md`](docs/project/INSPIRATIONS.md) | The systems this project takes its character from — ToaruOS principally, BSD besides — the appearance the desktop is intended to have, and the line between an inspiration and a source of code. |
@@ -99,6 +109,7 @@ by subject. The two are complementary.
 | [`drivers/README.md`](drivers/README.md) | The device drivers, one subdirectory per device class. |
 | [`graphics/README.md`](graphics/README.md) | The framebuffer and the drawing above it. |
 | [`docs/README.md`](docs/README.md) | The documentation corpus itself: what the four groups hold, and the form every document takes. Each group carries a `README.md` of its own. |
+| [`.github/README.md`](.github/README.md) | The automation that runs upon GitHub: the workflow that builds the kernel, runs the second compiler and executes `make verify` upon a machine nobody here has configured. |
 
 The directories `libc/`, `userland/`, `crypto/`, `net/` and `uefi/` are presently
 empty and acquire their documents when material is first placed within them.
