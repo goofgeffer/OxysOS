@@ -180,3 +180,4 @@ owner's decision.
 | How anything is tested | [`docs/project/TESTING.md`](docs/project/TESTING.md) |
 | The rules that bind all of it | [`PROJECT_GUIDELINES.md`](PROJECT_GUIDELINES.md) |
 | What is expected of conduct, as against of work | [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) |
+| What the system defends, what it does not, and how to report a defect in either | [`SECURITY.md`](SECURITY.md) |

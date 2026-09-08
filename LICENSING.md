@@ -17,7 +17,7 @@ intended to be used differently.
 | ---- | ------- | --------------- |
 | `boot/`, `kernel/`, `drivers/`, `graphics/`, `linker.ld` | GNU Lesser General Public License, version 3 or later | `LGPL-3.0-or-later` |
 | `libc/`, `userland/` | MIT License | `MIT` |
-| `docs/`, every `README.md`, `PROJECT_GUIDELINES.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, this file | Creative Commons CC0 1.0 Universal | `CC0-1.0` |
+| `docs/`, every `README.md`, `PROJECT_GUIDELINES.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SECURITY.md`, this file | Creative Commons CC0 1.0 Universal | `CC0-1.0` |
 | `Makefile`, `build_*.sh`, `boot/grub/grub.cfg`, `.gitignore`, `.gitattributes`, `.github/` | CC0 1.0 Universal, as documentation of how the work is built rather than part of it | `CC0-1.0` |
 
 `libc/` and `userland/` are empty at the time of writing; they acquire material

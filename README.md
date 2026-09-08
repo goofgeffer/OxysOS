@@ -157,6 +157,7 @@ it.
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | The working procedure those conventions imply: the order of work, what a change must carry before it is complete, and the standards a test, a document and a commit are held to. |
 | [`LICENSING.md`](LICENSING.md) | Which licence applies to which path, why the three were chosen, and where the boundary between the kernel and a program running upon it falls. |
 | [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) | The standard of conduct expected, what is not acceptable, how to report a concern and what follows from one — and why blunt criticism of the work is expected rather than forbidden. |
+| [`SECURITY.md`](SECURITY.md) | The one security boundary this system actually has, what is in force defending it, what is not in force and when it is due, and how to report a defect that crosses it. |
 
 ## Document conventions
 
