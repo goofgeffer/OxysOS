@@ -1,7 +1,6 @@
 # Oxys-OS
 
 [![CI](https://github.com/goofgeffer/OxysOS/actions/workflows/ci.yml/badge.svg)](https://github.com/goofgeffer/OxysOS/actions/workflows/ci.yml)
-[![Version](https://img.shields.io/badge/version-v0.1.0-blue)](docs/project/HISTORY.md)
 [![Language](https://img.shields.io/badge/C-C11-blue?logo=c)](docs/project/CODING-STANDARDS.md)
 [![Assembly](https://img.shields.io/badge/asm-NASM-6E4C13)](boot/)
 [![Architecture](https://img.shields.io/badge/arch-x86__64-lightgrey)](docs/design/ARCHITECTURE.md)
