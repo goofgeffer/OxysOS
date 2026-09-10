@@ -18,7 +18,7 @@ divided into atomic sub-tasks, and every milestone must be bootable and testable
 beyond the thirteen phases and is recorded here so that the work leading to it is
 not quietly foreclosed; the section [Beyond the thirteen
 phases](#beyond-the-thirteen-phases--self-hosting) sets out what it means, what
-it depends upon, and the one decision it cannot be planned without.
+it depends upon, and the decision already taken about how the compiler is got.
 
 ## Where we are
 **Phases 1 to 5 are complete.** Sub-task 1.12 closed on 2026-09-07: the kernel
@@ -527,8 +527,8 @@ involved at any step. The project is self-hosting when the cross-compiler of
 `PROJECT_GUIDELINES.md`, Section 3, is no longer the only way to make it.
 
 This is a statement of direction and not a fourteenth phase. It has no sub-tasks,
-no ordering and no assertions, because it cannot honestly have them until the
-decision in Section B below is taken. It is written down so that the work leading
+no ordering and no assertions, because the work it names has not been broken down
+yet — only its shape is settled. It is written down so that the work leading
 towards it is not foreclosed by accident — a system call omitted, a filesystem
 left read-only, a toolchain assumption baked into the build — which is the way
 this goal is usually lost.
@@ -544,49 +544,53 @@ roadmap for their own reasons.
 | A filesystem that can be written to, with directories and a mountable root | **Phase 5.** Present. |
 | Processes that can fork, execute a program from a volume, and be collected | **Phase 6**, sub-task 6.11. Present. |
 | A scheduler, so that a build runs while other work does | **Phase 6**, sub-task 6.15. Present, though a user thread is confined to the bootstrap processor until the locks of [`../design/CONCURRENCY.md`](../design/CONCURRENCY.md), Section 10, limitation 1, are applied. A parallel build is what will first want that. |
-| A C library a compiler can be built against | **Phase 7**, and this is the requirement Phase 7's present scope does *not* meet. A minimal libc is enough for `ls` and `cat`; it is nowhere near enough for a compiler. |
+| A C library a compiler can be built against | **Phase 7**, whose scope Section B enlarges: a libc sized for `ls` and `cat` is nowhere near enough for a ported compiler to link against. |
 | A shell, a job-control model, and pipes | **Phase 8.** Planned. A build system is a program that runs programs. |
-| An assembler and a linker | **Not on the roadmap.** Nothing yet plans for either. |
-| A C compiler that runs upon Oxys-OS | **Not on the roadmap**, and Section B is why. |
+| An assembler and a linker | **Porting work, not yet scheduled.** Section B settles that they are ports; which ones, and when, is not decided. |
+| A C compiler that runs upon Oxys-OS | **Porting work, not yet scheduled.** Section B settles it; which compiler is a judgement better taken once Phase 7 has shown what each would demand. |
 | A text editor, and enough of a utility set to work in | **Phase 13**, sub-task 13.8, in outline only. |
 | Storage, memory and time enough to compile a kernel on the machine itself | An open question. It bears on Phase 13's optimisation work and on what hardware the final image targets. |
 
-Three of those rows have nothing behind them, and the honest summary is that
-self-hosting is presently **further away than the thirteen phases are long**.
-Recording it is worth doing anyway: several of the rows above are cheaper to get
-right the first time than to retrofit, and the ones that are not yet planned are
-easier to plan for if it is known they are coming.
+Three of those rows are porting work that has not been scheduled, and the honest
+summary is that self-hosting is presently **further away than the thirteen phases
+are long**. Recording it is worth doing anyway: several of the rows above are
+cheaper to get right the first time than to retrofit, and the ones not yet
+scheduled are easier to plan for if it is known they are coming.
 
-### B. The decision this cannot be planned without
+### B. The compiler is ported, not written
 
-**Does Oxys-OS write its own C compiler, or port one?**
+**Decided by the project owner: Oxys-OS ports a C compiler rather than writing
+one.** `PROJECT_GUIDELINES.md`, Section 2, records the rule that follows from it
+— external tools, toolchains and their supporting libraries may be ported and
+depended upon — and Section 8's prohibition on third-party code now says
+explicitly that it stops at the kernel.
 
-The two answers lead to entirely different projects, and neither is obviously
-right.
+The alternative was to write a compiler here. It was declined on the plainest
+possible ground: a compiler good enough to compile this kernel is a larger
+undertaking than the thirteen phases combined, and one that is *not* good enough
+does not reach the objective at all. Porting reaches it, and the cost is that the
+system depends upon code this project did not write.
 
-*Writing one* is what `PROJECT_GUIDELINES.md`, Section 2, points at: the project
-is built from scratch, no external code is copied, and a compiler written here
-would be continuous with everything else in the repository. It is also, plainly,
-a larger undertaking than the thirteen phases combined if the target is a C11
-compiler good enough to compile this kernel — and a compiler that cannot compile
-this kernel does not achieve the objective at all.
+**What that changes about the work**:
 
-*Porting one* — a small existing C compiler, or GCC or LLVM — reaches the
-objective far sooner and brings a large body of third-party code into the
-project. Section 8 of the guidelines forbids third-party code **inside the kernel
-proper**, and a userland toolchain is not the kernel; but the project's identity
-in Section 1 is "built entirely from scratch", and a ported compiler sits
-uncomfortably against that whether or not the letter of the rule permits it.
+- **Phase 7's C library is sized for a compiler, not for utilities.** This is the
+  decision's largest consequence and it lands earliest. A libc that supports `ls`
+  and `cat` is a fraction of what a ported compiler links against, and the
+  difference is far cheaper to plan for than to discover.
+- **The three unplanned rows in Section A become porting work**, not original
+  work: a C compiler, an assembler and a linker. Which compiler — a small one,
+  or GCC, or LLVM — is not decided here; it is a judgement about how much libc
+  and how many system calls each demands, and it is better taken when Phase 7
+  has shown what those cost.
+- **A port is held apart from original source**, in a directory of its own,
+  under its own licence, recorded in [`../../LICENSING.md`](../../LICENSING.md)
+  before it is committed, and modified no further than the port requires. The
+  rule is in the guidelines rather than here because it binds every port and not
+  only the compiler.
 
-**This is the project owner's decision and has not been taken.** It is recorded
-as an open question rather than resolved by whoever writes the next document,
-because the answer determines whether Phase 7's C library is sized for utilities
-or for a compiler — and that is a decision made long before anybody starts
-writing either.
-
-Whichever way it goes, `PROJECT_GUIDELINES.md`, Section 5, will need amending to
-say so, and Section 7 of that document requires the reason to be recorded in the
-commit that makes the amendment.
+The identity in `PROJECT_GUIDELINES.md`, Section 1, states the position this
+implies: the kernel and userland are written from scratch, and the system may run
+and depend upon ported third-party tools.
 
 ### C. What to avoid foreclosing in the meantime
 

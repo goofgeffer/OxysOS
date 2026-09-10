@@ -7,7 +7,7 @@ practices that are prohibited.
 
 ## 1. Project Identity
 - **Name**: Oxys-OS (Oxys).
-- **Purpose**: A monolithic, Unix-based x86_64 operating system built entirely from scratch in ISO C11 and assembly.
+- **Purpose**: A monolithic, Unix-based x86_64 operating system whose kernel and userland are written from scratch in ISO C11 and assembly, and which may run and depend upon ported third-party tools.
 - **Root Directory**: `~/oxys-os` (within WSL2 on Windows 10).
 - **Primary Language**: C11 for kernel and userland; NASM assembly for boot and architecture-specific routines.
 
@@ -18,12 +18,13 @@ practices that are prohibited.
   - Updated inline comments and file-header blocks.
   - Corresponding design notes within the `docs/` folder, in the group its subject belongs to: `project/`, `design/`, `devices/` or `storage/`, as `docs/README.md` sets out.
   - The living roadmap `docs/project/PLAN.md` (marking completed tasks and adjusting subsequent steps).
-- **No External Code Copying**: All source code must be original. Reference implementations may be studied for understanding but must not be transcribed. The only permitted inclusions are standard public domain headers or minimal stub code explicitly required by the toolchain (e.g., linker scripts).
+- **Original Kernel and Userland**: All source code under `kernel/`, `boot/`, `drivers/`, `graphics/`, `libc/`, `net/`, `crypto/`, `uefi/` and `userland/` must be original. Reference implementations may be studied for understanding but must not be transcribed. The only permitted inclusions there are standard public domain headers or minimal stub code explicitly required by the toolchain (e.g., linker scripts).
+- **Ported Third-Party Tools Are Permitted**: External tools, toolchains, plugins and their supporting libraries may be ported to run upon Oxys-OS, and Oxys-OS may depend upon them. This is how the system becomes self-hosting: the C compiler, assembler and linker it will eventually build itself with are ports and not original work. A port is held apart from original source, in a directory of its own, and carries the upstream project's name, version and the licence it arrived under, and that licence must be recorded in `LICENSING.md` before the port is committed. A port must not be modified beyond what the port requires, so that it can be updated from upstream rather than diverging into a fork nobody maintains.
 - **Testing Mandate**: Every milestone must be bootable and testable in both QEMU (with `-machine q35 -cpu qemu64 -smp cores=2` for SMP testing) and VirtualBox. UEFI testing requires QEMU with OVMF firmware (`-bios /usr/share/ovmf/OVMF.fd`). Real hardware compatibility must be considered from the first ISO build.
 
 
 ## 3. Technical Stack and Constraints
-- **Toolchain**: `x86_64-elf-gcc`, `x86_64-elf-ld`, `nasm`, `grub-mkrescue`, `make`. All must be installed and functional in the WSL2 environment.
+- **Toolchain**: `x86_64-elf-gcc`, `x86_64-elf-ld`, `nasm`, `grub-mkrescue`, `make`. All must be installed and functional in the WSL2 environment. This is the cross-build host; the long-term objective is that a native toolchain, ported under Section 2, supersedes it.
 - **Boot Protocol**: Multiboot2 (GRUB as the bootloader) for legacy BIOS; UEFI boot path (PE32+ image) added later.
 - **Kernel Image**: ELF64, linked according to `linker.ld`. Higher-half kernel layout is recommended.
 - **Build System**: GNU Make with explicit targets: `all`, `clean`, `iso`, `run-qemu`, `run-vbox`, `run-uefi` (for OVMF testing), `verify` (the automated regression run required by the Testing Mandate of Section 2) and `toolcheck`.
@@ -66,6 +67,8 @@ The graphical work is divided between Phases 6 and 9, by dependency. What requir
 
 UEFI is a dedicated phase before final polish.
 
+Beyond the thirteen phases, the long-term objective is that Oxys-OS builds Oxys-OS. The compiler, assembler and linker that requires are ports, by the rule in Section 2; `docs/project/PLAN.md` sets out what else it depends upon.
+
 ## 6. Research and Reference Protocol
 - **Permitted Sources**:
   - Intel 64 and IA-32 Architectures Software Developer Manuals (Volumes 1–4).
@@ -86,7 +89,7 @@ UEFI is a dedicated phase before final polish.
 - Use of non-standard or GCC-specific extensions without first documenting the rationale.
 - Use of floating-point operations in the kernel unless explicitly required for a specific algorithm (and even then, with clear justification).
 - Reliance on undefined behaviour. All pointer arithmetic, type punning, and bitwise operations must be explicitly defined in the C11 standard.
-- Use of any third-party library or external code inside the kernel proper. The only external dependencies are the bootloader (GRUB) and the cross-compiler toolchain.
+- Use of any third-party library or external code **inside the kernel proper**. The kernel's only external dependencies are the bootloader (GRUB) and the toolchain that builds it. This prohibition stops at the kernel: ported third-party tools run upon the system and are permitted by Section 2.
 
 ## 9. Initialisation Checklist
 At the start of each working session, the contributor shall verify:
