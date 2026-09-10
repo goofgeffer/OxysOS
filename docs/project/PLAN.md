@@ -14,6 +14,12 @@ A monolithic, Unix-like operating system for x86_64, written from scratch in ISO
 C11 and NASM assembly, in thirteen phases ordered by dependency. Each phase is
 divided into atomic sub-tasks, and every milestone must be bootable and testable.
 
+**The long-term objective is that Oxys-OS should build Oxys-OS.** That lies
+beyond the thirteen phases and is recorded here so that the work leading to it is
+not quietly foreclosed; the section [Beyond the thirteen
+phases](#beyond-the-thirteen-phases--self-hosting) sets out what it means, what
+it depends upon, and the one decision it cannot be planned without.
+
 ## Where we are
 **Phases 1 to 5 are complete.** Sub-task 1.12 closed on 2026-09-07: the kernel
 has booted from a USB medium upon real hardware, and the boot log was read there.
@@ -88,7 +94,7 @@ sub-task being the verification itself.
 | [3](#phase-3--interrupts-exceptions-and-keyboard-input) | Interrupts, exceptions and keyboard input | Implemented |
 | [4](#phase-4--basic-device-drivers) | Basic device drivers | Implemented |
 | [5](#phase-5--ext2-filesystem) | EXT2 filesystem | Implemented |
-| [6](#phase-6--graphics-system-calls-process-management-and-symmetric-multi-processing) | Graphics, system calls, processes, SMP | **In progress** — 6.1 to 6.13 done |
+| [6](#phase-6--graphics-system-calls-process-management-and-symmetric-multi-processing) | Graphics, system calls, processes, SMP | Implemented |
 | [7](#phase-7--userland-and-minimal-c-library) | Userland and minimal C library | Planned |
 | [8](#phase-8--shell) | Shell | Planned |
 | [9](#phase-9--the-desktop-its-system-services-and-its-configuration) | The desktop, its services and its configuration | Planned |
@@ -510,6 +516,97 @@ mappings those protections exist for came into being at sub-task 6.10.
 | 13.6 | Complete and review the whole of the `docs/` corpus. | Planned | — |
 | 13.7 | Test on a minimum of three distinct physical machines, including UEFI systems. | Planned | — |
 | 13.8 | Extend the userland utility set and produce the final release image. | Planned | — |
+
+---
+
+## Beyond the thirteen phases — self-hosting
+
+**The objective**: a machine running Oxys-OS can check out this repository, build
+it, and produce a bootable image of Oxys-OS — with no other operating system
+involved at any step. The project is self-hosting when the cross-compiler of
+`PROJECT_GUIDELINES.md`, Section 3, is no longer the only way to make it.
+
+This is a statement of direction and not a fourteenth phase. It has no sub-tasks,
+no ordering and no assertions, because it cannot honestly have them until the
+decision in Section B below is taken. It is written down so that the work leading
+towards it is not foreclosed by accident — a system call omitted, a filesystem
+left read-only, a toolchain assumption baked into the build — which is the way
+this goal is usually lost.
+
+### A. What it actually requires
+
+Self-hosting is not one piece of work. It is the point at which several
+independent lines of work happen to meet, and most of them are already on the
+roadmap for their own reasons.
+
+| Requirement | Where it stands |
+| ----------- | --------------- |
+| A filesystem that can be written to, with directories and a mountable root | **Phase 5.** Present. |
+| Processes that can fork, execute a program from a volume, and be collected | **Phase 6**, sub-task 6.11. Present. |
+| A scheduler, so that a build runs while other work does | **Phase 6**, sub-task 6.15. Present, though a user thread is confined to the bootstrap processor until the locks of [`../design/CONCURRENCY.md`](../design/CONCURRENCY.md), Section 10, limitation 1, are applied. A parallel build is what will first want that. |
+| A C library a compiler can be built against | **Phase 7**, and this is the requirement Phase 7's present scope does *not* meet. A minimal libc is enough for `ls` and `cat`; it is nowhere near enough for a compiler. |
+| A shell, a job-control model, and pipes | **Phase 8.** Planned. A build system is a program that runs programs. |
+| An assembler and a linker | **Not on the roadmap.** Nothing yet plans for either. |
+| A C compiler that runs upon Oxys-OS | **Not on the roadmap**, and Section B is why. |
+| A text editor, and enough of a utility set to work in | **Phase 13**, sub-task 13.8, in outline only. |
+| Storage, memory and time enough to compile a kernel on the machine itself | An open question. It bears on Phase 13's optimisation work and on what hardware the final image targets. |
+
+Three of those rows have nothing behind them, and the honest summary is that
+self-hosting is presently **further away than the thirteen phases are long**.
+Recording it is worth doing anyway: several of the rows above are cheaper to get
+right the first time than to retrofit, and the ones that are not yet planned are
+easier to plan for if it is known they are coming.
+
+### B. The decision this cannot be planned without
+
+**Does Oxys-OS write its own C compiler, or port one?**
+
+The two answers lead to entirely different projects, and neither is obviously
+right.
+
+*Writing one* is what `PROJECT_GUIDELINES.md`, Section 2, points at: the project
+is built from scratch, no external code is copied, and a compiler written here
+would be continuous with everything else in the repository. It is also, plainly,
+a larger undertaking than the thirteen phases combined if the target is a C11
+compiler good enough to compile this kernel — and a compiler that cannot compile
+this kernel does not achieve the objective at all.
+
+*Porting one* — a small existing C compiler, or GCC or LLVM — reaches the
+objective far sooner and brings a large body of third-party code into the
+project. Section 8 of the guidelines forbids third-party code **inside the kernel
+proper**, and a userland toolchain is not the kernel; but the project's identity
+in Section 1 is "built entirely from scratch", and a ported compiler sits
+uncomfortably against that whether or not the letter of the rule permits it.
+
+**This is the project owner's decision and has not been taken.** It is recorded
+as an open question rather than resolved by whoever writes the next document,
+because the answer determines whether Phase 7's C library is sized for utilities
+or for a compiler — and that is a decision made long before anybody starts
+writing either.
+
+Whichever way it goes, `PROJECT_GUIDELINES.md`, Section 5, will need amending to
+say so, and Section 7 of that document requires the reason to be recorded in the
+commit that makes the amendment.
+
+### C. What to avoid foreclosing in the meantime
+
+These cost nothing now and are expensive to retrofit:
+
+1. **The build must not assume the host is Linux.** `Makefile` and the scripts
+   beside it should keep to what a POSIX shell provides, so that the day they are
+   run under an Oxys-OS shell is a day of finding bugs rather than of rewriting.
+2. **System calls should be added in the shapes a real program expects**, and
+   not in whatever shape the self-test that first needed them found convenient.
+   A compiler wants files, directories, pipes and processes; each is far cheaper
+   to get right at the moment it is introduced.
+3. **The filesystem must stay writable and must stay correct under a load it has
+   never seen.** A build writes many files, of many sizes, quickly.
+   [`../storage/BUFFER.md`](../storage/BUFFER.md) records that the buffer cache
+   is the first structure that will want a lock it may sleep upon; a build is the
+   workload that will demonstrate it.
+4. **The `docs/` corpus should keep saying which parts are self-hosting
+   obstacles**, in the file that owns each, rather than accumulating the list
+   here. A limitation named in one place is one somebody can find.
 
 ---
 
