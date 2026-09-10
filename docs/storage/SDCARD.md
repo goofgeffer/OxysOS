@@ -1,3 +1,5 @@
+<!-- SPDX-FileCopyrightText: 2026 The Oxys-OS Authors -->
+<!-- SPDX-License-Identifier: CC0-1.0 -->
 # The SD Card and the Embedded MultiMediaCard
 
 **Phase**: 4, sub-task 4.8, of [`PLAN.md`](../project/PLAN.md).

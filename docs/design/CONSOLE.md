@@ -1,3 +1,5 @@
+<!-- SPDX-FileCopyrightText: 2026 The Oxys-OS Authors -->
+<!-- SPDX-License-Identifier: CC0-1.0 -->
 # The Font and the Console
 
 **Corresponding phase**: 6, sub-task 6.4 — the bitmap face drawn for this

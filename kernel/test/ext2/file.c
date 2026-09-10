@@ -1,3 +1,5 @@
+/* SPDX-FileCopyrightText: 2026 The Oxys-OS Authors */
+/* SPDX-License-Identifier: LGPL-3.0-or-later */
 /*
  * File: kernel/test/ext2/file.c
  * Purpose: Asserts the reading of a file's contents: that a range of bytes is

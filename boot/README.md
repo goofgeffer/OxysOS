@@ -1,3 +1,5 @@
+<!-- SPDX-FileCopyrightText: 2026 The Oxys-OS Authors -->
+<!-- SPDX-License-Identifier: CC0-1.0 -->
 # `boot/` — Bootstrapping and Boot Loader Configuration
 
 **Phase**: 1, sub-tasks 1.3 to 1.6 and 1.9; and 6.14, which placed

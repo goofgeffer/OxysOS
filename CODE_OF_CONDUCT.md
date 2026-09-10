@@ -1,3 +1,5 @@
+<!-- SPDX-FileCopyrightText: 2026 The Oxys-OS Authors -->
+<!-- SPDX-License-Identifier: CC0-1.0 -->
 # Code of Conduct
 
 **Authority**: This document. It is subordinate to

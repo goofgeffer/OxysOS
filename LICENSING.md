@@ -1,3 +1,5 @@
+<!-- SPDX-FileCopyrightText: 2026 The Oxys-OS Authors -->
+<!-- SPDX-License-Identifier: CC0-1.0 -->
 # Licensing
 
 **Authority**: This document, together with the texts in
@@ -139,15 +141,27 @@ recollection.
    kernel's implementation of it.** Section 2.1. It must be divided before
    sub-task 7.2, and this is the first thing to be done about licensing after
    this document.
-2. **No `SPDX-License-Identifier` headers are present in the source files.** The
-   mapping of Section 1 is by path, which is sufficient and is what this document
-   is for, but a per-file tag is machine-readable where a table is not. Adding
-   one to each of the hundred-odd files is a mechanical change and is not made
-   here.
+2. **~~No `SPDX-License-Identifier` headers are present in the source files.~~**
+   Discharged. Every tracked file carries `SPDX-FileCopyrightText` and
+   `SPDX-License-Identifier` lines, in the comment syntax its type requires,
+   placed after a shebang where there is one.
+
+   They were added by [`tools/spdx.sh`](tools/spdx.sh) and are kept honest
+   by it: `make spdx-check` fails when a file's tag is absent or disagrees with
+   the table in Section 1, and CI runs it on every push. **That script is this
+   table expressed as code**, and the two must change together — a rule added
+   here and not there is a rule that binds nobody.
+
+   A mismatched tag is reported and never rewritten. A file whose tag disagrees
+   with the table is either a file in the wrong place or a table that is wrong,
+   and neither is a thing a script should decide.
 3. **The copyright holder is recorded as "The Oxys-OS Authors".** That is a
    placeholder of the ordinary kind and is legally serviceable, but a single
    copyright holder may prefer to be named. Changing it means changing it in
-   `LICENSES/MIT.txt` and in this document.
+   `LICENSES/MIT.txt`, in this document, in the `COPYRIGHT` constant of
+   [`tools/spdx.sh`](tools/spdx.sh), and in the tag every tracked file now
+   carries — the last of which is what `make spdx-apply` exists to do in one
+   pass rather than by hand.
 4. **No contributor licensing mechanism is in force**, there being one
    contributor. [`CONTRIBUTING.md`](CONTRIBUTING.md), Section 7, records what
    would be needed if that changes.

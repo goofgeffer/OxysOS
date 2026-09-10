@@ -1,3 +1,5 @@
+<!-- SPDX-FileCopyrightText: 2026 The Oxys-OS Authors -->
+<!-- SPDX-License-Identifier: CC0-1.0 -->
 # The Design Documentation
 
 **Authority**: `PROJECT_GUIDELINES.md`, Sections 2 and 7. No change to this

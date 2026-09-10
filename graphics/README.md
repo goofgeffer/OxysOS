@@ -1,3 +1,5 @@
+<!-- SPDX-FileCopyrightText: 2026 The Oxys-OS Authors -->
+<!-- SPDX-License-Identifier: CC0-1.0 -->
 # `graphics/` — The Display
 
 **Phase**: 6, sub-tasks 6.2 to 6.6, all of which are done. This directory was

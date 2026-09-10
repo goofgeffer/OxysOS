@@ -1,3 +1,5 @@
+<!-- SPDX-FileCopyrightText: 2026 The Oxys-OS Authors -->
+<!-- SPDX-License-Identifier: CC0-1.0 -->
 # The PCI Bus
 
 **Phase**: 4, sub-task 4.3, of [`PLAN.md`](../project/PLAN.md).

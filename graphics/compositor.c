@@ -1,3 +1,5 @@
+/* SPDX-FileCopyrightText: 2026 The Oxys-OS Authors */
+/* SPDX-License-Identifier: LGPL-3.0-or-later */
 /*
  * File: graphics/compositor.c
  * Purpose: Implements the compositor: a back buffer standing in for the

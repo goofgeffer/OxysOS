@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 The Oxys-OS Authors
+# SPDX-License-Identifier: CC0-1.0
 # ==============================================================================
 # File: .github/workflows/ci.yml
 #
@@ -44,6 +46,21 @@ env:
   GCC_VERSION: "13.2.0"
 
 jobs:
+  lint:
+    name: Licence tags and corpus
+    runs-on: ubuntu-24.04
+    steps:
+      # It needs no toolchain and builds nothing: it reads the repository and
+      # says whether it contradicts itself. It is a job of its own so that a
+      # corpus that has drifted is not reported as a compiler failure.
+      - uses: actions/checkout@v4
+
+      - name: Check the SPDX licence tags
+        run: make spdx-check
+
+      - name: Check the documentation corpus
+        run: make docs-check
+
   clang-check:
     name: Second compiler
     runs-on: ubuntu-24.04

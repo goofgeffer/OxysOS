@@ -1,3 +1,5 @@
+<!-- SPDX-FileCopyrightText: 2026 The Oxys-OS Authors -->
+<!-- SPDX-License-Identifier: CC0-1.0 -->
 # `docs/devices/` — The Hardware the Kernel Drives
 
 One document per device. Each describes what the hardware is, what its

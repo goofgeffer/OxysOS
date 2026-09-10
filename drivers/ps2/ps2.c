@@ -1,3 +1,5 @@
+/* SPDX-FileCopyrightText: 2026 The Oxys-OS Authors */
+/* SPDX-License-Identifier: LGPL-3.0-or-later */
 /*
  * File: drivers/ps2/ps2.c
  * Purpose: Implements the driver for the 8042 keyboard controller itself: its

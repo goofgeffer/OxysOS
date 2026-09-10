@@ -1,3 +1,5 @@
+/* SPDX-FileCopyrightText: 2026 The Oxys-OS Authors */
+/* SPDX-License-Identifier: LGPL-3.0-or-later */
 /*
  * File: kernel/include/oxys/types.h
  * Purpose: Defines the fixed-width integer types, the boolean type and the

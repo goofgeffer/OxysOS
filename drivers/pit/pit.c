@@ -1,3 +1,5 @@
+/* SPDX-FileCopyrightText: 2026 The Oxys-OS Authors */
+/* SPDX-License-Identifier: LGPL-3.0-or-later */
 /*
  * File: drivers/pit/pit.c
  * Purpose: Implements the driver for counter 0 of the 8253/8254 programmable

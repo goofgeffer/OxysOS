@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 The Oxys-OS Authors
+# SPDX-License-Identifier: CC0-1.0
 # ==============================================================================
 # File: Makefile
 #
@@ -223,7 +225,8 @@ OVMF_FIRMWARE := /usr/share/ovmf/OVMF.fd
 
 VBOX_VM_NAME := Oxys-OS
 
-.PHONY: all iso clean run-qemu run-uefi run-vbox verify toolcheck clang-check
+.PHONY: all iso clean run-qemu run-uefi run-vbox verify toolcheck clang-check \
+        spdx-check spdx-apply docs-check lint
 
 # ------------------------------------------------------------------------------
 # Principal targets.
@@ -347,6 +350,37 @@ verify: $(ISO_IMAGE)
 		false; \
 	fi
 	@echo "VERIFICATION SUCCEEDED: the kernel booted, reported completion, and every self-test passed."
+
+# ------------------------------------------------------------------------------
+
+# ------------------------------------------------------------------------------
+# The corpus checks.
+#
+# Neither target builds anything, and neither needs the toolchain: they read the
+# repository and say whether it contradicts itself. They are separate from
+# `verify` because `verify` answers "does the kernel work" and these answer "does
+# what is written about it still hold", and a run that conflates the two cannot
+# say which of them failed.
+#
+#   spdx-check   Every tracked file carries the licence tag LICENSING.md,
+#                Section 1, assigns to its path.
+#   spdx-apply   Add the tag to the files that lack one. A mismatched tag is
+#                never rewritten; see tools/spdx.sh.
+#   docs-check   The claims the corpus makes about itself and about the source.
+#   lint         Both of the checks, and what CI runs.
+# ------------------------------------------------------------------------------
+
+spdx-check:
+	@tools/spdx.sh --check
+
+spdx-apply:
+	@tools/spdx.sh --apply
+
+docs-check:
+	@tools/check-docs.sh
+
+lint: spdx-check docs-check
+	@echo "LINT SUCCEEDED: the licence tags and the corpus agree with the source."
 
 # ------------------------------------------------------------------------------
 # Toolchain verification.

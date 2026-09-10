@@ -1,3 +1,5 @@
+<!-- SPDX-FileCopyrightText: 2026 The Oxys-OS Authors -->
+<!-- SPDX-License-Identifier: CC0-1.0 -->
 # Contributing to Oxys-OS
 
 **Authority**: [`PROJECT_GUIDELINES.md`](PROJECT_GUIDELINES.md) is binding upon

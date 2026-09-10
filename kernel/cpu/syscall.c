@@ -1,3 +1,5 @@
+/* SPDX-FileCopyrightText: 2026 The Oxys-OS Authors */
+/* SPDX-License-Identifier: LGPL-3.0-or-later */
 /*
  * File: kernel/cpu/syscall.c
  * Purpose: Configures the fast system-call mechanism: enables it in IA32_EFER,

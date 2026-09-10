@@ -1,3 +1,5 @@
+<!-- SPDX-FileCopyrightText: 2026 The Oxys-OS Authors -->
+<!-- SPDX-License-Identifier: CC0-1.0 -->
 # The Drawing Primitives
 
 **Corresponding phase**: 6, sub-task 6.3 — the surface, the clipping that bounds
@@ -129,7 +131,7 @@ right on the same row.
 
 This is not a corner case to be tidy about. **Scrolling is exactly the overlapping
 case** — the whole screen moved up by one row of text — and it is what the console
-of sub-task 6.4 will be built on.
+of sub-task 6.4 is built upon.
 
 ## 6. Verification of the primitives
 

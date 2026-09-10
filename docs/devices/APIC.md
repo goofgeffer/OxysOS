@@ -1,3 +1,5 @@
+<!-- SPDX-FileCopyrightText: 2026 The Oxys-OS Authors -->
+<!-- SPDX-License-Identifier: CC0-1.0 -->
 # The Advanced Programmable Interrupt Controllers
 
 **Corresponding phase**: Phase 6, sub-tasks 6.12, 6.13 and 6.14. This document is

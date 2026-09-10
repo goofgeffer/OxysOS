@@ -1,3 +1,5 @@
+/* SPDX-FileCopyrightText: 2026 The Oxys-OS Authors */
+/* SPDX-License-Identifier: LGPL-3.0-or-later */
 /*
  * File: kernel/test/verify_sched.c
  * Purpose: Asserts the work of sub-task 6.15: the per-processor run queues, the

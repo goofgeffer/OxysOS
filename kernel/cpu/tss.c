@@ -1,3 +1,5 @@
+/* SPDX-FileCopyrightText: 2026 The Oxys-OS Authors */
+/* SPDX-License-Identifier: LGPL-3.0-or-later */
 /*
  * File: kernel/cpu/tss.c
  * Purpose: Establishes the task state segment: the stacks it names, its
@@ -82,12 +84,14 @@ static TaskStateSegment *TssCurrent(void)
  * exist before anything that could fail does, and because the address must not
  * change: the processor holds it in a structure it reads without asking.
  *
- * There is no guard page beneath it. The kernel arena of sub-task 2.5 could
- * supply one, and sub-task 6.9 will need to when each thread has a stack of its
- * own and the stacks are numerous enough that an overflow becomes likely; until
- * then an overflow runs into the .bss below, which is the double-fault stack,
- * and the double fault that results is delivered upon a stack of its own and is
- * therefore reported. That is an accident rather than a design, and it is
+ * There is no guard page beneath it, and there will not be one. The thread
+ * stacks of sub-task 6.9 come from the kernel arena and do carry a guard; this
+ * stack is not one of them. It is reserved in `.bss` because it must exist
+ * before any allocator does, and `.bss` has no page beneath it to unmap.
+ *
+ * What lies below it instead is the double-fault stack, so an overflow runs into
+ * that, and the double fault that results is delivered upon a stack of its own
+ * and is therefore reported. That is an accident rather than a design, and it is
  * recorded as a limitation in docs/design/PRIVILEGE.md.
  */
 static uint8_t TssKernelStackStore[TSS_KERNEL_STACK_SIZE] __attribute__((aligned(16)));

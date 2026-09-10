@@ -1,3 +1,5 @@
+/* SPDX-FileCopyrightText: 2026 The Oxys-OS Authors */
+/* SPDX-License-Identifier: LGPL-3.0-or-later */
 /*
  * File: drivers/ata/channel.c
  * Purpose: Establishes where each channel actually answers: the walk of the bus

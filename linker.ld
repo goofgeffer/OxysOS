@@ -1,3 +1,5 @@
+/* SPDX-FileCopyrightText: 2026 The Oxys-OS Authors */
+/* SPDX-License-Identifier: LGPL-3.0-or-later */
 /*
  * File: linker.ld
  * Purpose: Link script for the Oxys-OS kernel, producing an ELF64 image that is

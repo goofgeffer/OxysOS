@@ -1,3 +1,5 @@
+/* SPDX-FileCopyrightText: 2026 The Oxys-OS Authors */
+/* SPDX-License-Identifier: LGPL-3.0-or-later */
 /*
  * File: drivers/pic/pic.c
  * Purpose: Implements the driver for the pair of cascaded Intel 8259A

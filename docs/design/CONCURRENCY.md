@@ -1,3 +1,5 @@
+<!-- SPDX-FileCopyrightText: 2026 The Oxys-OS Authors -->
+<!-- SPDX-License-Identifier: CC0-1.0 -->
 # Concurrency
 
 **Phase**: 6, sub-task 6.13, of [`../project/PLAN.md`](../project/PLAN.md).

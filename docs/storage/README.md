@@ -1,3 +1,5 @@
+<!-- SPDX-FileCopyrightText: 2026 The Oxys-OS Authors -->
+<!-- SPDX-License-Identifier: CC0-1.0 -->
 # `docs/storage/` — From a Medium to a Caller
 
 Nine documents describing one stack, bottom upwards. They are grouped apart from

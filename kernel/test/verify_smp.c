@@ -1,3 +1,5 @@
+/* SPDX-FileCopyrightText: 2026 The Oxys-OS Authors */
+/* SPDX-License-Identifier: LGPL-3.0-or-later */
 /*
  * File: kernel/test/verify_smp.c
  * Purpose: Asserts the work of sub-tasks 6.13 and 6.14: the per-processor data

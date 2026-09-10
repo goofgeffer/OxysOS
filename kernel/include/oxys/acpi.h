@@ -1,3 +1,5 @@
+/* SPDX-FileCopyrightText: 2026 The Oxys-OS Authors */
+/* SPDX-License-Identifier: LGPL-3.0-or-later */
 /*
  * File: kernel/include/oxys/acpi.h
  * Purpose: Declares the reading of the firmware's ACPI description tables: the

@@ -1,3 +1,5 @@
+<!-- SPDX-FileCopyrightText: 2026 The Oxys-OS Authors -->
+<!-- SPDX-License-Identifier: CC0-1.0 -->
 # Oxys-OS Bibliography
 
 **Authority**: `PROJECT_GUIDELINES.md`, Section 6, requires that every design decision be

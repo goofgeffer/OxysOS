@@ -1,3 +1,5 @@
+<!-- SPDX-FileCopyrightText: 2026 The Oxys-OS Authors -->
+<!-- SPDX-License-Identifier: CC0-1.0 -->
 # `kernel/` — The Kernel Core
 
 **Phase**: 1, sub-tasks 1.7 and 1.8. This directory grows in every subsequent

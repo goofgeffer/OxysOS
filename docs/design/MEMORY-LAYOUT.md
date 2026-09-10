@@ -1,3 +1,5 @@
+<!-- SPDX-FileCopyrightText: 2026 The Oxys-OS Authors -->
+<!-- SPDX-License-Identifier: CC0-1.0 -->
 # Oxys-OS Memory Layout
 
 **Corresponding phases**: Phase 1, sub-tasks 1.2 and 1.4, which establish the

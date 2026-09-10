@@ -1,3 +1,5 @@
+<!-- SPDX-FileCopyrightText: 2026 The Oxys-OS Authors -->
+<!-- SPDX-License-Identifier: CC0-1.0 -->
 # Verification of the EXT2 Implementation
 
 **Corresponding phase**: 5, sub-tasks 5.1 to 5.7 — the eleven self-tests that

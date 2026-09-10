@@ -1,3 +1,5 @@
+/* SPDX-FileCopyrightText: 2026 The Oxys-OS Authors */
+/* SPDX-License-Identifier: LGPL-3.0-or-later */
 /*
  * File: kernel/include/oxys/process.h
  * Purpose: Declares the process control block, the thread structure and the
@@ -122,7 +124,7 @@ typedef enum ThreadState
  * The six callee-saved registers and the stack pointer, and nothing else. The
  * System V convention provides that RBX, RBP and R12 to R15 are preserved across
  * a call, so a switch performed *as an ordinary function call* — which is what
- * sub-task 6.10 will do — need save no others: the compiler has already spilled
+ * sub-task 6.10 does — need save no others: the compiler has already spilled
  * anything else it cared about at the call site.
  *
  * The instruction pointer is not among them and is not an omission. A switch

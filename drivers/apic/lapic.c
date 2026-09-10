@@ -1,3 +1,5 @@
+/* SPDX-FileCopyrightText: 2026 The Oxys-OS Authors */
+/* SPDX-License-Identifier: LGPL-3.0-or-later */
 /*
  * File: drivers/apic/lapic.c
  * Purpose: Implements the driver for the Local Advanced Programmable Interrupt

@@ -1,3 +1,5 @@
+<!-- SPDX-FileCopyrightText: 2026 The Oxys-OS Authors -->
+<!-- SPDX-License-Identifier: CC0-1.0 -->
 # The EXT2 Directory and the Operations upon a File
 
 **Corresponding phase**: 5, sub-tasks 5.4 to 5.7 — the directory and the

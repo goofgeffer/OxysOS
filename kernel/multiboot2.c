@@ -1,3 +1,5 @@
+/* SPDX-FileCopyrightText: 2026 The Oxys-OS Authors */
+/* SPDX-License-Identifier: LGPL-3.0-or-later */
 /*
  * File: kernel/multiboot2.c
  * Purpose: Parses the Multiboot2 boot information structure supplied by GRUB and

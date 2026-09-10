@@ -1,3 +1,5 @@
+<!-- SPDX-FileCopyrightText: 2026 The Oxys-OS Authors -->
+<!-- SPDX-License-Identifier: CC0-1.0 -->
 # Oxys-OS Coding Standards
 
 **Authority**: `PROJECT_GUIDELINES.md`, Sections 2, 4 and 8. This document elaborates upon

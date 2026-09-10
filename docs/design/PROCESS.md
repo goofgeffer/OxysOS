@@ -1,3 +1,5 @@
+<!-- SPDX-FileCopyrightText: 2026 The Oxys-OS Authors -->
+<!-- SPDX-License-Identifier: CC0-1.0 -->
 # The Process
 
 **Phase**: 6, sub-tasks 6.9, 6.10 and 6.11, of

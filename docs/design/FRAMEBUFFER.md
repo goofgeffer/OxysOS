@@ -1,3 +1,5 @@
+<!-- SPDX-FileCopyrightText: 2026 The Oxys-OS Authors -->
+<!-- SPDX-License-Identifier: CC0-1.0 -->
 # The Framebuffer
 
 **Corresponding phase**: 6, sub-task 6.2 — the linear framebuffer the boot loader
@@ -119,7 +121,7 @@ Every field is checked before it is recorded, and the description is left
 depth, a pitch narrower than a row, a channel lying outside the pixel.
 
 This is not defensive habit. These values become a base address and a stride that
-sub-task 6.3 will write through in a loop, and a pitch smaller than a row would
+sub-task 6.3 writes through in a loop, and a pitch smaller than a row would
 be discovered as a fault in the middle of drawing — a long way, in both code and
 time, from the boot loader that supplied it. The place to refuse a bad
 description is where the description is read.

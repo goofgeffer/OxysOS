@@ -1,3 +1,5 @@
+<!-- SPDX-FileCopyrightText: 2026 The Oxys-OS Authors -->
+<!-- SPDX-License-Identifier: CC0-1.0 -->
 # `docs/design/` — The Kernel Itself
 
 How the machine is brought up, and how it is arranged once it is. These sixteen

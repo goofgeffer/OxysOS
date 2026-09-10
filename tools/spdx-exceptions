@@ -1,0 +1,8 @@
+# Paths exempt from the SPDX tag, one glob to a line.
+#
+# A ported third-party tool goes here: PROJECT_GUIDELINES.md, Section 2, requires
+# it to keep the licence it arrived under, and tools/spdx.sh must not add this
+# project.s to it. LICENSES/ is exempt in the script itself, that exemption
+# being structural rather than a matter of policy.
+#
+# None yet; the first port adds its directory here.

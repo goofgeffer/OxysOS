@@ -1,3 +1,5 @@
+<!-- SPDX-FileCopyrightText: 2026 The Oxys-OS Authors -->
+<!-- SPDX-License-Identifier: CC0-1.0 -->
 # The Apparatus of a Privilege Transition
 
 **Corresponding phase**: 6, sub-task 6.1, which opens the phase.

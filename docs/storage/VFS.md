@@ -1,3 +1,5 @@
+<!-- SPDX-FileCopyrightText: 2026 The Oxys-OS Authors -->
+<!-- SPDX-License-Identifier: CC0-1.0 -->
 # The Virtual Filesystem Layer
 
 **Corresponding phase**: 5, sub-task 5.8, which completes the phase.

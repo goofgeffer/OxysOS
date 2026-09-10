@@ -1,3 +1,5 @@
+<!-- SPDX-FileCopyrightText: 2026 The Oxys-OS Authors -->
+<!-- SPDX-License-Identifier: CC0-1.0 -->
 # The EXT2 Volume and its Structures
 
 **Phase**: 5, sub-tasks 5.1 to 5.3, of [`../project/PLAN.md`](../project/PLAN.md)

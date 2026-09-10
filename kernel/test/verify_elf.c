@@ -1,3 +1,5 @@
+/* SPDX-FileCopyrightText: 2026 The Oxys-OS Authors */
+/* SPDX-License-Identifier: LGPL-3.0-or-later */
 /*
  * File: kernel/test/verify_elf.c
  * Purpose: Asserts the ELF64 loader: the decoding of a header, every refusal a

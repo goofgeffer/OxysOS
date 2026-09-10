@@ -1,3 +1,5 @@
+<!-- SPDX-FileCopyrightText: 2026 The Oxys-OS Authors -->
+<!-- SPDX-License-Identifier: CC0-1.0 -->
 # The Oxys-OS Toolchain and Build System
 
 **Corresponding phase**: Phase 1, sub-tasks 1.1 and 1.9.

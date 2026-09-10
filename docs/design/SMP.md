@@ -1,3 +1,5 @@
+<!-- SPDX-FileCopyrightText: 2026 The Oxys-OS Authors -->
+<!-- SPDX-License-Identifier: CC0-1.0 -->
 # Symmetric Multiprocessing
 
 **Phase**: 6, sub-task 6.14, of [`../project/PLAN.md`](../project/PLAN.md).

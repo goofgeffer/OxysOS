@@ -1,3 +1,5 @@
+/* SPDX-FileCopyrightText: 2026 The Oxys-OS Authors */
+/* SPDX-License-Identifier: LGPL-3.0-or-later */
 /*
  * File: graphics/cursor.c
  * Purpose: Implements the pointer: the shape drawn for this project, the small

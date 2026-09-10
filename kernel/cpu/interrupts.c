@@ -1,3 +1,5 @@
+/* SPDX-FileCopyrightText: 2026 The Oxys-OS Authors */
+/* SPDX-License-Identifier: LGPL-3.0-or-later */
 /*
  * File: kernel/cpu/interrupts.c
  * Purpose: Installs the 256 interrupt stubs into the descriptor table and

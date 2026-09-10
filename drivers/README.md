@@ -1,3 +1,5 @@
+<!-- SPDX-FileCopyrightText: 2026 The Oxys-OS Authors -->
+<!-- SPDX-License-Identifier: CC0-1.0 -->
 # `drivers/` — Device Drivers
 
 **Phase**: 1, sub-task 1.7, for the early output drivers. Phase 4 in full.

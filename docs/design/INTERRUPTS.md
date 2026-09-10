@@ -1,3 +1,5 @@
+<!-- SPDX-FileCopyrightText: 2026 The Oxys-OS Authors -->
+<!-- SPDX-License-Identifier: CC0-1.0 -->
 # Interrupt and Exception Handling
 
 **Corresponding phase**: Phase 3, sub-tasks 3.1 to 3.5; Phase 6, sub-task 6.12,

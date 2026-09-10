@@ -1,3 +1,5 @@
+<!-- SPDX-FileCopyrightText: 2026 The Oxys-OS Authors -->
+<!-- SPDX-License-Identifier: CC0-1.0 -->
 # Testing: the Graphical Work
 
 **Authority**: `PROJECT_GUIDELINES.md`, Section 2, the testing mandate.

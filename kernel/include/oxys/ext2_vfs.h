@@ -1,3 +1,5 @@
+/* SPDX-FileCopyrightText: 2026 The Oxys-OS Authors */
+/* SPDX-License-Identifier: LGPL-3.0-or-later */
 /*
  * File: kernel/include/oxys/ext2_vfs.h
  * Purpose: Declares the binding of the EXT2 implementation to the virtual

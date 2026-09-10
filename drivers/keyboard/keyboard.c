@@ -1,3 +1,5 @@
+/* SPDX-FileCopyrightText: 2026 The Oxys-OS Authors */
+/* SPDX-License-Identifier: LGPL-3.0-or-later */
 /*
  * File: drivers/keyboard/keyboard.c
  * Purpose: Implements the PS/2 keyboard driver: the initialisation of the

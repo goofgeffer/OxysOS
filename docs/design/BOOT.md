@@ -1,3 +1,5 @@
+<!-- SPDX-FileCopyrightText: 2026 The Oxys-OS Authors -->
+<!-- SPDX-License-Identifier: CC0-1.0 -->
 # The Oxys-OS Boot Sequence
 
 **Corresponding phase**: Phase 1, sub-tasks 1.3 to 1.6.

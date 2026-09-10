@@ -1,3 +1,5 @@
+<!-- SPDX-FileCopyrightText: 2026 The Oxys-OS Authors -->
+<!-- SPDX-License-Identifier: CC0-1.0 -->
 # `docs/project/` — How the Work Is Conducted
 
 These documents govern the work rather than describe the system. Nothing here

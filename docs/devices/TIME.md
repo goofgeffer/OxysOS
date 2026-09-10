@@ -1,3 +1,5 @@
+<!-- SPDX-FileCopyrightText: 2026 The Oxys-OS Authors -->
+<!-- SPDX-License-Identifier: CC0-1.0 -->
 # Timekeeping in Oxys-OS
 
 **Corresponding phase**: Phase 3, sub-task 3.6. This document is revised

@@ -1,3 +1,5 @@
+/* SPDX-FileCopyrightText: 2026 The Oxys-OS Authors */
+/* SPDX-License-Identifier: LGPL-3.0-or-later */
 /*
  * File: graphics/font.c
  * Purpose: Holds the bitmap font and draws a glyph of it upon a surface. Eight
@@ -1161,7 +1163,7 @@ void FontDrawGlyph(GraphicsSurface *surface, int32_t x, int32_t y, uint8_t code,
      *
      * Drawing the background here as well would be one pass instead of two, and
      * would make it impossible to draw a character over anything — which is
-     * what a cursor does, and what sub-task 6.6 will want for a glyph drawn upon
+     * what a cursor does, and what sub-task 6.6 wants for a glyph drawn upon
      * a surface that already holds an image.
      *
      * Every pixel goes through GraphicsPutPixel, so every pixel is clipped. A

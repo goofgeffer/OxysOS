@@ -1,3 +1,5 @@
+<!-- SPDX-FileCopyrightText: 2026 The Oxys-OS Authors -->
+<!-- SPDX-License-Identifier: CC0-1.0 -->
 # The Pointer and the Compositor
 
 **Corresponding phase**: 6, sub-tasks 6.5 and 6.6. Section 1 is the pointer, the

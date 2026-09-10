@@ -1,3 +1,5 @@
+<!-- SPDX-FileCopyrightText: 2026 The Oxys-OS Authors -->
+<!-- SPDX-License-Identifier: CC0-1.0 -->
 # The Graphical Work of Phase 6
 
 **Corresponding phase**: 6, sub-tasks 6.2 to 6.6, which are the whole of the

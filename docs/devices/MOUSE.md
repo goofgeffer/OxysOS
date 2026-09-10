@@ -1,3 +1,5 @@
+<!-- SPDX-FileCopyrightText: 2026 The Oxys-OS Authors -->
+<!-- SPDX-License-Identifier: CC0-1.0 -->
 # The PS/2 Mouse and the Pointer
 
 **Corresponding phase**: Phase 6, sub-task 6.5.

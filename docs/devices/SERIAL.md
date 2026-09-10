@@ -1,3 +1,5 @@
+<!-- SPDX-FileCopyrightText: 2026 The Oxys-OS Authors -->
+<!-- SPDX-License-Identifier: CC0-1.0 -->
 # The Serial Adapter
 
 **Phase**: 4, sub-task 4.1, of [`PLAN.md`](../project/PLAN.md). The polled subset upon which

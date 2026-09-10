@@ -1,3 +1,5 @@
+/* SPDX-FileCopyrightText: 2026 The Oxys-OS Authors */
+/* SPDX-License-Identifier: LGPL-3.0-or-later */
 /*
  * File: kernel/mm/addrspace.c
  * Purpose: Implements the address space: the creation, cloning by copy-on-write,

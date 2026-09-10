@@ -1,3 +1,5 @@
+/* SPDX-FileCopyrightText: 2026 The Oxys-OS Authors */
+/* SPDX-License-Identifier: LGPL-3.0-or-later */
 /*
  * File: kernel/test/verify_usermode.c
  * Purpose: Asserts the two transfers of sub-task 6.10: the exchange of one

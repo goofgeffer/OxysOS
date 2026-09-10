@@ -1,3 +1,5 @@
+<!-- SPDX-FileCopyrightText: 2026 The Oxys-OS Authors -->
+<!-- SPDX-License-Identifier: CC0-1.0 -->
 # The Inspirations of Oxys-OS
 
 **Corresponding phase**: All phases. This document is revised whenever an

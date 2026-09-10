@@ -1,3 +1,5 @@
+<!-- SPDX-FileCopyrightText: 2026 The Oxys-OS Authors -->
+<!-- SPDX-License-Identifier: CC0-1.0 -->
 # Oxys-OS
 
 [![CI](https://github.com/goofgeffer/OxysOS/actions/workflows/ci.yml/badge.svg)](https://github.com/goofgeffer/OxysOS/actions/workflows/ci.yml)
