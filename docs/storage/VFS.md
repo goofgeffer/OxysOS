@@ -588,5 +588,7 @@ the mount count, so the field is now written as well.
     table and the open file table each require a lock, and a node's reference
     count must be adjusted atomically. The spinlock they require was built by
     sub-task 6.13 and has not been applied here. A processor started by sub-task
-    6.14 is parked and opens nothing; **sub-task 6.15 is what makes these tables
+    6.14 is parked and opens nothing, and 6.15 pinned every user thread to the
+    bootstrap processor; **the change that widens that affinity mask is what makes
+    these tables
     contended**.

@@ -208,7 +208,8 @@ was built by sub-task 6.13 and this sequence has not been brought under it. It i
 safe still: sub-task 6.14 started the application processors, but a started
 processor is parked in a halt loop and no path it takes reaches this unit, so
 there remains one flow of control that programmes a redirection entry.
-**Sub-task 6.15 is what makes it contended** — the same obligation the 8259A's
+**The change that widens a user thread's affinity mask is what makes it
+contended** — the same obligation the 8259A's
 mask registers carry, for the same reason, and discharged at the same moment.
 
 ### 4.2 The registers themselves
@@ -392,21 +393,32 @@ Under QEMU with `-machine q35 -cpu qemu64 -smp cores=2`:
 2. **One processor is a destination.** Every redirection entry names the
    bootstrap processor, and still does since sub-task 6.14: a started processor
    is parked and would be a worse destination than one that is running.
-   Sub-task 6.15 is what gives the destination something worth choosing between.
+   Sub-task 6.15 gave the processors work, and the entries still name processor
+   0: a device request handled anywhere but the bootstrap processor would be
+   handled by a driver whose structures are unsynchronised. Widening this and
+   widening a user thread's affinity mask are the same change.
 3. **~~The inter-processor interrupt is not implemented.~~** Discharged at
    sub-task 6.13. The command register is written, two vectors are reserved —
    `0xFD` for the shootdown and `0xFC` for the halt — and the three audiences a
    sender may address are the two shorthands and a named identifier. See
    [`../design/CONCURRENCY.md`](../design/CONCURRENCY.md), Section 5.
-4. **The APIC timer is masked and uncalibrated.** The 8253 remains the only time
-   source. Sub-task 6.15.
+4. **~~The APIC timer is masked and uncalibrated.~~** Discharged at sub-task
+   6.15. It is calibrated against the 8253 — the architecture states no rate for
+   it, Section 10.5.4 giving it as the bus clock or core crystal divided by the
+   divide configuration register — and each processor then starts its own,
+   periodic, on vector `0xFB`. The 8253 remains the only source of *elapsed
+   time*; what the local timer supplies is a quantum, and only to the processor
+   it belongs to. See [`../design/SCHEDULER.md`](../design/SCHEDULER.md),
+   Section 3.
 5. **Nothing here is safe against concurrent access.** The select-then-window
    sequence of the I/O APIC and the mask state of the request layer both require
    a lock. The lock now **exists** — sub-task 6.13 built it — but neither has
    been put under one. Both are safe still: a processor started by sub-task 6.14
-   is parked and reaches neither, so there is one flow of control that touches
-   them. Sub-task 6.15 is what makes them contended. The local controller's own
-   registers need none: each processor reaches its own controller at the same
+   is parked or runs a kernel thread, so there is one flow of control that touches
+   them, sub-task 6.15 having placed no user thread and no driver upon another
+   processor. The change that widens a user thread's affinity mask is what makes
+   them contended. The local controller's own registers need none: each
+   processor reaches its own controller at the same
    physical address, and no lock could make an access there refer to another's.
 6. **x2APIC mode is not entered**, even where the processor reports it. The xAPIC
    register interface addresses 255 processors, which is more than this kernel

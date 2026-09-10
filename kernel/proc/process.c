@@ -28,7 +28,7 @@
  *
  * A child runs when its parent waits for it.
  *
- *   There is one thread of control until the scheduler of sub-task 6.15, so a
+ *   There is one thread of control upon the bootstrap processor, so a
  *   forked child is created runnable and left standing until `wait` runs it upon
  *   the parent's own thread of control. Everything a program can observe of the
  *   ordering is preserved — a child runs after the fork that made it and before
@@ -43,9 +43,20 @@
  *   than finding whoever was given that slot next — which is the whole class of
  *   fault that makes a process kill an unrelated one.
  *
- * Concurrency. Neither table is guarded. Nothing runs but the boot sequence
- * until sub-task 6.15, and the spinlock of sub-task 6.13 exists and has not been
- * applied here; both tables and the current thread require it then.
+ * Concurrency. The claim of a slot in either table is guarded by
+ * ProcessTableLock, from sub-task 6.15: the search and the claim must be one
+ * atomic act, because each application processor claims a thread slot as it
+ * comes online and two that found the same free slot would produce two threads
+ * sharing one identifier, one context and one kernel stack pointer. The current
+ * thread and the thread to return to are per processor from the same sub-task,
+ * and are the reason the tables were single-threaded before it — see the note
+ * upon ProcessCurrentThreads.
+ *
+ * **The lock does not make the allocators safe.** ThreadCreate takes a kernel
+ * stack from the arena while holding it, and the arena is unsynchronised;
+ * docs/design/CONCURRENCY.md, Section 10, limitation 1, still names it. What
+ * makes that sound is that the one path a second processor takes through this
+ * file — ThreadAdoptCurrent — allocates nothing.
  */
 
 #include <oxys/process.h>
@@ -57,6 +68,9 @@
 #include <oxys/gdt.h>
 #include <oxys/tss.h>
 #include <oxys/vmm.h>
+#include <oxys/percpu.h>
+#include <oxys/sched.h>
+#include <oxys/spinlock.h>
 
 static Process ProcessTable[PROCESS_CAPACITY];
 static Thread ThreadTable[THREAD_CAPACITY];
@@ -67,18 +81,100 @@ static uint64_t ProcessCreations;
 static uint64_t ThreadCreations;
 static uint64_t ProcessTerminations;
 
-static Thread *ProcessCurrentThread;
+/*
+ * The lock that guards the two tables' slots.
+ *
+ * **It exists from sub-task 6.15**, which is the sub-task that gives a second
+ * processor a reason to claim one. Until then every claim was made by the
+ * bootstrap processor: an application processor started by 6.14 was parked and
+ * created nothing. Now each one adopts an idle thread as it comes online, and
+ * SmpInitialise waits only for a processor's *area* before starting the next —
+ * so two processors can be in ThreadAdoptCurrent at once.
+ *
+ * What must be atomic is the search together with the claim, and not either
+ * alone. Two processors that each scanned for a free slot, each found the same
+ * one, and each then wrote to it would produce two threads sharing a structure:
+ * one identifier, one context, one kernel stack pointer — and the second write
+ * would win, leaving the first processor running a thread that describes
+ * somebody else's execution. No count would be wrong and nothing would fault
+ * until the two switched.
+ *
+ * **It does not make the allocators safe.** ThreadCreate takes a kernel stack
+ * from the arena while holding this lock, and the arena is still unsynchronised;
+ * docs/design/CONCURRENCY.md, Section 10, limitation 1, still names it. What
+ * makes that sound today is that the one path a second processor takes through
+ * here — ThreadAdoptCurrent — allocates nothing, describing a stack that
+ * already exists. A user thread created upon an application processor would
+ * need the arena's own lock, and that is what a user thread's affinity mask
+ * exists to prevent until it has one.
+ */
+static Spinlock ProcessTableLock = SPINLOCK_INITIALISER("process and thread tables");
 
 /*
- * The thread that started a program and is waiting to be returned to when it
- * ends, of sub-task 6.10.
+ * The thread each processor is running, and the thread each will return to.
  *
- * Declared here beside the current thread rather than beside the switching code
- * that sets it, because ThreadDestroy must clear both and for the same reason:
- * either pointer left naming a destroyed thread names a released slot, and a
- * kernel stack that has gone back to the arena.
+ * **These were single variables until sub-task 6.15, and that was the whole of
+ * what made this kernel single-threaded.** A second processor executing kernel
+ * code against one `ProcessCurrentThreads[ProcessProcessorIndex()]` would not race for it occasionally: it
+ * would overwrite it on every switch, and the loser would find `rsp0` naming
+ * another processor's stack at its next entry from privilege level 3. Two
+ * programs would then write their trap frames over one another, which is a
+ * corruption of the kernel's own state by two programs that never touched each
+ * other.
+ *
+ * They are indexed by the dense processor index of kernel/include/oxys/percpu.h
+ * rather than held inside the PerCpu area itself. The area's first three fields
+ * are addressed by displacement from `GS` in kernel/cpu/syscall_entry.asm, and a
+ * pointer added to it would be a fourth thing whose offset the assembly and the
+ * C must agree about for no gain — the index is already available in one
+ * instruction, and an array subscripted by it is per processor in exactly the
+ * same sense.
+ *
+ * No lock guards either array. Each processor writes only its own element, and
+ * reads another's only in the report, where a torn read costs a diagnostic.
  */
-static Thread *ProcessReturnThread;
+static Thread *ProcessCurrentThreads[PER_CPU_MAXIMUM];
+static Thread *ProcessReturnThreads[PER_CPU_MAXIMUM];
+
+/*
+ * The index of the executing processor, or zero before there is an area to ask.
+ *
+ * The fallback is not a guess. Until PerCpuInitialise has run there is one
+ * processor by construction — no other can have been started, the bring-up of
+ * sub-task 6.14 being what starts them — and that processor is the bootstrap
+ * processor, which is index 0. Asking through GS before the base is established
+ * would read address sixteen; the guard is the same one KernelWriteString makes,
+ * and for the same reason.
+ */
+static uint32_t ProcessProcessorIndex(void)
+{
+    const uint32_t index = PerCpuIsEstablished() ? PerCpuIndex() : 0U;
+
+    return (index < PER_CPU_MAXIMUM) ? index : 0U;
+}
+
+/*
+ * The scheduling fields every newly made thread starts with.
+ *
+ * It is one function and not four assignments repeated, because a creation path
+ * added later that forgot one of them would produce a thread linked into a queue
+ * it is not on, or one with an affinity of zero — which is a thread no processor
+ * is permitted to run and which would therefore be admitted, counted, and never
+ * scheduled, with nothing anywhere saying so.
+ *
+ * The default mask is the argument rather than a constant here, because the two
+ * kinds of thread this kernel makes want different ones and the difference is
+ * the subject of docs/design/SCHEDULER.md, Section 4.
+ */
+static void ThreadInitialiseScheduling(Thread *thread, uint64_t affinity)
+{
+    thread->queue_next = NULL;
+    thread->affinity = affinity;
+    thread->processor = 0U;
+    thread->queued = false;
+    thread->slices = 0U;
+    thread->preemptions = 0U;
+}
 
 /* ------------------------------------------------------------------ helpers */
 
@@ -153,7 +249,7 @@ void ProcessInitialise(void)
         ThreadTable[index].state = THREAD_UNUSED;
     }
 
-    ProcessCurrentThread = NULL;
+    ProcessCurrentThreads[ProcessProcessorIndex()] = NULL;
 }
 
 /* ---------------------------------------------------------------- processes */
@@ -413,6 +509,7 @@ Thread *ThreadCreate(Process *owner, uint64_t entry, uint64_t user_stack)
         thread->context.r15 = 0U;
         thread->context.rsp = top;
         thread->owns_stack = true;
+        ThreadInitialiseScheduling(thread, SCHED_AFFINITY_BOOTSTRAP);
 
         /* A thread created here begins at an entry point, not part way through a
          * program, so there is no saved user context to restore. Sub-task 6.11's
@@ -466,25 +563,25 @@ void ThreadDestroy(Thread *thread)
      * arena, and the next entry from privilege level 3 would arrive upon memory
      * belonging to somebody else.
      */
-    if (ProcessCurrentThread == thread)
+    if (ProcessCurrentThreads[ProcessProcessorIndex()] == thread)
     {
-        ProcessCurrentThread = NULL;
+        ProcessCurrentThreads[ProcessProcessorIndex()] = NULL;
     }
 
     /*
      * And a thread that was the one to return to is that no longer, for the same
      * reason and with a worse consequence.
      *
-     * ProcessReturnThread is what ThreadTerminateCurrent switches to when a
+     * ProcessReturnThreads is what ThreadTerminateCurrent switches to when a
      * program ends. Left naming a destroyed thread, that switch would load a
      * stack pointer out of a context structure belonging to a released slot and
      * resume execution upon a kernel stack the arena has given to somebody else
      * — which is not a fault but a machine that continues, wrongly, with no
      * indication that anything happened.
      */
-    if (ProcessReturnThread == thread)
+    if (ProcessReturnThreads[ProcessProcessorIndex()] == thread)
     {
-        ProcessReturnThread = NULL;
+        ProcessReturnThreads[ProcessProcessorIndex()] = NULL;
     }
 
     /*
@@ -504,6 +601,7 @@ void ThreadDestroy(Thread *thread)
     thread->kernel_stack_base = NULL;
     thread->kernel_stack_top = 0U;
     thread->owns_stack = false;
+    ThreadInitialiseScheduling(thread, 0U);
     thread->id = 0U;
 }
 
@@ -547,7 +645,7 @@ size_t ThreadCount(void)
 
 void ThreadSetCurrent(Thread *thread)
 {
-    ProcessCurrentThread = thread;
+    ProcessCurrentThreads[ProcessProcessorIndex()] = thread;
 
     if (thread == NULL)
     {
@@ -589,7 +687,25 @@ void ThreadSetCurrent(Thread *thread)
 
 Thread *ThreadCurrent(void)
 {
-    return ProcessCurrentThread;
+    return ProcessCurrentThreads[ProcessProcessorIndex()];
+}
+
+/*
+ * The thread a numbered processor is running.
+ *
+ * It exists for the scheduler's report and its self-test, which are the only
+ * things that ask about a processor other than the one asking. The value is a
+ * snapshot of something that processor is changing, and the caller is expected
+ * to know that: it is a diagnostic, not a handle.
+ */
+Thread *ThreadCurrentOn(uint32_t processor)
+{
+    if (processor >= PER_CPU_MAXIMUM)
+    {
+        return NULL;
+    }
+
+    return ProcessCurrentThreads[processor];
 }
 
 /* --------------------------------------------------- what a process holds */
@@ -727,6 +843,7 @@ Thread *ThreadCreateKernel(void (*entry)(void))
         thread->entry = (uint64_t)(uintptr_t)entry;
         thread->user_stack = 0U;
         thread->owns_stack = true;
+        ThreadInitialiseScheduling(thread, SCHED_AFFINITY_ANY);
         thread->resumes_from_fork = false;
         thread->used = true;
 
@@ -739,18 +856,103 @@ Thread *ThreadCreateKernel(void (*entry)(void))
     return NULL;
 }
 
+
+/*
+ * Where a kernel thread started by the scheduler begins.
+ *
+ * It exists to close the critical section it inherited. The scheduler switches
+ * threads from inside a masked region — it masks interrupts, chooses, and
+ * switches — and the counted disable of kernel/cpu/percpu.h belongs to the
+ * processor rather than to the thread. A resumed thread carries on inside its
+ * own push and executes the matching pop; a thread that has never run has no
+ * such pop, and would run with interrupts masked for ever, taking no timer tick
+ * and never being pre-empted. That is a machine that hangs the first time a
+ * thread is scheduled, with no fault and nothing in the log, and it is why this
+ * function is not merely a convenience.
+ *
+ * The entry is read back from the thread rather than passed, because a prepared
+ * frame carries a return address and no arguments. The conversion is the same
+ * one ThreadCreateKernel made in the other direction, and the two are the only
+ * places a function address becomes an integer in this file.
+ */
+static void ThreadScheduledEntry(void)
+{
+    Thread *const self = ProcessCurrentThreads[ProcessProcessorIndex()];
+
+    PerCpuResetInterruptState();
+
+    if ((self != NULL) && (self->entry != 0U))
+    {
+        void (*const entry)(void) = (void (*)(void))(uintptr_t)self->entry;
+
+        entry();
+    }
+
+    /*
+     * A kernel thread that returns has nowhere to go: nothing called it, so
+     * there is no caller to return to, and this kernel has no reaper. It stops
+     * rather than falling off the prepared frame into whatever lies beneath it.
+     * docs/design/SCHEDULER.md, Section 8, limitation 4, records what that
+     * costs.
+     */
+    for (;;)
+    {
+        __asm__ __volatile__("cli; hlt");
+    }
+}
+
+/*
+ * A kernel thread made to be handed to the scheduler.
+ *
+ * It differs from ThreadCreateKernel in one respect: the prepared frame enters
+ * the trampoline above rather than the entry point directly. ThreadCreateKernel
+ * is left as it was because its other caller — the context-switch self-test of
+ * sub-task 6.10 — switches to its thread by hand, with interrupts enabled and no
+ * critical section open, and has no inherited state to close.
+ */
+Thread *ThreadCreateScheduled(void (*entry)(void))
+{
+    Thread *const thread = ThreadCreateKernel(entry);
+
+    if (thread == NULL)
+    {
+        return NULL;
+    }
+
+    thread->context.rsp =
+        ThreadPrepareFrame(thread->kernel_stack_top,
+                           (uint64_t)(uintptr_t)&ThreadScheduledEntry);
+
+    return thread;
+}
 Thread *ThreadAdoptCurrent(const char *name)
 {
     Thread *thread = NULL;
+
+    /*
+     * The search and the claim, under one acquisition.
+     *
+     * This is the one path in this file that two processors take at once — each
+     * application processor adopts its idle thread as it comes online — and
+     * splitting the two would let both find the same free slot. See the note
+     * upon ProcessTableLock.
+     */
+    SpinlockAcquire(&ProcessTableLock);
 
     for (size_t index = 0U; index < THREAD_CAPACITY; ++index)
     {
         if (!ThreadTable[index].used)
         {
             thread = &ThreadTable[index];
+            thread->used = true;
+            thread->id = ThreadNextId;
+            ++ThreadNextId;
+            ++ThreadCreations;
             break;
         }
     }
+
+    SpinlockRelease(&ProcessTableLock);
 
     if (thread == NULL)
     {
@@ -770,8 +972,6 @@ Thread *ThreadAdoptCurrent(const char *name)
      * switches *away* from this thread, and that is the moment the switch fills
      * it in.
      */
-    thread->id = ThreadNextId;
-    ++ThreadNextId;
     thread->state = THREAD_RUNNING;
     thread->owner = NULL;
     thread->kernel_stack_base = NULL;
@@ -779,10 +979,9 @@ Thread *ThreadAdoptCurrent(const char *name)
     thread->entry = 0U;
     thread->user_stack = 0U;
     thread->owns_stack = false;
-    thread->used = true;
-    ++ThreadCreations;
+    ThreadInitialiseScheduling(thread, SCHED_AFFINITY_ANY);
 
-    ProcessCurrentThread = thread;
+    ProcessCurrentThreads[ProcessProcessorIndex()] = thread;
 
     return thread;
 }
@@ -860,7 +1059,7 @@ void ThreadSwitchTo(Thread *from, Thread *to)
  */
 void ThreadTrampolineEntry(void)
 {
-    Thread *const thread = ProcessCurrentThread;
+    Thread *const thread = ProcessCurrentThreads[ProcessProcessorIndex()];
 
     if ((thread == NULL) || (thread->entry == 0U))
     {
@@ -899,24 +1098,26 @@ void ThreadTrampolineEntry(void)
 
 bool ThreadStart(Thread *thread)
 {
-    Thread *const caller = ProcessCurrentThread;
+    Thread *const caller = ProcessCurrentThreads[ProcessProcessorIndex()];
 
     /*
      * Whoever the caller was itself started by, of sub-task 6.11.
      *
      * A program may now start another — a parent that calls `wait` starts its
-     * child from within its own system call — so the single variable naming the
-     * thread to return to must be saved and put back rather than cleared. The
-     * chain of them lives upon the kernel stacks of the calls that made it, one
-     * to a stack, which is the shape a stack of callers takes when there is one
-     * thread of control and no scheduler to hold a queue.
+     * child from within its own system call — so the per-processor variable that
+     * names the thread to return to must be saved and put back rather than
+     * cleared. The chain of them lives upon the kernel stacks of the calls that
+     * made it, one to a stack — the shape a stack of callers takes. It is per
+     * processor from sub-task 6.15, because the chain belongs to the processor
+     * walking it: two processors each starting a program have two chains, and
+     * one variable between them would return each to the other's caller.
      *
      * Clearing it instead was correct while nothing nested and would be a
      * particular kind of silent failure now: the parent would end with nobody
      * recorded to return to, and ThreadTerminateCurrent would refuse — leaving
      * the exception path to panic about a program the kernel had itself started.
      */
-    Thread *const previous = ProcessReturnThread;
+    Thread *const previous = ProcessReturnThreads[ProcessProcessorIndex()];
 
     if ((thread == NULL) || !thread->used || (caller == NULL) || (thread == caller))
     {
@@ -932,17 +1133,17 @@ bool ThreadStart(Thread *thread)
 
     /*
      * The thread that starts another is the one it will be returned to when the
-     * program ends. There is one such at a time because there is one thread of
-     * control until the scheduler of sub-task 6.15; recording it here is what
-     * makes a program's death a return rather than a halt.
+     * program ends. There is one such at a time *upon this processor*, which is
+     * what makes a single pointer per processor sufficient; recording it here is
+     * what makes a program's death a return rather than a halt.
      */
-    ProcessReturnThread = caller;
+    ProcessReturnThreads[ProcessProcessorIndex()] = caller;
 
     ThreadSwitchTo(caller, thread);
 
     /* Reached when the started thread — or the kernel acting for it — switches
      * back. */
-    ProcessReturnThread = previous;
+    ProcessReturnThreads[ProcessProcessorIndex()] = previous;
     ThreadSetCurrent(caller);
 
     return true;
@@ -950,8 +1151,8 @@ bool ThreadStart(Thread *thread)
 
 bool ThreadTerminateCurrent(int64_t status)
 {
-    Thread *const thread = ProcessCurrentThread;
-    Thread *const back = ProcessReturnThread;
+    Thread *const thread = ProcessCurrentThreads[ProcessProcessorIndex()];
+    Thread *const back = ProcessReturnThreads[ProcessProcessorIndex()];
 
     if ((thread == NULL) || (back == NULL) || (thread == back))
     {
@@ -1060,7 +1261,7 @@ static uint64_t ProcessReaps;
 
 Process *ProcessCurrent(void)
 {
-    return (ProcessCurrentThread != NULL) ? ProcessCurrentThread->owner : NULL;
+    return (ProcessCurrentThreads[ProcessProcessorIndex()] != NULL) ? ProcessCurrentThreads[ProcessProcessorIndex()]->owner : NULL;
 }
 
 Process *ProcessFork(Process *parent, const SyscallFrame *frame)
@@ -1127,7 +1328,7 @@ Process *ProcessFork(Process *parent, const SyscallFrame *frame)
 
 int64_t ProcessExecute(Process *process, const char *path)
 {
-    Thread *const thread = ProcessCurrentThread;
+    Thread *const thread = ProcessCurrentThreads[ProcessProcessorIndex()];
     AddressSpace fresh;
     AddressSpace previous;
     ElfImage image;
@@ -1401,12 +1602,12 @@ void ProcessReport(void)
         KernelWriteString("\n");
     }
 
-    if (ProcessCurrentThread != NULL)
+    if (ProcessCurrentThreads[ProcessProcessorIndex()] != NULL)
     {
         KernelWriteString("Processes: the current thread is ");
-        KernelWriteDecimal(ProcessCurrentThread->id);
+        KernelWriteDecimal(ProcessCurrentThreads[ProcessProcessorIndex()]->id);
         KernelWriteString(", kernel stack top ");
-        KernelWriteHexadecimal(ProcessCurrentThread->kernel_stack_top);
+        KernelWriteHexadecimal(ProcessCurrentThreads[ProcessProcessorIndex()]->kernel_stack_top);
         KernelWriteString(".\n");
     }
     else if (ProcessTerminations > 0U)

@@ -16,7 +16,10 @@
  * flag is set, so there is one flow of control while the table is written. The
  * spinlock of sub-task 6.13 exists and has not been applied here. A processor
  * started by sub-task 6.14 is parked and never reaches this file, so the table
- * is uncontended still; **sub-task 6.15 is what makes it contended**. What the
+ * is uncontended still. Sub-task 6.15 gave the processors work but pinned every
+ * user thread to the bootstrap processor, so nothing here has a second caller
+ * yet; **the change that widens that affinity mask is what makes it
+ * contended**. What the
  * lock must cover then is the search for a free slot together with the claiming
  * of it — two processors registering at once would otherwise both find the same
  * free slot and the second would replace the first, leaving a device registered

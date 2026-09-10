@@ -131,7 +131,8 @@ place: what must not interleave is a diagnostic line across all three output
 devices, and a lock held inside this driver would let a line reach the serial
 port interleaved with another's while each buffer stayed internally consistent.
 The receive buffer still has one consumer, the echo loop upon the bootstrap
-processor; sub-task 6.15 is what could give it a second.
+processor, and sub-task 6.15 left it there. The change that widens a user
+thread's affinity mask is what could give it a second.
 
 The indices are free-running and masked when used, the discipline described in
 [`KEYBOARD.md`](KEYBOARD.md), Section 5.1: their difference is the occupancy
@@ -350,7 +351,8 @@ ordinary case and not the exception.
    single processor with interrupts provides. Sub-task 6.14 gave the transmit
    side a second producer and applied the lock in `KernelWriteString` rather than
    here, for the reason Section 5 gives. The receive side still has one consumer;
-   sub-task 6.15 is what would make it necessary there.
+   the change that widens a user thread's affinity mask is what would make it
+   necessary there.
 5. The modem control signals are asserted and then ignored. Hardware flow control
    does not exist, so a receiver that cannot keep pace has no means of saying so.
 6. There is no line discipline. Received characters are delivered exactly as they

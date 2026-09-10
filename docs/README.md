@@ -56,6 +56,7 @@ complementary, and neither replaces the other.
 | [`PROCESS.md`](design/PROCESS.md) | The process control block, the thread and the saved context; the switch that exchanges one thread for another, the descent to privilege level 3, and the four calls by which a program makes another program, becomes another program, ends, and collects what a child ended with. |
 | [`CONCURRENCY.md`](design/CONCURRENCY.md) | The ticket spinlock, the per-processor area beneath it, the interrupt one processor sends to another, and the translation-lookaside-buffer shootdown built upon that — the mechanisms a second processor cannot safely exist without, built before there was one; [`SMP.md`](design/SMP.md) is what started them. |
 | [`SMP.md`](design/SMP.md) | The bring-up of the application processors: the INIT-startup-startup protocol, the real-mode trampoline that carries a processor from a reset into 64-bit mode upon the kernel's own hierarchy, and the rule that a starting processor allocates nothing. |
+| [`SCHEDULER.md`](design/SCHEDULER.md) | The per-processor run queues, the round-robin rotation, the affinity that decides which queue a thread may join, and the local timer whose rate the kernel measures rather than assumes. |
 
 ### [`devices/`](devices/)
 

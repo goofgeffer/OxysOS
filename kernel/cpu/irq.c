@@ -37,7 +37,8 @@
  * mask both require, an interrupt handler and an application processor each
  * being able to enter either. It has not been applied here, and it is not yet
  * needed: a processor started by sub-task 6.14 claims no line and changes no
- * mask, being parked in a halt loop. Sub-task 6.15 is what makes either
+ * mask, and sub-task 6.15 gave it only kernel threads to run. The change that
+ * widens a user thread's affinity mask is what makes either
  * contended.
  */
 

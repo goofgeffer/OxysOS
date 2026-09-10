@@ -39,7 +39,7 @@
  *   2, ProcessExecute replaces the program a process is running, ProcessExit
  *   ends one on its own request, and ProcessWait collects what a child ended
  *   with. Nothing runs concurrently: a child runs when its parent waits for it,
- *   until the scheduler of sub-task 6.15.
+ *   upon the bootstrap processor, which is where every user thread runs.
  */
 
 #ifndef OXYS_PROCESS_H
@@ -194,6 +194,38 @@ typedef struct Thread
      * which the linker established and which is not the arena's to release. */
     bool owns_stack;
 
+
+    /*
+     * Scheduling, of sub-task 6.15.
+     *
+     * The run-queue link is intrusive because the alternative is an allocation
+     * upon every enqueue, and an enqueue happens with a lock held and interrupts
+     * masked — which is the one place in this kernel an allocator must not be
+     * called from. A thread is upon at most one queue, so one link suffices.
+     *
+     * The affinity is a bitmask over the processor indices of
+     * kernel/include/oxys/percpu.h — this kernel's dense numbering, not the
+     * firmware's. It is a hard constraint and not a hint: a thread is never
+     * placed upon a processor whose bit is clear. See docs/design/SCHEDULER.md,
+     * Section 4, for why a user thread's mask names the bootstrap processor
+     * alone, which is a statement about the locks that do not yet exist rather
+     * than about scheduling.
+     *
+     * `processor` is the index of the queue the thread is upon, or that it last
+     * ran upon; it is meaningful only while `queued` or while the state is
+     * THREAD_RUNNING.
+     */
+    struct Thread *queue_next;
+    uint64_t affinity;
+    uint32_t processor;
+    bool queued;
+
+    /* How many times this thread has been given a processor, and how many of
+     * those ended because its quantum expired rather than because it gave the
+     * processor up. The difference is what distinguishes a thread that yields
+     * from one that must be taken away. */
+    uint64_t slices;
+    uint64_t preemptions;
     bool used;
 } Thread;
 
@@ -284,6 +316,11 @@ void ThreadSetCurrent(Thread *thread);
 /* The thread most recently made current, or null. */
 Thread *ThreadCurrent(void);
 
+/* The thread a numbered processor is running, of sub-task 6.15. A snapshot of
+ * another processor's state, for the report and the self-test; NULL for an index
+ * beyond the reservation. */
+Thread *ThreadCurrentOn(uint32_t processor);
+
 /* Records what an image occupied, once it has been loaded into the process. */
 void ProcessRecordImage(Process *process, const ElfImage *image);
 
@@ -339,6 +376,17 @@ Thread *ThreadAdoptCurrent(const char *name);
 Thread *ThreadCreateKernel(void (*entry)(void));
 
 /*
+ * A kernel thread made to be handed to the scheduler of sub-task 6.15.
+ *
+ * The same thing ThreadCreateKernel makes, save that its prepared frame enters a
+ * trampoline which closes the critical section the scheduler switched out of.
+ * A thread created by ThreadCreateKernel and then admitted would begin with
+ * interrupts masked and never be pre-empted; see the note upon
+ * PerCpuResetInterruptState.
+ */
+Thread *ThreadCreateScheduled(void (*entry)(void));
+
+/*
  * Exchanges the running thread for another: the address space, `rsp0`, and then
  * the registers and the stack.
  *
@@ -354,8 +402,9 @@ void ThreadSwitchTo(Thread *from, Thread *to);
  * whether it ends by asking or by faulting. Returns false where the thread has
  * no entry point or no stack, and true once the program has ended.
  *
- * There is one such caller at a time because there is one thread of control
- * until the scheduler of sub-task 6.15.
+ * There is one such caller at a time upon each processor, which is why the
+ * thread to return to is one pointer per processor rather than one for the
+ * machine.
  */
 bool ThreadStart(Thread *thread);
 
@@ -398,7 +447,7 @@ void ProcessReport(void);
  * the child is entitled to find unchanged.
  *
  * The child is created READY and does not run. There is one thread of control
- * until the scheduler of sub-task 6.15, so what starts a child is its parent
+ * upon the bootstrap processor, so what starts a child is its parent
  * asking for it by `wait`; see docs/design/PROCESS.md, Section 13.2.
  *
  * Returns null where a slot, a frame or a paging structure could not be had. The

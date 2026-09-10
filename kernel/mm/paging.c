@@ -67,6 +67,19 @@ static PhysicalAddress PagingRootTable;
  * kernel belongs in the kernel hierarchy, whose higher-half entries every
  * address space shares.
  */
+
+/*
+ * Which hierarchy was last activated, for the report.
+ *
+ * **It is a per-processor fact held in a machine-wide variable**, and from
+ * sub-task 6.15 every processor writes it on every context switch. That is
+ * presently harmless for a reason rather than by luck: every kernel thread runs
+ * upon the kernel root, and a user thread's affinity mask names the bootstrap
+ * processor alone — so every writer writes the same value. It becomes wrong the
+ * moment a user thread may run elsewhere, and must become per processor in the
+ * same change that widens that mask. docs/design/SCHEDULER.md, Section 9,
+ * limitation 7, records it so that the two cannot be separated.
+ */
 static PhysicalAddress PagingActiveTable;
 
 /* The number of frames consumed by the hierarchy, for reporting. */

@@ -10,7 +10,10 @@
  *          LocalApicInitialise, LocalApicSignalEndOfInterrupt,
  *          LocalApicIdentifier, LocalApicIsEnabled,
  *          LocalApicIsBootstrapProcessor, LocalApicRead, LocalApicWrite,
- *          LocalApicSendCommand, LocalApicCommandIsIdle, LocalApicReport.
+ *          LocalApicSendCommand, LocalApicCommandIsIdle,
+ *          LocalApicCalibrateTimer, LocalApicStartTimer, LocalApicStopTimer,
+ *          LocalApicTimerCountsPerMillisecond, LocalApicTimerIsRunning,
+ *          LocalApicReport.
  * References:
  *   - Intel 64 and IA-32 Architectures Software Developer's Manual, Volume 3A,
  *     Chapter 10 (Advanced Programmable Interrupt Controller). The chapter is
@@ -108,6 +111,43 @@
 
 /* Fields of the spurious-interrupt vector register, per Intel SDM, Figure 10-23. */
 #define LAPIC_SPURIOUS_SOFTWARE_ENABLE UINT32_C(0x00000100)
+
+/*
+ * Fields of the timer's local vector table entry, per Intel SDM, Volume 3A,
+ * Section 10.5.4 and Figure 10-10.
+ *
+ * The mode is bits 18:17 and not a single flag, because there are three modes
+ * and not two: 00 is one-shot, 01 is periodic, and 10 is the TSC deadline this
+ * kernel does not use. The vector and the mask are the same bits every other
+ * entry carries.
+ */
+#define LAPIC_LVT_TIMER_ONE_SHOT UINT32_C(0x00000000)
+#define LAPIC_LVT_TIMER_PERIODIC UINT32_C(0x00020000)
+#define LAPIC_LVT_TIMER_DEADLINE UINT32_C(0x00040000)
+
+/*
+ * The divide configuration register, per Intel SDM, Volume 3A, Section 10.5.4
+ * and Figure 10-10.
+ *
+ * The encoding is not a plain binary divisor and is the sort of thing that is
+ * wrong once and then wrong for ever: **bit 2 is reserved**, and the divisor is
+ * carried in bits 3, 1 and 0. Divide-by-one is 1011B and not 0000B, which is
+ * divide-by-two — so a register written with a value that "looks like one"
+ * halves every interval the kernel believes it programmed.
+ *
+ * Sixteen is what this kernel uses. It is far enough from one that a calibration
+ * counting down from 0xFFFFFFFF spans a useful interval without the counter
+ * reaching zero, and far enough from 128 that a millisecond is still thousands
+ * of counts rather than tens.
+ */
+#define LAPIC_TIMER_DIVIDE_1   UINT32_C(0x0000000B)
+#define LAPIC_TIMER_DIVIDE_2   UINT32_C(0x00000000)
+#define LAPIC_TIMER_DIVIDE_4   UINT32_C(0x00000001)
+#define LAPIC_TIMER_DIVIDE_8   UINT32_C(0x00000002)
+#define LAPIC_TIMER_DIVIDE_16  UINT32_C(0x00000003)
+#define LAPIC_TIMER_DIVIDE_32  UINT32_C(0x00000008)
+#define LAPIC_TIMER_DIVIDE_64  UINT32_C(0x00000009)
+#define LAPIC_TIMER_DIVIDE_128 UINT32_C(0x0000000A)
 
 /*
  * Fields of the interrupt command register, per Intel SDM, Volume 3A, Section
@@ -264,6 +304,49 @@ bool LocalApicCommandIsIdle(void);
  * sends abandoned because the delivery status did not clear. */
 uint64_t LocalApicCommandCount(void);
 uint64_t LocalApicCommandTimeoutCount(void);
+
+/*
+ * Establishes how fast this machine's local timers count, by measuring one
+ * against the interval timer of drivers/pit/pit.c.
+ *
+ * The rate is the processor's bus clock or core crystal divided by the divide
+ * configuration register, and Intel SDM, Volume 3A, Section 10.5.4, states no
+ * figure for it: it is a property of the machine, so it is measured and not
+ * assumed. The measurement is made once, upon the bootstrap processor, and the
+ * result is used to programme every processor's timer — the clock being the
+ * machine's rather than the processor's.
+ *
+ * It must be called with interrupts masked and after the interval timer is
+ * running, the measurement being a busy wait upon that timer's counter.
+ *
+ * Returns false where the local controller is not enabled or where the count
+ * measured is implausible, in which case no timer is programmed anywhere and the
+ * scheduler is told rather than left to run upon a rate it invented.
+ */
+bool LocalApicCalibrateTimer(void);
+
+/* Counts of the local timer in one millisecond, or zero if no calibration has
+ * succeeded. Divided by LAPIC_TIMER_DIVIDE_16. */
+uint32_t LocalApicTimerCountsPerMillisecond(void);
+
+/*
+ * Starts this processor's own timer, periodic, at the given interval.
+ *
+ * Each processor calls it for itself, the timer being one of the local vector
+ * table entries and therefore per processor. A processor that never calls it
+ * takes no timer interrupt and is never pre-empted, which is what an
+ * uninitialised processor would silently be.
+ *
+ * Returns false where no calibration has been made.
+ */
+bool LocalApicStartTimer(uint8_t vector, uint32_t milliseconds);
+
+/* Masks this processor's timer entry again. */
+void LocalApicStopTimer(void);
+
+/* Whether this processor's timer entry is unmasked, read back from the entry
+ * itself rather than from a variable this kernel keeps. */
+bool LocalApicTimerIsRunning(void);
 
 /*
  * Reads and writes a register of the mapped page. Exposed so that the self-test

@@ -227,7 +227,8 @@ written into the row padding. The edit was then reverted.
    be: a primitive is far too small a thing to own a lock, and the right place is
    the surface's owner — [`COMPOSITOR.md`](COMPOSITOR.md), limitation 6, is where
    that obligation is recorded and where 6.14 discharged the part of it that the
-   ordinary diagnostic path represents. **Sub-task 6.15 is what makes the
+   ordinary diagnostic path represents. **The change that widens a user thread's
+   affinity mask is what makes the
    remainder contended**, by giving a second processor something to draw.
 6. ~~**No fast path uses the pixel size.**~~ Resolved in the course of sub-task
    6.4, by the measurement of [`CONSOLE.md`](CONSOLE.md), Section 6, which is the specialisation this

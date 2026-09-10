@@ -124,7 +124,8 @@ _Static_assert(sizeof(SmpTrampolineParameters) == 48U,
 /*
  * The stack a started processor runs upon, in pages of 4 KiB.
  *
- * It serves three purposes at once until sub-task 6.15 divides them: it is the
+ * It serves three purposes at once, sub-task 6.15 having divided none of them:
+ * it is the
  * stack the trampoline hands the C entry point, it is what the task state
  * segment names as the stack of a transition to privilege level 0, and it is
  * what the processor idles upon. Four pages is what a kernel stack is given

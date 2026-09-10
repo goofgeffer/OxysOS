@@ -6,7 +6,7 @@
  *          that every critical section in the kernel is built upon.
  * Key functions: PerCpuInitialise, PerCpuAt, PerCpuOnlineCount,
  *          PerCpuIsEstablished, PerCpuPushInterruptState,
- *          PerCpuPopInterruptState, PerCpuReport.
+ *          PerCpuPopInterruptState, PerCpuResetInterruptState, PerCpuReport.
  * References:
  *   - Intel SDM, Volume 3A, Section 3.4.4: the FS and GS bases in 64-bit mode.
  *   - Intel SDM, Volume 3A, Table 2-1: IA32_GS_BASE at 0xC0000101 and
@@ -295,6 +295,43 @@ void PerCpuPopInterruptState(void)
     {
         __asm__ __volatile__("sti" : : : "memory");
     }
+}
+
+/*
+ * Declares that the executing processor holds no critical section, and enables
+ * interrupts.
+ *
+ * **It exists for exactly one caller and would be a defect anywhere else.** The
+ * counted interrupt-disable is a property of the processor, not of the thread,
+ * and the scheduler of sub-task 6.15 switches threads from inside one: it masks
+ * interrupts, chooses, and switches. A thread that is *resumed* by that switch
+ * carries on inside its own PerCpuPushInterruptState and executes the matching
+ * pop, so the count comes out even. A thread that has **never run** has no such
+ * pop: it begins at a prepared frame, and would begin it with the depth and the
+ * flag of the thread that gave it the processor — running with interrupts masked
+ * for ever, taking no timer tick, and never being pre-empted again.
+ *
+ * That failure was met and is why this exists. It presents as a machine that
+ * hangs the first time the scheduler starts a thread, with no fault and nothing
+ * in the log.
+ *
+ * The count comes out even across the machine because every push still has a
+ * pop somewhere: the pushing thread executes its own when it is next resumed,
+ * against whatever depth the resuming processor then holds.
+ */
+void PerCpuResetInterruptState(void)
+{
+    PerCpu *const area = PerCpuCurrent();
+
+    if (area == NULL)
+    {
+        return;
+    }
+
+    area->critical_depth = 0U;
+    area->interrupts_were_enabled = true;
+
+    __asm__ __volatile__("sti" : : : "memory");
 }
 
 uint32_t PerCpuCriticalDepth(void)

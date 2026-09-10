@@ -546,7 +546,7 @@ kept, this section describing what the kernel does now.
 
 ## 10. Limitations
 
-1. **One lock is applied; the rest are not.** Sub-task 6.14 put the diagnostic
+1. **Three locks are applied; the rest are not.** Sub-task 6.14 put the diagnostic
    channel under a lock — `KernelWriteString`, in
    [`../../kernel/kernel.c`](../../kernel/kernel.c) — because that is the whole
    of what a started processor touches, and one function reaches all four of the
@@ -558,6 +558,19 @@ kept, this section describing what the kernel does now.
    `KernelWriteString` as where its lock is taken. See
    [`SMP.md`](SMP.md), Section 6.
 
+   **Sub-task 6.15 added two more.** Each run queue carries a lock of its own —
+   one per queue and not one for the scheduler, so that two processors
+   rescheduling at once do not wait for each other — and `ProcessTableLock`, in
+   `kernel/proc/process.c`, makes the search for a free slot in the process and
+   thread tables atomic with the claim of it. That became necessary the moment
+   each application processor began adopting an idle thread as it came online:
+   `SmpInitialise` waits only for a processor's *area* before starting the next,
+   so two can be inside `ThreadAdoptCurrent` at once, and two that found the same
+   free slot would produce two threads sharing one identifier, one context and
+   one kernel stack pointer — with no count wrong and nothing faulting until they
+   switched. The process and thread tables are struck from the list below. See
+   [`SCHEDULER.md`](SCHEDULER.md), Sections 2.1 and 6.
+
    **Everything else is still unsynchronised**, and each says so in the header of
    the file that owns it: the frame allocator's bitmap and search hint
    (`kernel/mm/pmm.c`), the kernel arena (`kernel/mm/vmm.c`), the heap
@@ -568,17 +581,23 @@ kept, this section describing what the kernel does now.
    layer's mask state (`kernel/cpu/irq.c`), the 8259A's mask registers
    (`drivers/pic/pic.c`), the I/O APIC's select-then-window sequence
    (`drivers/apic/ioapic.c`), the 8042's configuration byte
-   (`drivers/ps2/ps2.c`), the process and thread tables
-   (`kernel/proc/process.c`), the drawing surfaces (`graphics/draw.c`), the fault
+   (`drivers/ps2/ps2.c`), the drawing surfaces (`graphics/draw.c`), the fault
    screen (`graphics/faultscreen.c`), and the keyboard and mouse buffers
    (`drivers/keyboard/keyboard.c`, `drivers/mouse/mouse.c`).
 
-   **None of that is unsafe today, and the reason has changed.** It used to be
-   that there was one flow of control. There is now more than one processor —
-   sub-task 6.14 started them — but a started processor has nothing to run: it
-   answers inter-processor interrupts and halts, and reaches none of the files
-   above. **Sub-task 6.15 is what makes each contended**, and the locks are what
-   it must bring with it.
+   **None of that is unsafe today, and the reason has changed twice.** It used to
+   be that there was one flow of control. Then sub-task 6.14 started the other
+   processors, and the reason became that a started processor had nothing to run.
+   Sub-task 6.15 gave them something to run, and the reason is now narrower and
+   more precise: **what runs upon an application processor is a kernel thread,
+   and no user thread may be placed upon one.** Every file above is reached
+   through a system call or through a driver a user program drives, and a user
+   thread's affinity mask names the bootstrap processor alone.
+
+   That is deliberately a value in a field rather than a rule written nowhere.
+   [`SCHEDULER.md`](SCHEDULER.md), Section 4, records it, and the mask widens in
+   one place when these locks land — at which point the list above must shrink in
+   the same change, or the widening is the defect.
 
    **The fault screen is in that list and will never leave it.** It takes no lock
    by decision rather than by omission: a fault handler that waited upon a lock

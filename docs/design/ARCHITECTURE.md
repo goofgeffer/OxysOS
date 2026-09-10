@@ -386,7 +386,8 @@ path and the dispatch above it, and sub-task 6.10 the descent itself: a program
 is loaded into an address space of its own, entered at privilege level 3 by
 `IRETQ`, returned to by `SYSRET` when it makes a system call, and ended when it
 faults. What does not yet exist is pre-emption — nothing takes a processor away
-from a thread that has not given it up — which is the scheduler of sub-task 6.15.
+from a thread that has not given it up. Sub-task 6.15 supplies it for threads
+upon a run queue; a *program* is not yet placed upon one.
 
 ## 6. Diagnostic policy
 

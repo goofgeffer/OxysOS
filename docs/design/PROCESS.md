@@ -159,7 +159,7 @@ fault, but continues, wrongly, with nothing to indicate that anything happened.
 The review after 6.10 added the clearing. Asserting it would need an accessor for
 a variable that has no other reader, and the mechanism cannot be reached at all
 while there is one thread of control (limitation 3); it becomes assertable, and
-must be asserted, when the scheduler of sub-task 6.15 makes more than one
+must be asserted, when something makes more than one
 program's death possible.
 
 ### 7.1 The negative tests
@@ -458,7 +458,7 @@ stack, so every register of the frame is restored in the same way as every other
 **A child runs when its parent waits for it**, and this is the sub-task's one
 substantial departure from the call it is named after.
 
-There is one thread of control until the scheduler of sub-task 6.15, so a forked
+The bootstrap processor has one thread of control, so a forked
 child is created `READY` and left standing; `wait` starts it upon the parent's
 own thread of control and returns when it ends. Everything a program can observe
 of the *ordering* is preserved — a child runs after the fork that made it and
@@ -678,7 +678,9 @@ part of the kernel wrote.
 
 1. ~~**Nothing has run.**~~ A program has: see Section 10.2. What has not
    happened is pre-emption — nothing takes a processor away from a thread that
-   has not given it up, which is the scheduler of sub-task 6.15.
+   has not given it up — until sub-task 6.15, whose local timer does exactly that
+   for any thread the scheduler has placed upon a run queue. A program still
+   runs to completion, no program having yet been admitted to one.
 2. **The tables are fixed and are searched linearly.** Sixty-four processes and
    a hundred and twenty-eight threads, found by walking. Nothing here is on a
    path that runs often, and a hash of identifiers is worth writing when

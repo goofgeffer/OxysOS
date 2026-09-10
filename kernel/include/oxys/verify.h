@@ -14,6 +14,7 @@
  *          KernelVerifyLocalApic, KernelVerifyIoApic, KernelVerifyApicRouting,
  *          KernelVerifyPerCpu, KernelVerifySpinlock, KernelVerifyIpi,
  *          KernelVerifyShootdown, KernelVerifyApplicationProcessors,
+ *          KernelVerifyScheduler,
  *          KernelVerifyPit, KernelVerifyKeyboard, KernelVerifySerial,
  *          KernelVerifyVga, KernelVerifyPci, KernelVerifyAta, KernelVerifyBlock,
  *          KernelVerifyBuffer, KernelVerifyExt2, KernelVerifyVfs,
@@ -192,6 +193,20 @@ void KernelVerifyShootdown(void);
  * state is consistent with that.
  */
 void KernelVerifyApplicationProcessors(void);
+
+/*
+ * Sub-task 6.15: the scheduler.
+ *
+ * Where the five before it asserted mechanisms, this asserts a rotation. It
+ * admits kernel threads that count and yield, and watches counters that nothing
+ * in the test itself writes: a scheduler that enqueued threads and never ran
+ * them produces the same admissions, the same queue lengths and the same report,
+ * and the counters are the only thing that distinguishes the two.
+ *
+ * Upon a machine with one processor it asserts everything but the pre-emption,
+ * which yielding cannot be told apart from there.
+ */
+void KernelVerifyScheduler(void);
 
 /* Phases 3 and 4: the remaining devices. */
 void KernelVerifyPit(void);

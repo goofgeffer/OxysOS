@@ -25,6 +25,7 @@ are separate.
 | `include/oxys/testvolume.h` | The fixture: the two memory-backed block devices, the geometry of the composed EXT2 volume, and the routines that address a field of it directly. |
 | `proc/switch.asm` | The transfers a privilege boundary requires: `ThreadSwitchContext`, which saves six registers and a stack pointer and resumes another thread through the return address its stack carries; `ThreadTrampoline`, where a thread that has never run begins; `ThreadEnterUser`, which clears every register and descends to privilege level 3 by `IRETQ`; and — from sub-task 6.11 — `ThreadResumeUser`, which descends with a whole saved register set restored, as a thread made by `fork` requires. |
 | `proc/process.c` | The process control block and the thread structure: the tables, the creation of a process with an address space of its own and a thread with a kernel stack of its own beneath a guard page, the writing of `rsp0` when a thread becomes current, the record of what a process has had loaded into it, and — from sub-task 6.10 — the switch, the start of a thread at privilege level 3, and the termination that returns from one. `ProcessInitialise`, `ProcessCreate`, `ProcessDestroy`, `ThreadCreate`, `ThreadDestroy`, `ThreadSetCurrent`, `ThreadCurrent`, `ProcessCreateUserStack`, `ProcessRecordImage`, `ThreadAdoptCurrent`, `ThreadCreateKernel`, `ThreadSwitchTo`, `ThreadStart`, `ThreadTerminateCurrent`, `ThreadTrampolineEntry`, `ProcessReport`, and — from sub-task 6.11 — `ProcessFork`, `ProcessExecute`, `ProcessExit`, `ProcessWait`, `ProcessCurrent`. |
+| `proc/sched.c` | The multiprocessor round-robin scheduler of sub-task 6.15: the per-processor run queues and the lock each carries, the affinity that decides which queue a thread may join, the choice of the shortest eligible queue at admission, the local timer that takes a processor back when a quantum expires, and the idle thread each processor falls back to. `SchedulerInitialise`, `SchedulerStartOnThisProcessor`, `SchedulerDetachThisProcessor`, `SchedulerEnterIdle`, `SchedulerAdmit`, `SchedulerYield`, `SchedulerBlockCurrent`, `SchedulerSetAffinity`, `SchedulerAffinity`, `SchedulerQueueLength`, `SchedulerRunningOn`, `SchedulerIsRunning`, `SchedulerReport`. |
 | `include/oxys/process.h` | `Process`, `Thread` and `ThreadContext`, whose six callee-saved registers and stack pointer are the whole of a context; the capacities of the two tables; the kernel stack and its guard in pages; the placement and extent of a process's user stack; and — from sub-task 6.11 — the saved user context a forked child resumes upon, together with `ProcessFork`, `ProcessExecute`, `ProcessExit`, `ProcessWait` and `ProcessCurrent`. |
 | `include/oxys/elf.h` | The ELF64 file and program header layouts, the classes, encodings, machine and type values a file is checked against, the segment flags, and `ElfImage`, `ElfResult` and the loader's interface. |
 | `acpi/acpi.c` | The reading of the firmware's ACPI description tables: the discovery and validation of the Root System Description Pointer, the walk of the RSDT or the XSDT, and the parse of the Multiple APIC Description Table into the processors, I/O APICs, interrupt source overrides and non-maskable interrupt connections the APIC drivers are programmed from. Every table is mapped for the duration of its parse and unmapped afterwards, so nothing retains a pointer into memory the firmware declared reclaimable. `AcpiInitialise`, `AcpiIsAvailable`, `AcpiLocalApicAddress`, `AcpiDualPicPresent`, `AcpiProcessorCount`, `AcpiIoApicCount`, `AcpiOverrideCount`, `AcpiLocalNmiCount`, `AcpiGlobalInterruptForIsaIrq`, `AcpiIsaIrqIsActiveLow`, `AcpiIsaIrqIsLevelTriggered`, `AcpiReport`. |
@@ -174,17 +175,20 @@ Full citations are held in [`../docs/project/REFERENCES.md`](../docs/project/REF
    from it. There is no configuration that omits them, and none is wanted before
    there is a machine whose image size matters; `test/README.md` records the
    consequences.
-4. **There is now more than one processor; one lock is applied.** Sub-task 6.13 built the
-   ticket spinlock, the per-processor area beneath it, the inter-processor
-   interrupt and the shootdown, and sub-task 6.14 started the processors that
-   make any of it necessary; `docs/design/CONCURRENCY.md` and
-   `docs/design/SMP.md` are the designs. The one structure put under a lock is
-   the diagnostic channel, in `KernelWriteString`, because it is the whole of
-   what a started processor touches. Everything else here is still unsynchronised
-   — the frame allocator's bitmap and search hint, the arena, the heap, the
-   process and thread tables and the dispatch table all still say so in their own
-   headers — and is still safe, a processor started by 6.14 having nothing to run
-   and reaching none of them. **Sub-task 6.15 is what makes each contended**, and
-   the locks are what it must bring with it. Every structure introduced from
-   Phase 2 onward must record its locking discipline in its defining file's
-   header, as `docs/design/ARCHITECTURE.md`, Section 1, requires.
+4. **Every processor schedules; three structures are locked.** Sub-task 6.13
+   built the ticket spinlock, the per-processor area beneath it, the
+   inter-processor interrupt and the shootdown; 6.14 started the processors that
+   make any of it necessary; 6.15 gave each a run queue and a timer.
+   `docs/design/CONCURRENCY.md`, `docs/design/SMP.md` and
+   `docs/design/SCHEDULER.md` are the designs. What is locked is the diagnostic
+   channel (in `KernelWriteString`), each run queue, and the claim of a slot in
+   the process and thread tables (`ProcessTableLock`). Everything else here is
+   still unsynchronised — the frame allocator's bitmap and search hint, the
+   arena, the heap and the dispatch table all still say so in their own headers —
+   and is still safe for a narrower reason than before: **what runs upon an
+   application processor is a kernel thread, and a user thread's affinity mask
+   names the bootstrap processor alone.** That mask is the state of these locks
+   written as a value in a field; widening it and shrinking that list are one
+   change. Every structure introduced from Phase 2 onward must record its locking
+   discipline in its defining file's header, as
+   `docs/design/ARCHITECTURE.md`, Section 1, requires.

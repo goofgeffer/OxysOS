@@ -815,3 +815,73 @@ the removal of that mapping, and the address confirms it.
 [`../design/SMP.md`](../design/SMP.md), Section 6, visible in the accounting. The
 one lock a parked processor ever takes is the diagnostic channel, once, to
 announce that it arrived.
+
+## 11. Verification of the scheduler
+
+**Corresponding sub-task**: 6.15. **Design**:
+[`../design/SCHEDULER.md`](../design/SCHEDULER.md), Section 7.
+
+### 11.1 The difficulty this section exists for
+
+**A count of admissions is not evidence that anything ran.** A scheduler that
+enqueued four threads and gave none of them a processor produces the same
+admissions, the same queue lengths and the same report, and boots to its echo
+loop exactly as a correct one does. Every quantity the scheduler prints about
+itself is one the scheduler wrote.
+
+What it cannot produce is a counter that moves while nothing in the test writes
+it. So the fixture is four kernel threads that do work and record it, and every
+assertion is made against what they recorded.
+
+### 11.2 What `make verify` asserts
+
+See [`../design/SCHEDULER.md`](../design/SCHEDULER.md), Section 7, for the table
+pairing each assertion with the failure it catches. In outline: a mask naming no
+online processor is refused; the timer entry is unmasked, read back from the
+entry; every fixture thread completed all its rounds, upon a processor it named
+itself, having been given the processor at least once; the slices across the
+fixture exceed the number of threads, which is the rotation; and a quantum
+expired, which no voluntary yield can demonstrate.
+
+### 11.3 The three failures, and why two of them passed a test
+
+This sub-task is the clearest case in this project so far of a verdict being
+worth less than a report.
+
+| What happened | What the run said |
+| ------------- | ----------------- |
+| `SchedulerInitialise` required a current thread before calibrating, and the bootstrap processor has none at that point in the boot | `Scheduler: the local timer could not be calibrated; nothing will be pre-empted.` and then `Scheduler self-test passed: the kernel says why it schedules nothing.` **The test passed, and was right to.** A machine whose timer cannot be calibrated runs unpre-empted and reports it, and that is a legitimate outcome the test exists to distinguish from silence. It is also, on this machine, entirely wrong — and only the report says so. |
+| A newly scheduled thread inherited the scheduler's masked critical section | **The machine hung.** No fault, no panic, and nothing in the log after `Scheduler: asserting the run queues and the rotation.` The counted interrupt-disable belongs to the processor and not to the thread, so a thread that had never run began with the depth and flag of the thread that gave it the processor: interrupts masked for ever, no timer tick, never pre-empted. |
+| The scheduler adopted an idle thread for the bootstrap processor | `a child that could not be started was collected as though it had run`, in `verify_lifecycle` — a self-test three hundred lines away and two sub-tasks old. `ThreadStart` succeeds or fails according to whether a thread is current, and that test asserts the failing branch; adopting a thread had quietly turned it into a test of the other branch. |
+| The fixture yielded after every round and did no work between them | **Everything passed and nothing was demonstrated.** The threads completed in microseconds, so no two were ever runnable at the same moment: each ran to completion upon a single slice, no queue ever held two, and no quantum ever expired. The fixture now waits at a barrier and then works without yielding. |
+| The rotation was asserted as "slices at least rounds" | `a thread completed more rounds than it was given the processor. FAILED.` — four times, and the assertion was the thing that was wrong. A thread that yields into an *empty* queue is not switched away, so it carries on and completes many rounds upon one slice. |
+
+Three of those five produced a passing or absent verdict. That is the argument
+for [`../design/SCHEDULER.md`](../design/SCHEDULER.md), Section 7, existing at
+all: an assertion is only as good as the state it can actually reach.
+
+### 11.4 Reading the log
+
+```
+Scheduler: asserting the run queues and the rotation.
+  the fixture ran upon 2 of 2 processor(s), completing 32 rounds upon 32 slice(s).
+Scheduler self-test passed.
+Scheduler: round-robin, quantum 10 ms, tick vector 0xFB, local timer 62607 counts/ms.
+Scheduler: admitted 4, switches 34, pre-empted 19, found idle 49.
+  Processor 0: queue 0, timer running, running thread 0.
+  Processor 1: queue 0, timer running, running thread 7 (idle).
+```
+
+**The report comes after the self-test**, which is the other way round from every
+other subsystem here, and the reason is that there is nothing to report until
+something has been scheduled. A report before the test would print four zeroes,
+which reads exactly like a scheduler that does not work.
+
+`pre-empted 19` is the figure to read. Every other number in that line could be
+produced by threads that yielded; only that one requires the timer to have taken
+a processor back.
+
+`running thread 0` upon processor 0 is not a defect. The bootstrap processor is
+not itself a scheduled thread — it executes `KernelMain` — and the self-test
+released the thread it adopted, for the reason the third row of Section 11.3
+gives.

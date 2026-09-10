@@ -632,7 +632,8 @@ the mask is honoured.
    mask register is not atomic, and requires the spinlock governing this device.
    The lock has existed since sub-task 6.13 and has not been applied here, there
    being one flow of control that reaches it — a processor started by sub-task
-   6.14 is parked and registers no handler. Sub-task 6.15 is what makes the
+   6.14 is parked and registers no handler, and 6.15 gave it only kernel threads.
+   The change that widens a user thread's affinity mask is what makes the
    register contended.
 2. **The pair is retired, not removed.** `PicDisable` masks both mask registers
    and clears the flag that governs the report; the controllers are still

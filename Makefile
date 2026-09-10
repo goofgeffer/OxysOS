@@ -132,6 +132,7 @@ C_SOURCES := kernel/kernel.c \
              kernel/test/verify_vfs.c \
              kernel/test/verify_apic.c \
              kernel/test/verify_smp.c \
+             kernel/test/verify_sched.c \
              kernel/mm/pmm.c \
              kernel/mm/paging.c \
              kernel/mm/shootdown.c \
@@ -152,6 +153,7 @@ C_SOURCES := kernel/kernel.c \
              kernel/acpi/acpi.c \
              kernel/exec/elf.c \
              kernel/proc/process.c \
+             kernel/proc/sched.c \
              kernel/fs/ext2/core.c \
              kernel/fs/ext2/superblock.c \
              kernel/fs/ext2/group.c \

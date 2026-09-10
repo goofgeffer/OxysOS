@@ -25,9 +25,9 @@ memory and is not.
 | `vga/vga.c` | The VGA text-mode display, mode 3. Displaced by the framebuffer of sub-task 6.2 wherever the boot loader leaves the adapter in a graphics mode; see `docs/devices/DISPLAY.md`, Section 1.1. | `<oxys/vga.h>` | 1, 4.2 |
 | `serial/serial.c` | The 16550-compatible UART at COM1, interrupt-driven. | `<oxys/serial.h>` | 1, 4.1 |
 | `pic/pic.c` | The pair of cascaded 8259A interrupt controllers. Retired at sub-task 6.12; it holds no handler table and routes nothing. | `<oxys/pic.h>` | 3, 6.12 |
-| `apic/lapic.c` | The Local APIC: one per logical processor; what completes every interrupt from sub-task 6.12 onward; from sub-task 6.13 the command register through which one processor interrupts another; and from sub-task 6.14 `LocalApicInitialiseThisProcessor`, by which a started processor enables and programmes its own controller. | `<oxys/lapic.h>` | 6.12, 6.13, 6.14 |
+| `apic/lapic.c` | The Local APIC: one per logical processor; what completes every interrupt from sub-task 6.12 onward; from sub-task 6.13 the command register through which one processor interrupts another; from sub-task 6.14 `LocalApicInitialiseThisProcessor`, by which a started processor enables and programmes its own controller; and from sub-task 6.15 the timer that pre-empts it, calibrated against the interval timer because the architecture states no rate for it. | `<oxys/lapic.h>` | 6.12, 6.13, 6.14, 6.15 |
 | `apic/ioapic.c` | The I/O APIC: the redirection table that decides what vector an interrupt input presents, and to which processor. | `<oxys/ioapic.h>` | 6.12 |
-| `pit/pit.c` | Counter 0 of the 8253 interval timer, the system tick; and, from sub-task 6.14, `PitBusyWaitMicroseconds`, the counter-watching wait the startup protocol's delays are measured by. | `<oxys/pit.h>` | 3, 6.14 |
+| `pit/pit.c` | Counter 0 of the 8253 interval timer, the system tick; from sub-task 6.14 `PitBusyWaitMicroseconds`, the counter-watching wait the startup protocol's delays are measured by; and from sub-task 6.15 the reference the local APIC timers are calibrated against. | `<oxys/pit.h>` | 3, 6.14, 6.15 |
 | `ps2/ps2.c` | The 8042 keyboard controller itself, and the two device ports it presents. | `<oxys/ps2.h>` | 3, 6.5 |
 | `keyboard/keyboard.c` | The PS/2 keyboard upon the controller's first port. | `<oxys/keyboard.h>` | 3 |
 | `mouse/mouse.c` | The PS/2 mouse upon the controller's second port. | `<oxys/mouse.h>` | 6.5 |
@@ -313,6 +313,15 @@ does not use, and set the software enable, none of which the bootstrap processor
 can do on its behalf — each of those is per processor. It refuses rather than
 faults where the register page has never been mapped, which is what a processor
 started against a kernel whose controller never came up reports.
+
+**Sub-task 6.15 adds the timer.** `lapic.c` calibrates the local timers against
+the interval timer of `pit/` — the architecture states no rate for them, giving
+it as the bus clock or core crystal divided by the divide configuration register
+— and each processor then starts its own, the local vector table being per
+processor. The divide register is the part worth care: bit 2 is reserved and the
+divisor lives in bits 3, 1 and 0, so divide-by-one is `1011B` while `0000B` is
+divide-by-two. A value that looks like one halves every interval the kernel
+believes it programmed, and nothing would report it.
 
 ### `pit/` — the interval timer
 

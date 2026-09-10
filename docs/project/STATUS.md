@@ -25,12 +25,20 @@ linked ELF64 program at privilege level 3 — which returns to the kernel by sys
 call, may make a child of itself and collect what it ended with, and is ended
 when it faults or when it asks.
 
-What it does not yet do is pre-empt that program or run more than one of them at a
-time. **It does now start a second processor**: since sub-task 6.14 every
-processor the firmware declares usable is brought up and answers inter-processor
-interrupts, though none of them has anything to run until the scheduler of 6.15.
-The locks of sub-task 6.13 are applied in one place — the diagnostic channel,
-which is the whole of what a parked processor touches.
+**It pre-empts, and it schedules across processors.** Since sub-task 6.15 each
+processor holds a run queue of its own with a lock of its own, rotates
+round-robin between the threads upon it, and is taken back by a local APIC timer
+— calibrated against the interval timer, because the architecture states no rate
+for it — when a ten-millisecond quantum expires. A thread is placed upon the
+shortest queue its affinity permits, and stays there.
+
+What it does not yet do is run a **user** program upon anything but the bootstrap
+processor. The allocators, the process tables and the filesystem layer a system
+call reaches are still unsynchronised, and a user thread's affinity mask names
+processor 0 alone for exactly that reason — a limitation written as a value in a
+field rather than as a rule somebody must remember. Two locks are applied: the
+diagnostic channel of sub-task 6.14, and the process and thread tables, which
+6.15 made contended.
 
 ## 2. By phase
 
@@ -92,8 +100,8 @@ the GRUB entry that permits writing. See
 [`../storage/EXT2.md`](../storage/EXT2.md) with the two documents it heads, and
 [`../storage/VFS.md`](../storage/VFS.md).
 
-**Phase 6 — graphics, system calls, processes, SMP.** Complete as far as sub-task
-6.14; 6.15, the multiprocessor-aware scheduler, is what remains of it.
+**Phase 6 — graphics, system calls, processes, SMP.** Complete.
+
 
 - The apparatus a privilege transition is performed out of stands and has been
   exercised: user-mode descriptors in the order `SYSCALL` and `SYSRET` derive
@@ -122,7 +130,8 @@ the GRUB entry that permits writing. See
   register set with `RAX` zeroed; `execve` replaces a process's program with one
   read from a volume; `exit` ends a program upon its own request; and `wait`
   collects what a child ended with. A child runs when its parent waits for it,
-  there being one thread of control until the scheduler of sub-task 6.15.
+  the bootstrap processor having one thread of control; sub-task 6.15 rotates
+  threads upon a run queue, and no program has been placed upon one.
 - **The machine's own interrupt controllers are in use.** The firmware's ACPI
   tables are found, checksummed and read; the Multiple APIC Description Table
   says where the Local APIC and the I/O APIC are, which processors exist, and
@@ -158,13 +167,25 @@ the GRUB entry that permits writing. See
   afterwards by the first shootdown this kernel has ever had a target for.
   **A started processor has nothing to run**: it answers inter-processor
   interrupts and halts, which is its whole contribution until 6.15.
-- **One lock is applied, and it is the right one.** The diagnostic channel, in
-  `KernelWriteString`, covers the four unsynchronised structures a parked
-  processor can reach — the text display's cursor, the console's rows, the serial
-  transmit buffer and the compositor's back buffer — because one function reaches
-  all four and a whole line is what must not interleave. Every other structure
-  that needs a lock says so in its own file's header and is safe still, nothing
-  reaching it; sub-task 6.15 is what makes those contended.
+- **Three locks are applied, and each was applied where it became necessary.**
+  The diagnostic channel, in `KernelWriteString`, covers the four unsynchronised
+  structures a parked processor can reach — the text display's cursor, the
+  console's rows, the serial transmit buffer and the compositor's back buffer —
+  because one function reaches all four and a whole line is what must not
+  interleave. Sub-task 6.15 added two more: a lock per run queue, and
+  `ProcessTableLock`, which makes the claim of a slot in the process and thread
+  tables atomic now that each application processor claims one as it comes
+  online. Every other structure that needs a lock says so in its own file's
+  header and is safe still, nothing reaching it.
+- **Every processor has work, and is taken back when it has had enough.** Since
+  sub-task 6.15 each holds a run queue with a lock of its own and rotates
+  round-robin between the threads upon it. Pre-emption is a local APIC timer, one
+  per processor because the local vector table is per processor, at a rate this
+  kernel measures against the interval timer rather than assumes — the
+  architecture states none. A thread is placed once, upon the shortest queue its
+  affinity permits, and stays there. **A user thread's affinity names the
+  bootstrap processor alone**, which is the state of the remaining locks written
+  as a value in a field rather than as a rule somebody must remember.
 
 See [`../design/PRIVILEGE.md`](../design/PRIVILEGE.md),
 [`../design/GRAPHICS.md`](../design/GRAPHICS.md) and the five documents it indexes,
@@ -172,6 +193,7 @@ See [`../design/PRIVILEGE.md`](../design/PRIVILEGE.md),
 [`../design/PROCESS.md`](../design/PROCESS.md),
 [`../design/CONCURRENCY.md`](../design/CONCURRENCY.md),
 [`../design/SMP.md`](../design/SMP.md),
+[`../design/SCHEDULER.md`](../design/SCHEDULER.md),
 [`../design/INTERRUPTS.md`](../design/INTERRUPTS.md), Section 10,
 [`../devices/ACPI.md`](../devices/ACPI.md) and
 [`../devices/APIC.md`](../devices/APIC.md).
@@ -197,6 +219,7 @@ The physical machine is one machine — the HP Laptop 14-dq0052dx specified in
 | 6.12 The APIC | Yes | **Not yet run** | — | **Not yet run** |
 | 6.13 Concurrency | Yes | **Not yet run** | — | **Not yet run** |
 | 6.14 Application processors | Yes | **Not yet run** | — | **Not yet run** |
+| 6.15 The scheduler | Yes | **Not yet run** | — | **Not yet run** |
 
 **Sub-task 6.12 has its own row because it is the change most likely to differ by
 machine.** Everything it does is programmed from tables the firmware wrote, and
@@ -229,6 +252,19 @@ only where the first was unanswered, and the hundred-millisecond bound upon the
 wait are all timing against real silicon under QEMU and timing against an
 emulator's approximation of it here. Under QEMU one application processor starts,
 comes online, and answers a shootdown from within its own handler.
+
+**Sub-task 6.15 has its own row because its quantum is a measurement.** The local
+timer's rate is not stated by the architecture — Intel SDM, Volume 3A, Section
+10.5.4, gives it as the bus clock or core crystal divided by the divide
+configuration register — so this kernel measures it against the interval timer at
+every boot. Under QEMU that measurement lands at about 62,600 counts per
+millisecond at divide-by-sixteen, which is the 1 GHz bus clock QEMU presents; a
+real machine will produce a different figure, and a machine whose interval timer
+is inaccurate will produce a wrong one. The refusals are what stand between a bad
+measurement and a quantum computed from it: the kernel declines to start any
+timer and says so, and runs unpre-empted rather than upon an invented rate. That
+path has been exercised — it is what the first run of this sub-task did — but not
+upon hardware.
 
 "Reached, not examined" means the kernel ran that far upon the machine — it must
 have, the storage report of Phase 4 coming after all of it — but nothing about
@@ -279,7 +315,7 @@ functional. [`TESTING.md`](TESTING.md), Section 3.
 There is no test harness and there will be none before Phase 7, there being no
 userland to run one in. The kernel therefore asserts its own properties at boot,
 in the order the subsystems are initialised, and `make verify` fails if any of
-them reports a failure. Fifty-two assertions presently report passed or sound.
+them reports a failure. Fifty-three assertions presently report passed or sound.
 
 Those tests are in [`../../kernel/test/`](../../kernel/test/), one file per
 subsystem. Each subsystem's design document carries a table pairing every
@@ -302,10 +338,10 @@ design document ends with its particular ones.
 
 | Absent | Arrives at |
 | ------ | ---------- |
-| Pre-emption. Nothing takes a processor away from a thread that has not given it up. | 6.15 |
-| More than one program at a time. `ThreadStart` records the thread to return to in a single variable. | 6.15 |
-| File descriptors. A process has no open files; the filesystem layer's table is global. | Phase 7 |
-| Synchronisation **applied**, beyond the diagnostic channel. The lock, the per-processor area, the inter-processor interrupt and the shootdown all exist as of 6.13, and 6.14 applied one lock — `KernelWriteString`, which is the whole of what a parked processor touches. Every other shared structure is still unsynchronised and still says so in its own file's header; `CONCURRENCY.md`, Section 10, limitation 1, enumerates them. | 6.15 |
-| Work for a second processor. Every declared processor is started as of 6.14, but a started processor answers inter-processor interrupts and otherwise halts; there is no run queue to take work from. | 6.15 |
+| A user program upon anything but the bootstrap processor. Every user thread's affinity mask names processor 0 alone, because the allocators, the process tables and the filesystem layer its system calls reach are still unsynchronised. `SCHEDULER.md`, Section 4, and `CONCURRENCY.md`, Section 10, limitation 1. | Phase 7 |
+| More than one program at a time. The scheduler rotates threads, but nothing yet creates a second *program* that runs beside the first rather than in place of it. | Phase 7 |
+| Synchronisation **applied**, beyond three structures. The diagnostic channel was locked at 6.14; the run queues and the process and thread tables at 6.15. Every other shared structure is still unsynchronised and still says so in its own file's header; `CONCURRENCY.md`, Section 10, limitation 1, enumerates them. | Phase 7 |
+| A reaper. A kernel thread that finishes cannot free its own stack — it is standing on it — and nothing else does. Its slot and its four pages are held until the machine stops. | Phase 7 |
+| Migration, work stealing, and more than one priority. A thread is placed once, at admission, upon the shortest queue its affinity permits, and stays there. | Later |
 | `CR4.SMEP`, `CR4.SMAP` and `IA32_EFER.NXE`. The user mappings that would be protected now exist. | 13.3 |
 | A UEFI boot path. | Phase 12 |

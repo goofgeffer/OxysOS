@@ -158,7 +158,9 @@ slow.
    locked. There is one flow of control, and when there is not, this is the first
    thing in the storage stack that must change. The spinlock it requires was
    built by sub-task 6.13 and has not been applied here. A processor started by
-   sub-task 6.14 is parked and reaches no block device; **sub-task 6.15 is what
+   sub-task 6.14 is parked and reaches no block device, and 6.15 pinned every user
+   thread to the bootstrap processor; **the change that widens that affinity mask
+   is what
    makes the cache contended**. What the lock must cover is the whole of a lookup
    and its outcome — the search, the eviction it may perform and the reference it
    takes — because two processors that each searched for one block, each found

@@ -10,7 +10,10 @@
  * Key functions: LocalApicIsSupported, LocalApicInitialise,
  *          LocalApicSignalEndOfInterrupt, LocalApicIdentifier,
  *          LocalApicIsBootstrapProcessor, LocalApicRead, LocalApicWrite,
- *          LocalApicSendCommand, LocalApicCommandIsIdle, LocalApicReport.
+ *          LocalApicSendCommand, LocalApicCommandIsIdle,
+ *          LocalApicCalibrateTimer, LocalApicStartTimer, LocalApicStopTimer,
+ *          LocalApicTimerCountsPerMillisecond, LocalApicTimerIsRunning,
+ *          LocalApicReport.
  * References:
  *   - Intel SDM, Volume 3A, Section 10.4.1: the registers occupy a 4 KiB region
  *     at 0xFEE00000, and "for correct APIC operation, this address space must be
@@ -74,6 +77,7 @@
 
 #include <oxys/lapic.h>
 #include <oxys/acpi.h>
+#include <oxys/pit.h>
 #include <oxys/msr.h>
 #include <oxys/paging.h>
 #include <oxys/vmm.h>
@@ -586,6 +590,171 @@ uint32_t LocalApicLastErrorStatus(void)
     return LocalApicErrorStatus;
 }
 
+
+/* ------------------------------------------------------------------- timer */
+
+/*
+ * The measured rate of the local timers, in counts per millisecond.
+ *
+ * It is one figure for the machine and not one per processor, because the timer
+ * counts from the bus clock or the core crystal — Intel SDM, Volume 3A, Section
+ * 10.5.4 — which every processor shares. Measuring it upon each would be
+ * measuring one clock several times, and the several answers would then have to
+ * be reconciled by something with no way of knowing which was right.
+ *
+ * Written once by the bootstrap processor before any application processor is
+ * started, and read thereafter; no lock, and none possible to want.
+ */
+static uint32_t LocalApicTimerCounts;
+
+bool LocalApicCalibrateTimer(void)
+{
+    uint32_t elapsed;
+    uint32_t remaining;
+
+    /* Fifty milliseconds. Long enough that the interval timer's 838-nanosecond
+     * resolution is four orders of magnitude below the measurement, short enough
+     * that it is not felt in a boot. */
+    const uint32_t interval = 50U;
+
+    LocalApicTimerCounts = 0U;
+
+    if (!LocalApicEnabled)
+    {
+        return false;
+    }
+
+    if (!PitIsRunning())
+    {
+        return false;
+    }
+
+    /*
+     * The timer is masked throughout the measurement.
+     *
+     * The count is what is being read, not the interrupt; and an interrupt
+     * delivered from a vector nothing has yet registered would be counted as
+     * unhandled by the dispatcher and reported as a defect of the boot rather
+     * than as the calibration doing its work.
+     */
+    LocalApicWrite(LAPIC_REGISTER_LVT_TIMER, LAPIC_LVT_MASKED);
+    LocalApicWrite(LAPIC_REGISTER_TIMER_DIVIDE, LAPIC_TIMER_DIVIDE_16);
+
+    /*
+     * One-shot from the largest count there is, so that the counter is falling
+     * throughout and cannot reload beneath the measurement. A periodic timer
+     * would wrap, and a wrap that went unobserved would be a rate reported as a
+     * fraction of the truth.
+     */
+    LocalApicWrite(LAPIC_REGISTER_TIMER_INITIAL, UINT32_MAX);
+
+    if (!PitBusyWaitMicroseconds(interval * 1000U))
+    {
+        LocalApicWrite(LAPIC_REGISTER_TIMER_INITIAL, 0U);
+        return false;
+    }
+
+    remaining = LocalApicRead(LAPIC_REGISTER_TIMER_CURRENT);
+
+    /* Stop it: writing zero to the initial count disables the timer, per Section
+     * 10.5.4, and leaves nothing counting down behind this function. */
+    LocalApicWrite(LAPIC_REGISTER_TIMER_INITIAL, 0U);
+
+    if (remaining == 0U)
+    {
+        /*
+         * The counter reached zero, so the interval was longer than the largest
+         * count could span and the elapsed figure would be a floor rather than a
+         * measurement. It cannot happen at any rate a real machine runs at —
+         * 0xFFFFFFFF counts at divide-by-sixteen is minutes — and it is refused
+         * rather than divided by, because the alternative is a quantum computed
+         * from a number that is merely the largest one available.
+         */
+        return false;
+    }
+
+    elapsed = UINT32_MAX - remaining;
+
+    /*
+     * A rate too low to divide into a millisecond is refused for the same
+     * reason: a quantum of zero counts programmes a timer that either never
+     * fires or fires continuously, and both present as a machine that stopped.
+     */
+    if (elapsed < interval)
+    {
+        return false;
+    }
+
+    LocalApicTimerCounts = elapsed / interval;
+
+    return LocalApicTimerCounts != 0U;
+}
+
+uint32_t LocalApicTimerCountsPerMillisecond(void)
+{
+    return LocalApicTimerCounts;
+}
+
+bool LocalApicStartTimer(uint8_t vector, uint32_t milliseconds)
+{
+    uint64_t initial;
+
+    if (!LocalApicEnabled || (LocalApicTimerCounts == 0U) || (milliseconds == 0U))
+    {
+        return false;
+    }
+
+    initial = (uint64_t)LocalApicTimerCounts * (uint64_t)milliseconds;
+
+    if (initial > (uint64_t)UINT32_MAX)
+    {
+        return false;
+    }
+
+    /*
+     * The divide is programmed again upon each processor, and that is not
+     * redundant. The divide configuration register is one of the local vector
+     * table's neighbours and is per processor like the rest of them; a processor
+     * that inherited only the count would count at whatever divisor a reset left
+     * — which is divide-by-two, so its quantum would be a eighth of every other
+     * processor's and nothing would say so.
+     */
+    LocalApicWrite(LAPIC_REGISTER_TIMER_DIVIDE, LAPIC_TIMER_DIVIDE_16);
+
+    /*
+     * The entry is written before the count, and unmasked in that write.
+     *
+     * Writing the count first would start a timer whose entry still held
+     * whatever the firmware left — a masked entry at best, and at worst a vector
+     * this kernel has not registered.
+     */
+    LocalApicWrite(LAPIC_REGISTER_LVT_TIMER,
+                   (uint32_t)vector | LAPIC_LVT_TIMER_PERIODIC);
+    LocalApicWrite(LAPIC_REGISTER_TIMER_INITIAL, (uint32_t)initial);
+
+    return true;
+}
+
+void LocalApicStopTimer(void)
+{
+    if (!LocalApicEnabled)
+    {
+        return;
+    }
+
+    LocalApicWrite(LAPIC_REGISTER_TIMER_INITIAL, 0U);
+    LocalApicWrite(LAPIC_REGISTER_LVT_TIMER, LAPIC_LVT_MASKED);
+}
+
+bool LocalApicTimerIsRunning(void)
+{
+    if (!LocalApicEnabled)
+    {
+        return false;
+    }
+
+    return (LocalApicRead(LAPIC_REGISTER_LVT_TIMER) & LAPIC_LVT_MASKED) == 0U;
+}
 void LocalApicReport(void)
 {
     KernelWriteString("Local APIC: ");

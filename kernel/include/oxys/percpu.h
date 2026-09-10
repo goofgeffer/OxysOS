@@ -253,6 +253,19 @@ void PerCpuPushInterruptState(void);
  */
 void PerCpuPopInterruptState(void);
 
+/*
+ * Declares that this processor holds no critical section, and enables
+ * interrupts.
+ *
+ * It is for the entry path of a thread that has never run, and for nothing else.
+ * The counted disable belongs to the processor rather than to the thread, so a
+ * thread started by the scheduler of sub-task 6.15 begins with the depth its
+ * predecessor left — masked, and never pre-empted again. See the note upon the
+ * definition; the failure it prevents is a machine that hangs silently the first
+ * time a thread is scheduled.
+ */
+void PerCpuResetInterruptState(void);
+
 /* The nesting depth of the executing processor's critical section, and the
  * number of spinlocks it holds. Both exist for the self-test and the report. */
 uint32_t PerCpuCriticalDepth(void);

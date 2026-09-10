@@ -18,7 +18,9 @@
  * one flow of control, so the hash chains and the least-recently-used list are
  * consistent by construction; the spinlock of sub-task 6.13 exists and has not
  * been applied here. A processor started by sub-task 6.14 is parked and reaches
- * no block device, so the structure is uncontended still; **sub-task 6.15 is what
+ * no block device, and sub-task 6.15 pinned every user thread to the bootstrap
+ * processor, so the structure is uncontended still; **the change that widens that
+ * affinity mask is what
  * makes it contended**.
  *
  *   What the lock must cover is the whole of a lookup and its outcome — the

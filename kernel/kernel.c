@@ -68,6 +68,7 @@
 #include <oxys/ipi.h>
 #include <oxys/shootdown.h>
 #include <oxys/smp.h>
+#include <oxys/sched.h>
 #include <oxys/pic.h>
 #include <oxys/irq.h>
 #include <oxys/acpi.h>
@@ -1217,6 +1218,27 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
     KernelVerifyShootdown();
 
     /*
+     * Sub-task 6.15: the scheduler, prepared before the processors it will
+     * schedule upon.
+     *
+     * It stands before SmpInitialise because a processor that comes online goes
+     * straight into SchedulerEnterIdle, and there must be a tick handler
+     * registered and a calibrated rate for it to find. The calibration is a busy
+     * wait upon the interval timer, so it must stand after that timer is
+     * running — and it runs upon the bootstrap processor alone, which at this
+     * point in the boot it does by construction.
+     *
+     * A failure here is reported and survived. The machine then runs
+     * unpre-empted, which is what it did until this sub-task, rather than upon a
+     * quantum computed from a rate nothing measured.
+     */
+    if (!SchedulerInitialise())
+    {
+        KernelWriteString("Scheduler: the local timer could not be calibrated; "
+                          "nothing will be pre-empted.\n");
+    }
+
+    /*
      * Sub-task 6.14: the application processors.
      *
      * It stands after everything above it because a starting processor is given
@@ -1237,12 +1259,37 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
      */
     SmpInitialise();
 
+    /*
+     * And this processor's own timer, last.
+     *
+     * It is started after the bring-up rather than before it because the
+     * bring-up masks interrupts for its whole duration and measures the
+     * protocol's delays by polling the interval timer's counter. A local timer
+     * running through that would deliver its ticks the moment the flag was
+     * restored — a burst of pre-emptions against a processor that had just
+     * finished starting the machine, for no purpose.
+     */
+    (void)SchedulerStartOnThisProcessor();
+
     PerCpuReport();
     IpiReport();
     ShootdownReport();
     SmpReport();
 
     KernelVerifyApplicationProcessors();
+    KernelVerifyScheduler();
+
+    /*
+     * The scheduler's report comes after its self-test and not before it, which
+     * is the other way round from every report above.
+     *
+     * The reason is that there is nothing to report until something has been
+     * scheduled. The bring-up of sub-task 6.14 had done its work by the time
+     * SmpReport ran; the scheduler has admitted nobody until its own test admits
+     * somebody, so a report before it would print four zeroes and a queue length
+     * of none — which reads exactly like a scheduler that does not work.
+     */
+    SchedulerReport();
 
     /*
      * The bus is enumerated once every device driven so far is working, so that

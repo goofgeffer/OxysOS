@@ -386,7 +386,8 @@ At the completion of the self-test under QEMU:
    shell of Phase 8.
 6. The consumer's side of the buffer is unsynchronised. The spinlock it requires
    was built by sub-task 6.13 and has not been applied here. A processor started
-   by sub-task 6.14 is parked and consumes nothing; sub-task 6.15 is what makes a
+   by sub-task 6.14 is parked and consumes nothing, and 6.15 gave it only kernel
+   threads; the change that widens a user thread's affinity mask is what makes a
    second consumer possible. Section 5.3 says why the producer's side needs none.
 7. The "fake shift" sequences are not suppressed. The controller emits `E0 2A`
    before, and `E0 AA` after, several extended keys — the keypad's solidus, and

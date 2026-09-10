@@ -73,7 +73,9 @@
  *
  * The receive buffer is untouched by any of that. Its producer is still the
  * interrupt handler and its consumer still the echo loop, both upon the
- * bootstrap processor; sub-task 6.15 is what could give it a second consumer.
+ * bootstrap processor, and sub-task 6.15 left it there: every user thread is pinned
+ * to that processor. The change that widens that affinity mask is what could give
+ * this buffer a second consumer.
  */
 
 #include <oxys/serial.h>

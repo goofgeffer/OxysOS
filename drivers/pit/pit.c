@@ -97,11 +97,13 @@ static bool PitRunning;
 /*
  * Receives the timer's request line.
  *
- * The handler does nothing but count. That is deliberate: it runs with the
- * interrupt flag clear, at the highest priority the controller offers, and every
- * instruction executed within it delays every other interrupt in the machine.
- * The scheduling decision that sub-task 6.15 will take upon each tick is
- * expressed as work performed elsewhere, not as work performed here.
+ * The handler does nothing but count, and from sub-task 6.15 that is a division
+ * of labour rather than a deferral. Pre-emption is measured by the local APIC
+ * timer, one per processor — this counter interrupts the bootstrap processor
+ * alone, so a scheduler built upon it could never take a thread away from any
+ * other. What this device contributes to the scheduler is the calibration:
+ * LocalApicCalibrateTimer measures the local timers against this one, the
+ * architecture stating no rate for them.
  *
  * The end-of-interrupt is not signalled here; the routing layer of
  * drivers/pic/pic.c does so upon this handler's return, for the reason given in

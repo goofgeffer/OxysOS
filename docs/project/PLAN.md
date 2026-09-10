@@ -17,34 +17,38 @@ divided into atomic sub-tasks, and every milestone must be bootable and testable
 ## Where we are
 **Phases 1 to 5 are complete.** Sub-task 1.12 closed on 2026-09-07: the kernel
 has booted from a USB medium upon real hardware, and the boot log was read there.
-**Phase 6 is complete as far as sub-task 6.14**: a statically linked
-ELF64 program is loaded into an address space of its own, entered at privilege
-level 3, returned to by `SYSRET` when it makes a system call, and ended when it
-faults or when it asks — and it may now make a child of itself upon the
-copy-on-write substrate of Phase 2, replace that child's program with one read
-from a volume, and collect what it ended with. Since sub-task 6.12 the machine's
-own interrupt controllers are the Local APIC and the I/O APIC, programmed from
-what the firmware's ACPI tables declare; the 8259A pair is masked and retired.
-Since sub-task 6.13 each processor holds a per-processor area of its own, reached
-through `GS`; there is a ticket spinlock that masks interrupts for as long as it
-is held; one processor can interrupt another; and a paging-structure change is
-announced by a translation-lookaside-buffer shootdown that waits to be
-acknowledged. **Since sub-task 6.14 there is more than one processor to send that
-shootdown to**: every processor the firmware declares usable is started by an
-INIT-startup-startup sequence into a real-mode trampoline, carried into 64-bit
-mode upon the kernel's own paging hierarchy, given the kernel's descriptor
-tables, a task state segment of its own and an area of its own, and parked.
+**Phase 6 is complete**: a statically linked ELF64 program is loaded into an
+address space of its own, entered at privilege level 3, returned to by `SYSRET`
+when it makes a system call, and ended when it faults or when it asks — and it
+may make a child of itself upon the copy-on-write substrate of Phase 2, replace
+that child's program with one read from a volume, and collect what it ended with.
+Since sub-task 6.12 the machine's own interrupt controllers are the Local APIC
+and the I/O APIC, programmed from what the firmware's ACPI tables declare; the
+8259A pair is masked and retired. Since sub-task 6.13 each processor holds a
+per-processor area of its own, reached through `GS`; there is a ticket spinlock
+that masks interrupts for as long as it is held; one processor can interrupt
+another; and a paging-structure change is announced by a
+translation-lookaside-buffer shootdown that waits to be acknowledged. Since
+sub-task 6.14 every processor the firmware declares usable is started by an
+INIT-startup-startup sequence into a real-mode trampoline and carried into
+64-bit mode upon the kernel's own paging hierarchy. **Since sub-task 6.15 those
+processors have work**: each holds a run queue of its own with a lock of its own,
+rotates round-robin between the threads upon it, and is taken back by a local
+timer calibrated against the interval timer when a ten-millisecond quantum
+expires.
 
-**Next: sub-task 6.15** — the multiprocessor-aware scheduler. It is what a child
-presently waits for, and what a started processor presently lacks: there is one
-thread of control, so a forked child runs when its parent waits for it rather
-than beside it, and a started processor answers inter-processor interrupts and
-otherwise halts. **The locks of 6.13 are applied in exactly one place** — the
-diagnostic channel, in `KernelWriteString`, which is the whole of what a parked
-processor touches. Every other structure that needs one says so in its own file
-header and is safe until 6.15 gives a second processor a reason to reach it;
+**Next: Phase 7** — the userland and the minimal C library.
+
+**Two things Phase 6 leaves for it to inherit.** The scheduler's affinity mask
+names the bootstrap processor alone for every user thread, because the
+allocators, the process tables and the filesystem layer a system call reaches are
+still unsynchronised; [`../design/SCHEDULER.md`](../design/SCHEDULER.md),
+Section 4, records that this is a limitation written as a value in a field rather
+than a scheduling decision, and
 [`../design/CONCURRENCY.md`](../design/CONCURRENCY.md), Section 10, limitation 1,
-enumerates them.
+enumerates what is outstanding. And the bootstrap processor is not itself a
+scheduled thread: it executes `KernelMain` as a flow of control, joining the
+rotation only while something has adopted a thread for it.
 
 For what the system does today, and where it has been observed to do it, see
 [`STATUS.md`](STATUS.md). For how it came to be that way, see
@@ -267,7 +271,7 @@ BIOS Extensions 3.0.
 | 6.12 | Parse the ACPI MADT; initialise the Local APIC and the I/O APIC; retire the 8259A PIC. | Implemented | `verify_apic.c`, `verify_devices.c` — see note (b) |
 | 6.13 | Implement spinlocks, per-CPU data areas and inter-processor interrupts, including TLB shootdown. | Implemented | `verify_smp.c` — see note (c) |
 | 6.14 | Implement application-processor bring-up by INIT-SIPI-SIPI and a real-mode trampoline. | Implemented | `verify_smp.c` — see note (d) |
-| 6.15 | Implement a multiprocessor-aware round-robin scheduler with per-CPU run queues and processor affinity. | **Planned — next** | — |
+| 6.15 | Implement a multiprocessor-aware round-robin scheduler with per-CPU run queues and processor affinity. | Implemented | `verify_sched.c` — see note (e) |
 
 **(a)** Sub-task 6.1's self-test executed `SYSCALL` until sub-task 6.7 replaced
 the entry point with one returning by `SYSRET`, which returns to privilege level
@@ -308,7 +312,26 @@ because that is the whole of what a started processor touches — a started
 processor has nothing to run and is parked in a halt loop until 6.15. Every other
 structure in
 [`../design/CONCURRENCY.md`](../design/CONCURRENCY.md), Section 10, limitation 1,
-is still unsynchronised and still safe, and **6.15 is what makes each contended**.
+is still unsynchronised; see note (e) for what 6.15 did and did not change.
+
+**(e)** Sub-task 6.15 is asserted by `KernelVerifyScheduler` in
+`verify_sched.c`. **A count of admissions is not evidence that anything ran**: a
+scheduler that enqueued four threads and gave none of them a processor produces
+the same admissions, the same queue lengths and the same report. So the fixture
+is four kernel threads that do work and record it, and the assertions are made
+against what they recorded — that every thread completed its rounds, upon a
+processor it names itself, having been given the processor at least once; that
+the slices across the fixture exceed the number of threads, which is the rotation
+visible from outside; and that a quantum expired, which is the one thing a
+voluntary yield cannot demonstrate.
+
+Two of those assertions were got wrong first and the corrections are recorded in
+[`../design/SCHEDULER.md`](../design/SCHEDULER.md), Section 7. **The locks are
+still not applied beyond two of them** — the run queues, which this sub-task
+creates, and the process and thread tables, which it makes contended. A user
+thread's affinity mask names the bootstrap processor alone for exactly that
+reason, and Section 4 of that document says so; widening it is the work of the
+sub-task that locks the allocators and the filesystem layer.
 
 **Why 6.2 to 6.6 sit here rather than in Phase 9**, and **why 6.13 precedes
 6.14**: both orderings were chosen against the obvious one, and both arguments

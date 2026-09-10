@@ -79,6 +79,7 @@
 #include <oxys/pit.h>
 #include <oxys/cpu.h>
 #include <oxys/framebuffer.h>
+#include <oxys/sched.h>
 #include <oxys/memory.h>
 #include <oxys/verify.h>
 #include <oxys/kernel.h>
@@ -663,25 +664,21 @@ _Noreturn void SmpApplicationProcessorEntry(uint64_t index)
     SmpAnnounceArrival(PerCpuIndex(), PerCpuCurrent()->apic_identifier);
 
     /*
-     * There is nothing to run.
+     * And into the scheduler, which is where this processor's working life
+     * begins.
      *
-     * The processor enables interrupts and halts, and every time it is woken it
-     * halts again. What wakes it is an inter-processor interrupt — a shootdown,
-     * or the halt request a panicking processor sends — and servicing those is
-     * this processor's entire contribution until the scheduler of sub-task 6.15.
+     * Sub-task 6.14 ended here with a bare halt loop, there being nothing to
+     * run. Sub-task 6.15 gives this processor a run queue of its own, a timer of
+     * its own that takes a thread back when its quantum expires, and an idle
+     * thread — which is this very execution, described. SchedulerEnterIdle
+     * adopts it and does not return.
      *
-     * The two instructions are adjacent and must be. Intel SDM, Volume 2B,
-     * "STI", provides that the interrupt flag takes effect only after the
-     * instruction following STI, so an interrupt arriving in between is held
-     * until after the HLT has been entered rather than being delivered before
-     * it and leaving the processor asleep with the reason it was woken already
-     * past. The same pairing, for the same reason, is in the echo loop of
-     * docs/devices/KEYBOARD.md, Section 7.3.
+     * It stands after the announcement rather than before it, so that a
+     * processor which reached this point is reported as online whatever the
+     * scheduler then makes of it: a processor that could not claim an idle
+     * thread has still come up, and the two facts are worth telling apart.
      */
-    for (;;)
-    {
-        __asm__ __volatile__("sti; hlt");
-    }
+    SchedulerEnterIdle();
 }
 
 void SmpInitialise(void)

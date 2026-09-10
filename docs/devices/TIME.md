@@ -247,7 +247,9 @@ Under QEMU, at the completion of the self-test:
    the spinlock sub-task 6.13 built, is what this limitation waits upon.
 2. `PitWaitTicks` is a busy wait. It occupies the processor entirely and cannot
    be used once there is anything else for the processor to do. The sleeping wait
-   belongs to the scheduler of sub-task 6.15.
+   belongs to the scheduler of sub-task 6.15, which measures its quantum by the
+   local APIC timer instead — one per processor, this counter reaching only the
+   bootstrap processor.
 3. There is no accounting of a tick that was missed. Were interrupts masked
    across a period longer than the tick interval, the ticks falling within it
    would simply not be counted and the kernel's notion of elapsed time would lag
