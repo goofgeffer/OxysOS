@@ -285,11 +285,16 @@ the kernel deny having a framebuffer three lines after describing one in detail.
 6. ~~**Nothing is buffered off-screen.**~~ Resolved by sub-task 6.6. Drawing goes
    to the back buffer and reaches the display only at a presentation. There is
    still no synchronisation with the adapter's vertical blank; see [`COMPOSITOR.md`](COMPOSITOR.md), Section 2.7.
-7. **There is no lock**, and no second thread of control writes here: the
-   interrupt handlers do not print save through the panic path, which does not
-   return. From sub-task 6.14 that ceases to be true and this must take the lock
-   sub-task 6.13 built — the whole of a character, not one pixel of it, being the
-   thing that must not interleave. The lock exists; it is not taken here.
+7. **The lock is taken above this file.** Since sub-task 6.14 a started processor
+   announces its arrival through `KernelWriteString`, so this console has a
+   second writer, and that function holds the spinlock sub-task 6.13 built for
+   the whole of a call. A call is a whole string, which is the right granularity —
+   the thing that must not interleave is a character, not one pixel of it, and a
+   caller with a line to emit composes it before it writes it. Nothing in
+   `console.c` acquires a lock of its own, and nothing should: a second lock
+   beneath the first would protect what is already protected. The one path that
+   holds no lock is the fault screen, by decision; see
+   [`FAULTSCREEN.md`](FAULTSCREEN.md).
 8. **The picture comments are unchecked.** Nothing asserts that the art beside a
    glyph agrees with its bytes. See Section 1.2.
 9. **The console is at most `CONSOLE_MAXIMUM_ROWS` rows tall.** The row lengths

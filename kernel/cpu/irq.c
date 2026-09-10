@@ -35,8 +35,10 @@
  * Until the interrupt flag is set there is one flow of control; from sub-task
  * 6.13 there is a spinlock the registration of a handler and the change of a
  * mask both require, an interrupt handler and an application processor each
- * being able to enter either. It has not been applied here; sub-task 6.14 is
- * what makes either contended.
+ * being able to enter either. It has not been applied here, and it is not yet
+ * needed: a processor started by sub-task 6.14 claims no line and changes no
+ * mask, being parked in a halt loop. Sub-task 6.15 is what makes either
+ * contended.
  */
 
 #include <oxys/irq.h>

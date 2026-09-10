@@ -15,10 +15,9 @@ C11 and NASM assembly, in thirteen phases ordered by dependency. Each phase is
 divided into atomic sub-tasks, and every milestone must be bootable and testable.
 
 ## Where we are
-
 **Phases 1 to 5 are complete.** Sub-task 1.12 closed on 2026-09-07: the kernel
 has booted from a USB medium upon real hardware, and the boot log was read there.
-**Phase 6 is complete as far as sub-task 6.13**: a statically linked
+**Phase 6 is complete as far as sub-task 6.14**: a statically linked
 ELF64 program is loaded into an address space of its own, entered at privilege
 level 3, returned to by `SYSRET` when it makes a system call, and ended when it
 faults or when it asks — and it may now make a child of itself upon the
@@ -26,18 +25,24 @@ copy-on-write substrate of Phase 2, replace that child's program with one read
 from a volume, and collect what it ended with. Since sub-task 6.12 the machine's
 own interrupt controllers are the Local APIC and the I/O APIC, programmed from
 what the firmware's ACPI tables declare; the 8259A pair is masked and retired.
-Since sub-task 6.13 the processor holds a per-processor area of its own, reached
+Since sub-task 6.13 each processor holds a per-processor area of its own, reached
 through `GS`; there is a ticket spinlock that masks interrupts for as long as it
 is held; one processor can interrupt another; and a paging-structure change is
 announced by a translation-lookaside-buffer shootdown that waits to be
-acknowledged.
+acknowledged. **Since sub-task 6.14 there is more than one processor to send that
+shootdown to**: every processor the firmware declares usable is started by an
+INIT-startup-startup sequence into a real-mode trampoline, carried into 64-bit
+mode upon the kernel's own paging hierarchy, given the kernel's descriptor
+tables, a task state segment of its own and an area of its own, and parked.
 
-**Next: sub-task 6.14** — the bring-up of the application processors, then the
-scheduler of 6.15. The scheduler is what a child presently waits for: there is
-one thread of control, so a forked child runs when its parent waits for it rather
-than beside it. **The locks of 6.13 exist but are not yet applied** to the
-structures that need them, each of which says so in its own file header; 6.14 and
-6.15 are what make them contended, and
+**Next: sub-task 6.15** — the multiprocessor-aware scheduler. It is what a child
+presently waits for, and what a started processor presently lacks: there is one
+thread of control, so a forked child runs when its parent waits for it rather
+than beside it, and a started processor answers inter-processor interrupts and
+otherwise halts. **The locks of 6.13 are applied in exactly one place** — the
+diagnostic channel, in `KernelWriteString`, which is the whole of what a parked
+processor touches. Every other structure that needs one says so in its own file
+header and is safe until 6.15 gives a second processor a reason to reach it;
 [`../design/CONCURRENCY.md`](../design/CONCURRENCY.md), Section 10, limitation 1,
 enumerates them.
 
@@ -261,8 +266,8 @@ BIOS Extensions 3.0.
 | 6.11 | Implement `fork()` upon the Phase 2 copy-on-write substrate, together with `execve()`, `exit()` and `wait()`. | Implemented | `verify_lifecycle.c` |
 | 6.12 | Parse the ACPI MADT; initialise the Local APIC and the I/O APIC; retire the 8259A PIC. | Implemented | `verify_apic.c`, `verify_devices.c` — see note (b) |
 | 6.13 | Implement spinlocks, per-CPU data areas and inter-processor interrupts, including TLB shootdown. | Implemented | `verify_smp.c` — see note (c) |
-| 6.14 | Implement application-processor bring-up by INIT-SIPI-SIPI and a real-mode trampoline. | **Planned — next** | — |
-| 6.15 | Implement a multiprocessor-aware round-robin scheduler with per-CPU run queues and processor affinity. | Planned | — |
+| 6.14 | Implement application-processor bring-up by INIT-SIPI-SIPI and a real-mode trampoline. | Implemented | `verify_smp.c` — see note (d) |
+| 6.15 | Implement a multiprocessor-aware round-robin scheduler with per-CPU run queues and processor affinity. | **Planned — next** | — |
 
 **(a)** Sub-task 6.1's self-test executed `SYSCALL` until sub-task 6.7 replaced
 the entry point with one returning by `SYSRET`, which returns to privilege level
@@ -282,10 +287,28 @@ two — the per-processor area and the spinlock — assert internal state and no
 behaviour, because upon a machine with one processor a lock that does not lock
 behaves exactly like one that does. The last two are behavioural: an interrupt a
 processor sends to itself is delivered like any other, so the whole shootdown
-path is exercised, against a mapping the test makes stale on purpose. **The
-locks are not yet applied to the structures that need them**;
+path is exercised, against a mapping the test makes stale on purpose. **Only one
+of the locks has been applied**; see note (d).
+
+**(d)** Sub-task 6.14 is asserted by `KernelVerifyApplicationProcessors`, the
+fifth routine in `verify_smp.c`. **A count is not the assertion**: a kernel that
+incremented a variable and started nobody would produce the same count, the same
+report and the same banner. What only a running processor can produce is an
+acknowledgement to an interrupt it was sent, so the substance of the test is a
+shootdown broadcast with each target's own service count read out afterwards —
+the mechanism of 6.13 doing, at last, the thing it was built for. It also checks
+what each started processor read out of its own task register, descriptor table
+registers and control registers, `CR0.WP` among them, whose absence upon one
+processor nothing else in this kernel would ever report; and upon a machine with
+one processor it asserts the other side, that nobody was started and that the
+kernel says which condition declined it.
+
+**The one lock 6.14 applies is the diagnostic channel**, in `KernelWriteString`,
+because that is the whole of what a started processor touches — a started
+processor has nothing to run and is parked in a halt loop until 6.15. Every other
+structure in
 [`../design/CONCURRENCY.md`](../design/CONCURRENCY.md), Section 10, limitation 1,
-enumerates them, and 6.14 and 6.15 are what make each contended.
+is still unsynchronised and still safe, and **6.15 is what makes each contended**.
 
 **Why 6.2 to 6.6 sit here rather than in Phase 9**, and **why 6.13 precedes
 6.14**: both orderings were chosen against the obvious one, and both arguments

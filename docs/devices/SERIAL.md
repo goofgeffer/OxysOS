@@ -123,10 +123,15 @@ the interrupt flag for the last time.
 
 Both directions are single-producer, single-consumer queues. For the transmit
 buffer the producer is the writing code and the consumer the handler; for the
-receive buffer the reverse. Neither requires a lock upon a machine of one
-processor. The lock each will require was built by sub-task 6.13 and has not
-been applied here; sub-task 6.14 is what gives either buffer a second producer
-or a second consumer.
+receive buffer the reverse. **Sub-task 6.14 gave the transmit buffer a second
+producer** — a started processor announcing its arrival through the diagnostic
+path — and the lock that answers it was applied above this driver, in
+`KernelWriteString`, whose critical section is a whole call. That is the right
+place: what must not interleave is a diagnostic line across all three output
+devices, and a lock held inside this driver would let a line reach the serial
+port interleaved with another's while each buffer stayed internally consistent.
+The receive buffer still has one consumer, the echo loop upon the bootstrap
+processor; sub-task 6.15 is what could give it a second.
 
 The indices are free-running and masked when used, the discipline described in
 [`KEYBOARD.md`](KEYBOARD.md), Section 5.1: their difference is the occupancy
@@ -340,11 +345,12 @@ ordinary case and not the exception.
    present and usable, and are not read; upon an 8250 or a 16450 the driver would
    write sixteen characters where one was possible and lose fifteen of them. No
    machine the project targets carries one.
-4. Nothing here is safe against concurrent access. The buffers tolerate one
-   producer and one consumer, which is what a single processor with interrupts
-   provides. The spinlock required before a second processor writes to the
-   console was built by sub-task 6.13 and has not been applied here; sub-task
-   6.14 is what makes it necessary.
+4. The receive buffer is unsynchronised, and the transmit buffer is covered from
+   above. The buffers tolerate one producer and one consumer, which is what a
+   single processor with interrupts provides. Sub-task 6.14 gave the transmit
+   side a second producer and applied the lock in `KernelWriteString` rather than
+   here, for the reason Section 5 gives. The receive side still has one consumer;
+   sub-task 6.15 is what would make it necessary there.
 5. The modem control signals are asserted and then ignored. Hardware flow control
    does not exist, so a receiver that cannot keep pace has no means of saying so.
 6. There is no line discipline. Received characters are delivered exactly as they

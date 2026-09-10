@@ -145,6 +145,7 @@ C_SOURCES := kernel/kernel.c \
              kernel/cpu/percpu.c \
              kernel/cpu/spinlock.c \
              kernel/cpu/ipi.c \
+             kernel/cpu/smp.c \
              kernel/cpu/interrupts.c \
              kernel/cpu/irq.c \
              kernel/cpu/exceptions.c \
@@ -198,6 +199,7 @@ C_SOURCES := kernel/kernel.c \
 ASM_SOURCES := boot/boot.asm \
                kernel/cpu/interrupt_stubs.asm \
                kernel/cpu/gdt.asm \
+               kernel/cpu/smp_trampoline.asm \
                kernel/cpu/syscall_entry.asm \
                kernel/proc/switch.asm
 
@@ -242,6 +244,30 @@ $(BUILD_DIR)/%.c.o: %.c
 $(BUILD_DIR)/%.asm.o: %.asm
 	@mkdir -p $(dir $@)
 	$(NASM) $(ASFLAGS) $< -o $@
+
+# ------------------------------------------------------------------------------
+# The real-mode trampoline of sub-task 6.14.
+#
+# It is assembled to a flat binary rather than to an object file, because the
+# processor that executes it begins in real mode at a fixed low physical page and
+# the addresses within it must be that page's. NASM's `org` directive states that
+# origin and is available only in the flat binary format, so this cannot be an
+# ordinary member of ASM_SOURCES.
+#
+# kernel/cpu/smp_trampoline.asm embeds the result with `incbin`, and the
+# dependency below is what guarantees the binary exists before that file is
+# assembled. The path in the `incbin` is relative to the directory make runs in,
+# which is the repository root.
+# ------------------------------------------------------------------------------
+
+TRAMPOLINE_SOURCE := boot/trampoline.asm
+TRAMPOLINE_BINARY := $(BUILD_DIR)/trampoline.bin
+
+$(TRAMPOLINE_BINARY): $(TRAMPOLINE_SOURCE)
+	@mkdir -p $(dir $@)
+	$(NASM) -f bin -Wall -Werror $< -o $@
+
+$(BUILD_DIR)/kernel/cpu/smp_trampoline.asm.o: $(TRAMPOLINE_BINARY)
 
 iso: $(ISO_IMAGE)
 

@@ -288,11 +288,17 @@ suspends the display has stopped the machine.
    The pointer is 216 pixels, so this has nothing yet to buy.
 5. **The back buffer is the size of the display and is never resized.** The mode
    is fixed by the boot loader and this kernel never changes it.
-6. **Nothing is safe against concurrent drawing.** From sub-task 6.14 two
-   processors may draw at once, and the back buffer, the damage and the layer
-   table all become the business of the spinlock sub-task 6.13 built. That lock
-   exists and has not been applied here. The section it must cover is a
-   presentation and not a primitive: a processor drawing between the reading of
-   the damage rectangle and its clearing would have its work discarded, the
-   region that recorded it having been cleared by a presentation that never
-   copied it.
+6. **The ordinary path is locked; drawing in general is not.** Since sub-task
+   6.14 there is more than one processor, and every presentation on the ordinary
+   path is reached through `KernelWriteString`, which holds the spinlock sub-task
+   6.13 built. Its critical section is a whole call, and a call is exactly a
+   presentation — which is the granularity this limitation always said was
+   required: a processor drawing between the reading of the damage rectangle and
+   its clearing would have its work discarded, the region that recorded it having
+   been cleared by a presentation that never copied it.
+
+   **What is not covered is a caller that draws through the primitives directly
+   and presents afterwards.** There is one such caller today, the fault screen,
+   and it is unprotected by decision — [`FAULTSCREEN.md`](FAULTSCREEN.md) says
+   why. Sub-task 6.15 is what will produce others, and it is what must extend the
+   lock to them.

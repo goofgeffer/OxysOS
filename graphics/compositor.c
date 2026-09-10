@@ -41,16 +41,26 @@
  *   are uncached — see docs/design/CONSOLE.md, Section 6.2.
  *
  * Concurrency. The back buffer, the damage rectangle and the layer table are
- * unsynchronised, and there is one flow of control that touches them. The
- * spinlock of sub-task 6.13 exists and has not been applied here; sub-task 6.14
- * is what makes them contended. What it must cover then is a presentation and
- * not a primitive: a processor drawing between the reading of the damage
- * rectangle and its clearing would have its work discarded, the region that
- * recorded it having been cleared by a presentation that never copied it. That
- * is a frame silently missing what was drawn into it, which is the failure this
- * note exists to name, and it is why the right place for the lock is the
- * surface's owner rather than the primitive — see docs/design/DRAWING.md,
+ * unsynchronised in this file, and are covered from above: every presentation
+ * this kernel performs on the ordinary path is reached through
+ * KernelWriteString, which has held a lock since sub-task 6.14 and whose
+ * critical section is a whole call. What that lock must cover is a presentation
+ * and not a primitive, and a call is exactly a presentation.
+ *
+ * The failure it prevents is worth naming, because it is silent. A processor
+ * drawing between the reading of the damage rectangle and its clearing would
+ * have its work discarded — the region that recorded it having been cleared by a
+ * presentation that never copied it — and the result is a frame quietly missing
+ * what was drawn into it. That is also why the right place for the lock is the
+ * surface's owner rather than the primitive; see docs/design/DRAWING.md,
  * limitation 5.
+ *
+ * A caller that draws through the primitives directly and presents afterwards
+ * does not hold that lock and is not protected by it. There is one such caller
+ * today, the fault screen, and it is unprotected by decision rather than by
+ * omission; see graphics/faultscreen.c. Sub-task 6.15 is what will produce
+ * others, and docs/design/COMPOSITOR.md, limitation 6, is where that obligation
+ * is recorded.
  */
 
 #include <oxys/compositor.h>

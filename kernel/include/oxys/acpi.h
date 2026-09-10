@@ -106,7 +106,7 @@
  * One logical processor, as declared by a Processor Local APIC structure or by a
  * Processor Local x2APIC structure. The two are recorded in one form because
  * nothing above this layer has any interest in which of them declared a
- * processor; sub-task 6.14 will bring up whichever are usable.
+ * processor; sub-task 6.14 brings up whichever are usable.
  *
  * A processor is usable if it is enabled, or if it is online capable, per the
  * rule of Table 5.23: a structure with both bits clear describes a processor

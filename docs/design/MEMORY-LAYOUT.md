@@ -177,8 +177,14 @@ and must be reserved separately by the frame allocator of sub-task 2.2:
 
 The low mebibyte is reserved in its entirety rather than by the map, because it
 contains structures that the map does not describe and that later phases will
-require: the application processor trampoline of sub-task 6.14 must be placed
-below 1 MiB, since a processor released from reset begins execution in real mode.
+require. The application processor trampoline of sub-task 6.14 is one: it is
+placed at physical `0x8000`, which must lie below 1 MiB, a processor released
+from reset beginning execution in real mode. The page is fixed rather than
+allocated, and `SmpTrampolinePageIsUsable` proves the firmware calls it available
+and that neither the kernel image nor the boot information structure stands
+within it — the same two exclusions `pmm.c` applies, applied again because this
+page does not come from the allocator. See [`SMP.md`](SMP.md), Sections 3.2
+and 3.3.
 
 ### 6.2 Why the kernel extent is not derived from the ELF sections tag
 

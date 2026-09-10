@@ -5,7 +5,8 @@
  *          arena, and describes what was obtained.
  * Key functions: FramebufferInitialise, FramebufferIsPresent,
  *          FramebufferIsGraphical, FramebufferAddress, FramebufferEncode,
- *          FramebufferWriteCombining, FramebufferReport.
+ *          FramebufferWriteCombining,
+ *          FramebufferEstablishWriteCombiningOnThisProcessor, FramebufferReport.
  * References:
  *   - Multiboot2 Specification 2.0, Sections 3.1.10 and 3.6.12: the request tag
  *     and the information tag.
@@ -112,9 +113,14 @@ static bool FramebufferEstablishWriteCombining(void)
 
     /*
      * Every processor holds its own IA32_PAT, and a mapping made here would be
-     * write-back upon any processor that had not performed this write. There is
-     * one processor until sub-task 6.14, which must repeat this upon each as it
-     * is brought up; it is recorded as a limitation in docs/design/FRAMEBUFFER.md.
+     * write-back upon any processor that had not performed this write. Since
+     * sub-task 6.14 there are other processors, and one of them writes the
+     * framebuffer the first time it announces its arrival; each therefore
+     * repeats this write for itself through
+     * FramebufferEstablishWriteCombiningOnThisProcessor, before it writes
+     * anything. Two processors holding different memory types for one physical
+     * page is precisely the aliasing Intel SDM, Volume 3A, Section 11.12.4,
+     * declines to define the behaviour of.
      */
     return true;
 }
@@ -259,6 +265,34 @@ BootFramebufferFormat FramebufferFormat(void)
 bool FramebufferWriteCombining(void)
 {
     return FramebufferCombining;
+}
+
+/*
+ * Repeats that write upon the executing processor.
+ *
+ * It exists for sub-task 6.14. IA32_PAT is per processor, and the mapping the
+ * bootstrap processor made carries the page-attribute-table flag: a processor
+ * that had not written entry 4 would resolve that flag to whatever its own
+ * entry 4 holds — write-back, as a reset leaves it — and would then be writing
+ * one physical page under a memory type different from every other processor's.
+ * Intel SDM, Volume 3A, Section 11.12.4, declines to define what that produces.
+ *
+ * It does nothing where the framebuffer was not mapped write-combining, because
+ * then nothing maps through entry 4 and the write would change a type no
+ * mapping selects. It does nothing where there is no framebuffer at all.
+ *
+ * It must be called before the processor writes to the framebuffer, which in
+ * practice means before it announces its arrival; SmpApplicationProcessorEntry
+ * calls it among the establishments that precede any diagnostic.
+ */
+void FramebufferEstablishWriteCombiningOnThisProcessor(void)
+{
+    if (!FramebufferCombining)
+    {
+        return;
+    }
+
+    (void)FramebufferEstablishWriteCombining();
 }
 
 uint32_t FramebufferEncode(uint8_t red, uint8_t green, uint8_t blue)

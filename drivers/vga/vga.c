@@ -43,6 +43,22 @@
  *     active position one character position backward, LF (0x0A) moves it one
  *     line down and CR (0x0D) moves it to the first position of the line. None of
  *     the three erases anything.
+ *
+ * Concurrency. The cursor position, the erase limit, the colour attribute and
+ * the cell buffer are unsynchronised in this file, and are covered from above:
+ * every write on the ordinary path arrives through KernelWriteString, which has
+ * held a lock since sub-task 6.14 — the sub-task that gave this display a second
+ * writer, a started processor announcing its arrival through the same function.
+ *
+ * The lock is there and not here because the cursor is a pair of registers
+ * reached by an index-then-data sequence and the cell buffer is written a
+ * character at a time: a lock covering one VgaPutCharacter would keep each cell
+ * intact while letting two lines interleave cell by cell, which is the failure
+ * that matters. What must not interleave is a whole diagnostic line, and
+ * KernelWriteString's critical section is exactly that.
+ *
+ * The fault screen and the boot-time failure paths write directly and hold no
+ * lock, by decision; graphics/faultscreen.c records why.
  */
 
 #include <oxys/vga.h>

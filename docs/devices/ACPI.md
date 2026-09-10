@@ -138,7 +138,7 @@ reserved would have the mapping run past it.
 
 | Structure | Type | What this kernel does with it |
 | --------- | ---- | ----------------------------- |
-| Processor Local APIC | 0 | Recorded. Sub-task 6.14 starts the usable ones. |
+| Processor Local APIC | 0 | Recorded. Sub-task 6.14 starts the usable ones, and does. |
 | I/O APIC | 1 | Mapped and programmed by [`APIC.md`](APIC.md). |
 | Interrupt Source Override | 2 | **See below.** |
 | NMI Source | 3 | Counted as unrecognised; no input of this kernel's is non-maskable. |

@@ -631,7 +631,9 @@ the mask is honoured.
 1. Nothing here is safe against concurrent access. The read-modify-write of a
    mask register is not atomic, and requires the spinlock governing this device.
    The lock has existed since sub-task 6.13 and has not been applied here, there
-   being one processor; sub-task 6.14 is what makes the register contended.
+   being one flow of control that reaches it — a processor started by sub-task
+   6.14 is parked and registers no handler. Sub-task 6.15 is what makes the
+   register contended.
 2. **The pair is retired, not removed.** `PicDisable` masks both mask registers
    and clears the flag that governs the report; the controllers are still
    remapped and still hold their initialisation. Nothing re-enables them, and
@@ -800,8 +802,9 @@ would mask the timer.
 2. **The handler table and the recorded mask state are unsynchronised.** Both
    require the spinlock governing this layer, an interrupt handler and an
    application processor each being able to enter either. The lock has existed
-   since sub-task 6.13; neither has been put under it, there being one processor
-   until sub-task 6.14. See
+   since sub-task 6.13; neither has been put under it, there being one flow of
+   control that reaches either — a processor started by sub-task 6.14 is parked
+   and claims no line. Sub-task 6.15 is what changes that. See
    [`CONCURRENCY.md`](CONCURRENCY.md), Section 10, limitation 1.
 3. **A line may be claimed by one driver only.** `IrqInstallHandler` replaces
    whatever was registered rather than refusing, and shared interrupt lines —

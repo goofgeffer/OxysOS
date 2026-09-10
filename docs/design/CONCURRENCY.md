@@ -29,12 +29,15 @@ It builds the four mechanisms a second processor cannot safely exist without: a
 lock, a place for a processor to keep what is its own, a way for one processor to
 interrupt another, and the one use of that which the memory manager already owes.
 
-**It starts no processor.** There is one thread of control after this sub-task
-exactly as there was before it, and every mechanism here is exercised upon that
+**It starts no processor.** There was one thread of control after this sub-task
+exactly as there was before it, and every mechanism here was exercised upon that
 one. [`ARCHITECTURE.md`](ARCHITECTURE.md), Section 4.1, records why the ordering
-is this way round: sub-task 6.14 starts processors, and starting them against a
-kernel whose every shared structure is unsynchronised produces a milestone that
+is this way round: sub-task 6.14 starts the processors, and starting them against
+a kernel whose every shared structure is unsynchronised produces a milestone that
 the testing mandate requires to be demonstrable and that cannot be demonstrated.
+**6.14 has since arrived** — [`SMP.md`](SMP.md) is its design — so the mechanisms
+below now have real targets, and where a section here says "there is one
+processor" it is describing what 6.13 could rely upon and is marked as such.
 
 **It does not put a lock around every shared structure.** The structures that
 need one say so in their own file headers and in their own documents, and they
@@ -395,13 +398,19 @@ panics upon it. There is no report that could be made later about the corruption
 it would otherwise cause, because the state that would explain it is what gets
 overwritten.
 
-### 6.3 What the ordinary path costs today
+### 6.3 What the ordinary path costs
 
-One comparison. `ShootdownBroadcast` returns before it takes the lock when fewer
-than two processors are online, which is the case upon every machine this kernel
-has yet run upon. The test is made before the lock because `PagingInvalidate` is
-on the path of every map, unmap and copy-on-write fault, and a lock taken there
-for nobody's benefit would be paid for by all of them.
+`ShootdownBroadcast` returns before it takes the lock when fewer than two
+processors are online. That was every machine this kernel had run upon until
+sub-task 6.14, and the early return is now the exception rather than the rule:
+upon a machine with processors started, an unmap costs an interrupt to each of
+them and a wait for every acknowledgement.
+
+The test is nevertheless still made before the lock, because `PagingInvalidate`
+is on the path of every map, unmap and copy-on-write fault, and a lock taken
+there for nobody's benefit would be paid for by all of them upon the machines
+that still have nobody — one declaring a single processor, or one whose bring-up
+was declined for a reason [`SMP.md`](SMP.md), Section 7.1, enumerates.
 
 ### 6.4 One request at a time
 
@@ -411,8 +420,10 @@ alternative — a request block per sending processor, which the handler would s
 measured to be the thing a workload waits for. It is not built now, for the
 reason [`../devices/APIC.md`](../devices/APIC.md), Section 7, gives for not having
 built any of this earlier: a mechanism with nothing to use it is a mechanism
-nothing has ever shown to be right. There is one processor, and the simple form
-is the one whose correctness can be argued in a paragraph.
+nothing has ever shown to be right. Since sub-task 6.14 there are processors, but
+only one of them ever sends — a parked processor announces no paging change — so
+the simple form remains the one whose correctness can be argued in a paragraph,
+and 6.15 is the sub-task that could make the measurement worth taking.
 
 ### 6.5 `ShootdownToSelf`, and the condition that makes it safe
 
@@ -421,13 +432,17 @@ acknowledgement is made by a handler upon the processor that is waiting for it,
 and the lock masks that processor's interrupts. So the published address is
 unprotected for the duration of the wait.
 
-That is safe upon a machine with one processor and upon no other, and the
-function therefore **refuses** where more than one is online, and refuses again
-where the interrupt flag is clear. The condition is enforced rather than assumed,
-because the argument that
-[`ARCHITECTURE.md`](ARCHITECTURE.md), Section 4.1, placed this whole sub-task
-before 6.14 upon — that everything in it can be exercised upon one processor — is
-the sentence this function has to make true.
+That is safe upon a machine with one processor online and upon no other, and the
+function therefore **refuses** where more than one is, and refuses again where
+the interrupt flag is clear.
+
+**Since sub-task 6.14 that refusal is reachable, and the ordering is what keeps
+it from firing.** `KernelVerifyShootdown`, which is the only caller, runs before
+`SmpInitialise` — so one processor is online when it runs, and the condition
+holds. Moving the self-test after the bring-up would turn a passing assertion
+into a refusal upon every multiprocessor machine, which is why
+[`../../kernel/test/verify_smp.c`](../../kernel/test/verify_smp.c) states the
+dependency rather than leaving it to be rediscovered.
 
 ## 7. `PagingInvalidateLocalPage`
 
@@ -496,52 +511,82 @@ accidentally.
 
 ## 9. Observed state
 
-Under QEMU with `-machine q35 -cpu qemu64 -smp cores=2`, on 2026-09-09:
+Under QEMU with `-machine q35 -cpu qemu64 -smp cores=2`, on 2026-09-10, read at
+the point in the boot where the reports are emitted — which since sub-task 6.14
+is **after** `SmpInitialise` and before
+`KernelVerifyApplicationProcessors`:
 
 | Quantity | Value |
 | -------- | ----- |
-| Processors online | 1 — the bootstrap processor, APIC identifier 0 |
+| Processors online | 2 — index 0 (APIC 0, bootstrap), index 1 (APIC 1, application) |
 | Shootdown vector | 253; halt vector 252 |
-| Interrupts sent through the command register | 3, none refused, none abandoned |
-| Interrupts received | 3 |
-| Shootdown requests | 1, serviced 3, abandoned 0 |
+| Interrupts sent through the command register | 4, none refused, none abandoned |
+| Interrupts received | 4 |
+| Shootdown requests | 2, serviced 4, abandoned 0; last address `0x8000` |
+| Serviced by processor 1, from its own handler | 1 |
 | Stale translation before the shootdown | **Observable** |
-| Locks acquired | 2, contended 0 |
+| Locks acquired, processor 0 / processor 1 | 1127 / 1, none contended |
 | Local controller errors | 0 |
 
-The shootdowns serviced exceed the requests because `KernelVerifyIpi` sends the
-shootdown vector twice on its own account, to establish the delivery and the
-end-of-interrupt, without publishing a request.
+**The shootdowns serviced exceed the requests** because `KernelVerifyIpi` sends
+the shootdown vector twice on its own account, to establish the delivery and the
+end-of-interrupt, without publishing a request. Of the two requests, one is
+`KernelVerifyShootdown`'s self-directed test and one is the removal of the
+trampoline's identity mapping — which is why the last address is `0x8000` and
+why processor 1 has serviced exactly one.
+
+**Processor 1 has acquired exactly one lock**, and that figure is the design of
+[`SMP.md`](SMP.md), Section 6, visible in the accounting: the one acquisition is
+its arrival announcement, which is the only thing a parked processor does.
+
+The figures recorded here on 2026-09-09, when sub-task 6.13 closed, were one
+processor online, three interrupts sent and received, one shootdown request
+serviced three times, and two locks acquired. They are superseded rather than
+kept, this section describing what the kernel does now.
 
 ## 10. Limitations
 
-1. **The locks are not yet applied.** Every structure listed in Section 5 of
-   [`../project/STATUS.md`](../project/STATUS.md) is still unsynchronised, and
-   each says so in the header of the file that owns it: the frame allocator's
-   bitmap and search hint (`kernel/mm/pmm.c`), the kernel arena
-   (`kernel/mm/vmm.c`), the heap (`kernel/mm/heap.c`), the block layer's device
-   table (`drivers/block/block.c`), the buffer cache (`drivers/block/buffer.c`),
-   the mount, node and open file tables (`kernel/fs/vfs/vfs.c`, which holds all
+1. **One lock is applied; the rest are not.** Sub-task 6.14 put the diagnostic
+   channel under a lock — `KernelWriteString`, in
+   [`../../kernel/kernel.c`](../../kernel/kernel.c) — because that is the whole
+   of what a started processor touches, and one function reaches all four of the
+   structures beneath it: the text-mode display's cursor
+   (`drivers/vga/vga.c`), the console (`graphics/console.c`), the serial
+   adapter's transmit buffer (`drivers/serial/serial.c`), and the compositor's
+   back buffer and damage rectangle (`graphics/compositor.c`). Those four are
+   struck from the list below, and each of their headers now names
+   `KernelWriteString` as where its lock is taken. See
+   [`SMP.md`](SMP.md), Section 6.
+
+   **Everything else is still unsynchronised**, and each says so in the header of
+   the file that owns it: the frame allocator's bitmap and search hint
+   (`kernel/mm/pmm.c`), the kernel arena (`kernel/mm/vmm.c`), the heap
+   (`kernel/mm/heap.c`), the block layer's device table
+   (`drivers/block/block.c`), the buffer cache (`drivers/block/buffer.c`), the
+   mount, node and open file tables (`kernel/fs/vfs/vfs.c`, which holds all
    four), the interrupt dispatch table (`kernel/cpu/interrupts.c`), the request
    layer's mask state (`kernel/cpu/irq.c`), the 8259A's mask registers
    (`drivers/pic/pic.c`), the I/O APIC's select-then-window sequence
    (`drivers/apic/ioapic.c`), the 8042's configuration byte
    (`drivers/ps2/ps2.c`), the process and thread tables
-   (`kernel/proc/process.c`), the drawing surfaces (`graphics/draw.c`) with the
-   back buffer, damage rectangle and layer table above them
-   (`graphics/compositor.c`), the console (`graphics/console.c`), the fault
-   screen (`graphics/faultscreen.c`), the serial adapter's two buffers
-   (`drivers/serial/serial.c`), and the keyboard and mouse buffers
-   (`drivers/keyboard/keyboard.c`, `drivers/mouse/mouse.c`). They acquire theirs
-   as sub-tasks 6.14 and 6.15 make them contended. Nothing here is unsafe today,
-   there being one flow of control; everything here is unsafe the moment there
-   is not.
+   (`kernel/proc/process.c`), the drawing surfaces (`graphics/draw.c`), the fault
+   screen (`graphics/faultscreen.c`), and the keyboard and mouse buffers
+   (`drivers/keyboard/keyboard.c`, `drivers/mouse/mouse.c`).
+
+   **None of that is unsafe today, and the reason has changed.** It used to be
+   that there was one flow of control. There is now more than one processor —
+   sub-task 6.14 started them — but a started processor has nothing to run: it
+   answers inter-processor interrupts and halts, and reaches none of the files
+   above. **Sub-task 6.15 is what makes each contended**, and the locks are what
+   it must bring with it.
 
    **The fault screen is in that list and will never leave it.** It takes no lock
    by decision rather than by omission: a fault handler that waited upon a lock
    held by the processor that faulted would replace a reported fault with a
    stopped machine. Two interleaved screens is the lesser failure, and it is
-   accepted. It is named here so that the omission is visible as a choice.
+   accepted. It is named here so that the omission is visible as a choice. The
+   same reasoning is why `KernelPanic` resets the diagnostic lock rather than
+   waiting for it.
 
    The list is written out file by file rather than by subsystem so that it can
    be checked mechanically: every file named holds a `Concurrency.` paragraph in

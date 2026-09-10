@@ -7,7 +7,8 @@
  *          FramebufferIsGraphical, FramebufferAddress, FramebufferWidth,
  *          FramebufferHeight, FramebufferPitch, FramebufferBitsPerPixel,
  *          FramebufferBytesPerPixel, FramebufferByteCount, FramebufferFormat,
- *          FramebufferEncode, FramebufferWriteCombining, FramebufferReport.
+ *          FramebufferEncode, FramebufferWriteCombining,
+ *          FramebufferEstablishWriteCombiningOnThisProcessor, FramebufferReport.
  * References:
  *   - Multiboot2 Specification 2.0, Section 3.1.10: the framebuffer request tag
  *     placed in the image header, without which no framebuffer is supplied.
@@ -134,6 +135,20 @@ void FramebufferDecode(uint32_t pixel, uint8_t *red, uint8_t *green, uint8_t *bl
  * measurements will need to account for.
  */
 bool FramebufferWriteCombining(void);
+
+/*
+ * Establishes the write-combining memory type upon the executing processor.
+ *
+ * IA32_PAT is per processor, so the entry the bootstrap processor wrote governs
+ * that processor alone. A processor started by sub-task 6.14 must repeat the
+ * write before it touches the framebuffer, or it writes one physical page under
+ * a memory type differing from every other processor's — the aliasing Intel SDM,
+ * Volume 3A, Section 11.12.4, declines to define the behaviour of.
+ *
+ * It does nothing where the framebuffer was not mapped write-combining, and
+ * nothing where there is no framebuffer.
+ */
+void FramebufferEstablishWriteCombiningOnThisProcessor(void);
 
 /* Emits the description upon the console and the serial port. */
 void FramebufferReport(void);

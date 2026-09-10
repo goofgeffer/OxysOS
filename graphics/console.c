@@ -12,11 +12,18 @@
  *     text-mode driver implements them, and the erase limit.
  *   - docs/design/CONSOLE.md, Sections 2 and 3.
  *
- * Concurrency. There is no lock, and there is no second thread of control that
- * writes here: the interrupt handlers do not print, save through the panic path,
- * which does not return. From sub-task 6.14 that ceases to be true and this must
- * take the lock sub-task 6.13 built — the whole of a character, not one pixel of
- * it, being the thing that must not interleave.
+ * Concurrency. **The lock is taken above this file, in KernelWriteString**, and
+ * from sub-task 6.14 it is genuinely necessary: a started processor announces
+ * its arrival through that function, so this console has a second writer. The
+ * section covers a whole call and therefore a whole string, which is the right
+ * granularity — the thing that must not interleave is a character, not one pixel
+ * of it, and a caller with a line to emit composes it before it writes it.
+ *
+ * Nothing in this file acquires a lock of its own, and nothing should: a second
+ * lock beneath the first would protect what is already protected and would be a
+ * second thing to take in the right order. The path that does not hold the outer
+ * lock is the fault screen, which draws directly and by design; see
+ * graphics/faultscreen.c.
  */
 
 #include <oxys/console.h>

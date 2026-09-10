@@ -63,15 +63,21 @@ static uint64_t GdtTable[GDT_ENTRY_COUNT] __attribute__((aligned(16))) = {
      * user program executes in. */
     UINT64_C(0x00AFFA000000FFFF),
     /*
-     * 0x30 and 0x38: the task state segment descriptor, which occupies sixteen
-     * bytes because its base address is 64 bits wide. It is left empty here and
-     * written by GdtInstallTaskStateSegment once the segment it describes
-     * exists; a descriptor whose present bit is clear is one LTR refuses, which
-     * is the right behaviour for a table that has been loaded and a segment that
-     * has not yet been built.
+     * From 0x30 upward: one task state segment descriptor for each processor,
+     * each occupying sixteen bytes because its base address is 64 bits wide.
+     * They are left empty here — the remainder of the array is zero-initialised
+     * by the rule of ISO/IEC 9899:2011, Section 6.7.9, paragraph 21 — and each
+     * is written by GdtInstallTaskStateSegment once the segment it describes
+     * exists. A descriptor whose present bit is clear is one LTR refuses, which
+     * is the right behaviour for a table that has been loaded and a segment
+     * belonging to a processor that has not yet been started.
+     *
+     * Sub-task 6.14 is what fills any of them but the first. The reservation is
+     * unconditional rather than sized to the machine because the table is a
+     * static array reached before a heap exists upon the processor that reads
+     * it, and because a table that grew would have to be re-loaded upon every
+     * processor already running it.
      */
-    UINT64_C(0x0000000000000000),
-    UINT64_C(0x0000000000000000)
 };
 
 /*
@@ -128,9 +134,46 @@ void GdtInitialise(void)
     (void)PerCpuEstablishSegmentBase();
 }
 
-void GdtInstallTaskStateSegment(uint64_t base, uint32_t limit)
+void GdtLoadOnThisProcessor(void)
 {
-    const size_t index = GDT_TSS_SELECTOR / sizeof(uint64_t);
+    /*
+     * The register operand is the one already composed by GdtInitialise, and it
+     * is read here rather than composed again. It names a table that does not
+     * move and a limit that does not change, so a second composition could only
+     * ever differ from the first — and a processor loading a table one quadword
+     * shorter than the one its fellows loaded would fault upon exactly the
+     * descriptors this sub-task added.
+     *
+     * GdtInitialise must therefore have run. It runs upon the bootstrap
+     * processor long before any other is started, which SmpInitialise's position
+     * in KernelMain guarantees.
+     */
+    GdtLoadAndReloadSegments(&GdtLoadedRegister,
+                             GDT_KERNEL_CODE_SELECTOR,
+                             GDT_KERNEL_DATA_SELECTOR);
+
+    /* The reload destroyed GS.base; see GdtInitialise for the whole of why. A
+     * false result is the ordinary case here, this running before the calling
+     * processor's area has been established. */
+    (void)PerCpuEstablishSegmentBase();
+}
+
+void GdtInstallTaskStateSegment(uint32_t processor_index, uint64_t base,
+                                uint32_t limit)
+{
+    const size_t index =
+        GdtTaskStateSegmentSelector(processor_index) / sizeof(uint64_t);
+
+    /*
+     * A processor number beyond the reservation is refused rather than written.
+     * PerCpuInitialise refuses the same machine for the same reason, and both
+     * refusals are reached only upon a machine declaring more processors than
+     * PER_CPU_MAXIMUM; writing here would corrupt whatever follows the table.
+     */
+    if (processor_index >= PER_CPU_MAXIMUM)
+    {
+        return;
+    }
 
     /*
      * The low quadword carries the fields an ordinary descriptor carries, with

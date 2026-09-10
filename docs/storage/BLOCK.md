@@ -123,7 +123,8 @@ The fourteen refusals are the ones the self-test provoked deliberately.
    that reordered them would not be contradicted here.
 5. **No concurrency safety.** There is no lock, and there is no second flow of
    control to need one yet. The spinlock the device table will require was built
-   by sub-task 6.13 and has not been applied here; sub-task 6.14 is what makes it
-   necessary.
+   by sub-task 6.13 and has not been applied here. A processor started by
+   sub-task 6.14 is parked and reaches no block device; **sub-task 6.15 is what
+   makes it necessary**.
 6. **Synchronous only.** A request returns when it has completed. Asynchronous
    submission needs a scheduler to return to.

@@ -96,10 +96,14 @@ The four that govern what can be built next:
    yet has a use for one: the echo loop does not need it, and a shell is Phase 8.
 3. **The mode cannot be chosen.** GRUB selects it and ignores what it is asked
    for; the kernel accepts whatever it is handed and asserts what it was.
-4. **Nothing here is safe against concurrent drawing.** The lock that governs
-   the back buffer, the damage rectangle and the layer table was built by
-   sub-task 6.13 and has not been applied to them; sub-task 6.14 is what makes
-   them contended. `compositor.c` names the failure in its header, and
+4. **The ordinary path is locked; drawing in general is not.** The lock that
+   governs the back buffer, the damage rectangle and the layer table was built by
+   sub-task 6.13, and sub-task 6.14 applied it above them, in
+   `KernelWriteString` — whose critical section is a whole call and therefore a
+   whole presentation. What it does not cover is a caller that draws through the
+   primitives directly and presents afterwards; there is one, the fault screen,
+   and it holds no lock by decision. Sub-task 6.15 is what produces others.
+   `compositor.c` names the failure in its header, and
    [`../docs/design/COMPOSITOR.md`](../docs/design/COMPOSITOR.md), limitation 6,
    records it beside the design.
 

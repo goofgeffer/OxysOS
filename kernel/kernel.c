@@ -67,6 +67,7 @@
 #include <oxys/spinlock.h>
 #include <oxys/ipi.h>
 #include <oxys/shootdown.h>
+#include <oxys/smp.h>
 #include <oxys/pic.h>
 #include <oxys/irq.h>
 #include <oxys/acpi.h>
@@ -183,6 +184,18 @@ void KernelWriteDecimal(uint64_t value)
  * diagnostic record is complete irrespective of which device the operator is
  * observing.
  */
+/*
+ * The lock that governs the diagnostic channel.
+ *
+ * It exists from sub-task 6.14, which is the sub-task that gives this kernel a
+ * second writer. Before it there was one flow of control and interleaving was
+ * impossible; from it, a processor announcing that it has come online writes
+ * through the same three drivers the bootstrap processor is writing through, and
+ * a log whose lines have to be reassembled before they can be read is one whose
+ * figures cannot be trusted.
+ */
+static Spinlock KernelDiagnosticLock = SPINLOCK_INITIALISER("diagnostic channel");
+
 void KernelWriteString(const char *string)
 {
     /*
@@ -211,12 +224,55 @@ void KernelWriteString(const char *string)
      *
      * The presentation carries only what changed. A line of text is some tens of
      * character cells, so the cost is the cells and not the screen.
+     *
+     * The lock is the whole of the synchronisation sub-task 6.14 applies, and it
+     * is applied here because this is the whole of what a started processor
+     * touches: four unsynchronised structures — the text-mode display's cursor,
+     * the console's rows, the serial adapter's transmit buffer and the
+     * compositor's back buffer and damage rectangle — reached through one
+     * function, so one lock covers all four. Each of those files' headers says
+     * it is unlocked and names this as where the lock is taken.
+     *
+     * The section is a call and not a line. Composing a line before writing it
+     * is therefore the caller's business, and the one caller that runs upon
+     * several processors at once — SmpAnnounceArrival — does exactly that.
+     *
+     * **The lock is taken only once there is an area to take it through**, and
+     * that condition is not a nicety. A spinlock acquire masks interrupts by way
+     * of the per-processor area, which it reaches through GS.base; this routine
+     * prints the banner, and the banner is printed before PerCpuInitialise has
+     * run. Taking the lock unconditionally read address sixteen through a
+     * segment base of zero, before the interrupt descriptor table existed, and
+     * the machine reset with an empty log — which is the only symptom a fault in
+     * the diagnostic channel can have.
+     *
+     * There is nothing to protect on that side of the line in any case. Before
+     * the area exists no processor has been started and none can be, so there is
+     * one writer by construction; the lock begins to mean something at exactly
+     * the moment the mechanism it is built upon begins to work.
      */
+    const bool locked = PerCpuIsEstablished();
+
+    if (locked)
+    {
+        SpinlockAcquire(&KernelDiagnosticLock);
+    }
+
     VgaWriteString(string);
     ConsoleWriteString(string);
     SerialWriteString(string);
 
     CompositorPresent();
+
+    if (locked)
+    {
+        SpinlockRelease(&KernelDiagnosticLock);
+    }
+}
+
+void KernelDiagnosticChannelReset(void)
+{
+    SpinlockInitialise(&KernelDiagnosticLock, "diagnostic channel");
 }
 
 void KernelPanic(const char *message)
@@ -235,6 +291,25 @@ void KernelPanic(const char *message)
      * nobody to tell.
      */
     IpiHaltOtherProcessors();
+
+    /*
+     * And the channel's lock is reset rather than waited for.
+     *
+     * A panic reaches this line from anywhere, including from inside
+     * KernelWriteString's own critical section — a fault raised by the console
+     * or by the compositor would do exactly that — and a ticket lock reacquired
+     * by the processor already holding it does not deadlock loudly; it spins
+     * until the bound of sub-task 6.13 fires and panics about the lock instead
+     * of about the fault. It could equally be held by one of the processors just
+     * halted, which will never release it.
+     *
+     * Both cases have the same answer, and it is the right one for the same
+     * reason: after the halt request above, no processor but this one is going
+     * to write anything, so there is nothing left for the lock to protect. The
+     * report is the last thing this machine will do, and it must not be the
+     * thing that stops it being written.
+     */
+    KernelDiagnosticChannelReset();
 
     VgaSetColour(VGA_COLOUR_WHITE, VGA_COLOUR_RED);
     KernelWriteString("\nKERNEL PANIC: ");
@@ -1141,9 +1216,33 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
     KernelVerifyIpi();
     KernelVerifyShootdown();
 
+    /*
+     * Sub-task 6.14: the application processors.
+     *
+     * It stands after everything above it because a starting processor is given
+     * everything and takes nothing: a stack and a double-fault stack from the
+     * kernel arena, a task state segment descriptor in a table already built,
+     * the interrupt descriptor table already filled, and a per-processor area
+     * from a reservation that exists. It needs the local controller enabled,
+     * because it is started by a command written into that controller; the
+     * inter-processor interrupt layer and the shootdown, because the first thing
+     * done after the last processor is up is a shootdown addressed to all of
+     * them; and the interval timer running, because the delays the startup
+     * protocol prescribes are measured by polling its counter with interrupts
+     * masked.
+     *
+     * It stands before the bus enumeration and the storage drivers so that the
+     * whole of the remainder of the boot runs upon a machine that has more than
+     * one processor, rather than upon one that acquires them at the end.
+     */
+    SmpInitialise();
+
     PerCpuReport();
     IpiReport();
     ShootdownReport();
+    SmpReport();
+
+    KernelVerifyApplicationProcessors();
 
     /*
      * The bus is enumerated once every device driven so far is working, so that
@@ -1269,9 +1368,10 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
                       "that child's program with one read from a\nvolume, collected "
                       "what it ended with, and ended; every device request is now "
                       "delivered\nby the I/O APIC and completed at the Local APIC, the "
-                      "8259A pair having been retired;\nand this processor holds an area "
-                      "of its own, takes locks that mask its interrupts,\nand has "
-                      "interrupted itself to discard a translation it had cached.\n");
+                      "8259A pair having been retired;\nand every processor this machine "
+                      "has holds an area of its own, takes locks that\nmask its "
+                      "interrupts, and answers a translation-lookaside-buffer shootdown "
+                      "sent\nto it by another.\n");
 
     VgaSetColour(VGA_COLOUR_LIGHT_GREY, VGA_COLOUR_BLACK);
 

@@ -29,9 +29,9 @@
  *   through PagingTranslate, and a word that does not translate is reported as
  *   absent rather than fetched.
  *
- *   It takes no lock. From sub-task 6.14 two processors faulting at once would
- *   interleave two screens, which is the same limitation the diagnostic path
- *   already carries and is recorded with it.
+ *   It takes no lock. Since sub-task 6.14 there is more than one processor, so
+ *   two faulting at once would interleave two screens; that is the same
+ *   limitation the diagnostic path already carries and is recorded with it.
  *
  *   It draws nothing at all where there is no framebuffer. A machine in a text
  *   mode has the display driver showing the report already, and drawing into
@@ -41,9 +41,15 @@
  * Concurrency. Nothing here is locked, by the third rule above rather than by
  * omission: a fault handler that waited upon a lock a faulted processor held
  * would replace a reported fault with a stopped machine. The spinlock of
- * sub-task 6.13 exists and is deliberately not applied here. From sub-task 6.14
- * two processors faulting at once interleave two screens, and that is accepted
- * as the lesser failure of the two.
+ * sub-task 6.13 exists and is deliberately not applied here, and this file is
+ * therefore the one member of the diagnostic path that sub-task 6.14 did not
+ * bring under KernelWriteString's lock — it draws through the primitives
+ * directly, for that reason.
+ *
+ * **The omission is permanent.** Since 6.14 there is a second processor and two
+ * faulting at once do interleave two screens, and that is accepted as the lesser
+ * failure of the two. KernelPanic resets the diagnostic lock rather than waiting
+ * for it, for the same reason and with the same reasoning; see kernel/kernel.c.
  */
 
 #include <oxys/faultscreen.h>

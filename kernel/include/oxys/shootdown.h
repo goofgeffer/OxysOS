@@ -31,7 +31,7 @@
  *   are not freed until nothing refers to them. Both are recorded as limitations
  *   in docs/design/CONCURRENCY.md rather than implemented ahead of the sub-task
  *   that needs them: a range shootdown is worth its complexity when there are
- *   processors to send it to, and there is one until sub-task 6.14.
+ *   processors to send it to, and there was one until sub-task 6.14 provided them.
  */
 
 #ifndef OXYS_SHOOTDOWN_H

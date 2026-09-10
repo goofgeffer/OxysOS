@@ -17,7 +17,9 @@
  * Concurrency. Nothing here is locked and no reference count is atomic. There is
  * one flow of control, so the hash chains and the least-recently-used list are
  * consistent by construction; the spinlock of sub-task 6.13 exists and has not
- * been applied here, and sub-task 6.14 is what makes this structure contended.
+ * been applied here. A processor started by sub-task 6.14 is parked and reaches
+ * no block device, so the structure is uncontended still; **sub-task 6.15 is what
+ * makes it contended**.
  *
  *   What the lock must cover is the whole of a lookup and its outcome — the
  *   search, the eviction it may perform and the reference it takes — and not

@@ -14,7 +14,7 @@ complementary, and neither replaces the other.
 | Directory | Holds | Read it when |
 | --------- | ----- | ------------ |
 | [`project/`](project/) | How the work is conducted: the plan, the tests, the toolchain, the standards, the bibliography. | You are about to make a change, or want to know what is done and what is not. |
-| [`design/`](design/) | The kernel itself: its architecture, its boot, its address space, its interrupts, the apparatus of a privilege transition, the framebuffer and the drawing upon it, and the executable and the process that runs one. | You want to know how the machine is brought up and how it is arranged once it is. |
+| [`design/`](design/) | The kernel itself: its architecture, its boot, its address space, its interrupts, the apparatus of a privilege transition, the framebuffer and the drawing upon it, the executable and the process that runs one, and the processors it all runs upon. | You want to know how the machine is brought up and how it is arranged once it is. |
 | [`devices/`](devices/) | The hardware the kernel drives, one document per device. | You are working upon a driver, or want to know what a device does and why the driver treats it so. |
 | [`storage/`](storage/) | The path from a medium to a caller: the disk, the block layer above it, the cache above that, and the filesystem above that. | You are working anywhere between a sector and a file. |
 
@@ -54,7 +54,8 @@ complementary, and neither replaces the other.
 | [`COMPOSITOR.md`](design/COMPOSITOR.md) | The pointer and the compositor beneath all of the above, after which nothing reads the framebuffer. |
 | [`EXECUTABLE.md`](design/EXECUTABLE.md) | The ELF64 loader for statically linked executables: the list of things it refuses to be told by an untrusted document, and how a segment reaches an address space. |
 | [`PROCESS.md`](design/PROCESS.md) | The process control block, the thread and the saved context; the switch that exchanges one thread for another, the descent to privilege level 3, and the four calls by which a program makes another program, becomes another program, ends, and collects what a child ended with. |
-| [`CONCURRENCY.md`](design/CONCURRENCY.md) | The ticket spinlock, the per-processor area beneath it, the interrupt one processor sends to another, and the translation-lookaside-buffer shootdown built upon that — the mechanisms a second processor cannot safely exist without, built before there is one. |
+| [`CONCURRENCY.md`](design/CONCURRENCY.md) | The ticket spinlock, the per-processor area beneath it, the interrupt one processor sends to another, and the translation-lookaside-buffer shootdown built upon that — the mechanisms a second processor cannot safely exist without, built before there was one; [`SMP.md`](design/SMP.md) is what started them. |
+| [`SMP.md`](design/SMP.md) | The bring-up of the application processors: the INIT-startup-startup protocol, the real-mode trampoline that carries a processor from a reset into 64-bit mode upon the kernel's own hierarchy, and the rule that a starting processor allocates nothing. |
 
 ### [`devices/`](devices/)
 

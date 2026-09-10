@@ -13,7 +13,7 @@
  *          KernelVerifyPic, KernelVerifyIrq, KernelVerifyAcpi,
  *          KernelVerifyLocalApic, KernelVerifyIoApic, KernelVerifyApicRouting,
  *          KernelVerifyPerCpu, KernelVerifySpinlock, KernelVerifyIpi,
- *          KernelVerifyShootdown,
+ *          KernelVerifyShootdown, KernelVerifyApplicationProcessors,
  *          KernelVerifyPit, KernelVerifyKeyboard, KernelVerifySerial,
  *          KernelVerifyVga, KernelVerifyPci, KernelVerifyAta, KernelVerifyBlock,
  *          KernelVerifyBuffer, KernelVerifyExt2, KernelVerifyVfs,
@@ -176,6 +176,22 @@ void KernelVerifyPerCpu(void);
 void KernelVerifySpinlock(void);
 void KernelVerifyIpi(void);
 void KernelVerifyShootdown(void);
+
+/*
+ * Sub-task 6.14: the processors that were started.
+ *
+ * Where the four above assert mechanisms upon one processor, this one asserts
+ * that there are several — and it asserts it behaviourally rather than by
+ * counting. A count is what a kernel that wrote a number into a variable would
+ * also produce; what only a running processor can produce is an acknowledgement
+ * to an interrupt it was sent, and the assertion is therefore a shootdown
+ * broadcast whose effect is read out of each target's own area afterwards.
+ *
+ * Upon a machine with one processor it asserts the same thing the other way: no
+ * processor was started, the report says which condition declined it, and the
+ * state is consistent with that.
+ */
+void KernelVerifyApplicationProcessors(void);
 
 /* Phases 3 and 4: the remaining devices. */
 void KernelVerifyPit(void);

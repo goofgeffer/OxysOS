@@ -64,8 +64,12 @@
  * physical address, so every access here is to the executing processor's own
  * controller and no lock can make an access refer to another's. The counters
  * below are written by the two handlers this driver registers, which run upon
- * whichever processor the event occurred at; from sub-task 6.14 they become
- * per-processor quantities.
+ * whichever processor the event occurred at. Since sub-task 6.14 that is
+ * genuinely more than one processor, and the counters are therefore machine-wide
+ * sums of per-processor events rather than either quantity exactly; making them
+ * per-processor belongs with the run queues of sub-task 6.15, which is what will
+ * give a started processor enough activity for the distinction to inform
+ * anything.
  */
 
 #include <oxys/lapic.h>
@@ -199,8 +203,11 @@ static void LocalApicHandleError(TrapFrame *frame)
  *
  * An entry naming processor 0xFF applies to every processor, per ACPI 6.5,
  * Table 5.28. Entries naming a particular processor are applied here only where
- * they name this one; sub-task 6.14 will apply the remainder as each application
- * processor starts.
+ * they name this one. Since sub-task 6.14 the remainder are applied as each
+ * application processor starts, this same routine running upon that processor
+ * from LocalApicInitialiseThisProcessor — so an entry naming a processor is
+ * programmed by the processor it names, which is the only processor whose
+ * controller can be reached to programme it.
  */
 static void LocalApicProgrammeLocalPins(void)
 {
@@ -242,6 +249,10 @@ static void LocalApicProgrammeLocalPins(void)
                        value);
     }
 }
+
+/* Defined below, beside the commentary that says why the initialisation is in
+ * two halves; declared here because the first half calls the second. */
+static void LocalApicProgrammeThisProcessor(void);
 
 bool LocalApicInitialise(void)
 {
@@ -316,6 +327,52 @@ bool LocalApicInitialise(void)
     LocalApicRegisters = (volatile uint8_t *)mapping;
     LocalApicPhysicalBase = base;
 
+    InterruptRegisterHandler(LAPIC_SPURIOUS_VECTOR, LocalApicHandleSpurious,
+                             "local APIC spurious");
+    InterruptRegisterHandler(LAPIC_ERROR_VECTOR, LocalApicHandleError,
+                             "local APIC error");
+
+    LocalApicProgrammeThisProcessor();
+
+    LocalApicEnabled = true;
+
+    return true;
+}
+
+/*
+ * The half of the initialisation that belongs to a processor rather than to the
+ * machine.
+ *
+ * Everything above this point is done once: the support check, the choice of
+ * base address, and the mapping of the register page — which is one page,
+ * mapped once, and reached at the same virtual address by every processor,
+ * because each processor's own controller answers there. Everything below is
+ * done upon each processor as it starts, because each has a controller of its
+ * own whose registers a reset left in a state the firmware may then have
+ * changed.
+ *
+ * The handler registration stays above deliberately. The dispatch table is one
+ * table and registering a vector twice would be a second entry for the same
+ * vector, which kernel/cpu/interrupts.c treats as a defect rather than as a
+ * repetition.
+ */
+static void LocalApicProgrammeThisProcessor(void)
+{
+    /*
+     * The global enable, per Section 10.4.3, upon this processor's own
+     * IA32_APIC_BASE. It is a per-processor model-specific register, so the
+     * bootstrap processor setting it says nothing whatever about the others:
+     * with bit 11 clear the processor is functionally one without an APIC, and
+     * an access to the register page raises an invalid-opcode exception upon
+     * some processors. The base is written back unchanged alongside the flag,
+     * the register being written whole.
+     */
+    const uint64_t base_register = ReadMsr(IA32_APIC_BASE);
+
+    WriteMsr(IA32_APIC_BASE,
+             (base_register & ~LAPIC_BASE_ADDRESS_MASK) |
+                 (uint64_t)LocalApicPhysicalBase | LAPIC_BASE_GLOBAL_ENABLE);
+
     /* Accept every priority class; see the commentary in the file header. */
     LocalApicWrite(LAPIC_REGISTER_TASK_PRIORITY, 0U);
 
@@ -340,11 +397,6 @@ bool LocalApicInitialise(void)
         LocalApicWrite(LAPIC_REGISTER_LVT_THERMAL, LAPIC_LVT_MASKED);
     }
 
-    InterruptRegisterHandler(LAPIC_SPURIOUS_VECTOR, LocalApicHandleSpurious,
-                             "local APIC spurious");
-    InterruptRegisterHandler(LAPIC_ERROR_VECTOR, LocalApicHandleError,
-                             "local APIC error");
-
     /*
      * The error entry is programmed before the controller is enabled, so that an
      * error arising from the enabling itself is delivered to a handler rather
@@ -362,8 +414,24 @@ bool LocalApicInitialise(void)
      */
     LocalApicWrite(LAPIC_REGISTER_SPURIOUS_VECTOR,
                    (uint32_t)LAPIC_SPURIOUS_VECTOR | LAPIC_SPURIOUS_SOFTWARE_ENABLE);
+}
 
-    LocalApicEnabled = true;
+bool LocalApicInitialiseThisProcessor(void)
+{
+    /*
+     * The register page must already be mapped, which means the bootstrap
+     * processor must already have run LocalApicInitialise. A caller reaching
+     * here before that would write through a null pointer at the first register
+     * access; it is refused instead, and the refusal is what an application
+     * processor started against a kernel whose controller never came up would
+     * report rather than fault upon.
+     */
+    if (!LocalApicEnabled)
+    {
+        return false;
+    }
+
+    LocalApicProgrammeThisProcessor();
 
     return true;
 }

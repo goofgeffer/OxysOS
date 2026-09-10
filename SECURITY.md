@@ -79,7 +79,7 @@ misleading by omission.
 | **User address-space layout randomisation.** | A program is loaded where its headers ask. | Not yet planned |
 | **Any filesystem permission model.** No users, no credentials, no ownership. | Whatever can reach a volume can do anything to it. | Phase 7 at the earliest |
 | **Any network stack.** Phase 11 has not begun. | There is no remote attack surface whatever, which is the one respect in which this kernel is currently very secure. | Phase 11 |
-| **Concurrency safety.** There is one flow of control. The lock, the per-processor area, the inter-processor interrupt and the shootdown all exist as of sub-task 6.13, but no shared structure has yet been put under a lock. | Data structures are unsynchronised by design and are documented as such, each in its own file's header. `docs/design/CONCURRENCY.md`, Section 10, limitation 1, enumerates them. | Sub-tasks 6.14 and 6.15 |
+| **Concurrency safety.** Since sub-task 6.14 more than one processor is running, but a started processor has nothing to run: it answers inter-processor interrupts and halts. One structure has been put under a lock — the diagnostic channel, which is the whole of what such a processor touches. | Every other shared structure is unsynchronised by design and is documented as such, each in its own file's header. `docs/design/CONCURRENCY.md`, Section 10, limitation 1, enumerates them; `docs/design/SMP.md` records what a started processor may and may not reach. | Sub-task 6.15 |
 | **Cryptography of any kind.** | No hashing, no ciphers, no random number generation. | Phase 10 |
 
 None of these is an oversight, and each is recorded as a limitation in the design

@@ -189,8 +189,8 @@ bool ShootdownBroadcast(VirtualAddress address)
     /*
      * Nothing to announce.
      *
-     * Upon a machine with one processor started — which is every machine this
-     * kernel has yet run upon, sub-task 6.14 not having been done — the
+     * Upon a machine with one processor started — which since sub-task 6.14 is
+     * only a machine that declares one, or one whose bring-up declined — the
      * invalidation the caller has already performed is the whole of the
      * operation. The test is made before the lock is taken so that the ordinary
      * path costs one comparison: PagingInvalidate is on the path of every map,

@@ -47,8 +47,9 @@
  * reader observes either the old value or the new and never a mixture, and no
  * lock is required. A reader upon another processor will additionally require
  * the compiler and the processor to be prevented from reordering the read, which
- * the volatile qualifier alone does not guarantee. Sub-task 6.14 is when that
- * begins to matter.
+ * the volatile qualifier alone does not guarantee. Since sub-task 6.14 there is
+ * another processor, but it is parked and reads nothing here; sub-task 6.15 is
+ * when that begins to matter.
  */
 
 #include <oxys/pit.h>
@@ -131,6 +132,72 @@ uint16_t PitReadCounter(void)
     high = PortReadByte(PIT_CHANNEL0_DATA);
 
     return (uint16_t)(((uint16_t)high << 8) | (uint16_t)low);
+}
+
+bool PitBusyWaitMicroseconds(uint32_t microseconds)
+{
+    /*
+     * A wait measured by watching the counter rather than by counting ticks.
+     *
+     * PitWaitTicks reads PitTicks, which the interrupt handler increments, so it
+     * cannot be used where interrupts are masked — and the startup sequence of
+     * sub-task 6.14 is masked throughout, Intel SDM, Volume 3A, Section 8.4.4.1,
+     * requiring every device capable of delivering an interrupt to be inhibited
+     * between an INIT and the last startup interrupt of a sequence. It also
+     * cannot express two hundred microseconds, a tick being a millisecond.
+     *
+     * The counter runs at PIT_BASE_FREQUENCY whatever divisor is programmed —
+     * Intel 8254 datasheet, "Functional Description": the divisor is the value
+     * the counter reloads from, not the rate at which it decrements — so one
+     * count is 1/1193182 of a second, or about 838 nanoseconds, which is the
+     * resolution of this wait and is ample for both delays the protocol asks
+     * for.
+     */
+    const uint32_t divisor = PitProgrammedDivisor;
+    uint64_t remaining;
+    uint16_t previous;
+
+    if ((divisor == 0U) || !PitRunning)
+    {
+        /*
+         * There is no counter to watch. The caller is told rather than left to
+         * believe it waited: a startup sequence whose delays did not happen is
+         * a processor that may not have answered because it was not given time
+         * to, and that is a different report from one that would not start.
+         */
+        return false;
+    }
+
+    /* Counts, from microseconds, rounded upward so that a wait is never short. */
+    remaining = (((uint64_t)microseconds * (uint64_t)PIT_BASE_FREQUENCY) +
+                 UINT64_C(999999)) /
+                UINT64_C(1000000);
+
+    previous = PitReadCounter();
+
+    while (remaining > 0U)
+    {
+        const uint16_t current = PitReadCounter();
+        uint64_t elapsed;
+
+        /*
+         * The counter decrements and reloads from the divisor, so a reading
+         * greater than the previous one is a reload rather than an increase.
+         * The two cases are distinguished by comparison and not by watching for
+         * the reload, because the reload can be missed: this loop is not
+         * guaranteed to observe every count, and it does not have to — it has
+         * only to observe the counter at least once per reload, which at a
+         * millisecond per reload it does by an enormous margin.
+         */
+        elapsed = (current <= previous)
+                      ? (uint64_t)(previous - current)
+                      : ((uint64_t)previous + (uint64_t)divisor - (uint64_t)current);
+
+        remaining = (elapsed >= remaining) ? 0U : (remaining - elapsed);
+        previous = current;
+    }
+
+    return true;
 }
 
 /*

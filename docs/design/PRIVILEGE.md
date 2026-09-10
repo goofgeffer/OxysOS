@@ -221,17 +221,27 @@ written over its first. The page fault is taken often — every copy-on-write
 resolution is one — and its handler may itself fault, so it must run on a stack
 that nests, which is the ordinary one.
 
-### 3.3 What is not here yet
+### 3.3 One segment per processor
 
-There is one segment, because there is one processor. From sub-task 6.14 each
-processor requires a segment of its own, with its own stacks and its own
-descriptor, because `rsp0` names the stack of whatever is running upon *that*
-processor and a shared segment would deliver two system calls onto one stack. The
-task register is per-processor already, so what must be duplicated is the storage
-and not the mechanism.
+There is one segment per processor, and there must be. `rsp0` names the stack of
+whatever is running upon *that* processor, and a shared segment would deliver two
+system calls onto one stack. The architecture forbids the sharing outright in any
+case: Intel SDM, Volume 2A, `LTR`, provides that the instruction marks the
+descriptor busy and refuses one already so marked, so the second processor to
+execute it against a shared descriptor takes a general-protection exception.
 
-`TssSetKernelStack` was written at sub-task 6.1 and left uncalled for exactly
-this. Sub-task 6.9 calls it: `ThreadSetCurrent` writes `rsp0` with the top of the
+**Sub-task 6.14 made it so.** Until then there was one segment because there was
+one processor; the task register was per-processor already, so what 6.14
+duplicated was the storage and not the mechanism —
+`TssSegments[PER_CPU_MAXIMUM]`, with a sixteen-byte descriptor for each in the
+global descriptor table, and `GdtTaskStateSegmentSelector(index)` deriving the
+selector. The array is statically sized rather than grown, because a descriptor
+must be installed before its processor runs and the address it names must not
+move afterwards. See [`SMP.md`](SMP.md), Section 4.1.
+
+`TssSetKernelStack` was written at sub-task 6.1 and left uncalled for a related
+reason, the stack it would write not yet varying.
+Sub-task 6.9 calls it: `ThreadSetCurrent` writes `rsp0` with the top of the
 thread's own kernel stack, so a thread entered from privilege level 3 arrives
 upon its own stack and not upon whichever thread ran last. See
 [`PROCESS.md`](PROCESS.md), Section 5.1.
@@ -564,7 +574,7 @@ alone would begin a copy it had promised to finish and fault in the middle of it
 **The bytes are copied once.** A kernel that read a caller's memory twice — once
 to validate and once to use — would be reading memory another processor may have
 changed in between, so what was validated and what was used need not be the same
-bytes. From sub-task 6.14 there is a second processor to open that window.
+bytes. Since sub-task 6.14 there is a second processor able to open that window.
 
 #### The user bit, which was missing above the leaf
 

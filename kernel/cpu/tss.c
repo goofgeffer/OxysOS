@@ -3,8 +3,9 @@
  * Purpose: Establishes the task state segment: the stacks it names, its
  *          descriptor within the global descriptor table, and the loading of the
  *          task register.
- * Key functions: TssInitialise, TssSetKernelStack, TssKernelStack,
- *          TssInterruptStack, TssAddress, TssLimit, TssTaskRegister, TssReport.
+ * Key functions: TssInitialise, TssInitialiseProcessor, TssSetKernelStack,
+ *          TssKernelStack, TssInterruptStack, TssAddress, TssLimit,
+ *          TssTaskRegister, TssReport.
  * References:
  *   - Intel 64 and IA-32 Architectures Software Developer's Manual, Volume 3A,
  *     Section 8.7 and Figure 8-11: the 64-bit task state segment.
@@ -26,12 +27,14 @@
  * upon a gate that names one. The name is the architecture's and is retained
  * because every manual uses it; nothing here switches a task.
  *
- * Concurrency. There is one segment because there is one processor. From
- * sub-task 6.14 each processor requires a segment of its own, with its own stacks
- * and its own descriptor, because RSP0 names the stack of whatever is running
- * upon *that* processor; a shared segment would deliver two system calls upon
- * one stack. The task register is per-processor already, so what must be
- * duplicated is the storage and not the mechanism.
+ * Concurrency. Each processor has a segment of its own, with its own stacks and
+ * its own descriptor, because RSP0 names the stack of whatever is running upon
+ * *that* processor and a shared segment would deliver two system calls upon one
+ * stack. The task register is per-processor already, so what sub-task 6.14
+ * duplicated is the storage and not the mechanism. No lock is required and none
+ * would help: every segment is written by the processor that owns it, save the
+ * one moment at which the bootstrap processor installs a descriptor for a
+ * processor it is about to start — and that processor is not running yet.
  */
 
 #include <oxys/tss.h>
@@ -39,14 +42,38 @@
 #include <oxys/kernel.h>
 
 /*
- * The segment itself.
+ * The segments, one to a processor.
  *
- * It is not const: the processor reads it, and this kernel writes RSP0 at every
- * privilege transition from sub-task 6.9. It is aligned so that no field crosses
- * a cache line unnecessarily, the processor reading RSP0 upon every entry from
- * user mode.
+ * They are not const: the processor reads them, and this kernel writes RSP0 at
+ * every privilege transition from sub-task 6.9. The array is aligned so that no
+ * field crosses a cache line unnecessarily, the processor reading RSP0 upon
+ * every entry from user mode.
+ *
+ * The array is statically sized to PER_CPU_MAXIMUM rather than to the number of
+ * processors the firmware declares, because a descriptor for a processor must be
+ * installed before that processor runs and the address it names must not move
+ * afterwards — the processor holds it in a structure it reads without asking.
+ * An array that grew would move every segment already in use.
  */
-static TaskStateSegment Tss __attribute__((aligned(16)));
+static TaskStateSegment TssSegments[PER_CPU_MAXIMUM] __attribute__((aligned(16)));
+
+/*
+ * The segment of the executing processor.
+ *
+ * The dense index of kernel/include/oxys/percpu.h is the key, and not the
+ * identifier the local controller answers to: the index is this kernel's own
+ * numbering, is dense from zero, and is therefore what an array is subscripted
+ * by. The bootstrap processor is index 0 and is the only processor that ever
+ * reaches this function before its area exists — TssInitialise runs long after
+ * PerCpuInitialise, but a diagnostic raised in between would otherwise read
+ * through a segment base that is not yet a base.
+ */
+static TaskStateSegment *TssCurrent(void)
+{
+    const uint32_t index = PerCpuIsEstablished() ? PerCpuIndex() : 0U;
+
+    return &TssSegments[(index < PER_CPU_MAXIMUM) ? index : 0U];
+}
 
 /*
  * The stack the processor loads upon entering privilege level 0 from level 3.
@@ -85,14 +112,38 @@ static uint64_t TssStackTop(uint8_t *store, size_t size)
 
 void TssInitialise(void)
 {
-    for (size_t index = 0U; index < sizeof Tss; ++index)
+    /*
+     * The bootstrap processor is index 0 and takes the two stacks reserved in
+     * .bss above. It cannot take allocated ones: this runs before the process
+     * table exists and, more to the point, the stacks must exist before anything
+     * that could fail does. Every other processor is given allocated stacks by
+     * the bootstrap processor before it is started; see SmpPrepareProcessor.
+     */
+    TssInitialiseProcessor(
+        0U,
+        TssStackTop(TssKernelStackStore, sizeof TssKernelStackStore),
+        TssStackTop(TssDoubleFaultStackStore, sizeof TssDoubleFaultStackStore));
+}
+
+void TssInitialiseProcessor(uint32_t processor_index, uint64_t kernel_stack_top,
+                            uint64_t double_fault_stack_top)
+{
+    TaskStateSegment *segment;
+
+    if (processor_index >= PER_CPU_MAXIMUM)
     {
-        ((uint8_t *)&Tss)[index] = 0U;
+        KernelPanic("A task state segment was asked for beyond the reservation.");
     }
 
-    Tss.rsp0 = TssStackTop(TssKernelStackStore, sizeof TssKernelStackStore);
-    Tss.ist[TSS_IST_DOUBLE_FAULT - 1U] =
-        TssStackTop(TssDoubleFaultStackStore, sizeof TssDoubleFaultStackStore);
+    segment = &TssSegments[processor_index];
+
+    for (size_t index = 0U; index < sizeof *segment; ++index)
+    {
+        ((uint8_t *)segment)[index] = 0U;
+    }
+
+    segment->rsp0 = kernel_stack_top;
+    segment->ist[TSS_IST_DOUBLE_FAULT - 1U] = double_fault_stack_top;
 
     /*
      * The map base is set beyond the limit, which the architecture defines as
@@ -101,9 +152,10 @@ void TssInitialise(void)
      * exception — which is what this kernel wants of a user program, the ports
      * being the kernel's to drive.
      */
-    Tss.io_map_base = (uint16_t)sizeof(TaskStateSegment);
+    segment->io_map_base = (uint16_t)sizeof(TaskStateSegment);
 
-    GdtInstallTaskStateSegment((uint64_t)(uintptr_t)&Tss, TssLimit());
+    GdtInstallTaskStateSegment(processor_index, (uint64_t)(uintptr_t)segment,
+                               TssLimit());
 
     /*
      * The task register is loaded last, the descriptor having to exist before a
@@ -127,19 +179,19 @@ void TssInitialise(void)
      * and clang `ltrw %ax` — so the operand size is stated rather than inferred,
      * and the encoding is unchanged.
      */
-    const uint16_t selector = GDT_TSS_SELECTOR;
+    const uint16_t selector = GdtTaskStateSegmentSelector(processor_index);
 
     __asm__ __volatile__("ltr %0" : : "r"(selector) : "memory");
 }
 
 void TssSetKernelStack(uint64_t stack_top)
 {
-    Tss.rsp0 = stack_top;
+    TssCurrent()->rsp0 = stack_top;
 }
 
 uint64_t TssKernelStack(void)
 {
-    return Tss.rsp0;
+    return TssCurrent()->rsp0;
 }
 
 uint64_t TssInterruptStack(unsigned int entry)
@@ -149,17 +201,17 @@ uint64_t TssInterruptStack(unsigned int entry)
         return 0U;
     }
 
-    return Tss.ist[entry - 1U];
+    return TssCurrent()->ist[entry - 1U];
 }
 
 uint16_t TssIoMapBase(void)
 {
-    return Tss.io_map_base;
+    return TssCurrent()->io_map_base;
 }
 
 const TaskStateSegment *TssAddress(void)
 {
-    return &Tss;
+    return TssCurrent();
 }
 
 uint32_t TssLimit(void)
@@ -185,7 +237,7 @@ uint16_t TssTaskRegister(void)
 void TssReport(void)
 {
     KernelWriteString("Task state segment: at ");
-    KernelWriteHexadecimal((uint64_t)(uintptr_t)&Tss);
+    KernelWriteHexadecimal((uint64_t)(uintptr_t)TssCurrent());
     KernelWriteString(", limit ");
     KernelWriteDecimal((uint64_t)TssLimit());
     KernelWriteString(", task register ");
@@ -193,18 +245,18 @@ void TssReport(void)
     KernelWriteString(".\n");
 
     KernelWriteString("  RSP0 ");
-    KernelWriteHexadecimal(Tss.rsp0);
+    KernelWriteHexadecimal(TssCurrent()->rsp0);
     KernelWriteString(" (");
     KernelWriteDecimal((uint64_t)TSS_KERNEL_STACK_SIZE / 1024U);
     KernelWriteString(" KiB), IST");
     KernelWriteDecimal((uint64_t)TSS_IST_DOUBLE_FAULT);
     KernelWriteString(" ");
-    KernelWriteHexadecimal(Tss.ist[TSS_IST_DOUBLE_FAULT - 1U]);
+    KernelWriteHexadecimal(TssCurrent()->ist[TSS_IST_DOUBLE_FAULT - 1U]);
     KernelWriteString(" (double fault, ");
     KernelWriteDecimal((uint64_t)TSS_INTERRUPT_STACK_SIZE / 1024U);
     KernelWriteString(" KiB).\n");
 
     KernelWriteString("  I/O permission map base ");
-    KernelWriteDecimal((uint64_t)Tss.io_map_base);
+    KernelWriteDecimal((uint64_t)TssCurrent()->io_map_base);
     KernelWriteString(", beyond the limit: no port is permitted to user mode.\n");
 }

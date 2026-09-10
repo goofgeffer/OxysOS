@@ -157,8 +157,9 @@ slow.
 6. **No concurrency safety.** Reference counts are not atomic and nothing is
    locked. There is one flow of control, and when there is not, this is the first
    thing in the storage stack that must change. The spinlock it requires was
-   built by sub-task 6.13 and has not been applied here; sub-task 6.14 is what
-   makes the cache contended. What the lock must cover is the whole of a lookup
+   built by sub-task 6.13 and has not been applied here. A processor started by
+   sub-task 6.14 is parked and reaches no block device; **sub-task 6.15 is what
+   makes the cache contended**. What the lock must cover is the whole of a lookup
    and its outcome — the search, the eviction it may perform and the reference it
    takes — because two processors that each searched for one block, each found
    none, and each then claimed an entry for it would leave the cache holding that

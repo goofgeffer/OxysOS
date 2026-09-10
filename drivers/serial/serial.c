@@ -59,13 +59,21 @@
  * is what a single processor with interrupts provides: for the transmit buffer
  * the producer is the writing code and the consumer the handler, and for the
  * receive buffer the reverse. Each side advances its own index alone and reads
- * the other's without modifying it, so no lock is required today. The spinlock
- * of sub-task 6.13 exists and has not been applied here; sub-task 6.14 is what
- * gives the transmit buffer a second producer, at which point a diagnostic line
- * written from one processor and one written from another would interleave
- * character by character — and a log in which two panics are shuffled together
- * is worse than either panic reported alone, which is the failure this note
- * exists to name.
+ * the other's without modifying it.
+ *
+ * **Sub-task 6.14 gave the transmit buffer a second producer**, a started
+ * processor announcing its arrival through the same diagnostic path, and the
+ * lock that answers it is taken above this file, in KernelWriteString. That is
+ * the right place and not merely a convenient one: what must not interleave is a
+ * whole diagnostic line across all three output devices, and a lock held inside
+ * this file would let a line reach the serial port interleaved with another's
+ * even while each buffer stayed internally consistent. A log in which two panics
+ * are shuffled together is worse than either panic reported alone, which is the
+ * failure this note exists to name.
+ *
+ * The receive buffer is untouched by any of that. Its producer is still the
+ * interrupt handler and its consumer still the echo loop, both upon the
+ * bootstrap processor; sub-task 6.15 is what could give it a second consumer.
  */
 
 #include <oxys/serial.h>

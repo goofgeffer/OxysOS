@@ -151,6 +151,34 @@ byte wraps between the two reads, which is to say rarely, and unpredictably.
 Reading the counter is the only means the kernel has of establishing that the
 divisor took effect, and Section 7 describes the use the self-test makes of it.
 
+### 5.1 The microsecond wait of sub-task 6.14
+
+`PitBusyWaitMicroseconds` is built upon that latched read, and it exists because
+`PitWaitTicks` cannot serve the application-processor bring-up. Two reasons, and
+either alone would be sufficient:
+
+- **The tick cannot advance.** `PitWaitTicks` reads a variable the interrupt
+  handler increments, and Intel SDM, Volume 3A, Section 8.4.4.1, requires every
+  device capable of delivering an interrupt to be inhibited between an INIT and
+  the last startup interrupt of a sequence. The bring-up therefore runs with the
+  interrupt flag clear throughout, and a wait upon a variable nothing can write
+  would never end.
+- **A tick is a millisecond.** One of the protocol's two delays is two hundred
+  microseconds, which the tick cannot express at all.
+
+So the wait watches the counter itself. Each latched read is compared against the
+last and the difference accumulated, the counter being a decrementing one that
+reloads — the wrap is handled by adding the divisor where the new reading exceeds
+the old, which is the same free-running arithmetic the circular buffers of
+[`KEYBOARD.md`](KEYBOARD.md), Section 5.1, use for the same reason.
+
+The resolution is one count of the 1.193182 MHz input, about 838 nanoseconds, and
+the requested interval is rounded upward so that a wait is never short: a startup
+sequence whose ten-millisecond delay was nine is a sequence the manual does not
+describe. It returns false where the counter is not running, so the caller is
+told that nothing was waited for rather than left to assume it was —
+`SmpInitialise` declines the whole bring-up on that answer, and says so.
+
 ## 6. Time sources yet to come
 
 | Source | Phase, sub-task | What it adds |
@@ -212,7 +240,8 @@ Under QEMU, at the completion of the self-test:
 
 1. The tick counter is unsynchronised. A 64-bit aligned access is not torn upon
    x86_64, so a reader observes either the old value or the new; from sub-task
-   6.14 a reader upon another processor will additionally require the read to be
+   6.14 there is another processor, though a parked one reads nothing here; a
+   reader upon another processor will additionally require the read to be
    ordered, which the `volatile` qualifier does not by itself guarantee. No lock
    is required for it — the counter has one writer — so the ordering, and not
    the spinlock sub-task 6.13 built, is what this limitation waits upon.

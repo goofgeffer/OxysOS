@@ -25,9 +25,9 @@ memory and is not.
 | `vga/vga.c` | The VGA text-mode display, mode 3. Displaced by the framebuffer of sub-task 6.2 wherever the boot loader leaves the adapter in a graphics mode; see `docs/devices/DISPLAY.md`, Section 1.1. | `<oxys/vga.h>` | 1, 4.2 |
 | `serial/serial.c` | The 16550-compatible UART at COM1, interrupt-driven. | `<oxys/serial.h>` | 1, 4.1 |
 | `pic/pic.c` | The pair of cascaded 8259A interrupt controllers. Retired at sub-task 6.12; it holds no handler table and routes nothing. | `<oxys/pic.h>` | 3, 6.12 |
-| `apic/lapic.c` | The Local APIC: one per logical processor; what completes every interrupt from sub-task 6.12 onward, and — from sub-task 6.13 — the command register through which one processor interrupts another. | `<oxys/lapic.h>` | 6.12, 6.13 |
+| `apic/lapic.c` | The Local APIC: one per logical processor; what completes every interrupt from sub-task 6.12 onward; from sub-task 6.13 the command register through which one processor interrupts another; and from sub-task 6.14 `LocalApicInitialiseThisProcessor`, by which a started processor enables and programmes its own controller. | `<oxys/lapic.h>` | 6.12, 6.13, 6.14 |
 | `apic/ioapic.c` | The I/O APIC: the redirection table that decides what vector an interrupt input presents, and to which processor. | `<oxys/ioapic.h>` | 6.12 |
-| `pit/pit.c` | Counter 0 of the 8253 interval timer, the system tick. | `<oxys/pit.h>` | 3 |
+| `pit/pit.c` | Counter 0 of the 8253 interval timer, the system tick; and, from sub-task 6.14, `PitBusyWaitMicroseconds`, the counter-watching wait the startup protocol's delays are measured by. | `<oxys/pit.h>` | 3, 6.14 |
 | `ps2/ps2.c` | The 8042 keyboard controller itself, and the two device ports it presents. | `<oxys/ps2.h>` | 3, 6.5 |
 | `keyboard/keyboard.c` | The PS/2 keyboard upon the controller's first port. | `<oxys/keyboard.h>` | 3 |
 | `mouse/mouse.c` | The PS/2 mouse upon the controller's second port. | `<oxys/mouse.h>` | 6.5 |
@@ -306,6 +306,14 @@ vector carries, exactly as it owns none of the meanings a device request line
 carries. What the vectors mean is
 [`../docs/design/CONCURRENCY.md`](../docs/design/CONCURRENCY.md), Section 5.
 
+**Sub-task 6.14 sends the startup sequence through that same register**, and adds
+`LocalApicInitialiseThisProcessor`: a started processor must set the global
+enable in its own `IA32_APIC_BASE`, mask the local vector entries this kernel
+does not use, and set the software enable, none of which the bootstrap processor
+can do on its behalf — each of those is per processor. It refuses rather than
+faults where the register page has never been mapped, which is what a processor
+started against a kernel whose controller never came up reports.
+
 ### `pit/` — the interval timer
 
 Programmes counter 0 of the 8253 as a rate generator and counts the interrupts it
@@ -320,6 +328,16 @@ the count by two and therefore admits only even divisors, while nothing here has
 any interest in the shape of the output waveform. The reasoning, the divisor
 arithmetic and the accuracy actually obtained are recorded in
 [`../docs/devices/TIME.md`](../docs/devices/TIME.md).
+
+**Sub-task 6.14 added a second kind of wait to it.** `PitBusyWaitMicroseconds`
+watches the counter directly rather than reading the tick variable the handler
+increments, because the startup protocol of Intel SDM, Volume 3A, Section
+8.4.4.1, runs with interrupts masked throughout — so the tick cannot advance —
+and because one of its two delays is two hundred microseconds, which a tick of
+one millisecond cannot express. The resolution is one count of the 1.193182 MHz
+input, about 838 nanoseconds, and the wait rounds upward so that it is never
+short. It returns false where the counter is not running, so a caller learns that
+nothing was waited for rather than assuming it was.
 
 ### `ps2/` — the 8042 controller
 

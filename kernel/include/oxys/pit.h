@@ -111,6 +111,27 @@ bool PitWaitTicks(uint64_t ticks);
  */
 uint16_t PitReadCounter(void);
 
+/*
+ * Waits by watching that counter rather than by counting ticks.
+ *
+ * PitWaitTicks reads a variable the interrupt handler increments, so it cannot
+ * be used where interrupts are masked, and a tick is a millisecond so it cannot
+ * express a delay shorter than one. The startup sequence of sub-task 6.14 needs
+ * both: it runs with interrupts masked throughout, as Intel SDM, Volume 3A,
+ * Section 8.4.4.1, requires, and one of its two delays is two hundred
+ * microseconds.
+ *
+ * The resolution is one count of the 1.193182 MHz input, about 838 nanoseconds,
+ * and the wait is rounded upward so that it is never short. It occupies the
+ * processor entirely, which is what the caller wants of it: there is nothing
+ * else for the processor to do between an INIT and the startup interrupt that
+ * follows it.
+ *
+ * Returns false where the counter is not running, in which case nothing was
+ * waited for and the caller is told so rather than left to assume it was.
+ */
+bool PitBusyWaitMicroseconds(uint32_t microseconds);
+
 /* The divisor programmed into counter 0. */
 uint32_t PitDivisor(void);
 

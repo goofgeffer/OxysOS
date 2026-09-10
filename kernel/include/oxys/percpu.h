@@ -110,7 +110,7 @@ typedef struct PerCpu
     bool bootstrap;
 
     /* Whether the processor is executing kernel code. The bootstrap processor is
-     * online from the moment its area is established; the others become so at
+     * online from the moment its area is established; the others became so at
      * sub-task 6.14. */
     bool online;
 
@@ -214,7 +214,8 @@ static inline uint32_t PerCpuIndex(void)
 PerCpu *PerCpuAt(uint32_t index);
 
 /* The number of areas established, which is the number of processors executing
- * kernel code. It is 1 until sub-task 6.14. */
+ * kernel code. It was 1 until sub-task 6.14 started the application processors;
+ * it is now one more than SmpProcessorsStarted reports. */
 uint32_t PerCpuOnlineCount(void);
 
 /* Whether an area has been established for the executing processor. It exists so

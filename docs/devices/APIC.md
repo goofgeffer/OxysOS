@@ -1,9 +1,9 @@
 # The Advanced Programmable Interrupt Controllers
 
-**Corresponding phase**: Phase 6, sub-tasks 6.12 and 6.13. This document is
-revised whenever either controller is programmed differently, and will be revised
-again at sub-task 6.14, whose bring-up uses the command register Section 7
-describes.
+**Corresponding phase**: Phase 6, sub-tasks 6.12, 6.13 and 6.14. This document is
+revised whenever either controller is programmed differently. Sub-task 6.14's
+bring-up uses the command register Section 7 describes, and is designed in
+[`../design/SMP.md`](../design/SMP.md).
 
 **Specifications**: Intel 64 and IA-32 Architectures Software Developer's Manual,
 Volume 3A, Chapter 10 (Advanced Programmable Interrupt Controller), Sections
@@ -148,8 +148,10 @@ The ACPI Local APIC NMI structures, Section 5.2.12.7, say which pin of which
 processor the non-maskable interrupt is attached to; an entry naming processor
 `0xFF` applies to every processor. The vector field is ignored for the NMI
 delivery mode, per Section 10.5.1, and is left zero. Entries naming a particular
-processor other than this one are left for sub-task 6.14 to apply as each
-application processor starts.
+processor other than this one are applied, since sub-task 6.14, by that processor
+itself: LocalApicInitialiseThisProcessor runs this same routine upon each
+application processor as it starts, and a processor's own controller is the only
+one it can reach.
 
 ### 3.5 The spurious vector, and why it is `0xFF`
 
@@ -202,10 +204,12 @@ window together.
 
 The sequence requires the spinlock governing the unit: two flows of control
 performing it would interleave into an access of the wrong register. That lock
-was built by sub-task 6.13 and this sequence has not been brought under it,
-there being one flow of control; sub-task 6.14 is what makes it contended. It
-is the same obligation the 8259A's mask registers carry, for the same reason,
-and discharged at the same moment.
+was built by sub-task 6.13 and this sequence has not been brought under it. It is
+safe still: sub-task 6.14 started the application processors, but a started
+processor is parked in a halt loop and no path it takes reaches this unit, so
+there remains one flow of control that programmes a redirection entry.
+**Sub-task 6.15 is what makes it contended** — the same obligation the 8259A's
+mask registers carry, for the same reason, and discharged at the same moment.
 
 ### 4.2 The registers themselves
 
@@ -247,9 +251,10 @@ reproducible nowhere — in which the input is unmasked and directed at whatever
 the entry held before.
 
 **Physical destination mode, deliberately.** The logical modes exist to
-distribute an interrupt across a set of processors. There is one processor until
-sub-task 6.14, so choosing a distribution before there is anything to distribute
-across would be a decision made without its reason. Sub-task 6.15 is where it
+distribute an interrupt across a set of processors. There was one processor until
+sub-task 6.14, so choosing a distribution before there was anything to distribute
+across would have been a decision made without its reason. There are processors
+now, but a parked one is not a destination worth choosing; sub-task 6.15 is where it
 acquires one.
 
 **A vector below 16 is refused.** Section 10.5.2 records that the Local APIC
@@ -351,7 +356,7 @@ initialised, and from a machine with nothing attached.
 | Every input above the request lines is masked | An input no driver claimed delivering a vector nothing registered — without end, if it is level triggered. |
 | The 8259A pair is fully masked, and reports itself retired | Two controllers presenting one device upon one vector. |
 | Every claimed line's entry carries the vector the line has always had | The keyboard's requests delivered to the timer's handler. A driver holds no vector and could not detect this. |
-| Every claimed line's entry names this processor | A device programmed, unmasked and silent — sub-task 6.14's characteristic failure, two sub-tasks early. |
+| Every claimed line's entry names this processor | A device programmed, unmasked and silent. It was named here as sub-task 6.14's characteristic failure two sub-tasks early; 6.14 has since arrived without producing it, every entry still naming the bootstrap processor. |
 | Every claimed line's mask agrees with what its driver asked for | A device that worked before the adoption and does not after. |
 | **The interval timer still ticks** | The end-to-end assertion. It is the timer because it is the only device that interrupts without anybody touching the machine, and because its line is the one most likely to have moved: an override for request line 0 is among the commonest a firmware declares. |
 
@@ -384,8 +389,10 @@ Under QEMU with `-machine q35 -cpu qemu64 -smp cores=2`:
    claimed. A PCI device that is not upon an ISA request line needs the ACPI
    namespace's `_PRT` object to be routed at all, which requires the interpreter
    [`ACPI.md`](ACPI.md), limitation 2, records as absent.
-2. **One processor is a destination.** Every entry names the bootstrap processor.
-   Sub-tasks 6.14 and 6.15 give the destination something to choose between.
+2. **One processor is a destination.** Every redirection entry names the
+   bootstrap processor, and still does since sub-task 6.14: a started processor
+   is parked and would be a worse destination than one that is running.
+   Sub-task 6.15 is what gives the destination something worth choosing between.
 3. **~~The inter-processor interrupt is not implemented.~~** Discharged at
    sub-task 6.13. The command register is written, two vectors are reserved —
    `0xFD` for the shootdown and `0xFC` for the halt — and the three audiences a
@@ -396,10 +403,11 @@ Under QEMU with `-machine q35 -cpu qemu64 -smp cores=2`:
 5. **Nothing here is safe against concurrent access.** The select-then-window
    sequence of the I/O APIC and the mask state of the request layer both require
    a lock. The lock now **exists** — sub-task 6.13 built it — but neither has
-   been put under one, there being one processor; sub-task 6.14 is what makes
-   them contended. The local controller's own registers need none: each processor
-   reaches its own controller at the same physical address, and no lock could
-   make an access there refer to another's.
+   been put under one. Both are safe still: a processor started by sub-task 6.14
+   is parked and reaches neither, so there is one flow of control that touches
+   them. Sub-task 6.15 is what makes them contended. The local controller's own
+   registers need none: each processor reaches its own controller at the same
+   physical address, and no lock could make an access there refer to another's.
 6. **x2APIC mode is not entered**, even where the processor reports it. The xAPIC
    register interface addresses 255 processors, which is more than this kernel
    will schedule for some time, and the extended mode's benefit is entirely in

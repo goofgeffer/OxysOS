@@ -243,8 +243,11 @@ and it is why the report had to learn to name storage outside the mass-storage
 class rather than say there was none.
 
 It has **four cores**, where the QEMU configuration this project verifies against
-runs two. The application-processor bring-up of sub-task 6.14 will therefore
-first meet a real machine with more processors than any test has used.
+runs two. The application-processor bring-up of sub-task 6.14 has therefore not
+yet met a real machine, and when it does it will meet one with more processors
+than any test has used — which exercises the reservation of `PER_CPU_MAXIMUM`,
+the serial bring-up of [`../design/SMP.md`](../design/SMP.md), Section 7, and the
+refusals of its Section 7.1, none of which QEMU's two processors reach.
 
 It is a **UEFI-era machine**, and the kernel has no UEFI boot path until Phase
 12, so booting it here went through the firmware's compatibility support module.

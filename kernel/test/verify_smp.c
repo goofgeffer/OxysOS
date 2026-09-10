@@ -1,11 +1,13 @@
 /*
  * File: kernel/test/verify_smp.c
- * Purpose: Asserts the work of sub-task 6.13: the per-processor data area and
- *          the segment base it is reached through, the ticket spinlock and the
- *          counted interrupt-disable beneath it, the inter-processor interrupt,
- *          and the translation-lookaside-buffer shootdown built upon that.
+ * Purpose: Asserts the work of sub-tasks 6.13 and 6.14: the per-processor data
+ *          area and the segment base it is reached through, the ticket spinlock
+ *          and the counted interrupt-disable beneath it, the inter-processor
+ *          interrupt, the translation-lookaside-buffer shootdown built upon
+ *          that, and the application processors the last of them is finally
+ *          broadcast to.
  * Key functions: KernelVerifyPerCpu, KernelVerifySpinlock, KernelVerifyIpi,
- *          KernelVerifyShootdown.
+ *          KernelVerifyShootdown, KernelVerifyApplicationProcessors.
  * References:
  *   - docs/design/CONCURRENCY.md, Section 8: the assertions, each paired with
  *     the silent failure it exists to catch.
@@ -31,6 +33,13 @@
  *   other. KernelVerifyShootdown deliberately makes a mapping stale in the way
  *   the kernel's own routines never would, and then requires the handler to be
  *   what repairs it.
+ *
+ *   **Sub-task 6.14 changed what is available to assert.** There are now several
+ *   processors, so KernelVerifyApplicationProcessors can assert the thing none
+ *   of the four above could: that an interrupt sent to *another* processor is
+ *   answered by it. That assertion is a count read out of each target's own
+ *   area, written by the target from inside its own handler, which is the one
+ *   quantity a kernel that started nobody cannot fabricate.
  */
 
 #include <oxys/kernel.h>
@@ -47,6 +56,9 @@
 #include <oxys/msr.h>
 #include <oxys/cpu.h>
 #include <oxys/tss.h>
+#include <oxys/gdt.h>
+#include <oxys/idt.h>
+#include <oxys/smp.h>
 
 /* The lock the spinlock assertions operate upon. It is a lock of this file's
  * own: asserting upon one the kernel is actually using would mean asserting upon
@@ -132,9 +144,15 @@ void KernelVerifyPerCpu(void)
     }
 
     /*
-     * The bootstrap processor is index 0 and the machine has one processor
-     * online until sub-task 6.14. Both are stated so that the run in which 6.14
-     * changes them is the run that says so.
+     * The bootstrap processor is index 0, and it is the only processor online at
+     * this point in the boot.
+     *
+     * The second half of that was "until sub-task 6.14" when this was written,
+     * and 6.14 has since arrived; it holds still because this routine runs
+     * before SmpInitialise and not because nothing can start a processor. That
+     * ordering is now load-bearing, and it is stated here rather than left to be
+     * rediscovered: moving this assertion after the bring-up would make it fail
+     * upon every machine with more than one processor.
      */
     if (area->index != 0U)
     {
@@ -145,7 +163,7 @@ void KernelVerifyPerCpu(void)
     if (!area->bootstrap)
     {
         KernelWriteString("  The initialising processor is not the bootstrap "
-                          "processor, which cannot be true before sub-task 6.14.\n");
+                          "processor, which nothing before the bring-up could make true.\n");
         succeeded = false;
     }
 
@@ -158,7 +176,7 @@ void KernelVerifyPerCpu(void)
     if (PerCpuOnlineCount() != 1U)
     {
         KernelWriteString("  More than one processor is online, which cannot be "
-                          "true before sub-task 6.14.\n");
+                          "true at this point in the boot, SmpInitialise not having run.\n");
         succeeded = false;
     }
 
@@ -829,4 +847,304 @@ void KernelVerifyShootdown(void)
 
     KernelWriteString(succeeded ? "TLB shootdown self-test passed.\n"
                                 : "TLB shootdown self-test FAILED.\n");
+}
+
+/*
+ * Asserts sub-task 6.14: the processors that were started.
+ *
+ * The distinction from everything above it is what makes it worth writing. Each
+ * assertion above establishes that a mechanism's internal state moves as it
+ * must, because upon one processor that is all a mechanism can be made to show.
+ * Here there are several, and a count of them is *not* the assertion: a kernel
+ * that incremented a variable and started nobody would produce the same count.
+ *
+ * What only a running processor can produce is an acknowledgement to an
+ * interrupt it was sent. The substance of this test is therefore a shootdown
+ * broadcast, and the reading of each target's own accounting afterwards — which
+ * is the mechanism of sub-task 6.13 doing, at last, the thing it was built for.
+ *
+ * Upon a machine with one processor it asserts the other side of the same coin:
+ * that nobody was started, that the kernel says which condition declined it, and
+ * that the state agrees with that. A test that reported nothing there would be a
+ * test that passed upon a machine where the bring-up silently did nothing.
+ */
+void KernelVerifyApplicationProcessors(void)
+{
+    bool succeeded = true;
+    const uint32_t online = PerCpuOnlineCount();
+    uint64_t serviced_before[PER_CPU_MAXIMUM];
+    uint32_t responded = 0U;
+
+    KernelWriteString("Application processors: asserting what was started.\n");
+
+    /*
+     * The trampoline's identity mapping must be gone, whether or not anybody
+     * was started. It is the one lasting hazard this sub-task introduces — a low
+     * linear address that reads and writes real memory instead of faulting — and
+     * a bring-up that left it standing would leave every stray low pointer in
+     * the kernel silently working.
+     */
+    if (PagingTranslate(SMP_TRAMPOLINE_ADDRESS) != 0U)
+    {
+        KernelWriteString("  the trampoline's identity mapping is still "
+                          "standing. FAILED.\n");
+        succeeded = false;
+    }
+
+    if (!SmpIsMultiprocessor())
+    {
+        /*
+         * No processor was started. That is a legitimate outcome and this test
+         * is what distinguishes it from a failure: the kernel must say which
+         * condition produced it, must not claim to have started anybody, and
+         * must not have lost one it did start.
+         */
+        if (SmpDeclinedReason() == NULL)
+        {
+            if (SmpStartupFailureCount() == 0U)
+            {
+                KernelWriteString("  no processor came online and nothing "
+                                  "declined or failed. FAILED.\n");
+                succeeded = false;
+            }
+            else
+            {
+                KernelWriteString("  every processor started was given up "
+                                  "upon; the machine remains usable.\n");
+            }
+        }
+
+        if (SmpProcessorsStarted() != 0U)
+        {
+            KernelWriteString("  a processor is reported started that is not "
+                              "online. FAILED.\n");
+            succeeded = false;
+        }
+
+        if (online != 1U)
+        {
+            KernelWriteString("  the count of online processors is not one upon "
+                              "a machine with one. FAILED.\n");
+            succeeded = false;
+        }
+
+        KernelWriteString(succeeded
+                              ? "Application processor self-test passed: one "
+                                "processor, and the kernel says why.\n"
+                              : "Application processor self-test FAILED.\n");
+        return;
+    }
+
+    /*
+     * The areas first, because everything below reads them. Each processor must
+     * have an area of its own, must have written itself into it, and must carry
+     * an identifier no other carries: two areas naming one controller would mean
+     * two processors sharing a stack and a task state segment, and every count
+     * in the report would still be right.
+     */
+    for (uint32_t index = 0U; index < online; ++index)
+    {
+        const PerCpu *const area = PerCpuAt(index);
+
+        if (area == NULL)
+        {
+            KernelWriteString("  a processor is counted online with no area. "
+                              "FAILED.\n");
+            succeeded = false;
+            continue;
+        }
+
+        if (!area->online)
+        {
+            KernelWriteString("  an area within the online count is not marked "
+                              "online. FAILED.\n");
+            succeeded = false;
+        }
+
+        if (area->index != index)
+        {
+            KernelWriteString("  an area does not hold the index it is at. "
+                              "FAILED.\n");
+            succeeded = false;
+        }
+
+        if (area->self != area)
+        {
+            KernelWriteString("  an area's self pointer does not name itself. "
+                              "FAILED.\n");
+            succeeded = false;
+        }
+
+        if ((index == 0U) != area->bootstrap)
+        {
+            KernelWriteString("  the bootstrap processor is not index 0, or a "
+                              "started processor claims to be it. FAILED.\n");
+            succeeded = false;
+        }
+
+        for (uint32_t other = 0U; other < index; ++other)
+        {
+            const PerCpu *const earlier = PerCpuAt(other);
+
+            if ((earlier != NULL) &&
+                (earlier->apic_identifier == area->apic_identifier))
+            {
+                KernelWriteString("  two processors report the same local "
+                                  "controller identifier. FAILED.\n");
+                succeeded = false;
+            }
+        }
+    }
+
+    if (PerCpuOnlineCount() != (SmpProcessorsStarted() + 1U))
+    {
+        KernelWriteString("  the processors online are not the bootstrap "
+                          "processor and those started. FAILED.\n");
+        succeeded = false;
+    }
+
+    /*
+     * What each started processor holds in the registers that are per processor
+     * rather than per machine.
+     *
+     * These assertions exist because a negative test found that nothing caught
+     * their absence. A processor given no task state segment came online,
+     * answered a shootdown, and passed every assertion above — and would have
+     * taken a triple fault the first time it double-faulted, a gate naming an
+     * interrupt stack table entry being undeliverable upon a processor whose
+     * task register is null. The same is true of every register below: each is
+     * loaded once, upon each processor, and a processor that missed one runs
+     * correctly until the single moment that register exists for.
+     *
+     * Each value was read by the processor itself, with the instruction that
+     * reads that register, and is compared against what the bootstrap processor
+     * reads from its own — so what is asserted is that the two processors agree,
+     * and not that this kernel wrote what it meant to write.
+     */
+    for (uint32_t index = 1U; index < online; ++index)
+    {
+        const SmpProcessorRecord *const record = SmpRecordAt(index);
+
+        if (record == NULL)
+        {
+            KernelWriteString("  a started processor recorded nothing about "
+                              "itself. FAILED.\n");
+            succeeded = false;
+            continue;
+        }
+
+        if (record->task_register != (uint64_t)GdtTaskStateSegmentSelector(index))
+        {
+            KernelWriteString("  a started processor's task register does not "
+                              "name its own task state segment. FAILED.\n");
+            succeeded = false;
+        }
+
+        if ((record->gdt_base != GdtBase()) ||
+            (record->gdt_limit != (uint64_t)GdtLimit()))
+        {
+            KernelWriteString("  a started processor loaded a different global "
+                              "descriptor table. FAILED.\n");
+            succeeded = false;
+        }
+
+        if (record->idt_base != IdtBase())
+        {
+            KernelWriteString("  a started processor loaded a different "
+                              "interrupt descriptor table. FAILED.\n");
+            succeeded = false;
+        }
+
+        if (record->cr3 != (uint64_t)PagingKernelRoot())
+        {
+            KernelWriteString("  a started processor is not upon the kernel's "
+                              "paging hierarchy. FAILED.\n");
+            succeeded = false;
+        }
+
+        /*
+         * Paging and write protection, bits 31 and 16 of CR0. Write protection
+         * is the one a machine would never report: without it a write by
+         * privilege level 0 to a page marked read-only succeeds, so a processor
+         * missing it could write the kernel's own text while its fellows could
+         * not — and nothing would fault, ever.
+         */
+        if ((record->cr0 & (UINT64_C(1) << 31)) == 0U)
+        {
+            KernelWriteString("  a started processor has paging disabled. "
+                              "FAILED.\n");
+            succeeded = false;
+        }
+
+        if ((record->cr0 & (UINT64_C(1) << 16)) !=
+            (ReadCr0() & (UINT64_C(1) << 16)))
+        {
+            KernelWriteString("  a started processor's write protection does "
+                              "not match the bootstrap processor's. FAILED.\n");
+            succeeded = false;
+        }
+
+        /* Physical address extension, bit 5 of CR4, without which long mode
+         * cannot have been entered at all. */
+        if ((record->cr4 & (UINT64_C(1) << 5)) == 0U)
+        {
+            KernelWriteString("  a started processor has no physical address "
+                              "extension. FAILED.\n");
+            succeeded = false;
+        }
+    }
+
+    /*
+     * And now the assertion this test exists for.
+     *
+     * Every started processor is parked in a halt loop with interrupts enabled,
+     * so the only evidence that it is executing at all is that it answers an
+     * interrupt. A shootdown broadcast is sent and each target's own
+     * `shootdowns_serviced` is read afterwards; the count is written by the
+     * target, in its own area, from within its own handler, so a processor that
+     * had halted with interrupts masked, or that never reached the kernel's
+     * gate, or whose local controller was never enabled, cannot produce it.
+     *
+     * ShootdownBroadcast waits for every target to acknowledge before it
+     * returns, so no wait is needed here: a target that did not answer would
+     * have made the broadcast itself fail.
+     */
+    for (uint32_t index = 0U; index < online; ++index)
+    {
+        const PerCpu *const area = PerCpuAt(index);
+
+        serviced_before[index] = (area != NULL) ? area->shootdowns_serviced : 0U;
+    }
+
+    if (!ShootdownBroadcast((VirtualAddress)(uintptr_t)&VerifySpinlock))
+    {
+        KernelWriteString("  a shootdown addressed to every processor was not "
+                          "acknowledged. FAILED.\n");
+        succeeded = false;
+    }
+
+    for (uint32_t index = 1U; index < online; ++index)
+    {
+        const PerCpu *const area = PerCpuAt(index);
+
+        if ((area != NULL) && (area->shootdowns_serviced > serviced_before[index]))
+        {
+            ++responded;
+        }
+    }
+
+    if (responded != (online - 1U))
+    {
+        KernelWriteString("  not every started processor serviced the "
+                          "shootdown. FAILED.\n");
+        succeeded = false;
+    }
+    else
+    {
+        KernelWriteString("  every started processor answered a shootdown and "
+                          "invalidated in its own handler.\n");
+    }
+
+    KernelWriteString(succeeded ? "Application processor self-test passed.\n"
+                                : "Application processor self-test FAILED.\n");
 }

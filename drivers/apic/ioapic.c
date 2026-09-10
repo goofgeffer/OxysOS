@@ -38,10 +38,13 @@
  *
  * Concurrency. The select-then-access sequence is not atomic, and two flows of
  * control performing it upon one unit would interleave into an access of the
- * wrong register. There is one flow of control, so it is presently safe; the
- * spinlock of sub-task 6.13 exists and this sequence has not been brought under
- * it — the same obligation the 8259A's mask registers carry, and for the same
- * reason, and discharged at the same moment: sub-task 6.14.
+ * wrong register. The spinlock of sub-task 6.13 exists and this sequence has not
+ * been brought under it. It is safe still: sub-task 6.14 started the application
+ * processors, but a started processor is parked in a halt loop and no path it
+ * takes reaches this file, so there remains one flow of control that programmes
+ * a redirection entry. **Sub-task 6.15 is what discharges the obligation** — the
+ * same obligation the 8259A's mask registers carry, for the same reason and at
+ * the same moment.
  */
 
 #include <oxys/ioapic.h>

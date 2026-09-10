@@ -345,10 +345,16 @@ and which sub-task 6.4 ends.
 1. **There was no visible console until sub-task 6.4.** See Section 7: for two
    sub-tasks the serial port carried everything and the screen carried the test
    pattern. [`CONSOLE.md`](CONSOLE.md), Section 2, ends that.
-2. **`IA32_PAT` is written upon one processor.** Every processor holds its own,
-   and a mapping made here would be write-back upon any processor that had not
-   performed the write. Sub-task 6.14 must repeat it upon each application
-   processor as it is brought up.
+2. **~~`IA32_PAT` is written upon one processor.~~** Discharged at sub-task 6.14.
+   Every processor holds its own, and a mapping made here would be write-back
+   upon any processor that had not performed the write — one physical page under
+   two memory types, which Intel SDM, Volume 3A, Section 11.12.4, declines to
+   define the behaviour of. `FramebufferEstablishWriteCombiningOnThisProcessor`
+   repeats the write, and `SmpApplicationProcessorEntry` calls it immediately
+   before the started processor's first diagnostic — which is that processor's
+   first write to the framebuffer. **Nothing would have reported the omission**:
+   the display looked correct, which is why this limitation is recorded as
+   discharged rather than quietly deleted.
 3. **The memory type range registers are not programmed, and may override the
    PAT.** Intel SDM, Volume 3A, Table 11-7: the effective type combines both, and
    the more conservative prevails, so a region an MTRR marks uncacheable stays

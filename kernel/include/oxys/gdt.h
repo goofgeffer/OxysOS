@@ -43,6 +43,7 @@
 #define OXYS_GDT_H
 
 #include <oxys/types.h>
+#include <oxys/percpu.h>
 
 /*
  * The selectors, being byte offsets into the table. The first three retain the
@@ -89,15 +90,46 @@
 /*
  * The number of quadwords the table occupies.
  *
- * Six ordinary descriptors of eight bytes, and the task state segment
- * descriptor, which occupies sixteen in 64-bit mode because its base address is
- * 64 bits wide; the descriptor accordingly consumes two of these slots and the
- * selector after GDT_TSS_SELECTOR is not available.
+ * Six ordinary descriptors of eight bytes, and then one task state segment
+ * descriptor for each processor. A task state segment descriptor occupies
+ * sixteen bytes in 64-bit mode because its base address is 64 bits wide, so
+ * each consumes two of these slots and the selector between one and the next is
+ * not available.
+ *
+ * **There is one segment per processor and there must be.** The segment holds
+ * the stack a transition to privilege level 0 is made upon and the stacks of
+ * the interrupt stack table, and both are properties of a processor rather than
+ * of the machine. Two processors sharing one would take a double fault upon one
+ * another's stack, which is the one stack a double fault must not be delivered
+ * upon. The architecture forbids the sharing outright in any case: Intel SDM,
+ * Volume 2A, "LTR", provides that the instruction marks the descriptor busy and
+ * refuses a descriptor already marked so, so the second processor to execute it
+ * against a shared descriptor would take a general-protection exception.
+ *
+ * The reservation is for PER_CPU_MAXIMUM processors, matching the areas of
+ * kernel/include/oxys/percpu.h, so that a machine with more processors than
+ * this kernel admits is refused in one place rather than three.
  */
-#define GDT_ENTRY_COUNT 8U
+#define GDT_FIXED_DESCRIPTOR_COUNT 6U
+#define GDT_TSS_DESCRIPTOR_QUADWORDS 2U
+#define GDT_ENTRY_COUNT \
+    (GDT_FIXED_DESCRIPTOR_COUNT + (GDT_TSS_DESCRIPTOR_QUADWORDS * PER_CPU_MAXIMUM))
 
 /* How many of those slots hold a descriptor a selector may name. */
-#define GDT_DESCRIPTOR_COUNT 7U
+#define GDT_DESCRIPTOR_COUNT (GDT_FIXED_DESCRIPTOR_COUNT + PER_CPU_MAXIMUM)
+
+/*
+ * The selector naming a numbered processor's task state segment.
+ *
+ * GDT_TSS_SELECTOR is the bootstrap processor's, which is index 0, so the
+ * constant above is this expression evaluated at zero and the two agree by
+ * construction rather than by inspection.
+ */
+static inline uint16_t GdtTaskStateSegmentSelector(uint32_t processor_index)
+{
+    return (uint16_t)(GDT_TSS_SELECTOR +
+                      (processor_index * GDT_TSS_DESCRIPTOR_QUADWORDS * 8U));
+}
 
 /*
  * The operand of the LGDT instruction. It shares its format with that of LIDT,
@@ -130,7 +162,23 @@ void GdtInitialise(void);
  * because the segment it describes belongs to kernel/cpu/tss.c, and a table that
  * composed the descriptor itself would have to know the segment's size.
  */
-void GdtInstallTaskStateSegment(uint64_t base, uint32_t limit);
+void GdtInstallTaskStateSegment(uint32_t processor_index, uint64_t base,
+                                uint32_t limit);
+
+/*
+ * Loads the table this kernel already built upon the executing processor, and
+ * reloads its segment registers.
+ *
+ * It is what an application processor calls at sub-task 6.14, where
+ * GdtInitialise is what the bootstrap processor called: the table is one table
+ * and composing it again upon each processor would be a second chance to
+ * compose it differently. The register operand is per processor and the table
+ * it names is not, which is the whole of the distinction.
+ *
+ * Like GdtInitialise it re-establishes GS.base afterwards, the segment reload
+ * having destroyed it; see the note in kernel/cpu/gdt.c.
+ */
+void GdtLoadOnThisProcessor(void);
 
 /* One quadword of the table, so that a self-test may assert the descriptors
  * rather than merely the register that names them. */

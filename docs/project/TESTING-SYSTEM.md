@@ -594,7 +594,7 @@ reading the log, and reverting. What is recorded is what the log said.
 | Give the redirection entries a vector below 16 | `Interrupt requests: no I/O APIC input carries line 0, which a driver has claimed.`, then `A claimed line is routed to the wrong vector.` four times. `IoApicRouteGlobalInterrupt` refuses the vector rather than programming it, so no entry is written at all and the four claimed lines keep the masked entries the initialisation left. The refusal is what makes this loud: without it the Local APIC would record an illegal vector in a register nothing reads. |
 | Skip the write to the task priority register | Nothing. `make verify` passed unchanged, QEMU's firmware leaving the register clear. The assertion exists for a firmware that does not, and cannot be provoked upon one that behaves — which is recorded rather than glossed, an assertion that cannot fail here being an assertion this environment does not test. |
 | Leave the spurious vector's software enable clear | `The software enable of the spurious vector register is clear.` and `Local APIC self-test FAILED.`, then `The interval timer stopped when the I/O APIC took over its request line.` Every device goes silent at once. |
-| Name a destination other than this processor's local APIC identifier | `A claimed line is directed at another processor.` four times, then `The interval timer stopped when the I/O APIC took over its request line.` This is what sub-task 6.14's characteristic failure will look like when it arrives. |
+| Name a destination other than this processor's local APIC identifier | `A claimed line is directed at another processor.` four times, then `The interval timer stopped when the I/O APIC took over its request line.` This was recorded as what sub-task 6.14's characteristic failure would look like; 6.14 has since arrived without producing it, every redirection entry still naming the bootstrap processor. |
 | Ignore the boot loader's ACPI tag, forcing the low-memory search | `ACPI: pointer at 0xF52C0, revision 0, from the BIOS read-only memory.` — a different address, by a different route, naming the same `RSDT at 0x1FFE2369` and the same five tables, and every self-test passed. This is a **positive** negative test: it is the only thing that exercises the search of ACPI 6.5, Section 5.2.5.1, at all, GRUB always supplying the tag. |
 | Write the redirection entry low half first | **Not attempted.** The window is a few instructions wide and the interrupt flag is clear throughout the adoption, so there is nothing to observe. The order is prevented by construction and recorded in [`../devices/APIC.md`](../devices/APIC.md), Section 4.3, rather than asserted. |
 
@@ -642,7 +642,7 @@ is one thread of control, so nothing contends, nothing races, and a completely
 broken implementation boots to the banner and echoes keystrokes exactly as a
 correct one does.
 
-That is not a reason to defer the testing to sub-task 6.14. It is a reason to
+That was not a reason to defer the testing to sub-task 6.14. It was a reason to
 test something other than behaviour. Three routes are available, and all three
 are used:
 
@@ -655,7 +655,9 @@ are used:
    the same gate, the same handler, the same end-of-interrupt. The whole
    inter-processor path is therefore exercisable upon one processor, and this is
    the argument [`../design/ARCHITECTURE.md`](../design/ARCHITECTURE.md), Section
-   4.1, placed the sub-task before 6.14 upon.
+   4.1, placed the sub-task before 6.14 upon. Sub-task 6.14 has since supplied
+   real targets, and `KernelVerifyApplicationProcessors` asserts against them;
+   the three routes below remain what 6.13 could be shown by.
 3. **Create the damage deliberately.** The shootdown test rewrites a page-table
    entry by hand and invalidates nothing, which puts this processor in exactly
    the state a mapping changed upon another processor would — and then requires
@@ -693,7 +695,7 @@ and how many are behind them.
 
 ### 9.4 Reading the log
 
-Six lines say the whole of it:
+Five lines and the report say the whole of it:
 
 ```
 Per-processor area self-test passed.
@@ -701,16 +703,115 @@ Spinlock self-test passed.
 Interprocessor interrupt self-test passed.
   The stale translation was observable before the shootdown.
 TLB shootdown self-test passed.
-Per-processor areas: 1 processor online.
 ```
 
-The fourth is reported rather than asserted. The architecture nowhere requires a
-processor to cache a translation it has used, so an equality there would mean the
-test proved less than it hoped rather than that anything was wrong. Under QEMU it
-is observable, and the run says so — which is what makes the shootdown assertion
-above it a demonstration and not a tautology.
+**These five run before `SmpInitialise`**, and `KernelVerifyPerCpu` asserts that
+one processor is online at that point. Since sub-task 6.14 that is a statement
+about the ordering and not about the machine: moving the corpus after the
+bring-up would make the assertion fail upon every multiprocessor machine, and
+[`../../kernel/test/verify_smp.c`](../../kernel/test/verify_smp.c) says so where
+it would be read.
 
-`ShootdownReport` prints `serviced 3` against `requests 1`, and that is correct:
+The fourth line is reported rather than asserted. The architecture nowhere
+requires a processor to cache a translation it has used, so an equality there
+would mean the test proved less than it hoped rather than that anything was
+wrong. Under QEMU it is observable, and the run says so — which is what makes the
+shootdown assertion above it a demonstration and not a tautology.
+
+`ShootdownReport` prints more services than requests, and that is correct:
 `KernelVerifyIpi` sends the shootdown vector twice on its own account, to
 establish the delivery and the end-of-interrupt, without publishing a request.
 
+## 10. Verification of the application processors
+
+**Corresponding sub-task**: 6.14. **Design**:
+[`../design/SMP.md`](../design/SMP.md), Section 8.
+
+### 10.1 The difficulty this section exists for
+
+**A count of processors is not evidence that there are any.** A kernel that
+incremented a variable and started nobody produces the same count, the same
+report and the same closing banner, and boots to its echo loop exactly as a
+correct one does. Every quantity the bring-up prints about itself is a quantity
+the bring-up itself wrote.
+
+What only a running processor can produce is an **acknowledgement to an interrupt
+it was sent**, written into an area that processor alone writes, from inside a
+handler that processor alone runs. That is the whole of what
+`KernelVerifyApplicationProcessors` rests upon, and it is why the test's substance
+is a shootdown broadcast rather than a comparison.
+
+### 10.2 What `make verify` asserts
+
+The identity mapping at `0x8000` is gone. Every area within the online count
+exists, is marked online, holds the index it is at, and its `self` names itself;
+no two carry the same local controller identifier; index 0 is the bootstrap
+processor and no other claims to be. The online count equals the started count
+plus one.
+
+Then, for each started processor, what **that processor** read out of its own
+registers with the instructions that read them — `STR`, `SGDT`, `SIDT`, and the
+control registers — against what the bootstrap processor reads from its own:
+
+| Register | What its disagreement would mean |
+| -------- | -------------------------------- |
+| Task register | A processor with no task state segment. It runs correctly until its first double fault, which is then a triple fault: a gate naming an interrupt stack table entry cannot be delivered upon a processor whose task register is null. |
+| `GDT` base and limit, `IDT` base | A processor still upon the trampoline's own table, which is about to be unmapped. |
+| `CR3` | A processor upon a paging hierarchy of its own. |
+| `CR0.PG` | Long mode not actually entered. |
+| `CR0.WP` | **The one nothing else would report.** Without it that processor may write the kernel's own text while its fellows may not, and nothing faults, ever. |
+| `CR4.PAE` | Long mode cannot have been entered at all. |
+
+And last, the assertion the test exists for: a shootdown is broadcast, and each
+target's own `shootdowns_serviced` is read afterwards and must have risen.
+`ShootdownBroadcast` waits for every acknowledgement before it returns, so a
+target that did not answer would have made the broadcast itself fail.
+
+### 10.3 Upon a machine with one processor
+
+The test asserts the other side of the same coin, and it is not a skip: that
+nobody was started, that `SmpDeclinedReason` names the condition that produced it,
+that no processor is reported started that is not online, and that the online
+count is one. A test that reported nothing there would be a test that passed upon
+a machine where the bring-up silently did nothing.
+
+### 10.4 The negative tests
+
+| Change | What the run said |
+| ------ | ----------------- |
+| **None.** `SmpMapTrampolinePage` had its call to `PagingMapKernelPage` disabled when the sub-task was first run | `#PF` at `CR2 0x8000`, error code `0x2` — page not present, write, supervisor mode — raised inside the copy of `SmpPlaceTrampoline`, and `KERNEL PANIC: An unresolved page fault was raised within the kernel.` with no banner. **This is not a contrived negative test but the defect the first run met**; the symptom names the cause exactly, the identity mapping being the one thing this kernel otherwise does not have and the one thing the bring-up requires. |
+| **None.** `IA32_PAT` was not written upon the started processor when the sub-task was first run | **Nothing.** Every self-test passed, the banner appeared, and the display looked correct. The started processor was writing the framebuffer through a mapping carrying the page-attribute-table flag while its own entry 4 still held write-back — one physical page under two memory types, which Intel SDM, Volume 3A, Section 11.12.4, declines to define. It was found by reading [`../design/FRAMEBUFFER.md`](../design/FRAMEBUFFER.md), limitation 2, against the new entry path, and by no run. It is recorded here because it is the shape of defect this whole section exists for: correct-looking output from a machine in an undefined state. |
+| Park the started processor with `cli; hlt` rather than `sti; hlt` | The log stops dead after `Processor 1 is online, local controller identifier 1.` — no banner, no panic, nothing further within the 25-second bound `make verify` allows. The cause is `SmpUnmapTrampolinePage`: its shootdown is never acknowledged by a processor that cannot take an interrupt, and `ShootdownBroadcast` spins out `SHOOTDOWN_WAIT_LIMIT`, which is 100,000,000 iterations and outlasts the timeout. **The eventual panic is correct and arrives far too late to be the diagnostic**, which is worth knowing: the observable symptom of an unresponsive processor here is a hang, not a report. |
+| Skip the wait for a started processor to come online | **Nothing. `make verify` passed unchanged.** This is recorded because the prediction was wrong and the reason is the environment: QEMU declares two processors, so there is exactly one application processor, so the loop never starts a second and the prepared index can never collide with a claimed one. The panic in `SmpApplicationProcessorEntry` — `A starting processor claimed an area other than the one prepared for it.` — is therefore **unreachable upon every machine this project has tested against**. It is retained because the serialisation of [`../design/SMP.md`](../design/SMP.md), Section 7, is what makes the two indices agree, and a check that fires loudly when that stops holding is worth more than one that was proven to fire here. |
+| Give a started processor no task state segment | **Nothing, at the time.** It came online, answered a shootdown, and passed every assertion that then existed — and would have taken a triple fault upon its first double fault. That negative test, recorded in the header of [`../../kernel/cpu/smp.c`](../../kernel/cpu/smp.c), is why the register comparisons of Section 10.2 exist at all. |
+
+**Two of the five say "nothing", and that is the finding.** This sub-task's
+characteristic failure is not a crash. It is a machine that boots, prints correct
+figures about itself, and is wrong in a way no output distinguishes — which is
+why Section 10.2 asserts registers read by the processor being asked about,
+rather than counts written by the kernel doing the asking.
+### 10.5 Reading the log
+
+```
+  Processor 1 is online, local controller identifier 1.
+Per-processor areas: 2 processors online.
+Application processors: 1 started, 0 did not answer, 0 declined; 2 processor(s) online in all.
+  Trampoline at 0x8000, startup vector 0x8, 254 bytes; its identity mapping is removed.
+Application processors: asserting what was started.
+  every started processor answered a shootdown and invalidated in its own handler.
+Application processor self-test passed.
+```
+
+Three details in that are worth reading rather than skimming.
+
+`its identity mapping is removed` is the report of a hazard closed, not a
+formality: the alternative reads `STILL PRESENT (unexpected)`, and would mean
+every stray low pointer in the kernel silently working.
+
+`TLB shootdown: … last address 0x8000` — the last shootdown before the reports is
+the removal of that mapping, and the address confirms it.
+
+`Processor 1: acquisitions 1` in the per-processor report is the design of
+[`../design/SMP.md`](../design/SMP.md), Section 6, visible in the accounting. The
+one lock a parked processor ever takes is the diagnostic channel, once, to
+announce that it arrived.

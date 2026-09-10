@@ -1,7 +1,9 @@
 # `boot/` — Bootstrapping and Boot Loader Configuration
 
-**Phase**: 1, sub-tasks 1.3 to 1.6 and 1.9.
-**Detailed design**: [`../docs/design/BOOT.md`](../docs/design/BOOT.md).
+**Phase**: 1, sub-tasks 1.3 to 1.6 and 1.9; and 6.14, which placed
+`trampoline.asm` here for the reason the whole directory exists.
+**Detailed design**: [`../docs/design/BOOT.md`](../docs/design/BOOT.md), and
+[`../docs/design/SMP.md`](../docs/design/SMP.md) for the trampoline.
 
 ## Purpose
 
@@ -9,18 +11,32 @@ This directory holds everything that executes between the boot loader's handover
 and the first instruction of the C kernel: the Multiboot2 header by which GRUB
 recognises the image, the 32-bit protected-mode entry point, the construction of
 the boot-time paging hierarchy, the transition to 64-bit long mode, the transfer
-of control to the higher half, and the GRUB configuration embedded in the ISO.
+of control to the higher half, and the GRUB configuration embedded in the ISO. It
+also holds the trampoline of sub-task 6.14, which is the same journey made a
+second time, by an application processor, long after the kernel is running.
 
 Code in this directory is unique in one respect: most of it executes **before
 paging is enabled**, and is therefore linked at its physical load address rather
 than at a higher-half virtual address. This constraint governs its structure and
 is the reason it cannot simply be merged into `kernel/`.
 
+`trampoline.asm` shares that property and takes it furthest. A processor
+answering a startup inter-processor interrupt begins in 16-bit real mode, so the
+code must execute from a physical page below the first mebibyte and every address
+it names must be that page's. NASM's `org` directive states that origin and is
+available only in the flat binary format, so the file is assembled with
+`nasm -f bin` to `build/trampoline.bin` and is **not** a member of `ASM_SOURCES`.
+`kernel/cpu/smp_trampoline.asm` embeds the result with `incbin` between two
+symbols the C of `kernel/cpu/smp.c` takes the size from, and the `Makefile`'s
+dependency upon `$(TRAMPOLINE_BINARY)` is what guarantees the image cannot be out
+of step with the source it came from: the link fails if it was not assembled.
+
 ## Contents
 
 | File | Description |
 | ---- | ----------- |
 | `boot.asm` | The Multiboot2 header, carrying the framebuffer request tag of sub-task 6.2 alongside the terminating tag; the entry point `_start`; `CPUID` and long-mode feature detection; `BootBuildPageTables`; `BootEnableLongMode`; the 64-bit trampoline `BootLongModeEntry`; the higher-half entry point `KernelEntryHigh`; and, in `.boot.data`, the boot GDT and the boot-time paging structures. |
+| `trampoline.asm` | The real-mode trampoline of sub-task 6.14, which an application processor begins executing when it answers a startup inter-processor interrupt. It carries that processor from 16-bit real mode through 32-bit protected mode into 64-bit long mode upon the kernel's own paging hierarchy, and hands it to `SmpApplicationProcessorEntry`. It holds `SmpTrampolineParameters`, the block the bootstrap processor fills in before each start. **It is assembled to a flat binary and not to an object file**, for the reason the note beneath **Purpose** gives; `kernel/cpu/smp_trampoline.asm` embeds the result in the kernel image. |
 | `grub/grub.cfg` | The GRUB configuration embedded within the ISO image, defining the boot menu entries. Staged into the image by the `iso` target of the `Makefile`. |
 
 ## Sequence of execution
@@ -35,6 +51,18 @@ The intermediate trampoline exists because the far jump that enters 64-bit mode
 encodes a 32-bit offset and cannot name an address in the upper half of the
 address space. `docs/design/BOOT.md`, Section 7, sets out the reasoning.
 
+The application processors of sub-task 6.14 make the same journey a second time,
+from a different starting point and into a kernel that is already running:
+
+```
+Startup IPI  --->  SmpTrampolineReal  --->  SmpTrampolineProtected  --->  SmpTrampolineLongMode  --->  SmpApplicationProcessorEntry
+vector 0x08        16-bit real,             32-bit, paging off           64-bit, kernel CR3          (kernel/cpu/smp.c)
+                   CS normalised to 0
+```
+
+`docs/design/SMP.md`, Section 3, sets out each step and what it would cost to
+omit it.
+
 ## Specifications implemented
 
 | Specification | Sections | Applied to |
@@ -45,6 +73,10 @@ address space. `docs/design/BOOT.md`, Section 7, sets out the reasoning.
 | Intel SDM, Volume 3A | 4.1.2, Table 4-14 | The control-register sequence entering IA-32e mode. |
 | Intel SDM, Volume 3A | 4.5, Figure 4-8, Table 4-15 | The four-level paging hierarchy, the index decomposition and the entry flags. |
 | Intel SDM, Volume 3A | 3.4.5, Figure 3-8 | The segment descriptor format and the `L` flag of a 64-bit code segment. |
+| Intel SDM, Volume 3A | 8.4.3, 8.4.4.1 | `trampoline.asm`: the address a processor begins at for a startup interrupt carrying vector `VV`, and the sequence that sends it. |
+| Intel SDM, Volume 3A | 9.1.4, Table 9-1 | `trampoline.asm`: the processor state after a reset, which is what it must start from. |
+| Intel SDM, Volume 3A | 9.9.1 | `trampoline.asm`: the descriptor table loaded before `CR0.PE`, and the far jump that follows. |
+| Intel SDM, Volume 3A | 2.5 | `trampoline.asm`: `CR0.WP`, which is per processor and must be set again here. |
 | GNU GRUB Manual | 6, 16.3.16 | The configuration file and the `multiboot2` command. |
 
 Full citations are held in [`../docs/project/REFERENCES.md`](../docs/project/REFERENCES.md).
@@ -82,3 +114,10 @@ an otherwise unmodified display.
    new boot-time table belongs in `.boot.data` and new boot-time code in
    `.boot.text`. See [`../docs/design/BOOT.md`](../docs/design/BOOT.md),
    Section 8.
+6. `trampoline.asm` is assembled at a fixed origin that must equal
+   `SMP_TRAMPOLINE_ADDRESS` in `kernel/include/oxys/smp.h`, and its parameter
+   block must match `SmpTrampolineParameters` in that same header. Neither
+   agreement is checked by any compiler: the magic value at the head of the block
+   is what proves them at run time, and a change to either side that does not
+   change the other is caught there or not at all. The image must also fit one
+   4 KiB page, which the file asserts at assembly time with `%error`.

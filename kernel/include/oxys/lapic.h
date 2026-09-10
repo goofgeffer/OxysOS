@@ -193,6 +193,22 @@ bool LocalApicIsSupported(void);
 bool LocalApicInitialise(void);
 
 /*
+ * Programmes the executing processor's own controller, the register page having
+ * already been mapped by LocalApicInitialise upon the bootstrap processor.
+ *
+ * It is what an application processor calls at sub-task 6.14. Every processor
+ * has a controller of its own, reached at the same physical address, and a
+ * reset leaves each of them software-disabled with its local vector table
+ * masked — so a processor that never ran this would accept no interrupt at all,
+ * including the shootdown its fellows will send it, and would present as a
+ * processor that started and then stopped answering.
+ *
+ * Returns false where the register page has not been mapped, which is a
+ * processor started against a kernel whose own controller never came up.
+ */
+bool LocalApicInitialiseThisProcessor(void);
+
+/*
  * Signals the completion of an interrupt, per Intel SDM, Volume 3A, Section
  * 10.8.5. It is called by the routing layer of kernel/cpu/irq.c upon the return
  * of a device handler, and by nothing else; see docs/design/INTERRUPTS.md,

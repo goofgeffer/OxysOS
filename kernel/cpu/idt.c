@@ -47,6 +47,22 @@ static void IdtLoad(void)
     __asm__ __volatile__("lidt %0" : : "m"(IdtLoadedRegister) : "memory");
 }
 
+void IdtLoadOnThisProcessor(void)
+{
+    /*
+     * The table is one table. IDTR is per processor, so every processor must
+     * execute LIDT, but what each loads is the same base and the same limit —
+     * and it must be, because a vector is registered once in
+     * kernel/cpu/interrupts.c and a processor holding a table with a gate
+     * missing would take an unhandled interrupt where its fellows took a
+     * handled one, upon a machine where nothing distinguishes the two in a log.
+     *
+     * IdtLoad recomputes the register from the same two expressions each time,
+     * so this is idempotent by construction rather than by care.
+     */
+    IdtLoad();
+}
+
 void IdtSetGate(uint8_t vector, uint64_t handler, uint8_t type_and_attributes)
 {
     IdtGateDescriptor *gate = &IdtTable[vector];

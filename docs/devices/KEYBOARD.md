@@ -206,9 +206,10 @@ complete event beneath it.
 
 With several consumers possible, the consumer's side requires the spinlock
 governing this device. That lock was built by sub-task 6.13 and has not been
-applied here; sub-task 6.14 is what makes a second consumer possible. The
-producer's side will not require it: there is one keyboard, and therefore one
-producer.
+applied here. Sub-task 6.14 started the application processors, but a started
+processor is parked and consumes nothing from this buffer; **sub-task 6.15 is
+what makes a second consumer possible**. The producer's side will not require it:
+there is one keyboard, and therefore one producer.
 
 ## 6. The initialisation sequence
 
@@ -384,9 +385,9 @@ At the completion of the self-test under QEMU:
    Those are properties of a terminal rather than of a keyboard and belong to the
    shell of Phase 8.
 6. The consumer's side of the buffer is unsynchronised. The spinlock it requires
-   was built by sub-task 6.13 and has not been applied here; sub-task 6.14 is
-   what makes a second consumer possible. Section 5.3 says why the producer's
-   side needs none.
+   was built by sub-task 6.13 and has not been applied here. A processor started
+   by sub-task 6.14 is parked and consumes nothing; sub-task 6.15 is what makes a
+   second consumer possible. Section 5.3 says why the producer's side needs none.
 7. The "fake shift" sequences are not suppressed. The controller emits `E0 2A`
    before, and `E0 AA` after, several extended keys — the keypad's solidus, and
    the cursor keys while number lock is engaged — in order that software unaware

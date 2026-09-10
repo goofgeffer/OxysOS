@@ -34,6 +34,7 @@
 #define OXYS_TSS_H
 
 #include <oxys/types.h>
+#include <oxys/percpu.h>
 
 /*
  * The task state segment, per Intel SDM, Volume 3A, Figure 8-11.
@@ -114,6 +115,24 @@ _Static_assert(sizeof(TaskStateSegment) == 104,
  * established.
  */
 void TssInitialise(void);
+
+/*
+ * The same, for a numbered processor and upon stacks the caller supplies.
+ *
+ * It is what an application processor calls at sub-task 6.14, and what
+ * TssInitialise is written in terms of. The stacks are supplied rather than
+ * reserved because only the bootstrap processor's can be reserved in `.bss`:
+ * every other processor's are allocated from the kernel arena, by the bootstrap
+ * processor, before the processor that will use them is started — a processor
+ * that allocated its own would be a second processor in an allocator that is
+ * not yet safe against one.
+ *
+ * The descriptor is installed at the selector belonging to that processor and
+ * the task register is loaded with it, both of which are per-processor
+ * operations performed upon the processor that owns them.
+ */
+void TssInitialiseProcessor(uint32_t processor_index, uint64_t kernel_stack_top,
+                            uint64_t double_fault_stack_top);
 
 /*
  * Sets the stack the processor loads upon a transfer to privilege level 0.

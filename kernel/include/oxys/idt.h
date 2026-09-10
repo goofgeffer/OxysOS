@@ -125,6 +125,16 @@ _Static_assert(sizeof(IdtRegister) == 10,
 void IdtInitialise(void);
 
 /*
+ * Loads the table already built into the executing processor's IDTR.
+ *
+ * It is what an application processor calls at sub-task 6.14. IDTR is per
+ * processor and the table is not: every processor must execute LIDT, and every
+ * one of them must name the same table, a processor holding a shorter or older
+ * one taking an unhandled interrupt where its fellows take a handled one.
+ */
+void IdtLoadOnThisProcessor(void);
+
+/*
  * Installs a gate for one vector.
  *
  * vector: the vector number, which must be below IDT_ENTRY_COUNT.

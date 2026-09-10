@@ -124,6 +124,7 @@ either.
 | Unit | Role |
 | ---- | ---- |
 | `boot/boot.asm` | The Multiboot2 header; the 32-bit entry point `_start`; CPUID and long-mode feature detection; the construction of the boot-time paging hierarchy; the long-mode transition; the higher-half entry point `KernelEntryHigh`. |
+| `boot/trampoline.asm` | The real-mode trampoline an application processor begins executing on answering a startup inter-processor interrupt: real mode with `CS` normalised, 32-bit protected mode, and 64-bit long mode upon the kernel's own paging hierarchy, with the parameter block the bootstrap processor fills in. Assembled to a flat binary at a fixed origin, not linked. |
 | `kernel/cpu/exceptions.c` | The handlers for the architecture-defined exceptions and the diagnostic report. |
 | `kernel/cpu/interrupt_stubs.asm` | The 256 per-vector entry stubs and the common stub that saves the registers and calls the dispatcher. |
 | `kernel/cpu/interrupts.c` | The installation of the stubs, the dispatch table and the routing of each vector to its registered handler. |
@@ -136,6 +137,8 @@ either.
 | `kernel/cpu/percpu.c` | The per-processor data areas: their static allocation, the establishment of the executing processor's own, the segment base it is reached through and the repair of that base after a segment reload, and the counted interrupt-disable every critical section is built upon. |
 | `kernel/cpu/spinlock.c` | The ticket spinlock: the locked fetch-and-add that issues a ticket, the bounded wait to be served, the release that admits the next arrival, and the two checks that turn the silent misuses of a lock into a report. |
 | `kernel/cpu/ipi.c` | The inter-processor interrupt layer: the composition of a command for each of the three audiences a sender may address, the accounting, and the handler by which a panicking processor stops the others. |
+| `kernel/cpu/smp.c` | The bring-up of the application processors: the proving and mapping of the low page the trampoline requires, the resources each processor is given before it is started, the INIT-startup-startup sequence and the bounded waits around it, and the C entry point a started processor arrives at and parks in. |
+| `kernel/cpu/smp_trampoline.asm` | Carries the assembled trampoline into the kernel image with `incbin`, and gives its two ends the symbols the C takes the size from. |
 | `kernel/acpi/acpi.c` | The firmware's ACPI description tables: the discovery and validation of the Root System Description Pointer, the walk of the RSDT or XSDT, and the parse of the Multiple APIC Description Table. |
 | `kernel/exec/elf.c` | The ELF64 loader for statically linked executables: the decoding of the file and program headers, the fifteen refusals an image must survive whole before a page of it is mapped, and the placing of its segments into an address space through the direct physical map. |
 | `kernel/proc/process.c` | The process control block, the thread and the saved context: the two tables, the address space a process is given, the kernel stack and guard page a thread is given, the writing of `rsp0` when a thread becomes current, the switch, the descent to privilege level 3, the termination that returns from it, and — from sub-task 6.11 — `fork`, `execve`, `exit` and `wait`. |
@@ -332,14 +335,22 @@ These two stood in the opposite order, and the order was wrong. Sub-task 6.14
 starts processors; sub-task 6.13 supplies the locks without which nothing they
 touch is safe. Every shared structure this kernel has — the frame allocator's
 bitmap and search hint, the heap, the buffer cache, the mount and node tables of
-the filesystem layer, the interrupt dispatch table — is presently unsynchronised,
-and each says so in its own file's header.
+the filesystem layer, the interrupt dispatch table — was unsynchronised then and
+remains so, save the diagnostic channel 6.14 locked; each says so in its own
+file's header.
 
-Bringing a second processor up before the locks exist would produce a milestone
-that the testing mandate requires to be bootable and testable, and that could be
-neither: it would either park the new processors immediately, in which case
-nothing is demonstrated, or let them run, in which case the machine is corrupt in
-a way no assertion here would catch.
+Bringing a second processor up before the locks existed would have produced a
+milestone that the testing mandate requires to be bootable and testable and that
+could be neither: it would either park the new processors immediately, in which
+case nothing is demonstrated, or let them run, in which case the machine is
+corrupt in a way no assertion here would catch.
+
+**The order chosen produced the first of those two, deliberately.** 6.14 does
+park its processors — but it parks them against locks that exist, and it
+demonstrates them by the one thing a parked processor can still do: answer an
+interrupt, and record having answered it in an area only it writes. That is
+`KernelVerifyApplicationProcessors`, and it is the assertion the wrong order
+could not have produced. See [`SMP.md`](SMP.md), Section 8.
 
 The reordering costs nothing, because everything in 6.13 can be exercised upon
 one processor. A spinlock's uncontended acquire and release, and the per-CPU data

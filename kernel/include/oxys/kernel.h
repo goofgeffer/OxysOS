@@ -3,7 +3,8 @@
  * Purpose: Declares the kernel entry point and the constants describing the
  *          kernel's position within the virtual address space.
  * Key definitions: KERNEL_VIRTUAL_BASE, PhysicalToVirtual, VirtualToPhysical,
- *          KernelTextStart, KernelTextEnd, KernelMain, KernelPanic.
+ *          KernelTextStart, KernelTextEnd, KernelMain, KernelPanic,
+ *          KernelWriteString, KernelDiagnosticChannelReset.
  * References:
  *   - Intel 64 and IA-32 Architectures Software Developer's Manual, Volume 3A,
  *     Section 4.5 (Four-Level Paging) and Section 3.3.7.1 (Canonical Addressing).
@@ -142,6 +143,19 @@ void KernelPanic(const char *message);
  * operator is observing.
  */
 void KernelWriteString(const char *string);
+
+/*
+ * Returns the diagnostic channel's lock to its unheld state, whoever was holding
+ * it.
+ *
+ * It is for the panic path and for nothing else. A panic may be raised from
+ * inside the channel's own critical section, or by a processor that has just
+ * halted every other processor — one of which may have been holding the lock and
+ * will now never release it. In both cases there is nothing left for the lock to
+ * protect, every other writer having been stopped, and a report that waited for
+ * it would be a machine that failed silently instead of one that said why.
+ */
+void KernelDiagnosticChannelReset(void);
 
 /*
  * Writes an unsigned value in hexadecimal, prefixed by "0x", to both output

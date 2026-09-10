@@ -25,10 +25,12 @@ linked ELF64 program at privilege level 3 — which returns to the kernel by sys
 call, may make a child of itself and collect what it ended with, and is ended
 when it faults or when it asks.
 
-What it does not yet do is pre-empt that program, run more than one of them at a
-time, or start a second processor. The mechanisms a second processor needs — the
-lock, the per-processor area, the inter-processor interrupt and the shootdown —
-exist as of sub-task 6.13 and are not yet applied to anything.
+What it does not yet do is pre-empt that program or run more than one of them at a
+time. **It does now start a second processor**: since sub-task 6.14 every
+processor the firmware declares usable is brought up and answers inter-processor
+interrupts, though none of them has anything to run until the scheduler of 6.15.
+The locks of sub-task 6.13 are applied in one place — the diagnostic channel,
+which is the whole of what a parked processor touches.
 
 ## 2. By phase
 
@@ -91,7 +93,7 @@ the GRUB entry that permits writing. See
 [`../storage/VFS.md`](../storage/VFS.md).
 
 **Phase 6 — graphics, system calls, processes, SMP.** Complete as far as sub-task
-6.13; 6.14 and 6.15 are the remainder of the multiprocessing half.
+6.14; 6.15, the multiprocessor-aware scheduler, is what remains of it.
 
 - The apparatus a privilege transition is performed out of stands and has been
   exercised: user-mode descriptors in the order `SYSCALL` and `SYSRET` derive
@@ -130,8 +132,8 @@ the GRUB entry that permits writing. See
   always had; and **the 8259A pair is masked and retired**. A device driver
   observed none of this: it claims a line number through one layer, and that
   layer is the only thing that knows which controller is answering.
-- **The mechanisms a second processor needs exist, though there is not one yet.**
-  Each processor holds an area of its own, reached in one instruction through
+- **The mechanisms a second processor needs exist, and there is one.** Each
+  processor holds an area of its own, reached in one instruction through
   `GS.base` — a register privilege level 3 cannot write — which the system-call
   path already used for its kernel stack and which now holds the whole of what a
   processor owns. Above it stands a ticket spinlock that admits its waiters in
@@ -142,15 +144,34 @@ the GRUB entry that permits writing. See
   memory manager uses that to announce a paging-structure change: a
   translation-lookaside-buffer shootdown, waited for until every target has
   acknowledged, because Intel SDM Section 4.10.4.4 permits an invalidation to be
-  deferred only while no processor can use the stale translation. **The locks are
-  not yet applied** to the structures that need them; sub-tasks 6.14 and 6.15 are
-  what make those contended.
+  deferred only while no processor can use the stale translation.
+- **Every processor the firmware declares usable is started.** Sub-task 6.14
+  sends each an INIT, waits ten milliseconds, sends a startup interrupt naming a
+  real-mode trampoline copied to a low page proved available by the Multiboot2
+  memory map, and waits for the acknowledgement the trampoline writes on
+  reaching 64-bit mode upon the kernel's own paging hierarchy. The started
+  processor then loads the kernel's descriptor tables, claims an area, loads a
+  task state segment of its own — one per processor, `LTR` refusing a descriptor
+  already marked busy — configures its four system-call registers and its own
+  local controller, records what it actually holds in each of those registers,
+  and parks in a halt loop. The trampoline's identity mapping is removed
+  afterwards by the first shootdown this kernel has ever had a target for.
+  **A started processor has nothing to run**: it answers inter-processor
+  interrupts and halts, which is its whole contribution until 6.15.
+- **One lock is applied, and it is the right one.** The diagnostic channel, in
+  `KernelWriteString`, covers the four unsynchronised structures a parked
+  processor can reach — the text display's cursor, the console's rows, the serial
+  transmit buffer and the compositor's back buffer — because one function reaches
+  all four and a whole line is what must not interleave. Every other structure
+  that needs a lock says so in its own file's header and is safe still, nothing
+  reaching it; sub-task 6.15 is what makes those contended.
 
 See [`../design/PRIVILEGE.md`](../design/PRIVILEGE.md),
 [`../design/GRAPHICS.md`](../design/GRAPHICS.md) and the five documents it indexes,
 [`../design/EXECUTABLE.md`](../design/EXECUTABLE.md),
 [`../design/PROCESS.md`](../design/PROCESS.md),
 [`../design/CONCURRENCY.md`](../design/CONCURRENCY.md),
+[`../design/SMP.md`](../design/SMP.md),
 [`../design/INTERRUPTS.md`](../design/INTERRUPTS.md), Section 10,
 [`../devices/ACPI.md`](../devices/ACPI.md) and
 [`../devices/APIC.md`](../devices/APIC.md).
@@ -175,6 +196,7 @@ The physical machine is one machine — the HP Laptop 14-dq0052dx specified in
 | 6 Graphics and processes | Yes | Yes, as far as sub-task 6.11 | — | Reached, not examined |
 | 6.12 The APIC | Yes | **Not yet run** | — | **Not yet run** |
 | 6.13 Concurrency | Yes | **Not yet run** | — | **Not yet run** |
+| 6.14 Application processors | Yes | **Not yet run** | — | **Not yet run** |
 
 **Sub-task 6.12 has its own row because it is the change most likely to differ by
 machine.** Everything it does is programmed from tables the firmware wrote, and
@@ -195,6 +217,18 @@ virtual machine that differs in how it leaves those registers, or a processor
 whose `CPUID` initial APIC identifier differs from what its local controller
 reports, would show itself here and nowhere else. Under QEMU every assertion
 passes and the shootdown was observed to repair a genuinely stale translation.
+
+**Sub-task 6.14 has its own row for the same kind of reason, and a stronger one.**
+Everything it does depends upon what the firmware declares and upon how the
+processors actually answer, and neither is the same on two machines. QEMU is
+started with `-smp cores=2` and declares two processors; a machine that declares
+more exercises paths no run has taken, and a machine whose firmware reserves the
+low page the trampoline requires exercises the refusal rather than the bring-up.
+The startup protocol's ten-millisecond delay, the second startup interrupt sent
+only where the first was unanswered, and the hundred-millisecond bound upon the
+wait are all timing against real silicon under QEMU and timing against an
+emulator's approximation of it here. Under QEMU one application processor starts,
+comes online, and answers a shootdown from within its own handler.
 
 "Reached, not examined" means the kernel ran that far upon the machine — it must
 have, the storage report of Phase 4 coming after all of it — but nothing about
@@ -245,7 +279,7 @@ functional. [`TESTING.md`](TESTING.md), Section 3.
 There is no test harness and there will be none before Phase 7, there being no
 userland to run one in. The kernel therefore asserts its own properties at boot,
 in the order the subsystems are initialised, and `make verify` fails if any of
-them reports a failure. Fifty-one assertions presently report passed or sound.
+them reports a failure. Fifty-two assertions presently report passed or sound.
 
 Those tests are in [`../../kernel/test/`](../../kernel/test/), one file per
 subsystem. Each subsystem's design document carries a table pairing every
@@ -271,7 +305,7 @@ design document ends with its particular ones.
 | Pre-emption. Nothing takes a processor away from a thread that has not given it up. | 6.15 |
 | More than one program at a time. `ThreadStart` records the thread to return to in a single variable. | 6.15 |
 | File descriptors. A process has no open files; the filesystem layer's table is global. | Phase 7 |
-| Synchronisation **applied**. The lock, the per-processor area, the inter-processor interrupt and the shootdown all exist as of 6.13, but no shared structure has yet been put under a lock; each still says so in its own file's header. `CONCURRENCY.md`, Section 10, limitation 1, enumerates them. | 6.14, 6.15 |
-| A second processor. | 6.14 |
+| Synchronisation **applied**, beyond the diagnostic channel. The lock, the per-processor area, the inter-processor interrupt and the shootdown all exist as of 6.13, and 6.14 applied one lock — `KernelWriteString`, which is the whole of what a parked processor touches. Every other shared structure is still unsynchronised and still says so in its own file's header; `CONCURRENCY.md`, Section 10, limitation 1, enumerates them. | 6.15 |
+| Work for a second processor. Every declared processor is started as of 6.14, but a started processor answers inter-processor interrupts and otherwise halts; there is no run queue to take work from. | 6.15 |
 | `CR4.SMEP`, `CR4.SMAP` and `IA32_EFER.NXE`. The user mappings that would be protected now exist. | 13.3 |
 | A UEFI boot path. | Phase 12 |

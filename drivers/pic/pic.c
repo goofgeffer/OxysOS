@@ -70,8 +70,11 @@
  * set there is one flow of control and the question does not arise; from sub-task
  * 6.13 there is a spinlock the read-modify-write of a mask register requires,
  * since an interrupt handler and an application processor may both enter it. It
- * has not been applied here; sub-task 6.14 is what makes the register
- * contended.
+ * has not been applied here, and it remains unnecessary for two reasons at once:
+ * a processor started by sub-task 6.14 is parked and reaches nothing here, and
+ * since sub-task 6.12 this pair is masked and retired in favour of the APIC, so
+ * the only writer left is the retirement itself. Sub-task 6.15 is what would make
+ * the register contended if anything still drove it.
  */
 
 #include <oxys/pic.h>

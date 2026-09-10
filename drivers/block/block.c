@@ -14,12 +14,14 @@
  * Concurrency. The registry and the four counters beside it are unsynchronised.
  * Registration and withdrawal happen during initialisation, before the interrupt
  * flag is set, so there is one flow of control while the table is written. The
- * spinlock of sub-task 6.13 exists and has not been applied here; sub-task 6.14
- * is what makes the table contended. What it must cover then is the search for a
- * free slot together with the claiming of it — two processors registering at once
- * would otherwise both find the same free slot and the second would replace the
- * first, leaving a device registered that nothing can reach and a driver holding
- * a handle to a slot that now describes another device.
+ * spinlock of sub-task 6.13 exists and has not been applied here. A processor
+ * started by sub-task 6.14 is parked and never reaches this file, so the table
+ * is uncontended still; **sub-task 6.15 is what makes it contended**. What the
+ * lock must cover then is the search for a free slot together with the claiming
+ * of it — two processors registering at once would otherwise both find the same
+ * free slot and the second would replace the first, leaving a device registered
+ * that nothing can reach and a driver holding a handle to a slot that now
+ * describes another device.
  */
 
 #include <oxys/block.h>

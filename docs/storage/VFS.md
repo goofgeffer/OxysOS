@@ -587,5 +587,6 @@ the mount count, so the field is now written as well.
 12. **Nothing here is safe against concurrent access.** The mount table, the node
     table and the open file table each require a lock, and a node's reference
     count must be adjusted atomically. The spinlock they require was built by
-    sub-task 6.13 and has not been applied here; sub-task 6.14 is what makes
-    these tables contended.
+    sub-task 6.13 and has not been applied here. A processor started by sub-task
+    6.14 is parked and opens nothing; **sub-task 6.15 is what makes these tables
+    contended**.

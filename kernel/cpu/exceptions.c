@@ -20,10 +20,15 @@
  *     code and the loading of CR2 with the faulting linear address.
  *   - Intel SDM, Volume 3A, Section 2.5: the control registers reported below.
  *
- * Concurrency. These handlers write to the shared output devices without a lock.
- * From sub-task 6.14 a fault taken simultaneously upon two processors would
- * interleave two reports; the diagnostic path will require a lock of its own,
- * one that a handler may take even when the general kernel lock is held.
+ * Concurrency. These handlers write to the shared output devices without a lock
+ * of their own, and reach them through KernelWriteString, which has held one
+ * since sub-task 6.14. That covers a report raised upon one processor against
+ * ordinary output upon another. It does not cover two faults at once: KernelPanic
+ * resets the lock rather than waiting for it, for the reason kernel/kernel.c
+ * gives, so two processors faulting simultaneously still interleave two reports.
+ * That is accepted as the lesser failure, on the same reasoning as
+ * graphics/faultscreen.c — a fault report that waits upon a lock a faulted
+ * processor holds is a fault report that never appears.
  */
 
 #include <oxys/exceptions.h>

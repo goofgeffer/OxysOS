@@ -93,7 +93,7 @@ bool IpiSendToOthers(uint8_t vector);
  * gives the self shorthand as a delivery like any other: the same vector, the
  * same gate, the same end-of-interrupt. The self-test of sub-task 6.13 uses it
  * to make the shootdown handler run and to observe the invalidation it performs,
- * which is the whole of what an application processor will do with it at 6.14.
+ * which is the whole of what an application processor does with it since 6.14.
  *
  * The interrupt is delivered when the processor next accepts one, so a caller
  * that waits for its effect must have interrupts enabled. A caller that does not
