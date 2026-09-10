@@ -9,9 +9,11 @@
 [![Userland licence](https://img.shields.io/badge/userland-MIT-green)](LICENSES/)
 [![Docs licence](https://img.shields.io/badge/docs-CC0--1.0-green)](LICENSES/)
 
-Oxys-OS is a monolithic, Unix-like operating system for x86_64, written from
-scratch in ISO C11 and NASM assembly. It targets real hardware and is tested
-under QEMU and VirtualBox.
+Oxys-OS is a monolithic, Unix-like operating system for x86_64. Its kernel and
+userland are written from scratch in ISO C11 and NASM assembly; the toolchain it
+will eventually build itself with is ported rather than written, which is the one
+place it depends upon code this project did not write. It targets real hardware
+and is tested under QEMU and VirtualBox.
 
 The conventions binding upon all work in this repository are set out in
 [`PROJECT_GUIDELINES.md`](PROJECT_GUIDELINES.md). In accordance with its

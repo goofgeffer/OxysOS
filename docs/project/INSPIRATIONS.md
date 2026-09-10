@@ -9,16 +9,26 @@ the projects named in it are recorded as what they are — sources of design and
 of character — and are never mistaken for sources of code. Section 2 states the
 rule that governs every one of them:
 
-> **No External Code Copying**: All source code must be original. Reference
-> implementations may be studied for understanding but must not be transcribed.
-> The only permitted inclusions are standard public domain headers or minimal
-> stub code explicitly required by the toolchain (e.g., linker scripts).
+> **Original Kernel and Userland**: All source code under `kernel/`, `boot/`,
+> `drivers/`, `graphics/`, `libc/`, `net/`, `crypto/`, `uefi/` and `userland/`
+> must be original. Reference implementations may be studied for understanding
+> but must not be transcribed. The only permitted inclusions there are standard
+> public domain headers or minimal stub code explicitly required by the
+> toolchain (e.g., linker scripts).
 
-That rule is not weakened by anything written here. An inspiration is a reason
-for a decision, not a source for an implementation. Where one of these systems
-is studied, what is taken from it is the understanding of why it is arranged as
-it is; the arrangement is then decided upon its merits for this project and
-written from nothing.
+That rule is not weakened by anything written here, and it is not weakened by
+the permission that stands beside it either. Section 2 also allows a
+third-party **tool** to be ported and depended upon — that is how Oxys-OS
+becomes self-hosting — but a port is a whole program brought across intact,
+under its own licence, in a directory of its own. It is the opposite of what
+this document guards against, which is a line of somebody else's
+implementation appearing inside this project's own, unattributed, because a
+system was admired.
+
+An inspiration is a reason for a decision, not a source for an implementation.
+Where one of these systems is studied, what is taken from it is the
+understanding of why it is arranged as it is; the arrangement is then decided
+upon its merits for this project and written from nothing.
 
 ## 1. Why this document exists
 

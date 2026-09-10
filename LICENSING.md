@@ -15,15 +15,32 @@ intended to be used differently.
 
 | Path | Licence | SPDX identifier |
 | ---- | ------- | --------------- |
-| `boot/`, `kernel/`, `drivers/`, `graphics/`, `linker.ld` | GNU Lesser General Public License, version 3 or later | `LGPL-3.0-or-later` |
+| `boot/`, `kernel/`, `drivers/`, `graphics/`, `crypto/`, `net/`, `uefi/`, `linker.ld` | GNU Lesser General Public License, version 3 or later | `LGPL-3.0-or-later` |
 | `libc/`, `userland/` | MIT License | `MIT` |
+| A ported third-party tool, in the directory of its own that `PROJECT_GUIDELINES.md`, Section 2, requires | Whatever licence it arrived under, unchanged | The upstream project's own identifier |
 | `docs/`, every `README.md`, `PROJECT_GUIDELINES.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SECURITY.md`, this file | Creative Commons CC0 1.0 Universal | `CC0-1.0` |
 | `Makefile`, `build_*.sh`, `boot/grub/grub.cfg`, `.gitignore`, `.gitattributes`, `.github/` | CC0 1.0 Universal, as documentation of how the work is built rather than part of it | `CC0-1.0` |
 
-`libc/` and `userland/` are empty at the time of writing; they acquire material
-in Phase 7. The licence is declared in advance so that the first file placed
-there is placed under a licence already decided, rather than one settled
-afterwards when there is code to argue about.
+**The rule that decides a new directory** is what is linked, not what a subject
+is called. Code that becomes part of the kernel image is LGPL; code that is
+compiled into a program the kernel runs is MIT. That is why `crypto/` and `net/`
+are LGPL although both phases also promise an interface for user programs: the
+interface is a header and a library, and those belong in `libc/` when they
+arrive, not beside the implementation. `uefi/` is LGPL for the same reason as
+`boot/` — it is a way into this kernel, not a program upon it.
+
+`libc/`, `userland/`, `crypto/`, `net/` and `uefi/` are empty at the time of
+writing; they acquire material in Phases 7, 10, 11 and 12. Their licences are
+declared in advance so that the first file placed in each is placed under a
+licence already decided, rather than one settled afterwards when there is code to
+argue about.
+
+**A port carries its own licence and does not acquire this project's.** The row
+above is not a licence this repository grants; it is a record that the licence of
+a ported tool is the upstream project's, and `PROJECT_GUIDELINES.md`, Section 2,
+requires it to be written into this table before the port is committed. A port
+whose licence cannot be reconciled with the rest of this repository is one that
+must not be brought in — which is a decision to take before porting, not after.
 
 **Both the LGPL and the GPL texts are present**, and the second is not a
 mistake. The Lesser General Public License version 3 is written as a set of
@@ -97,14 +114,24 @@ any of it, without attribution and without asking.
 ## 4. Originality
 
 Every line of source in this repository was written for it.
-`PROJECT_GUIDELINES.md`, Section 2, prohibits transcribing reference
-implementations, and nothing here is vendored: there is no third-party code, no
-imported header, and no obtained asset. The bitmap face in `graphics/font.c` was
-drawn for this project for exactly that reason, a font being the kind of asset
-that is easy to lift without noticing.
+`PROJECT_GUIDELINES.md`, Section 2, requires the kernel and userland to be
+original and prohibits transcribing reference implementations, and nothing here
+is vendored: there is no third-party code, no imported header, and no obtained
+asset. The bitmap face in `graphics/font.c` was drawn for this project for
+exactly that reason, a font being the kind of asset that is easy to lift without
+noticing.
 
 The consequence is that the licences above may be granted at all. A repository
 carrying vendored code cannot license itself freely, and this one carries none.
+
+**That will change, and the change is planned rather than accidental.** Section 2
+of the guidelines permits third-party tools to be ported, and self-hosting
+depends upon it: the compiler, assembler and linker Oxys-OS will eventually build
+itself with are ports. When the first arrives, this section stops describing the
+whole repository and begins describing the part of it this project wrote. The
+distinction is why a port is held in a directory of its own — the boundary
+between what may be licensed here and what may not is then a path, and not a
+recollection.
 
 ## 5. Limitations
 

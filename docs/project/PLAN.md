@@ -10,9 +10,10 @@ is made, in accordance with `PROJECT_GUIDELINES.md`, Section 7.
 
 ## What is being built
 
-A monolithic, Unix-like operating system for x86_64, written from scratch in ISO
-C11 and NASM assembly, in thirteen phases ordered by dependency. Each phase is
-divided into atomic sub-tasks, and every milestone must be bootable and testable.
+A monolithic, Unix-like operating system for x86_64, whose kernel and userland
+are written from scratch in ISO C11 and NASM assembly, in thirteen phases ordered
+by dependency. Each phase is divided into atomic sub-tasks, and every milestone
+must be bootable and testable.
 
 **The long-term objective is that Oxys-OS should build Oxys-OS.** That lies
 beyond the thirteen phases and is recorded here so that the work leading to it is
