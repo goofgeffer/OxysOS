@@ -18,7 +18,7 @@ divided into atomic sub-tasks, and every milestone must be bootable and testable
 
 **Phases 1 to 5 are complete.** Sub-task 1.12 closed on 2026-09-07: the kernel
 has booted from a USB medium upon real hardware, and the boot log was read there.
-**Phase 6 is complete as far as sub-task 6.12**: a statically linked
+**Phase 6 is complete as far as sub-task 6.13**: a statically linked
 ELF64 program is loaded into an address space of its own, entered at privilege
 level 3, returned to by `SYSRET` when it makes a system call, and ended when it
 faults or when it asks — and it may now make a child of itself upon the
@@ -26,12 +26,20 @@ copy-on-write substrate of Phase 2, replace that child's program with one read
 from a volume, and collect what it ended with. Since sub-task 6.12 the machine's
 own interrupt controllers are the Local APIC and the I/O APIC, programmed from
 what the firmware's ACPI tables declare; the 8259A pair is masked and retired.
+Since sub-task 6.13 the processor holds a per-processor area of its own, reached
+through `GS`; there is a ticket spinlock that masks interrupts for as long as it
+is held; one processor can interrupt another; and a paging-structure change is
+announced by a translation-lookaside-buffer shootdown that waits to be
+acknowledged.
 
-**Next: sub-task 6.13** — the locks, the per-processor data and the
-inter-processor interrupt, then the bring-up of 6.14 and the scheduler of 6.15.
-The scheduler is what a child presently waits for: there is one thread of
-control, so a forked child runs when its parent waits for it rather than beside
-it.
+**Next: sub-task 6.14** — the bring-up of the application processors, then the
+scheduler of 6.15. The scheduler is what a child presently waits for: there is
+one thread of control, so a forked child runs when its parent waits for it rather
+than beside it. **The locks of 6.13 exist but are not yet applied** to the
+structures that need them, each of which says so in its own file header; 6.14 and
+6.15 are what make them contended, and
+[`../design/CONCURRENCY.md`](../design/CONCURRENCY.md), Section 10, limitation 1,
+enumerates them.
 
 For what the system does today, and where it has been observed to do it, see
 [`STATUS.md`](STATUS.md). For how it came to be that way, see
@@ -71,7 +79,7 @@ sub-task being the verification itself.
 | [3](#phase-3--interrupts-exceptions-and-keyboard-input) | Interrupts, exceptions and keyboard input | Implemented |
 | [4](#phase-4--basic-device-drivers) | Basic device drivers | Implemented |
 | [5](#phase-5--ext2-filesystem) | EXT2 filesystem | Implemented |
-| [6](#phase-6--graphics-system-calls-process-management-and-symmetric-multi-processing) | Graphics, system calls, processes, SMP | **In progress** — 6.1 to 6.12 done |
+| [6](#phase-6--graphics-system-calls-process-management-and-symmetric-multi-processing) | Graphics, system calls, processes, SMP | **In progress** — 6.1 to 6.13 done |
 | [7](#phase-7--userland-and-minimal-c-library) | Userland and minimal C library | Planned |
 | [8](#phase-8--shell) | Shell | Planned |
 | [9](#phase-9--the-desktop-its-system-services-and-its-configuration) | The desktop, its services and its configuration | Planned |
@@ -109,8 +117,8 @@ Chapters 2, 4 and 9; System V ABI for AMD64.
 | 1.8 | Implement `KernelMain`, which clears the screen and prints the string "Oxys-OS". | Implemented | `make verify` banner |
 | 1.9 | Author the `Makefile` with the targets `all`, `clean`, `iso`, `run-qemu`, `run-vbox` and `run-uefi`. | Implemented | — |
 | 1.10 | Generate the ISO image and verify boot under QEMU. | Implemented | `make verify` |
-| 1.11 | Verify boot under VirtualBox. | Implemented | [`TESTING.md`](TESTING.md) §9 |
-| 1.12 | Verify boot on physical hardware from a USB medium. | Implemented | [`TESTING.md`](TESTING.md) §10.1–10.2 |
+| 1.11 | Verify boot under VirtualBox. | Implemented | [`TESTING.md`](TESTING.md) §4 |
+| 1.12 | Verify boot on physical hardware from a USB medium. | Implemented | [`TESTING.md`](TESTING.md) §5.1–5.2 |
 
 ---
 
@@ -201,7 +209,7 @@ the absence of a disk.
 
 **Specifications**: The Second Extended File System (Poirier); Linux kernel
 documentation, `Documentation/filesystems/ext2.rst`.
-**Design**: [`../storage/EXT2.md`](../storage/EXT2.md),
+**Design**: [`../storage/EXT2.md`](../storage/EXT2.md) and the two it heads,
 [`../storage/VFS.md`](../storage/VFS.md).
 
 | # | Sub-task | State | Asserted by |
@@ -229,9 +237,10 @@ table directory and the MADT); Multiboot2 Specification, Sections 3.6.12
 (framebuffer information tag), 3.6.16 and 3.6.17 (the ACPI pointer tags); VESA
 BIOS Extensions 3.0.
 **Design**: [`../design/PRIVILEGE.md`](../design/PRIVILEGE.md),
-[`../design/GRAPHICS.md`](../design/GRAPHICS.md),
+[`../design/GRAPHICS.md`](../design/GRAPHICS.md) and the five it indexes,
 [`../design/EXECUTABLE.md`](../design/EXECUTABLE.md),
 [`../design/PROCESS.md`](../design/PROCESS.md),
+[`../design/CONCURRENCY.md`](../design/CONCURRENCY.md),
 [`../design/INTERRUPTS.md`](../design/INTERRUPTS.md), Section 10,
 [`../devices/MOUSE.md`](../devices/MOUSE.md),
 [`../devices/ACPI.md`](../devices/ACPI.md),
@@ -251,8 +260,8 @@ BIOS Extensions 3.0.
 | 6.10 | Implement context switching and the initial transition to user mode via `IRETQ`. | Implemented | `verify_usermode.c` |
 | 6.11 | Implement `fork()` upon the Phase 2 copy-on-write substrate, together with `execve()`, `exit()` and `wait()`. | Implemented | `verify_lifecycle.c` |
 | 6.12 | Parse the ACPI MADT; initialise the Local APIC and the I/O APIC; retire the 8259A PIC. | Implemented | `verify_apic.c`, `verify_devices.c` — see note (b) |
-| 6.13 | Implement spinlocks, per-CPU data areas and inter-processor interrupts, including TLB shootdown. | **Planned — next** | — |
-| 6.14 | Implement application-processor bring-up by INIT-SIPI-SIPI and a real-mode trampoline. | Planned | — |
+| 6.13 | Implement spinlocks, per-CPU data areas and inter-processor interrupts, including TLB shootdown. | Implemented | `verify_smp.c` — see note (c) |
+| 6.14 | Implement application-processor bring-up by INIT-SIPI-SIPI and a real-mode trampoline. | **Planned — next** | — |
 | 6.15 | Implement a multiprocessor-aware round-robin scheduler with per-CPU run queues and processor affinity. | Planned | — |
 
 **(a)** Sub-task 6.1's self-test executed `SYSCALL` until sub-task 6.7 replaced
@@ -267,6 +276,16 @@ parse, the Local APIC, the I/O APIC and the routing after the adoption — and b
 `KernelVerifyIrq` in `verify_devices.c`, which asserts the routing layer while
 the 8259A pair still answers. The division is deliberate: the same path is
 asserted under each controller, so a failure says which of them broke it.
+
+**(c)** Sub-task 6.13 is asserted by four routines in `verify_smp.c`. The first
+two — the per-processor area and the spinlock — assert internal state and not
+behaviour, because upon a machine with one processor a lock that does not lock
+behaves exactly like one that does. The last two are behavioural: an interrupt a
+processor sends to itself is delivered like any other, so the whole shootdown
+path is exercised, against a mapping the test makes stale on purpose. **The
+locks are not yet applied to the structures that need them**;
+[`../design/CONCURRENCY.md`](../design/CONCURRENCY.md), Section 10, limitation 1,
+enumerates them, and 6.14 and 6.15 are what make each contended.
 
 **Why 6.2 to 6.6 sit here rather than in Phase 9**, and **why 6.13 precedes
 6.14**: both orderings were chosen against the obvious one, and both arguments
@@ -410,7 +429,7 @@ ACPI Specification 6.5.
 
 `make run-uefi` exists already and is expected to fail; it is provided in advance
 so that this phase has an established point of entry. Sub-task 12.7 renders it
-functional. See [`TESTING.md`](TESTING.md), Section 8.
+functional. See [`TESTING.md`](TESTING.md), Section 3.
 
 | # | Sub-task | State | Asserted by |
 | - | -------- | ----- | ----------- |

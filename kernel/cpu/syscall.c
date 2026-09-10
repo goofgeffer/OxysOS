@@ -31,6 +31,7 @@
  */
 
 #include <oxys/syscall.h>
+#include <oxys/percpu.h>
 #include <oxys/msr.h>
 #include <oxys/gdt.h>
 #include <oxys/kernel.h>
@@ -90,25 +91,14 @@ static bool SyscallIsSupported(void)
 }
 
 /*
- * The block GS names within the kernel.
+ * The block GS names within the kernel is the executing processor's own area.
  *
- * One, because there is one processor until sub-task 6.14. It is file-scope
- * rather than allocated because the entry path reaches it before a stack exists
- * and could not have been told where it was.
+ * It was a structure of this file's own from sub-task 6.7 until sub-task 6.13,
+ * which replaced it with the per-processor area <oxys/percpu.h> declares — the
+ * same two fields at the same two offsets, and the rest of what a processor owns
+ * after them. The offsets the entry path addresses by number are asserted in
+ * kernel/cpu/percpu.c, beside the structure they belong to.
  */
-static SyscallProcessorBlock SyscallBlock;
-
-/*
- * The assembly addresses these fields by number, having no sight of the
- * structure. A field reordered here without the assembly would put the caller's
- * stack pointer where the kernel stack belongs, and the very next instruction
- * would load RSP from it — which is a kernel running upon an address privilege
- * level 3 chose.
- */
-_Static_assert(offsetof(SyscallProcessorBlock, kernel_stack) == 0U,
-               "The assembly reads the kernel stack at offset 0 of the block.");
-_Static_assert(offsetof(SyscallProcessorBlock, user_stack) == 8U,
-               "The assembly writes the caller's stack at offset 8 of the block.");
 
 bool SyscallInitialise(void)
 {
@@ -148,27 +138,30 @@ bool SyscallInitialise(void)
      */
 
     /*
-     * The per-processor block, and the register through which the entry path
-     * finds it.
+     * The stack the entry path will switch to.
      *
-     * IA32_KERNEL_GS_BASE is what SWAPGS exchanges GS.base with, and privilege
-     * level 3 cannot write it — which is the whole reason the entry path can
-     * trust it. GS.base itself is set to zero, that being the value a user
-     * program has until something gives it one; SWAPGS exchanges the two, so
-     * after it the kernel has its block and the caller's value is held for the
-     * return.
+     * It is the one the task state segment names, which is the same stack an
+     * interrupt from privilege level 3 would arrive upon. They are deliberately
+     * the same: a system call and an interrupt are both entries to the kernel
+     * from a user program, and a kernel that used two stacks for them would have
+     * to say which was which at every point that examined one.
      *
-     * The kernel stack is the one the task state segment names, which is the
-     * same stack an interrupt from privilege level 3 would arrive upon. They are
-     * deliberately the same: a system call and an interrupt are both entries to
-     * the kernel from a user program, and a kernel that used two stacks for them
-     * would have to say which was which at every point that examined one.
+     * The area itself, and GS.base, were established by PerCpuInitialise long
+     * before this — a spinlock reaches the area, and locks are taken from the
+     * first allocation onwards. What is written here is the one field that could
+     * not be known then, the task state segment not having existed.
+     *
+     * The registers are settled by SyscallEstablishKernelGsBase rather than
+     * written directly, because the invariant they express has a direction: the
+     * kernel is executing at this moment, so the area belongs in GS.base and
+     * IA32_KERNEL_GS_BASE holds what a user program would have. Writing them the
+     * other way round — which this function did until sub-task 6.13, when
+     * nothing in the kernel read GS — leaves the kernel executing with a segment
+     * base of zero, and the first per-processor access after it reaching for
+     * address sixteen.
      */
-    SyscallBlock.kernel_stack = TssKernelStack();
-    SyscallBlock.user_stack = 0U;
-
-    WriteMsr(IA32_KERNEL_GS_BASE, (uint64_t)(uintptr_t)&SyscallBlock);
-    WriteMsr(IA32_GS_BASE, 0U);
+    SyscallSetKernelStack(TssKernelStack());
+    SyscallEstablishKernelGsBase();
 
     WriteMsr(IA32_EFER, ReadMsr(IA32_EFER) | EFER_SYSTEM_CALL_EXTENSIONS);
 
@@ -406,19 +399,36 @@ bool SyscallCopyUserString(uint64_t address, char *destination, size_t capacity)
 
 void SyscallSetKernelStack(uint64_t top)
 {
-    SyscallBlock.kernel_stack = top;
+    PerCpuCurrent()->kernel_stack = top;
 }
 
+/*
+ * The two boundaries, and why the registers are written rather than exchanged.
+ *
+ * Both obtain the area first and write the registers afterwards. That order is
+ * load-bearing in the second of them: the area is reached through GS.base, and
+ * the second thing that function does is clear GS.base, so a version that
+ * cleared first would have nothing left to read the area through.
+ *
+ * docs/design/PROCESS.md, Section 12, records why a context switch writes these
+ * registers instead of exchanging them: which of the two holds the area depends
+ * upon how the kernel was entered and not upon which thread is running, and a
+ * switch cannot tell those apart.
+ */
 void SyscallEstablishKernelGsBase(void)
 {
-    WriteMsr(IA32_GS_BASE, (uint64_t)(uintptr_t)&SyscallBlock);
+    PerCpu *const area = PerCpuCurrent();
+
+    WriteMsr(IA32_GS_BASE, (uint64_t)(uintptr_t)area);
     WriteMsr(IA32_KERNEL_GS_BASE, 0U);
 }
 
 void SyscallEstablishUserGsBase(void)
 {
+    PerCpu *const area = PerCpuCurrent();
+
+    WriteMsr(IA32_KERNEL_GS_BASE, (uint64_t)(uintptr_t)area);
     WriteMsr(IA32_GS_BASE, 0U);
-    WriteMsr(IA32_KERNEL_GS_BASE, (uint64_t)(uintptr_t)&SyscallBlock);
 }
 
 /* ------------------------------------------------------------------ the calls */

@@ -14,7 +14,7 @@
  *     text-mode driver implements them. This console matches that driver
  *     deliberately, including the erase limit, so that one diagnostic path does
  *     not behave differently upon two displays.
- *   - docs/design/GRAPHICS.md, Sections 19 and 20: the design and its limits.
+ *   - docs/design/CONSOLE.md, Sections 2 and 3: the design and its limits.
  *
  * What this is for.
  *

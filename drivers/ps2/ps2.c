@@ -42,10 +42,10 @@
  *
  * Concurrency. Everything save the reading of the data port and the status bit
  * beside it is called during initialisation, before the interrupt flag is set.
- * From sub-task 6.13 the read-modify-write of the configuration byte requires
- * the spinlock governing this device; the handlers' reads do not, the controller
- * holding one byte at a time and the two handlers being woken by different
- * request lines.
+ * The spinlock of sub-task 6.13 exists and has not been applied here. When a
+ * second processor runs, the read-modify-write of the configuration byte
+ * requires it; the handlers' reads do not, the controller holding one byte at a
+ * time and the two handlers being woken by different request lines.
  */
 
 #include <oxys/ps2.h>

@@ -197,7 +197,7 @@ from one it had measured.
 ## 7. The pointer, and the pixels beneath it
 
 *Written at sub-task 6.5 and superseded by 6.6, which is recorded in Section 8.2
-and in [`../design/GRAPHICS.md`](../design/GRAPHICS.md), Section 27. It is kept
+and in [`../design/COMPOSITOR.md`](../design/COMPOSITOR.md), Section 2. It is kept
 because the difficulty it describes is why the compositor was written.*
 
 A pointer is not drawn once. It is drawn, then it moves, and what was beneath it
@@ -251,7 +251,7 @@ the old one for ever. The negative test of Section 8.2 is exactly that damage.
 
 Reading is the expensive half: the framebuffer is mapped write-combining, and
 reads from write-combining memory are uncached — the same fact that made the
-console's scroll the costly operation of `GRAPHICS.md`, Section 23. It is 216
+console's scroll the costly operation of `CONSOLE.md`, Section 6. It is 216
 pixels, paid once per **movement** and not once per packet: the echo loop drains
 the event buffer and moves the pointer once, and `CursorMoveTo` returns
 immediately where the position has not changed, which is what a stationary mouse
@@ -264,7 +264,7 @@ rather than a mechanism the kernel kept. Sections 7, 7.1 and 7.2 above describe
 the arrangement as it stood between sub-tasks 6.5 and 6.6 and are left standing:
 what they say about *why* a pointer needs more than a bitmap is still true, and
 the cost they describe is what a reader should understand the compositor to have
-removed. What replaced them is `GRAPHICS.md`, Section 27.4.
+removed. What replaced them is `COMPOSITOR.md`, Section 2.4.
 
 One thing carried over unchanged and is worth naming, because the compositor did
 not make it unnecessary: `CursorMoveTo` still returns immediately where the
@@ -311,7 +311,7 @@ draw computing an address from the width was caught writing into the padding.
 
 None of that exists now. The pointer is rendered once and composited, so what is
 left to assert here is the **shape** and the **rendering**, and the compositing
-is asserted where it lives — `GRAPHICS.md`, Section 27.5.
+is asserted where it lives — `COMPOSITOR.md`, Section 2.5.
 
 | Property asserted | The silent failure it would catch |
 | ----------------- | --------------------------------- |
@@ -350,7 +350,7 @@ The last two applied to the save-under, which sub-task 6.6 removed, and they are
 recorded here as what was done rather than as a procedure to repeat: there is
 nothing left to damage in that way. The equivalent fault now lives in the
 compositor — a layer that marks only where it has arrived and not where it was —
-and is provoked and recorded in `../project/TESTING.md`, Section 20.
+and is provoked and recorded in `../project/TESTING-GRAPHICS.md`, Section 6.
 
 ## 9. Observed state
 
@@ -407,4 +407,4 @@ report.
    a compositor layer: `CursorConceal`, `CursorReveal`, the concealment count and
    the store of saved pixels are gone, and `KernelWriteString` no longer knows a
    pointer exists. See Section 8.2 and
-   [`../design/GRAPHICS.md`](../design/GRAPHICS.md), Section 27.
+   [`../design/COMPOSITOR.md`](../design/COMPOSITOR.md), Section 2.

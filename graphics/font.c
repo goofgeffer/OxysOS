@@ -11,7 +11,7 @@
  *   - PROJECT_GUIDELINES.md, Section 2: all source must be original. The glyphs
  *     below were drawn for this project and are not a transcription of any other
  *     font; see the note upon that immediately below.
- *   - docs/design/GRAPHICS.md, Section 18: the design of the face and the
+ *   - docs/design/CONSOLE.md, Section 1: the design of the face and the
  *     metrics it is drawn to.
  *
  * Where this font came from.

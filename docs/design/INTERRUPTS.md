@@ -1,11 +1,12 @@
 # Interrupt and Exception Handling
 
-**Corresponding phase**: Phase 3, sub-tasks 3.1 to 3.5, and Phase 6, sub-task
-6.12, which added the controller-neutral request layer of Section 11.
+**Corresponding phase**: Phase 3, sub-tasks 3.1 to 3.5; Phase 6, sub-task 6.12,
+which added the controller-neutral request layer of Section 10; and Phase 6,
+sub-task 6.13, which added the conditional segment-base exchange of Section 3.3.
 
 **Specifications**: Intel 64 and IA-32 Architectures Software Developer's Manual,
-Volume 3A, Chapter 6; Volume 3A, Sections 3.4 and 3.5; Volume 2A, `LGDT/LIDT`,
-`SGDT/SIDT` and `IRET/IRETQ`; Intel 8259A Programmable Interrupt Controller
+Volume 3A, Chapter 6; Volume 3A, Sections 3.4, 3.4.4 and 3.5; Volume 2A and 2B,
+`LGDT/LIDT`, `SGDT/SIDT`, `IRET/IRETQ` and `SWAPGS`; Intel 8259A Programmable Interrupt Controller
 datasheet, sections "INITIALIZATION COMMAND WORDS (ICWS)" and "OPERATION COMMAND
 WORDS (OCWS)"; IBM Personal Computer AT technical reference; ACPI Specification
 6.5, Sections 5.2.12.4 and 5.2.12.5.
@@ -60,9 +61,10 @@ privilege level of zero means user code cannot raise these vectors with `INT n`;
 the vectors user code is to be permitted acquire level three when they are
 introduced in Phase 6.
 
-## 3. The two irregularities the stubs normalise
+## 3. The irregularities the stubs normalise
 
-The stubs exist because the processor presents its state inconsistently.
+The stubs exist because the processor presents its state inconsistently. There
+were two until sub-task 6.13, which added a third.
 
 ### 3.1 The vector number is not recorded
 
@@ -102,6 +104,35 @@ would be displaced by eight bytes and the resulting diagnosis would be nonsense.
 **A hazard.** `INT n` never pushes an error code, whatever the vector. The stubs
 for those ten vectors must therefore never be reached by `INT n`, which would
 leave the frame eight bytes short. Nothing in this kernel invokes them that way.
+
+### 3.3 The segment base is not exchanged
+
+Added at sub-task 6.13, and it is the irregularity that had been harmless only
+because nothing in the kernel read `GS`.
+
+The kernel keeps its per-processor data area in `GS.base` while it executes and
+in `IA32_KERNEL_GS_BASE` while a user program does. `SYSCALL` is entered only
+from privilege level 3, so the system-call path exchanges the two
+unconditionally. **An interrupt is not.** It may arrive at either privilege
+level, and the processor performs no exchange either way — so an interrupt taken
+while a user program was running enters kernel code with the program's segment
+base in place, and the first spinlock the handler takes reaches for the area
+through it.
+
+The common stub therefore tests the low two bits of the saved `CS` and exchanges
+where they are not zero. The test is made against the frame rather than against a
+register because at that moment no register can be trusted to hold anything: the
+interrupted code owned all of them. The frame is read **again** on the way out
+rather than a decision being remembered, because a handler is permitted to alter
+it — Section 7.2 — and the exchange must match the privilege level being returned
+to and not the one that was left.
+
+The offset the stub reads `CS` at is `TRAP_FRAME_CS_OFFSET`, asserted against the
+structure by a `_Static_assert` in `kernel/cpu/interrupts.c`. A field inserted
+above `cs` without that assertion would leave the stub testing the saved `RIP`,
+whose low two bits are whatever the interrupted instruction's address happened to
+end in. The design is
+[`CONCURRENCY.md`](CONCURRENCY.md), Section 3.3.
 
 ## 4. The trap frame
 
@@ -598,8 +629,9 @@ the mask is honoured.
 ### 9.8 Limitations
 
 1. Nothing here is safe against concurrent access. The read-modify-write of a
-   mask register is not atomic, and from sub-task 6.13 it requires the spinlock
-   governing this device.
+   mask register is not atomic, and requires the spinlock governing this device.
+   The lock has existed since sub-task 6.13 and has not been applied here, there
+   being one processor; sub-task 6.14 is what makes the register contended.
 2. **The pair is retired, not removed.** `PicDisable` masks both mask registers
    and clears the flag that governs the report; the controllers are still
    remapped and still hold their initialisation. Nothing re-enables them, and
@@ -765,9 +797,12 @@ would mask the timer.
 1. **Sixteen lines.** An I/O APIC input above the fifteenth cannot be claimed;
    [`../devices/APIC.md`](../devices/APIC.md), limitation 1, records why and what
    would be needed to lift it.
-2. **The handler table and the recorded mask state are unsynchronised.** From
-   sub-task 6.13 both require the spinlock governing this layer, an interrupt
-   handler and an application processor each being able to enter either.
+2. **The handler table and the recorded mask state are unsynchronised.** Both
+   require the spinlock governing this layer, an interrupt handler and an
+   application processor each being able to enter either. The lock has existed
+   since sub-task 6.13; neither has been put under it, there being one processor
+   until sub-task 6.14. See
+   [`CONCURRENCY.md`](CONCURRENCY.md), Section 10, limitation 1.
 3. **A line may be claimed by one driver only.** `IrqInstallHandler` replaces
    whatever was registered rather than refusing, and shared interrupt lines —
    which PCI requires — have no representation here at all. Phase 11 is where

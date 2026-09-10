@@ -66,6 +66,7 @@ between runs.
 | `verify_mouse.c` | Phase 6, sub-task 6.5: the mouse's packet decoder, driven directly so that the framing, the nine-bit sign extension, the inverted vertical sense, the confinement of the position and the behaviour of a full buffer are all asserted **without a mouse and without anybody moving one**; and the pointer, upon a surface composed in memory, including that its transparent pixels leave the background alone — without which a pointer drawn as a solid rectangle would pass — and that a pointer at the edge writes nothing into the row padding. |
 | `verify_devices.c` | Phases 3 and 4: the 8259A controllers, the request layer above them, the interval timer, the PS/2 keyboard, the 16550 serial adapter, the VGA display, and PCI enumeration. |
 | `verify_apic.c` | Phase 6, sub-task 6.12: the parse of the firmware's ACPI tables, the Local APIC, the I/O APIC, and the routing of the device request lines through them once the 8259A pair has been retired. The first three assert what was programmed, every value being read back from the hardware; the fourth lets the interval timer run and counts its ticks, which is the only assertion that establishes the whole path from a device pin to a handler. A controller programmed wrongly reports nothing — it produces a device that is silent, and a silent device is indistinguishable from an absent one. |
+| `verify_smp.c` | Phase 6, sub-task 6.13: the per-processor data area and the segment base it is reached through, the ticket spinlock and the counted interrupt-disable beneath it, the inter-processor interrupt, and the translation-lookaside-buffer shootdown built upon that. **Upon a machine with one processor a lock that does not lock behaves exactly like a lock that does**, so the first two assert internal state — the tickets, the owner, the counted depth, the interrupt flag — rather than behaviour. The last two assert behaviour, an interrupt a processor sends to itself being delivered like any other; the shootdown test rewrites a page-table entry by hand and invalidates nothing, so that the handler is required to be what repairs a genuinely stale translation. |
 | `verify_storage.c` | Phase 4: the ATA, AHCI and SD host controller drivers, the generic block layer, and the buffer cache. |
 | `verify_ext2.c` | Phase 5: the entry point of the EXT2 self-test. It composes the fixture, asserts the superblock and every refusal a malformed one must meet, and calls in turn the five chapters in `ext2/`, restoring the volume between those that alter it. It was 2,618 lines until the chapters were divided out of it; `../../docs/design/ARCHITECTURE.md`, Section 2.2, records why. |
 | `ext2/internal.h` | What those chapters share: their own entry points, `KernelRestoreVolume`, and the two helpers more than one of them judges through. `<oxys/verify.h>` still declares `KernelVerifyExt2` and `KernelReportVolumes` alone, which is the whole of what `KernelMain` knows about any of it. |
@@ -102,7 +103,7 @@ its own display back through the eye of whoever is looking at it. The framebuffe
 test therefore paints a pattern composed so that looking at it establishes
 something — misread channel positions put the bands in the wrong colours, a wrong
 pitch skews them, a wrong extent stops them short — and
-`docs/project/TESTING.md`, Section 15, records the procedure by which a person
+`docs/project/TESTING-GRAPHICS.md`, Section 1, records the procedure by which a person
 judges it.
 
 Their value is the one thing a composed fixture cannot supply. The composed
@@ -135,9 +136,11 @@ header. The corpus is enumerated in
    panic exists before the test harness of Phase 7. Where that is so, the test
    asserts the admitting direction and says that it does.
 3. **Nothing here is safe against concurrent execution.** The fixture is a pair
-   of static arrays and the tests write to them. From sub-task 6.13 the corpus
-   must run on one processor, or be given a fixture per processor.
+   of static arrays and the tests write to them. From sub-task 6.14 the corpus
+   must run on one processor, or be given a fixture per processor; the
+   per-processor area sub-task 6.13 built is what the second of those would be
+   held in.
 4. **The fixture is one volume geometry**: 1024-byte blocks, one block group, 32
    inodes. A volume with several groups is exercised only by the probes against
-   real images, which `docs/project/TESTING.md` records at both block sizes this
-   kernel accepts.
+   real images, which `docs/project/TESTING-SYSTEM.md`, Sections 5 and 6, records
+   at both block sizes this kernel accepts.

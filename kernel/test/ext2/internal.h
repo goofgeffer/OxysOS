@@ -10,7 +10,7 @@
  *          KernelVerifyExt2VolumeRefusedWith, KernelVerifyExt2PathIs,
  *          KernelRestoreVolume.
  * References:
- *   - docs/storage/EXT2.md, Section 14: every assertion these files make, paired
+ *   - docs/storage/EXT2-VERIFICATION.md: every assertion these files make, paired
  *     with the silent failure it catches. The reasoning belongs there and is not
  *     restated here.
  *   - kernel/test/README.md: the arrangement of the boot-time self-tests, and

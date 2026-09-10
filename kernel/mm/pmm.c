@@ -22,9 +22,10 @@
  * time allocation but no means of removing a particular frame from the middle.
  *
  * Concurrency. This implementation is not yet safe against concurrent access.
- * From sub-task 6.13 the bitmap must be protected by a spinlock, since several
- * processors will allocate simultaneously. The single mutable index
- * FrameSearchHint is the other structure that will require protection.
+ * The spinlock of sub-task 6.13 exists and has not been applied here; the bitmap
+ * must be protected by it before several processors allocate simultaneously, and
+ * the single mutable index FrameSearchHint is the other structure that will
+ * require protection.
  */
 
 #include <oxys/pmm.h>

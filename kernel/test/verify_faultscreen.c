@@ -5,7 +5,7 @@
  *          the table of fault screens that the last of those three draws.
  * Key functions: KernelVerifyFaultScreen.
  * References:
- *   - docs/design/GRAPHICS.md, Section 25: every assertion below, paired with
+ *   - docs/design/FAULTSCREEN.md, Section 2: every assertion below, paired with
  *     the silent failure it catches.
  *   - Intel 64 and IA-32 Architectures Software Developer's Manual, Volume 3A,
  *     Table 6-1 and Section 6.5: the exceptions, and their classification as
@@ -27,7 +27,7 @@
  * — no more than it can determine that anything appeared upon the display at
  * all, which is the limitation Section 8 records for the framebuffer. The pages
  * are judged by a person, through the demonstration entry point, and
- * docs/project/TESTING.md, Section 19, records that procedure.
+ * docs/project/TESTING-GRAPHICS.md, Section 5, records that procedure.
  *
  * What is asserted is everything about the table that a person reading one
  * screen would not notice: that an entry added in a later phase carries all four

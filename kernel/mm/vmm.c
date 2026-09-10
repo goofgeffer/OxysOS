@@ -29,8 +29,9 @@
  * circular. A fixed array has no such dependency, and its capacity is a bound on
  * fragmentation rather than on the number of live allocations.
  *
- * Concurrency. Not yet safe against concurrent access. From sub-task 6.13 the
- * bump pointer and the free list require a spinlock.
+ * Concurrency. Not yet safe against concurrent access. The spinlock of sub-task
+ * 6.13 exists and has not been applied here; the bump pointer and the free list
+ * require it before a second processor runs.
  */
 
 #include <oxys/vmm.h>

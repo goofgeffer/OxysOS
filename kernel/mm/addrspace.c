@@ -21,10 +21,11 @@
  *   - docs/design/MEMORY-LAYOUT.md, Section 14.
  *
  * Concurrency. Cloning walks and modifies the source hierarchy, and is therefore
- * not safe against a concurrent fault upon the same address space. From sub-task
- * 6.13 it must be performed under the lock governing the address space, and the
- * invalidation performed here must be accompanied by a shootdown to the other
- * processors upon which the source may be active.
+ * not safe against a concurrent fault upon the same address space. The lock
+ * governing the address space is not yet taken here — the spinlock of sub-task
+ * 6.13 exists and has not been applied — but the invalidation performed here
+ * does now carry a shootdown to the other processors upon which the source may
+ * be active, PagingInvalidate announcing every change it makes.
  */
 
 #include <oxys/addrspace.h>

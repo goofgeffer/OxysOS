@@ -11,7 +11,7 @@
  *     Table 6-1: the exceptions, their mnemonics, and which deliver an error
  *     code. Section 6.13 and Figure 6-6: the selector-form error code.
  *     Section 6.15 and Figure 6-9: the page-fault error code and CR2.
- *   - docs/design/GRAPHICS.md, Sections 24 and 25.
+ *   - docs/design/FAULTSCREEN.md, Sections 1 and 2.
  *
  * What this must survive.
  *
@@ -29,7 +29,7 @@
  *   through PagingTranslate, and a word that does not translate is reported as
  *   absent rather than fetched.
  *
- *   It takes no lock. From sub-task 6.13 two processors faulting at once would
+ *   It takes no lock. From sub-task 6.14 two processors faulting at once would
  *   interleave two screens, which is the same limitation the diagnostic path
  *   already carries and is recorded with it.
  *
@@ -37,6 +37,13 @@
  *   mode has the display driver showing the report already, and drawing into
  *   memory nothing displays would be worse than useless: it would be a second
  *   thing to go wrong.
+ *
+ * Concurrency. Nothing here is locked, by the third rule above rather than by
+ * omission: a fault handler that waited upon a lock a faulted processor held
+ * would replace a reported fault with a stopped machine. The spinlock of
+ * sub-task 6.13 exists and is deliberately not applied here. From sub-task 6.14
+ * two processors faulting at once interleave two screens, and that is accepted
+ * as the lesser failure of the two.
  */
 
 #include <oxys/faultscreen.h>

@@ -809,7 +809,7 @@ void Ext2ReportDirectory(BlockDevice *device, const Ext2Superblock *superblock,
  * made into a buffer and the buffer marked dirty, so a caller that requires the
  * volume to be consistent upon the medium must call BufferSync. Without a
  * journal there is no way to make a sequence of such writes atomic, and this
- * kernel does not pretend otherwise; see docs/storage/EXT2.md, Section 12.6.
+ * kernel does not pretend otherwise; see docs/storage/EXT2-FILES.md, Section 3.6.
  * ---------------------------------------------------------------------------
  */
 

@@ -12,6 +12,8 @@
  *          KernelVerifyUserMode, KernelVerifyFork, KernelVerifyLifecycle,
  *          KernelVerifyPic, KernelVerifyIrq, KernelVerifyAcpi,
  *          KernelVerifyLocalApic, KernelVerifyIoApic, KernelVerifyApicRouting,
+ *          KernelVerifyPerCpu, KernelVerifySpinlock, KernelVerifyIpi,
+ *          KernelVerifyShootdown,
  *          KernelVerifyPit, KernelVerifyKeyboard, KernelVerifySerial,
  *          KernelVerifyVga, KernelVerifyPci, KernelVerifyAta, KernelVerifyBlock,
  *          KernelVerifyBuffer, KernelVerifyExt2, KernelVerifyVfs,
@@ -156,6 +158,24 @@ void KernelVerifyAcpi(void);
 void KernelVerifyLocalApic(void);
 void KernelVerifyIoApic(void);
 void KernelVerifyApicRouting(void);
+
+/*
+ * Phase 6, sub-task 6.13: the per-processor area, the spinlock above it, the
+ * inter-processor interrupt, and the translation-lookaside-buffer shootdown
+ * built upon that.
+ *
+ * The first two assert internal state and not behaviour, because upon a machine
+ * with one processor a lock that does not lock behaves exactly like one that
+ * does. The last two are behavioural: an interrupt a processor sends to itself
+ * is delivered like any other, so the whole path — send, gate, handler,
+ * invalidation, acknowledgement — is exercised before there is a second
+ * processor to exercise it against. docs/design/ARCHITECTURE.md, Section 4.1,
+ * records that as the condition upon which 6.13 was placed before 6.14.
+ */
+void KernelVerifyPerCpu(void);
+void KernelVerifySpinlock(void);
+void KernelVerifyIpi(void);
+void KernelVerifyShootdown(void);
 
 /* Phases 3 and 4: the remaining devices. */
 void KernelVerifyPit(void);

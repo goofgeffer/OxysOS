@@ -3,7 +3,7 @@
 **Phase**: 6, sub-tasks 6.2 to 6.6, all of which are done. This directory was
 created by sub-task 6.2 and completed by 6.6; the graphical work that remains
 needs a process to exist and is Phase 9.
-**Detailed design**: [`../docs/design/GRAPHICS.md`](../docs/design/GRAPHICS.md).
+**Detailed design**: [`../docs/design/GRAPHICS.md`](../docs/design/GRAPHICS.md), which is the index of the five documents this directory is described by.
 
 ## Purpose
 
@@ -84,7 +84,7 @@ Full citations are held in
 
 ## Present limitations
 
-The complete lists are `docs/design/GRAPHICS.md`, Sections 10, 17, 20 and 27.7.
+The complete lists are `docs/design/FRAMEBUFFER.md`, Section 10; `docs/design/DRAWING.md`, Section 7; `docs/design/CONSOLE.md`, Section 3; and `docs/design/COMPOSITOR.md`, Section 2.7.
 The four that govern what can be built next:
 
 1. **There is no scaling blit and no curve**, and a line is one pixel wide and
@@ -96,14 +96,18 @@ The four that govern what can be built next:
    yet has a use for one: the echo loop does not need it, and a shell is Phase 8.
 3. **The mode cannot be chosen.** GRUB selects it and ignores what it is asked
    for; the kernel accepts whatever it is handed and asserts what it was.
-4. **Nothing here is safe against concurrent drawing.** From sub-task 6.13 the
-   back buffer, the damage rectangle and the layer table all become that
-   sub-task's lock's business.
+4. **Nothing here is safe against concurrent drawing.** The lock that governs
+   the back buffer, the damage rectangle and the layer table was built by
+   sub-task 6.13 and has not been applied to them; sub-task 6.14 is what makes
+   them contended. `compositor.c` names the failure in its header, and
+   [`../docs/design/COMPOSITOR.md`](../docs/design/COMPOSITOR.md), limitation 6,
+   records it beside the design.
 
 ## What was measured
 
 The console was measured, after it worked, at **15.2% of the whole boot**, and
-the cause was not where it had been guessed at. Section 23 of the design document
+the cause was not where it had been guessed at.
+[`../docs/design/CONSOLE.md`](../docs/design/CONSOLE.md), Section 6,
 records the figures, what was actually wrong, and the three changes that brought
 it to 4.5%. The remaining factor named there was the framebuffer read a scroll
 performs; sub-task 6.6 removed it, a scroll now blitting the back buffer upon

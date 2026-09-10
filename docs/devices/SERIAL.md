@@ -124,7 +124,9 @@ the interrupt flag for the last time.
 Both directions are single-producer, single-consumer queues. For the transmit
 buffer the producer is the writing code and the consumer the handler; for the
 receive buffer the reverse. Neither requires a lock upon a machine of one
-processor, and both acquire one in sub-task 6.13.
+processor. The lock each will require was built by sub-task 6.13 and has not
+been applied here; sub-task 6.14 is what gives either buffer a second producer
+or a second consumer.
 
 The indices are free-running and masked when used, the discipline described in
 [`KEYBOARD.md`](KEYBOARD.md), Section 5.1: their difference is the occupancy
@@ -340,8 +342,9 @@ ordinary case and not the exception.
    machine the project targets carries one.
 4. Nothing here is safe against concurrent access. The buffers tolerate one
    producer and one consumer, which is what a single processor with interrupts
-   provides; the spinlock of sub-task 6.13 is required before a second processor
-   writes to the console.
+   provides. The spinlock required before a second processor writes to the
+   console was built by sub-task 6.13 and has not been applied here; sub-task
+   6.14 is what makes it necessary.
 5. The modem control signals are asserted and then ignored. Hardware flow control
    does not exist, so a receiver that cannot keep pace has no means of saying so.
 6. There is no line discipline. Received characters are delivered exactly as they

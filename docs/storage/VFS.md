@@ -443,7 +443,7 @@ which difference the assertion had detected.
 | An open that truncates discards the contents. | A file that keeps data the caller believed it had discarded. |
 | A second name raises the link count, both names lead to one file, and removing one leaves the other. | An unlink that destroys a file another name still leads to. |
 | A directory may not be given a second name. | A cycle in what must be a tree. |
-| A new directory bears two links and **its parent gains one**. | The count of Section 13.3 of [`EXT2.md`](EXT2.md) — a parent short by one may be freed while a child still names it, and nothing reports it until the freed blocks are given away. |
+| A new directory bears two links and **its parent gains one**. | The count of Section 4.3 of [`EXT2-FILES.md`](EXT2-FILES.md) — a parent short by one may be freed while a child still names it, and nothing reports it until the freed blocks are given away. |
 | Removing the directory returns the parent's link. | The same, in the other direction. |
 | A directory holding names is not removed; a directory is not unlinked as a file. | Everything within a directory made reachable by no path. |
 | A file that is open is not destroyed, and is destroyed once nothing holds it. | Section 9.3: blocks freed beneath a reader. |
@@ -479,7 +479,7 @@ disagree with itself — which is what an unclean state means.
 
 The self-test establishes the layer consistent with itself. The corroboration is
 a `mke2fs` image, and it is recorded in
-[`../project/TESTING.md`](../project/TESTING.md), Section 12. In summary: the
+[`../project/TESTING-SYSTEM.md`](../project/TESTING-SYSTEM.md), Section 6. In summary: the
 kernel mounted the image at `/` and listed its root with the inode numbers, types
 and names `debugfs` gives; a writable mount left the volume marked not clean with
 a mount count of one, and `e2fsck -fn` found no structural error in it; a
@@ -584,6 +584,8 @@ the mount count, so the field is now written as well.
     to write a diagnostic to a file. Only the filesystems' private descriptions —
     a superblock, an inode — are allocated, and those are bounded by these
     tables.
-12. **Nothing here is safe against concurrent access.** From sub-task 6.13 the
-    mount table, the node table and the open file table each require a lock, and
-    a node's reference count must be adjusted atomically.
+12. **Nothing here is safe against concurrent access.** The mount table, the node
+    table and the open file table each require a lock, and a node's reference
+    count must be adjusted atomically. The spinlock they require was built by
+    sub-task 6.13 and has not been applied here; sub-task 6.14 is what makes
+    these tables contended.

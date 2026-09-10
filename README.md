@@ -81,7 +81,11 @@ source of truth for progress, and nothing below restates it.
 | [`PLAN.md`](docs/project/PLAN.md) | The thirteen-phase roadmap and the task tracker: where the work stands and what comes next. This is the single source of truth for progress. |
 | [`STATUS.md`](docs/project/STATUS.md) | The present condition of the system, one paragraph to a phase, and which environments each phase has been observed to work in. |
 | [`HISTORY.md`](docs/project/HISTORY.md) | The revision history: one row per change, pointing at the commit and the design document that hold the detail. |
-| [`TESTING.md`](docs/project/TESTING.md) | The test procedure under QEMU, VirtualBox, OVMF and physical hardware, and the record of every test performed. |
+| [`VERSIONING.md`](docs/project/VERSIONING.md) | What a release gets called. One repository, many releases: `Oxys 1`, `Oxys 1.1`, `Oxys Aetos` — which is `Oxys 4` with a name — and editions such as `Oxys Aetos Workspace Edition`, which are varieties of a release rather than successors to it. Nothing has been released yet; the scheme is written before the first one rather than under the pressure of it. |
+| [`TESTING.md`](docs/project/TESTING.md) | The test procedure and the four environments — QEMU, VirtualBox, OVMF and physical hardware — with what each is good for that the others are not. |
+| [`TESTING-SYSTEM.md`](docs/project/TESTING-SYSTEM.md) | What the verification of each non-graphical subsystem establishes, and the deliberately-inserted defect that confirmed the assertion was worth making. |
+| [`TESTING-GRAPHICS.md`](docs/project/TESTING-GRAPHICS.md) | The same for the graphical work, which is apart because most of what matters there cannot be asserted by the kernel and has to be looked at. |
+| [`TESTING-RECORD.md`](docs/project/TESTING-RECORD.md) | The dated record of every test performed, with its outcome. |
 | [`TOOLCHAIN.md`](docs/project/TOOLCHAIN.md) | The cross-compilation toolchain, its construction, the build system, and the workflow that runs the verification upon GitHub. |
 | [`CODING-STANDARDS.md`](docs/project/CODING-STANDARDS.md) | The mandatory conventions of style, naming, documentation and compiler diagnostics. |
 | [`REFERENCES.md`](docs/project/REFERENCES.md) | The bibliography of authoritative specifications consulted by the project. |
@@ -96,9 +100,15 @@ source of truth for progress, and nothing below restates it.
 | [`MEMORY-LAYOUT.md`](docs/design/MEMORY-LAYOUT.md) | The physical and virtual address space layout, the paging hierarchy, and the allocators above it. |
 | [`INTERRUPTS.md`](docs/design/INTERRUPTS.md) | The interrupt descriptor table, the stubs and the dispatcher, the exception handlers, and the 8259A interrupt controllers. |
 | [`PRIVILEGE.md`](docs/design/PRIVILEGE.md) | The apparatus of a privilege transition: the user-mode descriptors, the task state segment and its trusted stacks, the registers that configure `SYSCALL`, and the entry path, dispatch table and argument validation built upon them. |
-| [`GRAPHICS.md`](docs/design/GRAPHICS.md) | The framebuffer: how it is asked for, why its pages are write-combining, the drawing primitives above it, the font and console that draw the boot log upon it, the screen each severe fault draws when the machine stops, the pointer, and the compositor that put a back buffer beneath all of it — after which nothing reads the framebuffer. |
+| [`GRAPHICS.md`](docs/design/GRAPHICS.md) | The index of the five documents that describe the graphical work of sub-tasks 6.2 to 6.6, and why it is five documents rather than one. |
+| [`FRAMEBUFFER.md`](docs/design/FRAMEBUFFER.md) | The framebuffer: how it is asked for, what is validated about it, why its pages are write-combining, how it is mapped, and what became of the text console that had the screen. |
+| [`DRAWING.md`](docs/design/DRAWING.md) | The drawing primitives: the surface they name instead of the framebuffer, the clipping that is a memory-safety boundary rather than a convenience, and the pixel, rectangle, line and blit. |
+| [`CONSOLE.md`](docs/design/CONSOLE.md) | The bitmap font drawn for this project, the console that draws the boot log with it, and the measurement that found the console slow and the specialisation that fixed it. |
+| [`FAULTSCREEN.md`](docs/design/FAULTSCREEN.md) | The screen each severe fault draws when the machine stops — one page per fault rather than one for all — and what a screen must survive to be drawn at all. |
+| [`COMPOSITOR.md`](docs/design/COMPOSITOR.md) | The pointer, and the compositor that put a back buffer beneath all of it — after which nothing reads the framebuffer. |
 | [`EXECUTABLE.md`](docs/design/EXECUTABLE.md) | The ELF64 loader: a piece of the kernel that does what an untrusted document tells it to, so its design is the list of things it refuses to be told. |
 | [`PROCESS.md`](docs/design/PROCESS.md) | The process, the thread and the saved context; the switch that exchanges one for another, and the descent to privilege level 3 by which a program first ran. |
+| [`CONCURRENCY.md`](docs/design/CONCURRENCY.md) | The ticket spinlock that masks interrupts for as long as it is held, the per-processor area it is built upon and the segment base that reaches it, the interrupt one processor sends to another, and the shootdown that makes a paging-structure change true everywhere — all of it built, and exercised, before there is a second processor. |
 
 ### [`docs/devices/`](docs/devices/) — the hardware the kernel drives
 
@@ -120,7 +130,9 @@ source of truth for progress, and nothing below restates it.
 | [`SDCARD.md`](docs/storage/SDCARD.md) | The SD card and the embedded MultiMediaCard: the host controller upon the bus, the second command set of the card behind it, and the two encodings of a card's capacity. |
 | [`BLOCK.md`](docs/storage/BLOCK.md) | The generic block-device layer: what a device is, what the layer refuses before a driver is reached, and why it is tested against memory. |
 | [`BUFFER.md`](docs/storage/BUFFER.md) | The buffer cache: how a block is found, what is discarded when the store is full, and when a modified block reaches its device. |
-| [`EXT2.md`](docs/storage/EXT2.md) | The EXT2 volume: the superblock, the block group descriptor table and the inode, their decoding, and which volumes this kernel refuses to address. |
+| [`EXT2.md`](docs/storage/EXT2.md) | The EXT2 volume's structures: the superblock, the block group descriptor table and the inode, their decoding, and which volumes this kernel refuses to address. Section 10 enumerates every limitation of the EXT2 support, the two documents below included. |
+| [`EXT2-FILES.md`](docs/storage/EXT2-FILES.md) | What is done with those structures: the directory and the resolution of a path through it, the reading of a file, the writing and truncation of one, and the names by which a file is reached. |
+| [`EXT2-VERIFICATION.md`](docs/storage/EXT2-VERIFICATION.md) | The eleven self-tests of the EXT2 implementation, six of which assert against a volume `mke2fs` produced rather than one this kernel composed. |
 | [`VFS.md`](docs/storage/VFS.md) | The virtual filesystem layer: the mount found through the node it covers, the file that is one node however many callers reach it, and the mark a mount leaves upon a volume it has open for writing. |
 
 ## Directory-level documentation

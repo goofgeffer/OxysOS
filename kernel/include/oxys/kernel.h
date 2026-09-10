@@ -56,9 +56,21 @@ extern char KernelTextEnd[];
  * They live here rather than in kernel.c because two things now present them:
  * the banner at every start, and the system call by which a program asks what it
  * is running upon. A second copy would be a second thing to forget to change.
+ *
+ * OXYS_VERSION_STRING holds the *ordinal form* of the release this image belongs
+ * to, as docs/project/VERSIONING.md, Section 3, defines it — "1", "1.1",
+ * "4-workspace" — and "unreleased" where it belongs to none, which is the case
+ * today. It held "0.1.0" until the versioning scheme was written, which was a
+ * release that had been published and then withdrawn; see
+ * docs/project/HISTORY.md, 2026-09-09.
+ *
+ * The release's *name* is deliberately absent. Nothing inside the kernel has any
+ * use for one: the banner is read by whoever is already looking at the machine,
+ * and a program asking what it runs upon wants something it can compare. The
+ * name lives in the release notes and the tag annotation.
  */
 #define OXYS_SYSTEM_NAME    "Oxys-OS"
-#define OXYS_VERSION_STRING "0.1.0"
+#define OXYS_VERSION_STRING "unreleased"
 
 #define DIRECT_MAP_BASE UINT64_C(0xFFFF800000000000)
 

@@ -10,13 +10,13 @@
  *   - ANSI X3.4-1986: LF, CR, HT and BS, and the meaning each is given.
  *   - docs/devices/DISPLAY.md, Sections 6 and 7: the same four characters as the
  *     text-mode driver implements them, and the erase limit.
- *   - docs/design/GRAPHICS.md, Sections 19 and 20.
+ *   - docs/design/CONSOLE.md, Sections 2 and 3.
  *
  * Concurrency. There is no lock, and there is no second thread of control that
  * writes here: the interrupt handlers do not print, save through the panic path,
- * which does not return. From sub-task 6.13 that ceases to be true and this must
- * take the lock that sub-task introduces — the whole of a character, not one
- * pixel of it, being the thing that must not interleave.
+ * which does not return. From sub-task 6.14 that ceases to be true and this must
+ * take the lock sub-task 6.13 built — the whole of a character, not one pixel of
+ * it, being the thing that must not interleave.
  */
 
 #include <oxys/console.h>
@@ -476,7 +476,7 @@ void ConsoleWriteCharacter(char character)
      * and then drawing the glyph over it was the first arrangement and was
      * replaced: it wrote every pixel of the cell twice and clipped each of them
      * separately, and it was the greater part of what a character cost. See
-     * docs/design/GRAPHICS.md, Section 23.
+     * docs/design/CONSOLE.md, Section 6.
      */
     FontDrawGlyphOpaque(&ConsoleSurface, (int32_t)(ConsoleCursorColumn * FONT_WIDTH),
                         (int32_t)(ConsoleCursorRow * FONT_HEIGHT), code, ConsoleForeground,

@@ -8,7 +8,7 @@
  *          CompositorMoveLayer, CompositorInvalidate, CompositorPresent,
  *          CompositorReport.
  * References: kernel/include/oxys/compositor.h states what this implements, and
- *          docs/design/GRAPHICS.md, Section 27, why.
+ *          docs/design/COMPOSITOR.md, Section 2, why.
  *
  * What this sub-task is for, in one paragraph.
  *
@@ -38,7 +38,19 @@
  *   ordinary write-back memory; the framebuffer is written and never read. That
  *   is the whole of the gain over sub-task 6.4's arrangement, where a scroll
  *   read four megabytes back through a write-combining mapping in which reads
- *   are uncached — see docs/design/GRAPHICS.md, Section 23.2.
+ *   are uncached — see docs/design/CONSOLE.md, Section 6.2.
+ *
+ * Concurrency. The back buffer, the damage rectangle and the layer table are
+ * unsynchronised, and there is one flow of control that touches them. The
+ * spinlock of sub-task 6.13 exists and has not been applied here; sub-task 6.14
+ * is what makes them contended. What it must cover then is a presentation and
+ * not a primitive: a processor drawing between the reading of the damage
+ * rectangle and its clearing would have its work discarded, the region that
+ * recorded it having been cleared by a presentation that never copied it. That
+ * is a frame silently missing what was drawn into it, which is the failure this
+ * note exists to name, and it is why the right place for the lock is the
+ * surface's owner rather than the primitive — see docs/design/DRAWING.md,
+ * limitation 5.
  */
 
 #include <oxys/compositor.h>

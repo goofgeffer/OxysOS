@@ -51,8 +51,8 @@
  * and a single consumer, as the keyboard's has; the reasoning in
  * drivers/keyboard/keyboard.c applies unchanged. The pointer position and the
  * partly received packet are written by the producer alone and read by both;
- * from sub-task 6.13 the consumer's side requires the spinlock governing this
- * device.
+ * the spinlock of sub-task 6.13 is what the consumer's side requires, and it has
+ * not been applied here.
  */
 
 #include <oxys/mouse.h>

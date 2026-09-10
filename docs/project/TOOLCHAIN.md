@@ -139,7 +139,7 @@ Every assertion this project makes about its own correctness is made by
 machinery this project wrote, against fixtures this project composed. That is a
 closed loop, and its characteristic failure is agreement: a misreading of a
 specification is composed into the fixture and then asserted against itself, and
-everything passes. `docs/project/TESTING.md`, Section 22, sets that argument out
+everything passes. `docs/project/TESTING.md`, Section 7, sets that argument out
 in full and names the several independent judges available to this project.
 
 A compiler written by other people, from the same standard, is one of them. It
@@ -234,7 +234,7 @@ is attributable to that edit.
 It does not run under KVM — a hosted runner provides none, so QEMU emulates,
 which is how the target is run locally also. It does not perform the interactive
 tests, the VirtualBox target, or the physical hardware procedure of
-[`TESTING.md`](TESTING.md), Section 10: each of those requires a display, a
+[`TESTING.md`](TESTING.md), Section 5: each of those requires a display, a
 hypervisor or a machine that a hosted runner does not have. Those runs are
 recorded by hand and this workflow does not replace them.
 

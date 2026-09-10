@@ -7,7 +7,7 @@
  *          the volume put it.
  * Key functions: KernelVerifyExt2Files.
  * References:
- *   - docs/storage/EXT2.md, Section 14, which pairs every assertion here with
+ *   - docs/storage/EXT2-VERIFICATION.md, which pairs every assertion here with
  *     the silent failure it catches.
  *   - The Second Extended File System, Dave Poirier, the description of i_block
  *     and the Symbolic Links chapter.

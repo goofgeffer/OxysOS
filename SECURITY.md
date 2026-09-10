@@ -79,7 +79,7 @@ misleading by omission.
 | **User address-space layout randomisation.** | A program is loaded where its headers ask. | Not yet planned |
 | **Any filesystem permission model.** No users, no credentials, no ownership. | Whatever can reach a volume can do anything to it. | Phase 7 at the earliest |
 | **Any network stack.** Phase 11 has not begun. | There is no remote attack surface whatever, which is the one respect in which this kernel is currently very secure. | Phase 11 |
-| **Concurrency safety.** There is one flow of control; the locks arrive at sub-task 6.13. | Data structures are unsynchronised by design and are documented as such. | Sub-task 6.13 |
+| **Concurrency safety.** There is one flow of control. The lock, the per-processor area, the inter-processor interrupt and the shootdown all exist as of sub-task 6.13, but no shared structure has yet been put under a lock. | Data structures are unsynchronised by design and are documented as such, each in its own file's header. `docs/design/CONCURRENCY.md`, Section 10, limitation 1, enumerates them. | Sub-tasks 6.14 and 6.15 |
 | **Cryptography of any kind.** | No hashing, no ciphers, no random number generation. | Phase 10 |
 
 None of these is an oversight, and each is recorded as a limitation in the design
@@ -96,6 +96,13 @@ it is present** very much is.
 
 This project does not branch and has cut no release. A fix lands on `main` and
 that is the whole of the release process.
+
+When there is a release this table has to be revisited, and the scheme it will
+have to be written against is `docs/project/VERSIONING.md` — under which a
+correction to a released image is a point release rather than a patch level, and
+an edition is a variety of a release rather than a separate line to support.
+That document records the gap as its own limitation 4 so that the obligation is
+not carried by this table alone.
 
 ## 6. Reporting
 

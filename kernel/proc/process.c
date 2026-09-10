@@ -44,8 +44,8 @@
  *   fault that makes a process kill an unrelated one.
  *
  * Concurrency. Neither table is guarded. Nothing runs but the boot sequence
- * until sub-task 6.15, and from sub-task 6.13 both tables and the current thread
- * become the business of that sub-task's lock.
+ * until sub-task 6.15, and the spinlock of sub-task 6.13 exists and has not been
+ * applied here; both tables and the current thread require it then.
  */
 
 #include <oxys/process.h>

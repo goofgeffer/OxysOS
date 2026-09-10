@@ -8,7 +8,7 @@
  * Key functions: KernelVerifyExt2VolumeRefusedWith, KernelVerifyExt2Groups,
  *          KernelVerifyExt2Inodes.
  * References:
- *   - docs/storage/EXT2.md, Section 14, which pairs every assertion here with
+ *   - docs/storage/EXT2-VERIFICATION.md, which pairs every assertion here with
  *     the silent failure it catches.
  *   - The Second Extended File System, Dave Poirier: the format itself. The
  *     field offsets are named in <oxys/ext2.h> and are not restated here.

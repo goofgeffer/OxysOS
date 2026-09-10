@@ -7,7 +7,7 @@
  *          FontDrawGlyphOpaque, FontDrawGlyphScaled.
  * References:
  *   - ANSI X3.4-1986: the printable range 0x20 to 0x7E the font covers.
- *   - docs/design/GRAPHICS.md, Section 18: the face, its metrics, and why it was
+ *   - docs/design/CONSOLE.md, Section 1: the face, its metrics, and why it was
  *     drawn rather than obtained.
  *
  * The font is compiled into the image. It is not read from the firmware and not

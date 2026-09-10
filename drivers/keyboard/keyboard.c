@@ -42,9 +42,9 @@
  * and a single consumer. The producer advances the write index alone and the
  * consumer the read index alone, and each reads the other's index without
  * modifying it, so the arrangement is correct without a lock upon one processor.
- * From sub-task 6.13, with several consumers possible, the consumer's side
- * requires the spinlock governing this device; the producer's side does not,
- * there being one keyboard and therefore one producer.
+ * The spinlock of sub-task 6.13 exists and has not been applied here. With
+ * several consumers possible it is the consumer's side that requires it; the
+ * producer's side does not, there being one keyboard and therefore one producer.
  */
 
 #include <oxys/keyboard.h>

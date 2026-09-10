@@ -84,7 +84,7 @@ void PitInitialise(uint32_t frequency);
  *
  * The counter is incremented by an interrupt handler and read by ordinary kernel
  * code. A 64-bit aligned read is not torn upon this architecture, so no lock is
- * required to observe a consistent value; from sub-task 6.13 an ordering
+ * required to observe a consistent value; from sub-task 6.14 an ordering
  * guarantee will nevertheless be required of readers upon other processors.
  */
 uint64_t PitTickCount(void);

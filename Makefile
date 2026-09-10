@@ -131,8 +131,10 @@ C_SOURCES := kernel/kernel.c \
              kernel/test/ext2/probe.c \
              kernel/test/verify_vfs.c \
              kernel/test/verify_apic.c \
+             kernel/test/verify_smp.c \
              kernel/mm/pmm.c \
              kernel/mm/paging.c \
+             kernel/mm/shootdown.c \
              kernel/mm/addrspace.c \
              kernel/mm/vmm.c \
              kernel/mm/heap.c \
@@ -140,6 +142,9 @@ C_SOURCES := kernel/kernel.c \
              kernel/cpu/idt.c \
              kernel/cpu/tss.c \
              kernel/cpu/syscall.c \
+             kernel/cpu/percpu.c \
+             kernel/cpu/spinlock.c \
+             kernel/cpu/ipi.c \
              kernel/cpu/interrupts.c \
              kernel/cpu/irq.c \
              kernel/cpu/exceptions.c \

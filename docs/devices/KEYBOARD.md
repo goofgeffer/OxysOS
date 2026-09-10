@@ -204,9 +204,11 @@ reads the other's index without modifying it. The event is written *before* the
 write index is advanced, so a consumer that observes the advance is guaranteed a
 complete event beneath it.
 
-From sub-task 6.13, with several consumers possible, the consumer's side requires
-the spinlock governing this device. The producer's side will not: there is one
-keyboard, and therefore one producer.
+With several consumers possible, the consumer's side requires the spinlock
+governing this device. That lock was built by sub-task 6.13 and has not been
+applied here; sub-task 6.14 is what makes a second consumer possible. The
+producer's side will not require it: there is one keyboard, and therefore one
+producer.
 
 ## 6. The initialisation sequence
 
@@ -381,8 +383,10 @@ At the completion of the self-test under QEMU:
 5. There is no notion of a keyboard interrupt, a line discipline, or echo control.
    Those are properties of a terminal rather than of a keyboard and belong to the
    shell of Phase 8.
-6. The consumer's side of the buffer is unsynchronised; from sub-task 6.13 it
-   requires the spinlock governing this device.
+6. The consumer's side of the buffer is unsynchronised. The spinlock it requires
+   was built by sub-task 6.13 and has not been applied here; sub-task 6.14 is
+   what makes a second consumer possible. Section 5.3 says why the producer's
+   side needs none.
 7. The "fake shift" sequences are not suppressed. The controller emits `E0 2A`
    before, and `E0 AA` after, several extended keys — the keypad's solidus, and
    the cursor keys while number lock is engaged — in order that software unaware

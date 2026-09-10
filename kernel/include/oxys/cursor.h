@@ -9,7 +9,7 @@
  *          CursorShapeIsInterior, CursorImageSurface, CursorImageMask,
  *          CursorMoveCount, CursorReport.
  * References:
- *   - docs/design/GRAPHICS.md, Section 26: what the pointer is, seen from the
+ *   - docs/design/COMPOSITOR.md, Section 1: what the pointer is, seen from the
  *     drawing it is built upon; Section 27.4, what sub-task 6.6 removed from it.
  *   - docs/devices/MOUSE.md, Sections 7 and 8: the shape and every assertion
  *     made upon it.

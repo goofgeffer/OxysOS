@@ -30,7 +30,7 @@ not conflict when they are introduced.
 | Base | Extent | Region | Introduced |
 | ---- | ------ | ------ | ---------- |
 | `0xFFFF800000000000` | 64 TiB | The direct map of all physical memory. | Phase 2, sub-task 2.4 (established) |
-| `0xFFFFC00000000000` | 32 TiB | The kernel virtual allocator arena, comprising the kernel heap and device mappings. The first device mapping is the framebuffer of sub-task 6.2; see [`GRAPHICS.md`](GRAPHICS.md), Section 5. | Phase 2, sub-task 2.5 (established) |
+| `0xFFFFC00000000000` | 32 TiB | The kernel virtual allocator arena, comprising the kernel heap and device mappings. The first device mapping is the framebuffer of sub-task 6.2; see [`FRAMEBUFFER.md`](FRAMEBUFFER.md), Section 5. | Phase 2, sub-task 2.5 (established) |
 | `0xFFFFFFFF80000000` | 2 GiB | The kernel image: text, read-only data, data and BSS. | Phase 1 |
 
 The kernel image is placed within the topmost 2 GiB so that every kernel symbol
@@ -882,9 +882,15 @@ this section's test and that of Section 14.6.
    2.8 need not be the kernel's. It has no means of resolving a fault in an
    address space that is not the active one, and needs none: a fault is raised
    only by the processor that is translating through that space.
-3. No shootdown is performed. `INVLPG` invalidates the translation upon the
-   executing processor only; from sub-task 6.13 the other processors holding a
-   stale entry must be signalled by inter-processor interrupt.
+3. ~~No shootdown is performed.~~ Discharged at sub-task 6.13. `INVLPG`
+   invalidates the translation upon the executing processor only, per Intel SDM,
+   Volume 3A, Section 4.10.5, so `PagingInvalidate` now announces the address to
+   every other processor by inter-processor interrupt and waits for each to
+   acknowledge. Upon a machine with one processor started the announcement costs
+   one comparison. A shootdown that is not acknowledged is fatal: Section 4.10.4.4
+   permits an invalidation to be deferred only while no processor can use the
+   stale translation, and a caller that returned would go on to give the frame
+   away. See [`CONCURRENCY.md`](CONCURRENCY.md), Section 6.
 
 ## 14. Address-space cloning
 
@@ -1033,7 +1039,10 @@ the real hierarchy, not by a probe.
    hierarchy and nothing besides. The record lives in the process control block
    of sub-task 6.9, which is what put things there and therefore what can say
    what it mapped. See [`PROCESS.md`](PROCESS.md), Section 2.
-3. Cloning is not safe against a concurrent fault upon the same address space.
-   From sub-task 6.13 it must be performed under the lock governing the space, and
-   the invalidation of Section 14.4 accompanied by a shootdown to the other
-   processors upon which the source may be active.
+3. Cloning is not safe against a concurrent fault upon the same address space. It
+   must be performed under the lock governing the space, which has existed since
+   sub-task 6.13 and has not yet been applied here, there being one thread of
+   control. The other half of that limitation **is** discharged: the invalidation
+   of Section 14.4 goes through `PagingInvalidate`, which announces the address to
+   every other processor upon which the source may be active. See
+   [`CONCURRENCY.md`](CONCURRENCY.md), Sections 6 and 10.

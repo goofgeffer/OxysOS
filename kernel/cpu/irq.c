@@ -33,9 +33,10 @@
  *
  * Concurrency. The handler table and the recorded mask state are unsynchronised.
  * Until the interrupt flag is set there is one flow of control; from sub-task
- * 6.13 the registration of a handler and the change of a mask both require the
- * spinlock governing this layer, an interrupt handler and an application
- * processor each being able to enter either.
+ * 6.13 there is a spinlock the registration of a handler and the change of a
+ * mask both require, an interrupt handler and an application processor each
+ * being able to enter either. It has not been applied here; sub-task 6.14 is
+ * what makes either contended.
  */
 
 #include <oxys/irq.h>

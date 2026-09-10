@@ -20,14 +20,15 @@
  *   - docs/design/MEMORY-LAYOUT.md, Section 8: the design of this hierarchy.
  *
  * Concurrency. This code runs once, before any application processor is started,
- * and requires no synchronisation. From sub-task 6.13, any later modification of
- * a mapping shared between processors must be followed by a translation
- * lookaside buffer shootdown by inter-processor interrupt.
+ * and requires no synchronisation. Any later modification of a mapping shared
+ * between processors is followed by a translation-lookaside-buffer shootdown, as
+ * of sub-task 6.13; PagingInvalidate is where that happens.
  */
 
 #include <oxys/paging.h>
 #include <oxys/pmm.h>
 #include <oxys/cpu.h>
+#include <oxys/shootdown.h>
 #include <oxys/kernel.h>
 
 /*
@@ -424,20 +425,48 @@ uint64_t PagingDirectMapExtent(void)
 }
 
 /*
- * Invalidates the translation-lookaside-buffer entry for one page.
+ * Invalidates the translation-lookaside-buffer entry for one page, upon the
+ * executing processor alone.
  *
  * Intel SDM, Volume 3A, Section 4.10.4.1, requires software to invalidate a
  * translation whenever it changes a paging-structure entry that the processor
  * may have cached. INVLPG is used in preference to reloading CR3 because it
  * discards one entry rather than the whole buffer.
+ */
+static void PagingInvalidateHere(VirtualAddress address)
+{
+    __asm__ __volatile__("invlpg (%0)" : : "r"(address) : "memory");
+}
+
+/*
+ * Invalidates the entry everywhere.
  *
- * From sub-task 6.13 this must be accompanied by a shootdown: other processors
- * hold their own translation-lookaside buffers, and an entry cached there is not
- * affected by an invalidation performed here.
+ * Intel SDM, Volume 3A, Section 4.10.5, records that the instruction above
+ * reaches the executing processor and no other, and that where several
+ * processors may have cached a translation each must be made to invalidate it
+ * for itself. That is the shootdown of sub-task 6.13, and it is announced from
+ * here because here is the one place a paging-structure change becomes visible
+ * as a change to a particular address.
+ *
+ * A shootdown that is not acknowledged is fatal. Section 4.10.4.4 permits an
+ * invalidation to be deferred only while no processor can use the stale
+ * translation, and a caller that returned from here would go on to give the
+ * frame away — after which another processor writes through a translation to a
+ * page that now belongs to somebody else. There is no report that could be made
+ * later about that, because the state that would explain it is what gets
+ * overwritten.
+ *
+ * Upon a machine with one processor started the broadcast returns at once,
+ * having nobody to tell; that is the whole cost on the ordinary path.
  */
 static void PagingInvalidate(VirtualAddress address)
 {
-    __asm__ __volatile__("invlpg (%0)" : : "r"(address) : "memory");
+    PagingInvalidateHere(address);
+
+    if (!ShootdownBroadcast(address))
+    {
+        KernelPanic("A translation-lookaside-buffer shootdown was not acknowledged.");
+    }
 }
 
 void PagingMapKernelPage(VirtualAddress virtual_address,
@@ -861,6 +890,11 @@ void PagingMapPageIn(PhysicalAddress root, VirtualAddress virtual_address,
 void PagingInvalidatePage(VirtualAddress address)
 {
     PagingInvalidate(address);
+}
+
+void PagingInvalidateLocalPage(VirtualAddress address)
+{
+    PagingInvalidateHere(address);
 }
 
 void PagingReleaseStructure(PhysicalAddress table)

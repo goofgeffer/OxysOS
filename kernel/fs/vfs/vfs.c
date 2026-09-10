@@ -34,8 +34,9 @@
  * not the other.
  *
  * Concurrency. This implementation is not yet safe against concurrent access.
- * From sub-task 6.13 the mount table, the node table and the open file table
- * each require a lock, and a node's reference count must be adjusted atomically.
+ * The spinlock of sub-task 6.13 exists and has not been applied here; the mount
+ * table, the node table and the open file table each require one, and a node's
+ * reference count must be adjusted atomically.
  * The open file table additionally becomes per-process in Phase 7 — not in
  * sub-task 6.9, which introduced the process control block and gave it no file
  * descriptors at all; see docs/design/PROCESS.md, limitation 6. Nothing here

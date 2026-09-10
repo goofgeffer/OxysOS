@@ -14,7 +14,7 @@
  *     decides each step from an accumulated integer error and uses no division.
  *   - PROJECT_GUIDELINES.md, Section 8: floating point is prohibited in the
  *     kernel, which is why every calculation here is integer.
- *   - docs/design/GRAPHICS.md, Sections 11 to 16: the design and its limits.
+ *   - docs/design/DRAWING.md, Sections 1 to 6: the design and its limits.
  *
  * The rule that governs this file.
  *
@@ -33,9 +33,8 @@
  * one of its tests remained correct.
  *
  * Concurrency. Nothing here is safe against two processors drawing upon one
- * surface. From sub-task 6.13 that requires the lock which that sub-task
- * introduces; it is not taken here, a primitive being far too small a thing to
- * own a lock.
+ * surface. That requires the lock of sub-task 6.13, which exists; it is not
+ * taken here, a primitive being far too small a thing to own a lock.
  */
 
 #include <oxys/graphics.h>
@@ -177,7 +176,7 @@ bool GraphicsSurfaceInitialise(GraphicsSurface *surface, void *pixels, uint32_t 
      *
      * The alignment is established rather than assumed. A framebuffer's pitch is
      * the boot loader's to choose and is not obliged to be a multiple of
-     * anything; docs/design/GRAPHICS.md, Section 3, records that it is read and
+     * anything; docs/design/FRAMEBUFFER.md, Section 3, records that it is read and
      * not computed.
      */
     surface->whole_words = (bytes_per_pixel == 4U) &&
@@ -788,8 +787,8 @@ bool GraphicsBlit(GraphicsSurface *destination, int32_t x, int32_t y,
          * framebuffer back, and a framebuffer is write-combining, where reads
          * are uncached — so the read is the expensive half and a quarter as many
          * of them is the whole of the gain. Removing the read altogether needs
-         * the back buffer of sub-task 6.6; see docs/design/GRAPHICS.md,
-         * Section 23.3.
+         * the back buffer of sub-task 6.6; see docs/design/CONSOLE.md,
+         * Section 6.3.
          */
         const bool by_words = destination->whole_words && source->whole_words;
 

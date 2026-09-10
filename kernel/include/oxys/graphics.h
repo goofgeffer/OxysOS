@@ -12,7 +12,7 @@
  *   - J. E. Bresenham, "Algorithm for computer control of a digital plotter",
  *     IBM Systems Journal 4(1), 1965: the integer line algorithm implemented in
  *     graphics/draw.c, which uses no division and no floating point.
- *   - docs/design/GRAPHICS.md, Sections 11 to 16: the design, and every
+ *   - docs/design/DRAWING.md, Sections 1 to 6: the design, and every
  *     assertion made upon it.
  *
  * Why a surface, when there is only one framebuffer.
@@ -84,8 +84,8 @@ typedef struct GraphicsRectangle
  *
  * The pixels are volatile because a surface may be the framebuffer, which is
  * memory a device reads independently of this kernel. Nothing here is safe
- * against concurrent drawing upon one surface; from sub-task 6.13 that requires
- * the lock which that sub-task introduces.
+ * against concurrent drawing upon one surface; that requires the lock of
+ * sub-task 6.13, which is not taken at this level.
  *
  * `whole_words` records that this surface may be addressed a 32-bit word at a
  * time: its pixels are four bytes, and its base address and its pitch are both
@@ -96,7 +96,7 @@ typedef struct GraphicsRectangle
  *
  * It exists because writing a four-byte pixel as four bytes costs four stores
  * and the loop that generates them, and that was measured to be the greater part
- * of what the console spent — see docs/design/GRAPHICS.md, Section 23. Where it
+ * of what the console spent — see docs/design/CONSOLE.md, Section 6. Where it
  * is false every primitive still works, byte at a time; nothing depends upon it
  * for correctness.
  */
@@ -301,7 +301,7 @@ void GraphicsPatternBlock(GraphicsSurface *surface, int32_t x, int32_t y,
  *
  * The pixels drawn are exactly those of the unclipped line that fall within the
  * clip, and this is a stronger promise than it appears; see
- * docs/design/GRAPHICS.md, Section 14.
+ * docs/design/DRAWING.md, Section 4.
  */
 void GraphicsDrawLine(GraphicsSurface *surface, int32_t first_x, int32_t first_y,
                       int32_t second_x, int32_t second_y, uint32_t colour);

@@ -134,29 +134,28 @@ uint64_t SyscallObservedFlags(void);
  * ------------------------------------------------------------------------------ */
 
 /*
- * The per-processor block GS names within the kernel.
+ * The block GS names within the kernel is the per-processor area of sub-task
+ * 6.13, and is declared in <oxys/percpu.h>.
  *
  * SYSCALL performs no stack switch: RSP is still the caller's when the first
  * instruction of the entry path runs, so the path must find a kernel stack using
  * nothing but a register the caller could not have set. SWAPGS is that register:
  * it exchanges GS.base with IA32_KERNEL_GS_BASE, which privilege level 3 cannot
- * write, so the first instruction of the path can reach this block and nothing
- * the caller does can redirect it.
+ * write, so the first instruction of the path can reach the area and nothing the
+ * caller does can redirect it.
  *
- * Two fields, and both are needed before a stack exists. The kernel stack is
- * where to go; the scratch is where the caller's stack pointer is put while
- * there is nowhere else to put it — no register may be destroyed and no memory
- * addressed, at that moment, except through GS.
+ * Two of the area's fields are needed before a stack exists, and are therefore
+ * its first two. The kernel stack is where to go; the second is where the
+ * caller's stack pointer is put while there is nowhere else to put it — no
+ * register may be destroyed and no memory addressed, at that moment, except
+ * through GS. Their offsets are asserted in kernel/cpu/percpu.c, the assembly
+ * addressing them by number.
  *
- * Sub-task 6.13 replaces this with the per-processor area proper. These two
- * fields are the beginning of it and their offsets are asserted, because the
- * assembly addresses them by number.
+ * This was a structure of its own — SyscallProcessorBlock — from sub-task 6.7
+ * until sub-task 6.13, which is what it always said it would be: the two fields
+ * were the beginning of the area, and the area is what a lock, a shootdown and a
+ * scheduler all need to reach by the same means.
  */
-typedef struct SyscallProcessorBlock
-{
-    uint64_t kernel_stack; /* Offset 0: the top of this processor's kernel stack. */
-    uint64_t user_stack;   /* Offset 8: the caller's RSP, while it is homeless. */
-} SyscallProcessorBlock;
 
 /*
  * The registers as the entry path saved them, in the order it pushed them.

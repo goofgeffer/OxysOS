@@ -6,7 +6,7 @@
  *          kernel/test/ext2/, restoring the volume between those that alter it.
  * Key functions: KernelVerifyExt2.
  * References:
- *   - docs/storage/EXT2.md, Section 14: every assertion made here and beneath,
+ *   - docs/storage/EXT2-VERIFICATION.md: every assertion made here and beneath,
  *     paired with the silent failure it catches.
  *   - The Second Extended File System, Dave Poirier: the format itself. The
  *     field offsets are named in <oxys/ext2.h> and are not restated here.

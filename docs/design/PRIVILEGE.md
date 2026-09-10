@@ -152,7 +152,7 @@ rather than inferred. The encoding is unchanged.
 is the class of defect that motivates having one: nothing this project wrote
 could have reported it, because everything this project wrote agreed with it. See
 [`../project/TOOLCHAIN.md`](../project/TOOLCHAIN.md), Section 9, and
-[`../project/TESTING.md`](../project/TESTING.md), Section 22.
+[`../project/TESTING.md`](../project/TESTING.md), Section 7.
 
 ## 3. The task state segment
 
@@ -443,7 +443,7 @@ The self-test was confirmed capable of failing before it was trusted.
 `RFLAGS_INTERRUPT_ENABLE` was removed from `SYSCALL_FLAG_MASK` and the kernel
 rebuilt. Two assertions reported — the configuration one in Section 7.4 and the
 exercised one in Section 7.5 — and the run ended `Privilege self-test FAILED.`
-The edit was then reverted. `docs/project/TESTING.md`, Section 13.1, records the
+The edit was then reverted. `docs/project/TESTING-SYSTEM.md`, Section 7.1, records the
 procedure.
 
 ### 7.7 Corroboration upon a second hypervisor
@@ -460,7 +460,7 @@ That run established one thing besides: this kernel does not detect VirtualBox's
 `docs/project/TESTING.md`, Section 1, cannot be made under it. A verdict must be
 read from the console instead, by pausing the machine while the line is still
 upon the screen. The condition predates this sub-task and is unrelated to it;
-the procedure is `docs/project/TESTING.md`, Sections 9.1 and 9.2.
+the procedure is `docs/project/TESTING.md`, Sections 4.1 and 4.2.
 
 ## 8. Observed state
 

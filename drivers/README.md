@@ -25,7 +25,7 @@ memory and is not.
 | `vga/vga.c` | The VGA text-mode display, mode 3. Displaced by the framebuffer of sub-task 6.2 wherever the boot loader leaves the adapter in a graphics mode; see `docs/devices/DISPLAY.md`, Section 1.1. | `<oxys/vga.h>` | 1, 4.2 |
 | `serial/serial.c` | The 16550-compatible UART at COM1, interrupt-driven. | `<oxys/serial.h>` | 1, 4.1 |
 | `pic/pic.c` | The pair of cascaded 8259A interrupt controllers. Retired at sub-task 6.12; it holds no handler table and routes nothing. | `<oxys/pic.h>` | 3, 6.12 |
-| `apic/lapic.c` | The Local APIC: one per logical processor, and what completes every interrupt from sub-task 6.12 onward. | `<oxys/lapic.h>` | 6.12 |
+| `apic/lapic.c` | The Local APIC: one per logical processor; what completes every interrupt from sub-task 6.12 onward, and — from sub-task 6.13 — the command register through which one processor interrupts another. | `<oxys/lapic.h>` | 6.12, 6.13 |
 | `apic/ioapic.c` | The I/O APIC: the redirection table that decides what vector an interrupt input presents, and to which processor. | `<oxys/ioapic.h>` | 6.12 |
 | `pit/pit.c` | Counter 0 of the 8253 interval timer, the system tick. | `<oxys/pit.h>` | 3 |
 | `ps2/ps2.c` | The 8042 keyboard controller itself, and the two device ports it presents. | `<oxys/ps2.h>` | 3, 6.5 |
@@ -298,6 +298,13 @@ Both are programmed from what the firmware's ACPI tables declare, which
 rather than kept beside them, why the register pages are uncacheable, why a
 redirection entry is written high half first, and why the spurious vector is
 `0xFF` — is in [`../docs/devices/APIC.md`](../docs/devices/APIC.md).
+
+From sub-task 6.13 `lapic.c` also writes the **interrupt command register**, by
+which one processor sends an interrupt to another. This driver owns the register
+and the bounded waits upon its delivery status; it owns none of the meanings a
+vector carries, exactly as it owns none of the meanings a device request line
+carries. What the vectors mean is
+[`../docs/design/CONCURRENCY.md`](../docs/design/CONCURRENCY.md), Section 5.
 
 ### `pit/` — the interval timer
 

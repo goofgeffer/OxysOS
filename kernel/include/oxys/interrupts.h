@@ -87,6 +87,19 @@ typedef struct TrapFrame
 #define TRAP_FRAME_REGISTER_COUNT 15U
 
 /*
+ * The distance from the frame's base to the saved code segment selector.
+ *
+ * The common stub of kernel/cpu/interrupt_stubs.asm reads it there to decide
+ * whether the interrupt came from privilege level 3, and therefore whether the
+ * per-processor segment base must be exchanged. The stub has no sight of this
+ * structure and addresses the field by number; the number is asserted against
+ * the structure in kernel/cpu/interrupts.c, because a field inserted above `cs`
+ * would leave the stub testing the saved RIP — whose low two bits are whatever
+ * the interrupted instruction's address happened to end in.
+ */
+#define TRAP_FRAME_CS_OFFSET 144U
+
+/*
  * The signature of a handler. The frame is supplied by address and is not
  * const: a handler may alter the state to which control returns, which is how a
  * fault is corrected and how a system call will deliver its result. Any change

@@ -154,7 +154,37 @@ Sections relied upon:
   store the descriptor table registers.
 - **Volume 3A, Section 4.10.4.1**, invalidation: writing CR3 invalidates every
   translation-lookaside-buffer entry associated with the current process context,
-  save those for global pages.
+  save those for global pages; `INVLPG` invalidates the entries for one linear
+  address upon the executing processor.
+- **Volume 3A, Section 4.10.4.4**, an invalidation may be deferred only while no
+  processor can use the stale translation. This is what obliges a shootdown to be
+  waited for rather than merely sent.
+- **Volume 3A, Section 4.10.5**, "Propagation of Paging-Structure Changes to
+  Multiple Processors": the invalidation reaches the executing processor alone,
+  so software must interrupt every other processor that may have cached the
+  translation and have each perform the invalidation for itself. The manual names
+  the procedure "TLB shootdown".
+- **Volume 3A, Section 3.4.4**, the FS and GS segment bases in 64-bit mode. They
+  are held in `IA32_FS_BASE` and `IA32_GS_BASE`, are **not** ignored as the other
+  segment bases are, and a load of the segment register from a descriptor
+  replaces the hidden base with the descriptor's — which for a flat data
+  descriptor is zero.
+- **Volume 3A, Section 8.1.2.2**, bus locking: the `LOCK` prefix makes the
+  read-modify-write of the destination operand atomic with respect to every other
+  processor, and is honoured for `XADD`, `CMPXCHG`, `ADD` and `SUB` among others.
+- **Volume 3A, Section 8.2.2**, the memory-ordering model: loads are not
+  reordered with other loads, stores are not reordered with other stores, and
+  stores are not reordered with older loads. An acquire and a release therefore
+  need no fence instruction.
+- **Volume 2A, "XADD"** and **"CMPXCHG"**, fetch-and-add and compare-and-exchange,
+  which are the whole of the spinlock's atomicity.
+- **Volume 2B, "PAUSE"**, which improves the performance of a spin-wait loop and
+  reduces the power it draws, de-pipelining the loop so that the processor
+  leaving it does not pay the memory-order violation penalty its speculated reads
+  would otherwise incur.
+- **Volume 2B, "SWAPGS"**, which exchanges `GS.base` with the contents of
+  `IA32_KERNEL_GS_BASE` and is valid only at privilege level 0 — which is what
+  makes the value it produces one a user program cannot have chosen.
 - **Volume 3A, Section 13.1**, the enabling and state management required of the
   SSE and x87 units.
 - **Volume 1, Section 3.4.3**, the flags of the `RFLAGS` register, from which the
@@ -242,6 +272,22 @@ Sections relied upon:
     APICs.
   - **Section 10.8.6**, the task priority register blocks every interrupt of a
     priority class at or below the value it holds; zero blocks none.
+  - **Section 10.6**, issuing interprocessor interrupts: one is sent by writing
+    the interrupt command register of the sending processor's local controller,
+    and is received by the target exactly as a device's request would be.
+  - **Section 10.6.1 and Figure 10-12**, the interrupt command register: the
+    vector in bits 7:0, the delivery mode in 10:8 (000 fixed, 001 lowest
+    priority, 010 SMI, 100 NMI, 101 INIT, 110 start-up), the destination mode in
+    bit 11, the read-only delivery status in bit 12, the level in bit 14, the
+    trigger mode in bit 15, and the destination shorthand in bits 19:18 (00 none,
+    01 self, 10 all including self, 11 all excluding self). **"The act of writing
+    to the low doubleword of the ICR causes the IPI to be sent"**, which is why
+    the high half must be written first.
+  - **Section 10.6.2.1**, the destination field in xAPIC mode: bits 63:56 of the
+    register, being bits 31:24 of the high half.
+  - **Section 10.8.3**, the vector number is the interrupt's priority, so an
+    interrupt sent between processors at a high vector is served ahead of any
+    device request the target is also holding.
   - **Section 10.9 and Figure 10-23**, the spurious interrupt: its handler must
     return without an end-of-interrupt, bit 8 of the register is the software
     enable, and upon the P6 family and the Pentium the low four bits of the
@@ -273,7 +319,7 @@ Used by: `boot/boot.asm`, `linker.ld`, `Makefile`, `kernel/include/oxys/io.h`,
 `graphics/faultscreen.c`, `kernel/include/oxys/faultscreen.h`,
 `kernel/test/verify_faultscreen.c`, `docs/design/MEMORY-LAYOUT.md`,
 `docs/design/INTERRUPTS.md`, `docs/design/PRIVILEGE.md`,
-`docs/design/GRAPHICS.md`.
+`docs/design/FAULTSCREEN.md`.
 
 ### Algorithm for computer control of a digital plotter
 J. E. Bresenham, IBM Systems Journal, volume 4, number 1, pages 25 to 30, 1965.
@@ -289,10 +335,10 @@ The consequence this project depends upon, which the paper states and which is
 easily forgotten: the choice at each step depends upon the error accumulated
 *since the start*. A line begun at a different point is therefore a different
 line, which is why `graphics/draw.c` clips per pixel rather than by moving the
-endpoints. See `docs/design/GRAPHICS.md`, Section 14.
+endpoints. See `docs/design/DRAWING.md`, Section 4.
 
 Used by: `graphics/draw.c`, `kernel/test/verify_graphics.c`,
-`docs/design/GRAPHICS.md`.
+`docs/design/DRAWING.md`.
 
 ### AMD64 Architecture Programmer's Manual, Volume 2: System Programming
 Advanced Micro Devices, publication 24593.
@@ -1103,7 +1149,7 @@ symlink, device, fifo, socket) to avoid the need to check the inode itself"; and
 decisively, "FILETYPE is an INCOMPAT flag because older kernels would think a
 filename was longer than 256 characters". That last sentence is the reason this
 kernel decides the width of `name_len` from the feature flag alone and not from
-the revision; see [`../storage/EXT2.md`](../storage/EXT2.md), Section 10.2.
+the revision; see [`../storage/EXT2-FILES.md`](../storage/EXT2-FILES.md), Section 1.2.
 
 Used by: `kernel/fs/ext2/`, `kernel/include/oxys/ext2.h`.
 

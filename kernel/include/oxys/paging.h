@@ -206,9 +206,29 @@ void PagingReleaseStructure(PhysicalAddress table);
 void PagingMapPageIn(PhysicalAddress root, VirtualAddress virtual_address,
                      PhysicalAddress physical_address, uint64_t flags);
 
-/* Invalidates the translation-lookaside-buffer entry for one page of the active
- * hierarchy, per Intel SDM, Volume 3A, Section 4.10.4.1. */
+/*
+ * Invalidates the translation-lookaside-buffer entry for one page of the active
+ * hierarchy, per Intel SDM, Volume 3A, Section 4.10.4.1, upon every processor.
+ *
+ * From sub-task 6.13 that is two operations and not one: the instruction reaches
+ * the executing processor alone, so the others are told by inter-processor
+ * interrupt and waited for. See docs/design/CONCURRENCY.md, Section 6.
+ */
 void PagingInvalidatePage(VirtualAddress address);
+
+/*
+ * Invalidates the entry upon the executing processor and tells nobody.
+ *
+ * This is the instruction alone. It exists for the shootdown handler, which is
+ * what the other processors run when they are told — an announcement made from
+ * within it would be an announcement of an announcement, and the processors
+ * would tell each other about the same address without end.
+ *
+ * No other caller has any business here: a mapping changed without the
+ * announcement leaves every other processor holding a translation of a page this
+ * one believes it has taken away.
+ */
+void PagingInvalidateLocalPage(VirtualAddress address);
 
 /* Emits a summary of the hierarchy upon the console and the serial port. */
 void PagingReport(void);

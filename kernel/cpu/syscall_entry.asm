@@ -75,10 +75,16 @@ extern SyscallObservedCodeSelector
 extern SyscallObservedStackSelector
 extern SyscallObservedFlagsValue
 
-; The fields of SyscallProcessorBlock, addressed through GS. Their offsets are
-; asserted against the C structure by a _Static_assert in kernel/cpu/syscall.c;
-; the assembler cannot see the structure and would otherwise agree with it only
-; by inspection.
+; The first two fields of the per-processor area of <oxys/percpu.h>, addressed
+; through GS. Their offsets are asserted against the C structure by a
+; _Static_assert in kernel/cpu/percpu.c; the assembler cannot see the structure
+; and would otherwise agree with it only by inspection.
+;
+; They were the whole of a structure of their own until sub-task 6.13, which put
+; the rest of what a processor owns after them. Nothing here changed: the two
+; fields are still first, for the reason they were first — they are needed before
+; a stack exists, and the addressing that reaches them is a displacement from a
+; segment base and nothing more.
 %define BLOCK_KERNEL_STACK 0
 %define BLOCK_USER_STACK   8
 

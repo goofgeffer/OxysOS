@@ -13,6 +13,25 @@
  *     device's removal requires, and why this cache must be told of it.
  *   - ISO/IEC 9899:2011, Section 6.3.2.3: the conversion of a pointer to an
  *     integer type, used to derive a hash from a device's address.
+ *
+ * Concurrency. Nothing here is locked and no reference count is atomic. There is
+ * one flow of control, so the hash chains and the least-recently-used list are
+ * consistent by construction; the spinlock of sub-task 6.13 exists and has not
+ * been applied here, and sub-task 6.14 is what makes this structure contended.
+ *
+ *   What the lock must cover is the whole of a lookup and its outcome — the
+ *   search, the eviction it may perform and the reference it takes — and not
+ *   each of those separately. Two processors that each searched for one block,
+ *   each found none, and each then claimed an entry for it would leave the cache
+ *   holding that block twice: a writer's changes would go into one copy and a
+ *   reader would be handed the other, and the block that reached the device
+ *   would be whichever copy was evicted last. That is a lost write with no
+ *   symptom at the point it is lost, and it is the reason the section is the
+ *   lookup rather than the list operation within it.
+ *
+ *   It is also the structure that will first want a lock it may sleep upon,
+ *   because a miss waits for a device; docs/design/CONCURRENCY.md, Section 10,
+ *   limitation 4, records why there is no such lock yet.
  */
 
 #include <oxys/buffer.h>

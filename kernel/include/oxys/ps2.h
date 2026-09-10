@@ -63,9 +63,9 @@
  *
  * Concurrency. Every routine here is called during initialisation, before the
  * interrupt flag is set, save Ps2ByteIsFromSecondPort and the reading of the
- * data port, which the two interrupt handlers call. From sub-task 6.13 the
- * read-modify-write of the configuration byte requires the spinlock governing
- * this device; a handler's read of the data port does not, the controller
+ * data port, which the two interrupt handlers call. The read-modify-write of the
+ * configuration byte requires the spinlock sub-task 6.13 built, which is not yet
+ * taken; a handler's read of the data port needs none, the controller
  * holding one byte and the two handlers being woken by different lines.
  */
 

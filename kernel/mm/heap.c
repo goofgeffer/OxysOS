@@ -22,8 +22,9 @@
  * for the 16-byte class is the difference between 6 per cent overhead and 100
  * per cent.
  *
- * Concurrency. Not yet safe against concurrent access. From sub-task 6.13 each
- * class free list requires a lock, and per-processor caches become worthwhile.
+ * Concurrency. Not yet safe against concurrent access. The spinlock of sub-task
+ * 6.13 exists and has not been applied here; each class free list requires one,
+ * and per-processor caches become worthwhile, when a second processor runs.
  */
 
 #include <oxys/heap.h>

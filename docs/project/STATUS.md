@@ -22,10 +22,13 @@ adapter, a display, a keyboard, a mouse, three kinds of storage controller and
 the PCI bus, mounts and writes an EXT2 volume through a virtual filesystem layer,
 draws upon a composited linear framebuffer, and loads and runs a statically
 linked ELF64 program at privilege level 3 — which returns to the kernel by system
-call and is ended when it faults.
+call, may make a child of itself and collect what it ended with, and is ended
+when it faults or when it asks.
 
-What it does not yet do is pre-empt that program, run more than one of them, or
-start a second processor.
+What it does not yet do is pre-empt that program, run more than one of them at a
+time, or start a second processor. The mechanisms a second processor needs — the
+lock, the per-processor area, the inter-processor interrupt and the shootdown —
+exist as of sub-task 6.13 and are not yet applied to anything.
 
 ## 2. By phase
 
@@ -34,7 +37,7 @@ warning regime, is confirmed Multiboot2 compliant by `grub-file`, and boots unde
 QEMU and VirtualBox alike, presenting its banner upon the console and COM1.
 It has also booted from a USB medium upon real hardware, which closed sub-task
 1.12 on 2026-09-07; the machine and the run are
-[`TESTING.md`](TESTING.md), Sections 10.1 and 10.2. See
+[`TESTING.md`](TESTING.md), Sections 5.1 and 5.2. See
 [`../design/BOOT.md`](../design/BOOT.md).
 
 **Phase 2 — memory.** A bitmap allocator governs every physical frame; a permanent
@@ -56,7 +59,6 @@ device driver claims a request line through one controller-neutral layer that
 knows which interrupt controller is answering — the cascaded 8259A pair, remapped
 clear of the exceptions, until sub-task 6.12 retires it in favour of the APIC.
 See [`../design/INTERRUPTS.md`](../design/INTERRUPTS.md).
-A
 
 **Phase 4 — device drivers.** The serial adapter is interrupt-driven and keeps a
 polled path it reverts to whenever the interrupt flag is clear, a panic reporting
@@ -85,11 +87,11 @@ is marked unclean before anything else is written to it**, a kernel that marked 
 upon unmounting recording only the mounts that ended well. The root volume of a
 machine this kernel is booted upon is mounted read-only unless the operator chose
 the GRUB entry that permits writing. See
-[`../storage/EXT2.md`](../storage/EXT2.md) and
+[`../storage/EXT2.md`](../storage/EXT2.md) with the two documents it heads, and
 [`../storage/VFS.md`](../storage/VFS.md).
 
 **Phase 6 — graphics, system calls, processes, SMP.** Complete as far as sub-task
-6.12; 6.13 to 6.15 are the remainder of the multiprocessing half.
+6.13; 6.14 and 6.15 are the remainder of the multiprocessing half.
 
 - The apparatus a privilege transition is performed out of stands and has been
   exercised: user-mode descriptors in the order `SYSCALL` and `SYSRET` derive
@@ -128,11 +130,27 @@ the GRUB entry that permits writing. See
   always had; and **the 8259A pair is masked and retired**. A device driver
   observed none of this: it claims a line number through one layer, and that
   layer is the only thing that knows which controller is answering.
+- **The mechanisms a second processor needs exist, though there is not one yet.**
+  Each processor holds an area of its own, reached in one instruction through
+  `GS.base` — a register privilege level 3 cannot write — which the system-call
+  path already used for its kernel stack and which now holds the whole of what a
+  processor owns. Above it stands a ticket spinlock that admits its waiters in
+  arrival order, masks interrupts for as long as it is held, counts the nesting so
+  that the flag is restored when the outermost section is left, and panics rather
+  than hangs upon the two misuses a lock cannot otherwise report. One processor
+  may interrupt another through the local controller's command register, and the
+  memory manager uses that to announce a paging-structure change: a
+  translation-lookaside-buffer shootdown, waited for until every target has
+  acknowledged, because Intel SDM Section 4.10.4.4 permits an invalidation to be
+  deferred only while no processor can use the stale translation. **The locks are
+  not yet applied** to the structures that need them; sub-tasks 6.14 and 6.15 are
+  what make those contended.
 
 See [`../design/PRIVILEGE.md`](../design/PRIVILEGE.md),
-[`../design/GRAPHICS.md`](../design/GRAPHICS.md),
+[`../design/GRAPHICS.md`](../design/GRAPHICS.md) and the five documents it indexes,
 [`../design/EXECUTABLE.md`](../design/EXECUTABLE.md),
 [`../design/PROCESS.md`](../design/PROCESS.md),
+[`../design/CONCURRENCY.md`](../design/CONCURRENCY.md),
 [`../design/INTERRUPTS.md`](../design/INTERRUPTS.md), Section 10,
 [`../devices/ACPI.md`](../devices/ACPI.md) and
 [`../devices/APIC.md`](../devices/APIC.md).
@@ -145,7 +163,7 @@ phase has actually been observed, and is the reason those are separate columns
 there.
 
 The physical machine is one machine — the HP Laptop 14-dq0052dx specified in
-[`TESTING.md`](TESTING.md), Section 10.1.
+[`TESTING.md`](TESTING.md), Section 5.1.
 
 | Phase | QEMU | VirtualBox | OVMF (UEFI) | Physical hardware |
 | ----- | ---- | ---------- | ----------- | ----------------- |
@@ -156,6 +174,7 @@ The physical machine is one machine — the HP Laptop 14-dq0052dx specified in
 | 5 EXT2 | Yes | Yes | — | Reached, not examined |
 | 6 Graphics and processes | Yes | Yes, as far as sub-task 6.11 | — | Reached, not examined |
 | 6.12 The APIC | Yes | **Not yet run** | — | **Not yet run** |
+| 6.13 Concurrency | Yes | **Not yet run** | — | **Not yet run** |
 
 **Sub-task 6.12 has its own row because it is the change most likely to differ by
 machine.** Everything it does is programmed from tables the firmware wrote, and
@@ -167,6 +186,15 @@ asserted only so far as a machine that does not exercise them permits.
 
 Nothing here has been run anywhere but QEMU, and it is recorded as such rather
 than assumed from a sibling row.
+
+**Sub-task 6.13 has its own row for a different reason.** What it changed that a
+machine could disagree about is the segment base: `GS.base` now holds a structure
+the kernel reads on every lock, and the interrupt entry path exchanges it
+conditionally upon the privilege level it was entered from. A firmware or a
+virtual machine that differs in how it leaves those registers, or a processor
+whose `CPUID` initial APIC identifier differs from what its local controller
+reports, would show itself here and nowhere else. Under QEMU every assertion
+passes and the shootdown was observed to repair a genuinely stale translation.
 
 "Reached, not examined" means the kernel ran that far upon the machine — it must
 have, the storage report of Phase 4 coming after all of it — but nothing about
@@ -183,7 +211,7 @@ sub-task closed against an unrecorded standard cannot be reopened against one.
 **No serial capture was possible, and that is part of the result.** The machine
 has no 16550 for the kernel to find and no USB stack exists to drive an adapter,
 so the log was read from the graphical console of sub-task 6.4 — the same
-condition VirtualBox presents. [`TESTING.md`](TESTING.md), Section 10.2, records
+condition VirtualBox presents. [`TESTING.md`](TESTING.md), Section 5.2, records
 what follows from it, including that the automated assertion of Section 1 cannot
 be performed there.
 
@@ -193,7 +221,7 @@ Three qualifications, each of which cost something to learn:
 6.2 and 6.4 it had no readable diagnostic output at all — the framebuffer having
 displaced the text console and the serial port being absent. Sub-task 6.4's
 graphical console is what restored it.
-[`TESTING.md`](TESTING.md), Section 9.1.
+[`TESTING.md`](TESTING.md), Section 4.1.
 
 **The storage drivers are the one part real hardware has changed the design of**,
 and the evidence was of failure rather than of success. One machine has run this
@@ -205,19 +233,19 @@ controller in AHCI mode, whose registers are memory-mapped and which answers at
 no I/O port; and then, upon the same machine, no mass-storage controller of any
 class whatever, its system being upon an eMMC part. Sub-tasks 4.7 and 4.8 were
 added in consequence. The machine is specified in [`TESTING.md`](TESTING.md),
-Section 10.1, and the diagnosis is in
+Section 5.1, and the diagnosis is in
 [`../storage/DISK.md`](../storage/DISK.md), Sections 2.1 to 2.3.
 
 **`make run-uefi` is expected to fail** and is provided in advance so that the
 UEFI work of Phase 12 has an established point of entry. Sub-task 12.7 renders it
-functional. [`TESTING.md`](TESTING.md), Section 8.
+functional. [`TESTING.md`](TESTING.md), Section 3.
 
 ## 4. How anything here is asserted
 
 There is no test harness and there will be none before Phase 7, there being no
 userland to run one in. The kernel therefore asserts its own properties at boot,
 in the order the subsystems are initialised, and `make verify` fails if any of
-them reports a failure. Thirty-nine assertions presently report.
+them reports a failure. Fifty-one assertions presently report passed or sound.
 
 Those tests are in [`../../kernel/test/`](../../kernel/test/), one file per
 subsystem. Each subsystem's design document carries a table pairing every
@@ -242,9 +270,8 @@ design document ends with its particular ones.
 | ------ | ---------- |
 | Pre-emption. Nothing takes a processor away from a thread that has not given it up. | 6.15 |
 | More than one program at a time. `ThreadStart` records the thread to return to in a single variable. | 6.15 |
-| `fork`, `execve`, `exit` and `wait`. A program ends because it faulted, not because it asked. | 6.11 |
 | File descriptors. A process has no open files; the filesystem layer's table is global. | Phase 7 |
-| Any synchronisation whatever. Every shared structure is unguarded, and each says so in its own file's header. | 6.13 |
+| Synchronisation **applied**. The lock, the per-processor area, the inter-processor interrupt and the shootdown all exist as of 6.13, but no shared structure has yet been put under a lock; each still says so in its own file's header. `CONCURRENCY.md`, Section 10, limitation 1, enumerates them. | 6.14, 6.15 |
 | A second processor. | 6.14 |
 | `CR4.SMEP`, `CR4.SMAP` and `IA32_EFER.NXE`. The user mappings that would be protected now exist. | 13.3 |
 | A UEFI boot path. | Phase 12 |

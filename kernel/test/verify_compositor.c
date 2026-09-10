@@ -5,7 +5,7 @@
  *          that has changed, and the composition of layers over a back buffer.
  * Key functions: KernelVerifyCompositing, KernelVerifyCompositor.
  * References:
- *   - docs/design/GRAPHICS.md, Section 27: the design of the compositor, and
+ *   - docs/design/COMPOSITOR.md, Section 2: the design of the compositor, and
  *     Section 27.5, this file's assertions paired with what each would catch.
  *
  * Two groups, and the division between them is deliberate.

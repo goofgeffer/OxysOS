@@ -19,7 +19,7 @@ stands.
 The storage devices are documented apart, in [`../storage/`](../storage/), because
 the disk is the bottom of a stack rather than a device on its own. The framebuffer
 is documented apart likewise, in
-[`../design/GRAPHICS.md`](../design/GRAPHICS.md), because nothing programs it:
+[`../design/FRAMEBUFFER.md`](../design/FRAMEBUFFER.md), because nothing programs it:
 the boot loader sets the mode and hands over an address, and there is no
 conversation with hardware to describe.
 

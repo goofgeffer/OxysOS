@@ -42,6 +42,14 @@ GdtLoadAndReloadSegments:
     ; Reload the data segment registers. In 64-bit mode their base and limit are
     ; ignored, but a selector referring to the retired table would remain in the
     ; register, and would be consulted upon a transition that does not ignore it.
+    ;
+    ; GS is the exception to "their base is ignored", and the load below destroys
+    ; it. Intel SDM, Volume 3A, Section 3.4.4, provides that FS.base and GS.base
+    ; are *not* ignored in 64-bit mode, and that loading the segment register from
+    ; a descriptor sets the hidden base to the descriptor's — which for the flat
+    ; data descriptor of this table is zero. The per-processor area of sub-task
+    ; 6.13 lives at that base, so it is re-established by the caller in
+    ; kernel/cpu/gdt.c the instant this routine returns; see the note there.
     mov     ax, dx
     mov     ds, ax
     mov     es, ax

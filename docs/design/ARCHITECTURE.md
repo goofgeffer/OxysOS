@@ -116,7 +116,7 @@ complementary and neither replaces the other.
 
 ## 3. Present composition
 
-As of the completion of Phase 5 and of sub-tasks 6.1 to 6.12, the system
+As of the completion of Phase 5 and of sub-tasks 6.1 to 6.13, the system
 comprises the following translation units. The list is the `C_SOURCES` and
 `ASM_SOURCES` of the `Makefile` and must be revised in the same change as
 either.
@@ -132,7 +132,10 @@ either.
 | `kernel/cpu/idt.c` | The interrupt descriptor table: its storage, the installation of a gate, the assignment of an interrupt stack table entry to a gate, and the loading of the table. |
 | `kernel/cpu/tss.c` | The task state segment: the stacks the processor loads when it needs one it can trust, its descriptor within the global descriptor table, and the loading of the task register. |
 | `kernel/cpu/syscall.c` | The configuration of the fast system-call mechanism — `IA32_STAR`, `IA32_LSTAR`, `IA32_FMASK`, `IA32_KERNEL_GS_BASE` and the enabling bit of `IA32_EFER` — and, from sub-task 6.7, the dispatch table and the validation of a caller's arguments; the table holds three calls from 6.7 and seven from sub-task 6.11, which adds `fork`, `execve`, `exit` and `wait`. |
-| `kernel/cpu/syscall_entry.asm` | The entry point `IA32_LSTAR` names. Provisional in sub-task 6.1; replaced at sub-task 6.7 by the path that swaps `GS`, loads the kernel stack from the per-processor block, dispatches, and returns by `SYSRET`. |
+| `kernel/cpu/syscall_entry.asm` | The entry point `IA32_LSTAR` names. Provisional in sub-task 6.1; replaced at sub-task 6.7 by the path that swaps `GS`, loads the kernel stack from the per-processor area, dispatches, and returns by `SYSRET`. |
+| `kernel/cpu/percpu.c` | The per-processor data areas: their static allocation, the establishment of the executing processor's own, the segment base it is reached through and the repair of that base after a segment reload, and the counted interrupt-disable every critical section is built upon. |
+| `kernel/cpu/spinlock.c` | The ticket spinlock: the locked fetch-and-add that issues a ticket, the bounded wait to be served, the release that admits the next arrival, and the two checks that turn the silent misuses of a lock into a report. |
+| `kernel/cpu/ipi.c` | The inter-processor interrupt layer: the composition of a command for each of the three audiences a sender may address, the accounting, and the handler by which a panicking processor stops the others. |
 | `kernel/acpi/acpi.c` | The firmware's ACPI description tables: the discovery and validation of the Root System Description Pointer, the walk of the RSDT or XSDT, and the parse of the Multiple APIC Description Table. |
 | `kernel/exec/elf.c` | The ELF64 loader for statically linked executables: the decoding of the file and program headers, the fifteen refusals an image must survive whole before a page of it is mapped, and the placing of its segments into an address space through the direct physical map. |
 | `kernel/proc/process.c` | The process control block, the thread and the saved context: the two tables, the address space a process is given, the kernel stack and guard page a thread is given, the writing of `rsp0` when a thread becomes current, the switch, the descent to privilege level 3, the termination that returns from it, and — from sub-task 6.11 — `fork`, `execve`, `exit` and `wait`. |
@@ -169,9 +172,12 @@ either.
 | `kernel/test/ext2/write.c` | Everything that alters a volume: allocation, writing, truncation, and the insertion and removal of names. |
 | `kernel/test/ext2/probe.c` | The report upon whatever volume the machine actually carries. **Not a self-test**: it asserts nothing, and the distinction is the reason it is a file of its own. |
 | `kernel/test/verify_vfs.c` | The self-tests of the virtual filesystem layer, and the probe of a real volume through it. |
+| `kernel/test/verify_apic.c` | The self-tests of the ACPI parse, the Local APIC, the I/O APIC, and the routing of the request lines through them once the 8259A pair has been retired. |
+| `kernel/test/verify_smp.c` | The self-tests of the per-processor area, the spinlock, the inter-processor interrupt and the shootdown — the first two asserting internal state, since upon one processor a lock that does not lock behaves like one that does, and the last two asserting behaviour by an interrupt the processor sends to itself. |
 | `kernel/mm/heap.c` | The kernel heap: a slab allocator of eight size classes over the kernel arena. |
 | `kernel/mm/vmm.c` | The kernel virtual address allocator, issuing ranges of the kernel arena backed by frames. |
 | `kernel/mm/paging.c` | The permanent kernel paging hierarchy: its construction, activation, software translation and copy-on-write fault resolution. |
+| `kernel/mm/shootdown.c` | The translation-lookaside-buffer shootdown: the publication of the address whose translation has become stale, the interrupt that tells the other processors to discard it, the acknowledgement each makes, and the bounded wait for all of them. |
 | `kernel/mm/addrspace.c` | The address space: its creation, its cloning by the copy-on-write discipline, its activation and its destruction. |
 | `kernel/mm/pmm.c` | The physical frame allocator: a bitmap of every 4 KiB frame below the highest usable address. |
 | `kernel/fs/ext2/internal.h` | What the nine translation units below share with one another and with nothing else: the record of the last refusal, the accounting, the decoders and encoders of the volume's byte order, and the block-level transfer. |
@@ -344,6 +350,15 @@ performs observed — the same device as sub-task 6.1's execution of `SYSCALL` f
 privilege level 0, where a mechanism is exercised in full although the condition
 it exists for has not yet arrived.
 
+**The reordering was borne out.** Sub-task 6.13 closed on 2026-09-09 and every
+one of its mechanisms was exercised upon the one processor, the shootdown against
+a mapping the self-test made stale on purpose. It also found two defects that
+would otherwise have surfaced during the bring-up itself, which is the hardest
+moment there is to diagnose one: a segment reload destroys `GS.base`, and the
+interrupt entry path performed no `SWAPGS`. Both had been harmless only because
+nothing in the kernel read `GS`, and both are recorded in
+[`CONCURRENCY.md`](CONCURRENCY.md), Sections 3.3 and 3.4.
+
 ## 5. Privilege and address-space model
 
 The kernel occupies the upper half of the canonical 48-bit address space and is
@@ -402,8 +417,8 @@ consequence shown every word of the boot log and not one of its numbers.
 
 Between sub-tasks 6.2 and 6.4 the cost was real and is worth recording: a machine
 with no serial adapter this kernel detects — VirtualBox is one — had **no readable
-diagnostic output at all**. `docs/design/GRAPHICS.md`, Sections 7 and 19, records
-the position, and `docs/project/TESTING.md`, Section 9.1, what it cost the
+diagnostic output at all**. `docs/design/FRAMEBUFFER.md`, Section 7, and `docs/design/CONSOLE.md`, Section 2, record
+the position, and `docs/project/TESTING.md`, Section 4.1, what it cost the
 VirtualBox procedure.
 
 **A fault that the kernel cannot survive leaves the ordinary paths and takes the
@@ -420,4 +435,4 @@ bears upon it rather than upon the others — and the console is suspended for g
 when it does. That is not a duplicate of the report: the report goes to every
 path and remains the record; the screen is a summary for a person standing at a
 machine that has stopped, who may have no other channel at all.
-`docs/design/GRAPHICS.md`, Sections 24 and 25.
+`docs/design/FAULTSCREEN.md`, Sections 1 and 2.

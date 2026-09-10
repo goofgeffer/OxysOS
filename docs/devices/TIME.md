@@ -212,8 +212,10 @@ Under QEMU, at the completion of the self-test:
 
 1. The tick counter is unsynchronised. A 64-bit aligned access is not torn upon
    x86_64, so a reader observes either the old value or the new; from sub-task
-   6.13 a reader upon another processor will additionally require the read to be
-   ordered, which the `volatile` qualifier does not by itself guarantee.
+   6.14 a reader upon another processor will additionally require the read to be
+   ordered, which the `volatile` qualifier does not by itself guarantee. No lock
+   is required for it — the counter has one writer — so the ordering, and not
+   the spinlock sub-task 6.13 built, is what this limitation waits upon.
 2. `PitWaitTicks` is a busy wait. It occupies the processor entirely and cannot
    be used once there is anything else for the processor to do. The sleeping wait
    belongs to the scheduler of sub-task 6.15.

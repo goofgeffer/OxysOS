@@ -63,6 +63,10 @@
 #include <oxys/interrupts.h>
 #include <oxys/exceptions.h>
 #include <oxys/cpu.h>
+#include <oxys/percpu.h>
+#include <oxys/spinlock.h>
+#include <oxys/ipi.h>
+#include <oxys/shootdown.h>
 #include <oxys/pic.h>
 #include <oxys/irq.h>
 #include <oxys/acpi.h>
@@ -217,6 +221,21 @@ void KernelWriteString(const char *string)
 
 void KernelPanic(const char *message)
 {
+    /*
+     * The other processors are stopped before a word is printed.
+     *
+     * A machine that has failed keeps running everywhere else, and everywhere
+     * else goes on modifying the structures this report is about — so a report
+     * written while they run describes a machine that no longer exists by the
+     * time anybody reads it. The request is made first for that reason, and it
+     * is not waited for: a panic that waited could be stopped by the very
+     * processors it is trying to stop.
+     *
+     * Upon a machine with one processor started it sends nothing, there being
+     * nobody to tell.
+     */
+    IpiHaltOtherProcessors();
+
     VgaSetColour(VGA_COLOUR_WHITE, VGA_COLOUR_RED);
     KernelWriteString("\nKERNEL PANIC: ");
     KernelWriteString(message);
@@ -696,8 +715,19 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
     VgaSetColour(VGA_COLOUR_LIGHT_CYAN, VGA_COLOUR_BLACK);
     KernelWriteString(OXYS_SYSTEM_NAME "\n");
 
+    /*
+     * The release, in the ordinal form of docs/project/VERSIONING.md, Section 3,
+     * or the word "unreleased" where this image belongs to no release — which is
+     * every image built so far.
+     *
+     * It said "Version 0.1.0" until the versioning scheme was written, naming a
+     * release that had been withdrawn three days after it was published. A boot
+     * banner is the one line of the log a person reads without being asked to,
+     * and a version number in it that names nothing is worse than no number:
+     * somebody would eventually cite it.
+     */
     VgaSetColour(VGA_COLOUR_LIGHT_GREY, VGA_COLOUR_BLACK);
-    KernelWriteString("Version " OXYS_VERSION_STRING
+    KernelWriteString("Release " OXYS_VERSION_STRING
                       ", x86_64, long mode active, higher-half kernel.\n");
 
     /*
@@ -712,6 +742,27 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
     }
 
     KernelWriteString("Multiboot2 magic value verified.\n");
+
+    /*
+     * The per-processor area of sub-task 6.13, established before anything that
+     * could take a lock.
+     *
+     * It stands here, above the frame allocator and above everything else, for
+     * one reason: a spinlock acquire reaches the area, and the allocators below
+     * are the first structures a lock will ever be taken over. An area
+     * established afterwards would leave every acquire before that point
+     * reaching through a segment base of zero.
+     *
+     * It needs nothing to exist. The area is a static structure, the identifier
+     * comes from CPUID and the segment base from a model-specific register; there
+     * is no allocation to fail and nothing to parse. Sub-task 6.14 calls the same
+     * function upon each application processor as it starts.
+     */
+    if (!PerCpuInitialise())
+    {
+        KernelPanic("This machine has more processors than the kernel reserves "
+                    "per-processor areas for.");
+    }
 
     /*
      * Reduce the Multiboot2 structure to the neutral description upon which the
@@ -1066,6 +1117,35 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
     IrqReport();
 
     /*
+     * Sub-task 6.13: the locks, the per-processor data and the interrupt one
+     * processor sends to another.
+     *
+     * The area itself was established before the frame allocator, a lock needing
+     * it; what stands here is the half that needs the local controller. An
+     * inter-processor interrupt is written into the controller's command
+     * register and delivered through the same gate a device's request uses, so
+     * neither the layer nor the shootdown above it can exist before the
+     * controller is enabled and the routing has been adopted.
+     *
+     * The shootdown registers its handler after the layer that carries it, and
+     * before anything may broadcast one — which upon a machine with one processor
+     * is never, the broadcast returning at once for want of an audience. It is
+     * nevertheless exercised in full below, by a request this processor addresses
+     * to itself.
+     */
+    IpiInitialise();
+    ShootdownInitialise();
+
+    KernelVerifyPerCpu();
+    KernelVerifySpinlock();
+    KernelVerifyIpi();
+    KernelVerifyShootdown();
+
+    PerCpuReport();
+    IpiReport();
+    ShootdownReport();
+
+    /*
      * The bus is enumerated once every device driven so far is working, so that
      * a failure in the enumeration is reported through channels already proved.
      * Nothing is claimed or configured here; the enumeration only establishes
@@ -1187,9 +1267,11 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
     KernelWriteString("Phase 6 initialisation complete: a program has been loaded, "
                       "run at privilege level 3,\nhas made a child of itself, replaced "
                       "that child's program with one read from a\nvolume, collected "
-                      "what it ended with, and ended; and every device request is now "
+                      "what it ended with, and ended; every device request is now "
                       "delivered\nby the I/O APIC and completed at the Local APIC, the "
-                      "8259A pair having been retired.\n");
+                      "8259A pair having been retired;\nand this processor holds an area "
+                      "of its own, takes locks that mask its interrupts,\nand has "
+                      "interrupted itself to discard a translation it had cached.\n");
 
     VgaSetColour(VGA_COLOUR_LIGHT_GREY, VGA_COLOUR_BLACK);
 

@@ -3,12 +3,14 @@
  * Purpose: Implements the driver for the Local Advanced Programmable Interrupt
  *          Controller: its detection, the mapping of its register page as strong
  *          uncacheable memory, its enabling through the spurious-interrupt vector
- *          register, the local vector table entries this kernel programmes, and
- *          the end-of-interrupt the architecture requires of every handler.
+ *          register, the local vector table entries this kernel programmes, the
+ *          end-of-interrupt the architecture requires of every handler, and the
+ *          interrupt command register through which one processor interrupts
+ *          another.
  * Key functions: LocalApicIsSupported, LocalApicInitialise,
  *          LocalApicSignalEndOfInterrupt, LocalApicIdentifier,
  *          LocalApicIsBootstrapProcessor, LocalApicRead, LocalApicWrite,
- *          LocalApicReport.
+ *          LocalApicSendCommand, LocalApicCommandIsIdle, LocalApicReport.
  * References:
  *   - Intel SDM, Volume 3A, Section 10.4.1: the registers occupy a 4 KiB region
  *     at 0xFEE00000, and "for correct APIC operation, this address space must be
@@ -41,6 +43,12 @@
  *   - ACPI Specification 6.5, Section 5.2.12.7: the Local APIC NMI structures,
  *     which say which local interrupt pin of which processor the non-maskable
  *     interrupt is attached to.
+ *   - Intel SDM, Volume 3A, Section 10.6.1 and Figure 10-12: the interrupt
+ *     command register. Writing its low doubleword sends the interrupt; bit 12
+ *     is the delivery status and is read-only; the destination shorthands
+ *     replace the destination field entirely.
+ *   - Intel SDM, Volume 3A, Section 10.6.2.1: the destination field is bits
+ *     31:24 of the high half in xAPIC mode.
  *
  * Why the task priority register is written to zero, and by this driver.
  *
@@ -56,7 +64,7 @@
  * physical address, so every access here is to the executing processor's own
  * controller and no lock can make an access refer to another's. The counters
  * below are written by the two handlers this driver registers, which run upon
- * whichever processor the event occurred at; from sub-task 6.13 they become
+ * whichever processor the event occurred at; from sub-task 6.14 they become
  * per-processor quantities.
  */
 
@@ -76,6 +84,8 @@ static bool LocalApicEnabled;
 static uint64_t LocalApicSpuriousRequests;
 static uint64_t LocalApicErrors;
 static uint32_t LocalApicErrorStatus;
+static uint64_t LocalApicCommands;
+static uint64_t LocalApicCommandTimeouts;
 
 /*
  * Executes CPUID with the given leaf.
@@ -393,6 +403,106 @@ PhysicalAddress LocalApicBaseAddress(void)
     return LocalApicPhysicalBase;
 }
 
+/*
+ * The number of reads of the delivery status after which a send is abandoned.
+ *
+ * A controller that has accepted an interrupt clears the bit in the time one
+ * message takes to cross the interconnect, which is tens of cycles. A bound of a
+ * million reads of an uncached register is therefore several orders of magnitude
+ * beyond any legitimate delay, and what it catches is a controller that has
+ * stopped answering at all — upon which an unbounded wait here would be a
+ * machine that stops inside the routine that sends interrupts, with interrupts
+ * masked, and no record of why.
+ */
+#define LAPIC_COMMAND_WAIT_LIMIT UINT64_C(1000000)
+
+bool LocalApicCommandIsIdle(void)
+{
+    return (LocalApicRead(LAPIC_REGISTER_COMMAND_LOW) & LAPIC_ICR_DELIVERY_PENDING) == 0U;
+}
+
+/*
+ * Waits for the delivery status to clear, and reports whether it did.
+ *
+ * PAUSE is used for the same reason a spinlock uses it: this is a spin-wait, and
+ * telling the processor so costs nothing where it does not care.
+ */
+static bool LocalApicWaitForIdle(void)
+{
+    for (uint64_t spins = 0U; spins < LAPIC_COMMAND_WAIT_LIMIT; ++spins)
+    {
+        if (LocalApicCommandIsIdle())
+        {
+            return true;
+        }
+
+        __asm__ __volatile__("pause" : : : "memory");
+    }
+
+    return false;
+}
+
+bool LocalApicSendCommand(uint8_t destination, uint32_t command)
+{
+    if (!LocalApicEnabled)
+    {
+        return false;
+    }
+
+    /*
+     * The register is waited for before it is written. It may still be carrying
+     * the previous interrupt: Intel SDM, Volume 3A, Section 10.6.1, provides
+     * that the delivery status stands from the write until the controller has
+     * accepted the message, and a write during that interval discards a message
+     * this kernel believes it sent.
+     */
+    if (!LocalApicWaitForIdle())
+    {
+        ++LocalApicCommandTimeouts;
+        return false;
+    }
+
+    /*
+     * The high half first, because the low half is the trigger. Section 10.6.1:
+     * "the act of writing to the low doubleword of the ICR causes the IPI to be
+     * sent". A destination written afterwards would be the destination of the
+     * next interrupt and not of this one.
+     *
+     * The whole of the high half is written rather than the destination field
+     * alone: every other bit of it is reserved, and a reserved field is written
+     * as zero so that it remains what a later processor may define it to be.
+     */
+    LocalApicWrite(LAPIC_REGISTER_COMMAND_HIGH,
+                   (uint32_t)destination << LAPIC_ICR_DESTINATION_SHIFT);
+    LocalApicWrite(LAPIC_REGISTER_COMMAND_LOW, command);
+
+    /*
+     * And waited for afterwards, because a caller that goes on to wait for an
+     * acknowledgement from the target must first know the message left. A send
+     * that was never accepted produces a wait for a reply that cannot come, and
+     * the two failures are indistinguishable from the waiting end.
+     */
+    if (!LocalApicWaitForIdle())
+    {
+        ++LocalApicCommandTimeouts;
+        return false;
+    }
+
+    ++LocalApicCommands;
+
+    return true;
+}
+
+uint64_t LocalApicCommandCount(void)
+{
+    return LocalApicCommands;
+}
+
+uint64_t LocalApicCommandTimeoutCount(void)
+{
+    return LocalApicCommandTimeouts;
+}
+
 uint64_t LocalApicSpuriousCount(void)
 {
     return LocalApicSpuriousRequests;
@@ -446,5 +556,9 @@ void LocalApicReport(void)
     KernelWriteDecimal(LocalApicErrors);
     KernelWriteString(", last error status ");
     KernelWriteHexadecimal((uint64_t)LocalApicErrorStatus);
+    KernelWriteString(", commands sent ");
+    KernelWriteDecimal(LocalApicCommands);
+    KernelWriteString(", sends abandoned ");
+    KernelWriteDecimal(LocalApicCommandTimeouts);
     KernelWriteString(".\n");
 }

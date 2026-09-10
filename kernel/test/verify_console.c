@@ -7,7 +7,7 @@
  *          active position as ANSI X3.4-1986 defines them.
  * Key functions: KernelVerifyConsole.
  * References:
- *   - docs/design/GRAPHICS.md, Section 21: every assertion below, paired with
+ *   - docs/design/CONSOLE.md, Section 4: every assertion below, paired with
  *     the silent failure it catches.
  *   - ANSI X3.4-1986: LF, CR, HT and BS.
  *   - docs/devices/DISPLAY.md, Section 6: the same four characters as the

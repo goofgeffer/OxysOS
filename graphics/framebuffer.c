@@ -20,12 +20,12 @@
  *     conservative prevailing.
  *   - Intel SDM, Volume 2A, "CPUID": leaf 1, EDX bit 16 reports the page
  *     attribute table.
- *   - docs/design/GRAPHICS.md: the design and its limitations.
+ *   - docs/design/FRAMEBUFFER.md: the design and its limitations.
  *
  * Concurrency. Everything here is established once, before any second processor
- * exists, and is read-only thereafter. The framebuffer's contents are not: from
- * sub-task 6.13 two processors drawing upon one surface require the lock that
- * sub-task governs, and this file will not be the place it is taken.
+ * exists, and is read-only thereafter. The framebuffer's contents are not: two
+ * processors drawing upon one surface require the lock sub-task 6.13 built, and
+ * this file will not be the place it is taken.
  */
 
 #include <oxys/framebuffer.h>
@@ -114,7 +114,7 @@ static bool FramebufferEstablishWriteCombining(void)
      * Every processor holds its own IA32_PAT, and a mapping made here would be
      * write-back upon any processor that had not performed this write. There is
      * one processor until sub-task 6.14, which must repeat this upon each as it
-     * is brought up; it is recorded as a limitation in docs/design/GRAPHICS.md.
+     * is brought up; it is recorded as a limitation in docs/design/FRAMEBUFFER.md.
      */
     return true;
 }

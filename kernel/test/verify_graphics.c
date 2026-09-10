@@ -7,7 +7,7 @@
  *          display at all.
  * Key functions: KernelVerifyGraphics.
  * References:
- *   - docs/design/GRAPHICS.md, Section 16: every assertion below, paired with
+ *   - docs/design/DRAWING.md, Section 6: every assertion below, paired with
  *     the silent failure it catches.
  *   - J. E. Bresenham, IBM Systems Journal 4(1), 1965: the line whose exactness
  *     under clipping is asserted here.
@@ -897,7 +897,7 @@ static void KernelVerifyGraphicsBlit(void)
  * Nothing is asserted here beyond what the memory surface already established;
  * the framebuffer may not exist, and reading it back through a write-combining
  * mapping proves less than reading an array. What this produces is the figure a
- * person judges, described in docs/project/TESTING.md, Section 16.
+ * person judges, described in docs/project/TESTING-GRAPHICS.md, Section 2.
  *
  * It is drawn only when the boot loader's command line asks for it. From
  * sub-task 6.4 the console owns the screen and erases whatever stands upon it,

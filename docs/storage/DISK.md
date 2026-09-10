@@ -170,7 +170,7 @@ was first reported from does not have one.
 It is an **HP Laptop 14-dq0052dx**: an Intel Celeron N4120, four gibibytes of
 memory, and its system upon a 64 GB **embedded MultiMediaCard** part rather than
 a disk. It was booted from a **USB drive**. The full specification is in
-[`../project/TESTING.md`](../project/TESTING.md), Section 10.1, and is not
+[`../project/TESTING.md`](../project/TESTING.md), Section 5.1, and is not
 restated here. Neither the eMMC part nor the USB drive is of the mass-storage
 class. An eMMC part
 is attached to an SD host controller, which the assignment specification classes

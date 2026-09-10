@@ -9,9 +9,9 @@
  * References:
  *   - docs/devices/MOUSE.md, Section 8: each assertion below, paired with the
  *     silent failure it catches.
- *   - docs/design/GRAPHICS.md, Section 26: the pointer, seen from the drawing
+ *   - docs/design/COMPOSITOR.md, Section 1: the pointer, seen from the drawing
  *     it is built upon.
- *   - docs/project/TESTING.md, Section 21: the record of these tests.
+ *   - docs/project/TESTING-GRAPHICS.md, Section 7: the record of these tests.
  *
  * Neither test needs a mouse, and that is the point of both.
  *

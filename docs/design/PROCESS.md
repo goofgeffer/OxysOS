@@ -365,6 +365,15 @@ entered*:
 | `SYSCALL` | the per-processor block; the entry path exchanged |
 | an interrupt or an exception | the program's own value; the stub exchanged nothing |
 
+**The second row was corrected at sub-task 6.13.** The stub now exchanges too,
+conditionally, upon the privilege level the saved `CS` names — because from that
+sub-task the kernel itself reads `GS` on every lock, and a handler entered from
+privilege level 3 would otherwise reach for the area through a base of zero. The
+argument below is unaffected: a switch still cannot tell how the kernel was
+entered, and still must not have to. See
+[`CONCURRENCY.md`](CONCURRENCY.md), Section 3.3, and
+[`INTERRUPTS.md`](INTERRUPTS.md), Section 3.3.
+
 A context switch cannot tell those apart and must not have to. The thread it
 resumes may be one suspended inside a system call, and the closing `SWAPGS` of
 that path assumes the block is in `GS.base`. Resume such a thread after a child
@@ -388,8 +397,11 @@ the history of the thread making it.
 
 `SYSCALL` performs no stack switch. The entry path therefore cannot read `rsp0`
 — it has no stack from which to reach the task state segment — and reads a field
-of the block `GS` names instead. **Two variables describe one stack**, and until
-this sub-task only one of them followed the current thread.
+of the block `GS` names instead. From sub-task 6.13 that block is the
+per-processor area of [`CONCURRENCY.md`](CONCURRENCY.md), Section 3; the field is
+the same field at the same offset, and nothing below changes. **Two variables
+describe one stack**, and until this sub-task only one of them followed the
+current thread.
 
 `SyscallInitialise` wrote the block's copy once, at boot, with the stack the task
 state segment was initialised with. `ThreadSetCurrent` has updated `rsp0` since
@@ -686,8 +698,11 @@ part of the kernel wrote.
    of Phase 7. `fork` now exists and must therefore decide what a child inherits
    the moment there is anything to inherit; presently there is nothing, and the
    whole of what a child gets is its parent's memory and its parent's registers.
-7. **Neither table is guarded.** From sub-task 6.13 both, and the current
-   thread, become the business of that sub-task's lock.
+7. **Neither table is guarded.** Both, and the current thread, become the
+   business of the lock sub-task 6.13 built. That lock exists and has not been
+   applied here: nothing runs but the boot sequence until the scheduler of
+   sub-task 6.15, which is when a table entry may be claimed upon one processor
+   while it is being read upon another.
 8. **The user stack does not grow.** Sixteen pages, mapped at creation. Growing
    one on demand means faulting below it and deciding whether the fault is a
    stack that wants to grow or a program that has gone wrong, which needs the

@@ -10,12 +10,12 @@
  *          CompositorInvalidateAll, CompositorPresent, CompositorSuspend,
  *          CompositorReport.
  * References:
- *   - docs/design/GRAPHICS.md, Section 27: the design of this layer and the four
+ *   - docs/design/COMPOSITOR.md, Section 2: the design of this layer and the four
  *     things sub-tasks 6.2 to 6.5 deferred to it.
- *   - docs/design/GRAPHICS.md, Section 11: a surface owns nothing and describes
+ *   - docs/design/DRAWING.md, Section 1: a surface owns nothing and describes
  *     memory somebody else supplied, which is what allows the back buffer to be
  *     substituted for the framebuffer without a caller knowing.
- *   - docs/design/GRAPHICS.md, Section 23.2: reads from the write-combining
+ *   - docs/design/CONSOLE.md, Section 6.2: reads from the write-combining
  *     framebuffer mapping are uncached and are the expensive half of everything
  *     drawn. The back buffer is ordinary memory, so a scroll reads it at cache
  *     speed and nothing ever reads the framebuffer again.

@@ -1,0 +1,569 @@
+# Testing: the Graphical Work
+
+**Authority**: `PROJECT_GUIDELINES.md`, Section 2, the testing mandate.
+
+**What is here**: the verification of sub-tasks 6.2 to 6.6 — the framebuffer, the
+drawing primitives, the font and the console, the measurement and the
+optimisation it directed, the fault screens, the compositor and the pointer.
+
+These are apart from the rest because their evidence is of a different kind.
+**Most of what matters here cannot be asserted by the kernel at all**: a
+framebuffer written perfectly may be scanned out by nothing, a console may be
+correct and illegible, and a pointer may leave a trail that every assertion in
+memory passes. So each section below pairs what the self-test asserts with what a
+person has to look at, and says which of the two found what.
+
+**The designs** these assert are
+[`../design/FRAMEBUFFER.md`](../design/FRAMEBUFFER.md),
+[`../design/DRAWING.md`](../design/DRAWING.md),
+[`../design/CONSOLE.md`](../design/CONSOLE.md),
+[`../design/FAULTSCREEN.md`](../design/FAULTSCREEN.md) and
+[`../design/COMPOSITOR.md`](../design/COMPOSITOR.md), which
+[`../design/GRAPHICS.md`](../design/GRAPHICS.md) indexes.
+
+**The other three**: [`TESTING.md`](TESTING.md) is how the machine is tested and
+in which environments; [`TESTING-SYSTEM.md`](TESTING-SYSTEM.md) is everything
+that is not graphical; [`TESTING-RECORD.md`](TESTING-RECORD.md) is the dated
+record. `TESTING.md` records why there are four.
+
+---
+
+## 1. Verification of the framebuffer
+
+The description, the mapping and the memory type of the framebuffer acquired by
+sub-task 6.2 are asserted at every boot by `KernelVerifyFramebuffer`. Each
+assertion, and the silent failure it catches, is tabulated in
+[`../design/FRAMEBUFFER.md`](../design/FRAMEBUFFER.md), Section 8.
+
+**One thing the kernel cannot assert about a display is that anything appeared
+upon it.** A framebuffer that is mapped, written and read back correctly may
+still be scanned out by nothing at all. That half of the verification is
+performed by a person, and the self-test paints a pattern for them to judge:
+bands of red, green and blue across the top sixteenth of the screen, and a single
+white pixel in the very last position of the last row.
+
+### 1.1 Capturing the pattern
+
+**The second menu entry must be selected.** From sub-task 6.4 the console owns
+the screen and would erase the pattern within the same boot, so the figures are
+painted only when the command line carries `graphics-figure` — which the entry
+**Oxys-OS (graphics figures)** passes, and which suppresses the console for that
+boot. The assertions of both self-tests run either way; it is only the drawing
+that this governs. See [`../design/CONSOLE.md`](../design/CONSOLE.md),
+Section 2.5.
+
+The entry is reached by sending a keystroke to the boot menu through the QEMU
+monitor:
+
+```sh
+( sleep 2;  echo "sendkey down"; sleep 0.3; echo "sendkey ret"; \
+  sleep 12; echo "screendump /tmp/oxys-fb.ppm"; \
+  sleep 3;  echo "quit" ) \
+  | qemu-system-x86_64 -machine q35 -cpu qemu64 -smp cores=2 -m 512M \
+      -cdrom build/oxys.iso -display none -monitor stdio -serial null
+```
+
+A capture that shows text rather than the figures is a capture of the default
+entry: the keystroke arrived before the menu was drawn, or after the three-second
+timeout had elapsed.
+
+The image is a binary PPM, whose header states the mode the boot loader chose.
+Four things are read from it, and each establishes something the kernel cannot
+establish for itself:
+
+| What to look for | What its absence would mean |
+| ---------------- | --------------------------- |
+| The bands are **red, then green, then blue**, left to right | The channel positions or widths were misread; the kernel would be writing blue where it meant red, with nothing to report it. |
+| They are **flat**, not sloping | The pitch is wrong. A traversal stepping by the occupied width rather than the pitch shears the image progressively down the screen. |
+| They reach the **right-hand edge** | The width or the pitch is short. |
+| The **last pixel of the last row is white** | The mapping is short by less than a page — an amount every assertion made upon the start of the range would pass. |
+
+The bands occupy the top sixteenth of the screen; the remainder is black, being
+memory nothing has written.
+
+### 1.2 The negative test
+
+To confirm the self-test can fail, change the memory type written into the page
+attribute table from write-combining to write-back:
+
+```sh
+sed -i 's/FRAMEBUFFER_PAT_ENTRY_WC   UINT64_C(0x01)/FRAMEBUFFER_PAT_ENTRY_WC   UINT64_C(0x06)/'     graphics/framebuffer.c
+make verify
+```
+
+The run must report `entry 4 of IA32_PAT does not hold write-combining, so the
+framebuffer is write-back and the display may lag the memory indefinitely` and
+end `Framebuffer self-test FAILED.` Restore the file afterwards.
+
+### 1.3 What the display self-test does now
+
+It is skipped. Requesting a framebuffer causes the boot loader to set a graphics
+mode, and every assertion the display test makes reads a character cell back out
+of the text buffer at `0xB8000`, which in a graphics mode is not the text buffer.
+The expected line is:
+
+```
+Display self-test skipped; the adapter is in a graphics mode, which the framebuffer owns.
+```
+
+A run in which it is *not* skipped is a run in which the boot loader left the
+adapter in a text mode, and the display test then applies as it always did. Both
+are correct; which occurs is the boot loader's decision. See
+[`../design/FRAMEBUFFER.md`](../design/FRAMEBUFFER.md), Sections 2.1 and 7.
+
+## 2. Verification of the drawing primitives
+
+The primitives of sub-task 6.3 are asserted at every boot by
+`KernelVerifyGraphics`, **against a surface composed in memory and not against
+the framebuffer**. Every assertion, and the silent failure it catches, is
+tabulated in [`../design/DRAWING.md`](../design/DRAWING.md), Section 6.
+
+The test surface is 32 by 16 pixels of four bytes in rows of 40. The pitch
+exceeds the width deliberately: a primitive that stepped from row to row by the
+width rather than the pitch would still write inside the array, merely writing
+the wrong pixels, so the eight pixels of padding on each row hold a sentinel that
+no test ever writes and the padding is checked after each operation. A failure
+therefore names the operation that caused it.
+
+Because the surface is in memory, **all of this holds upon a machine with no
+display at all**, which is the reason the primitives take a surface rather than
+drawing upon the framebuffer by name.
+
+### 2.1 The figure a person judges
+
+The self-test also draws upon the framebuffer, and that part is judged by eye.
+Capture it as in Section 1.1, **which from sub-task 6.4 means booting the
+Oxys-OS (graphics figures) entry**; the default entry gives the screen to the
+console instead. Four things are drawn, and each shows something different:
+
+| What to look for | What its absence would mean |
+| ---------------- | --------------------------- |
+| A one-pixel frame around the **whole** screen, on all four edges | The extent or the pitch is wrong. A wrong pitch makes the vertical edges lean rather than run straight. |
+| A panel with its two diagonals **crossing exactly at its centre** | The line is not exact; an error accumulated wrongly puts the crossing off-centre. |
+| The second panel's fill and line **stopping dead at the clip boundary**, with the line's slope unchanged where it stops | Clipping is not confining the fill, or — the subtler fault — the line was clipped by moving its endpoints, which meets the boundary at a slightly different height. |
+| The first panel **copied below itself, identically** | The blit is displaced, or takes the wrong part of the source. |
+
+The frame is one pixel wide, so it is easily lost when a captured image is
+scaled down; sample the corner pixels rather than trusting the eye at reduced
+size.
+
+### 2.2 The negative test
+
+To confirm the self-test can fail, make the primitives address a row by the
+surface's width instead of its pitch — the fault the padding sentinel exists to
+catch:
+
+```sh
+sed -i 's/(uint64_t)(uint32_t)y \* surface->pitch/(uint64_t)(uint32_t)y * surface->width * surface->bytes_per_pixel/' \
+    graphics/draw.c
+make verify
+```
+
+The run must report `wrote into the row padding` from **six** independent
+primitives — the fill, the clipped fill, the clear, the line, the blit and the
+trimmed blit — and end `Graphics self-test FAILED.` Restore the file afterwards.
+
+## 3. Verification of the font and the console
+
+The font and the console of sub-task 6.4 are asserted at every boot by
+`KernelVerifyConsole` — thirty-three assertions in three groups, each tabulated
+against the silent failure it catches in
+[`../design/CONSOLE.md`](../design/CONSOLE.md), Section 4.
+
+The face and its drawing are asserted **against a surface composed in memory**,
+as the primitives of Section 2 are, so that the whole of that holds upon a
+machine with no display. The four control characters are asserted upon the live
+console, because the position they move is the console's own and there is no
+second one to make; only characters that draw nothing are used — CR, HT and BS —
+so the boot log the test is written into is not disturbed by the test of it.
+
+The exception is the pair of assertions about a backspace crossing to the row
+above, added when that path was found to be wrong. A landing cannot be judged
+without text upon the row above to land after, so those write upon a fresh line,
+assert, erase what they wrote and leave the line blank. Their absence is what let
+the fault ship: every assertion here used characters that draw nothing, so the
+one case that needs a character drawn was the one case never exercised.
+
+The assertions worth naming here are the ones a compiler cannot make about a
+table authored by hand: that **no two glyphs are identical**, that exactly one
+glyph is blank, and that no glyph draws into the two columns reserved for the
+spacing between characters.
+
+### 3.1 The half a person judges
+
+That the log is legible is not something the kernel can assert, for the reason
+Section 1 gives: a framebuffer written correctly may be scanned out by nothing.
+Boot the **default** menu entry — the console owns the screen there — and look at
+it:
+
+| What to look for | What its absence would mean |
+| ---------------- | --------------------------- |
+| The log begins at its **first line**, `Oxys-OS`, at the top of the screen | The replay buffer is not being replayed, and the screen begins part way through the boot. |
+| **Every number is present** — addresses, counts, sizes | `KernelWriteHexadecimal` or `KernelWriteDecimal` is naming an output device itself rather than emitting through `KernelWriteString`. This reads as a formatting error in the messages and is a missing output path; see [`../design/CONSOLE.md`](../design/CONSOLE.md), Section 2.1. |
+| Letters are upright and not mirrored, and words have gaps between them | The bit order is reversed, or a glyph draws into its spacing columns. |
+| Text that has **scrolled** is unsmeared | The blit copied in the wrong direction and read bytes it had already overwritten. Visible only upon a display too short to hold the log, which is VirtualBox's 640 by 480 and not QEMU's 1280 by 800. |
+| The echo loop's backspace stops at the prompt | The erase limit is not set, or did not move with a scroll. |
+
+A screendump serves for the first four:
+
+```sh
+( sleep 11; echo "screendump /tmp/oxys-console.ppm"; sleep 3; echo "quit" ) \
+  | qemu-system-x86_64 -machine q35 -cpu qemu64 -smp cores=2 -m 512M \
+      -cdrom build/oxys.iso -display none -monitor stdio -serial null
+```
+
+### 3.2 The negative test
+
+To confirm the self-test can fail, duplicate a glyph — precisely the
+copy-and-paste the assertion exists for, and one that leaves a plausible-looking
+table because the picture comment beside it is not touched:
+
+```sh
+# Give 'O' (0x4F) the bytes of '0' (0x30).
+sed -i "/0x4F  'O'/{n;s/.*/    { 0x78, 0x84, 0x8C, 0x94, 0xA4, 0xC4, 0x78, 0x00 },/}" \
+    graphics/font.c
+make verify
+```
+
+The run must report
+
+```
+  two glyphs are identical, at codes 0x30 and 0x4F
+Console self-test FAILED.
+```
+
+and `make verify` must itself fail, the harness having gained the assertion upon
+`FAILED` recorded in [`TESTING.md`](TESTING.md), Section 1. Restore the file afterwards — the correct bytes
+for `'O'` are `0x78, 0x84, 0x84, 0x84, 0x84, 0x84, 0x78, 0x00`, and the picture
+comment beneath the line states them.
+
+### 3.3 The backspace across a line separator
+
+The fault was reported from a real machine: backspacing over letters worked and
+backspacing over a line separator did not. The cause was the console putting the
+cursor at the right-hand edge of the display when it crossed to the row above,
+so the erasure its caller composes — `BS SP BS` — wrote its space a hundred and
+fifty columns away from the text. See
+[`../design/CONSOLE.md`](../design/CONSOLE.md), Section 2.2.1.
+
+It is reproduced by driving the echo loop from outside, which needs the serial
+line for input rather than a log file. A socket serves for both, with the monitor
+upon a second one so that the screen can be captured while the machine still
+stands at the loop:
+
+```sh
+qemu-system-x86_64 -machine q35 -cpu qemu64 -smp cores=2 -m 512M \
+    -cdrom build/oxys.iso -display none -no-reboot \
+    -serial unix:/tmp/oxys-serial.sock,server=on,wait=off \
+    -monitor unix:/tmp/oxys-monitor.sock,server=on,wait=off
+```
+
+Wait for `A backspace erases, and crosses to the line above.` upon the serial
+socket, then send `ab`, a line feed, `cd`, a line feed, and three `0x08` bytes,
+a quarter of a second apart so that each is processed as a keystroke would be.
+Then `screendump` upon the monitor socket.
+
+| What to look for | What its absence would mean |
+| ---------------- | --------------------------- |
+| The three backspaces leave `ab` alone upon the screen | The line separator, then `d`, then `c` were each consumed. Both lines standing intact is the fault as reported. |
+| Ten backspaces leave neither line, and the banner above them intact | The erase limit still holds across a row crossing — the assertion that keeps an echo loop from eating the boot log. |
+| After a hundred and thirty line feeds, the same sequence still erases | The row lengths moved with the text when the display scrolled. |
+
+The third is the case the boot-time self-test cannot reach. The console at 1280
+by 800 is a hundred rows tall and has not scrolled by the time the self-test
+runs, so removing the shift of the row lengths upon a scroll leaves `make verify`
+passing; it is caught here and nowhere else.
+
+### 3.4 The negative tests of the backspace
+
+Each was applied to `graphics/console.c`, confirmed and reverted.
+
+| The damage | What the run reported |
+| ---------- | --------------------- |
+| The cursor put at the right-hand edge upon crossing, which is the fault as it was reported. | `a backspace crossing to the row above did not land after its text` and `three erasures did not return to the first column`. |
+| The filled-row exception dropped, so that a wrapped row is treated as one that ended with a line feed. | `a backspace crossing into a filled row did not stop upon its final character` and the erasure assertion beside it. |
+| The shift of the row lengths upon a scroll removed. | `make verify` **passed**, for the reason given in Section 3.3. Confirmed instead at the echo loop: after a hundred and thirty line feeds, `abc` followed by a line feed and three backspaces left `abc` standing untouched. |
+
+## 4. Verification of the drawing optimisation
+
+The primitives gained a path that writes a four-byte pixel as one 32-bit store,
+and the console gained one that draws a character cell and its glyph in a single
+pass. Both are asserted by `KernelVerifyGraphics` and `KernelVerifyConsole`, and
+both are tabulated in [`../design/FAULTSCREEN.md`](../design/FAULTSCREEN.md),
+Sections 2.1 and 2.2.
+
+**A fast path is the most dangerous kind of code to leave unasserted.** It runs
+only when its own precondition holds, so a fault in it is invisible upon every
+surface that does not meet the condition — and the surface the self-tests use is
+not the surface a person looks at. The test therefore draws upon **two surfaces
+differing in nothing but their alignment** and requires them to produce identical
+pixels, and it compares the two glyph routines for every glyph in the face.
+
+### 4.1 Measuring it again
+
+The figures in [`../design/CONSOLE.md`](../design/CONSOLE.md), Section 6.1, were obtained with `RDTSC`,
+not with the interval timer: interrupts are disabled for most of the boot and
+only seventeen ticks elapse in the whole of it. To repeat the measurement, time
+the operations from `KernelMain` after `PitInitialise` and read the counter
+directly; the ratios are what matter, QEMU's interpreter making the absolute
+figures proportional to instructions executed rather than to cycles.
+
+### 4.2 The negative tests
+
+Two, because the optimisation has two halves.
+
+```sh
+# The alignment conditions removed, so every four-byte surface claims the fast path.
+sed -i 's/    surface->whole_words = (bytes_per_pixel == 4U) \&\&/    surface->whole_words = (bytes_per_pixel == 4U); \/\//' \
+    graphics/draw.c
+```
+
+The run must report `a surface whose base and pitch are both odd was marked as
+addressable by words, so every row would be written misaligned` and end
+`Graphics self-test FAILED.`
+
+The second is applied by hand: make `GraphicsPatternBlock` skip its clear bits,
+as the transparent glyph does, by replacing the word store in its inner loop with
+`if ((bits & bit) != 0U) { word[column] = ink; }`. Three assertions must fire in
+the graphics self-test and a fourth in the console self-test, the last naming the
+code point at which the two glyph routines first disagree. Restore the file
+afterwards.
+
+## 5. Verification of the fault screens
+
+`KernelVerifyFaultScreen` asserts two things at every boot, and the first governs
+the second.
+
+**What is to be done about each exception.** `ExceptionDispositionOf` classifies
+every vector, at both privilege levels, as resumed, terminating the program that
+raised it, or fatal to the kernel — and **only the last draws a screen**. A
+divide by zero raised by a program must cost that program and nothing else; the
+kernel treated every exception as fatal until sub-task 6.4, so it would have
+halted the machine and announced it, which is a false account of what happened
+given to the person least able to check it. The classification is asserted rather
+than the behaviour because half of it concerns privilege level 3, where no code
+runs until sub-task 6.10, and `ExceptionDispositionOf` is a pure function that
+can be asked about a privilege level that does not yet exist.
+
+**The table of screens**: that every fault which threatens the kernel whatever
+raised it has a screen of its own, that **no two share a title or a colour**,
+that every title fits a 640-pixel display, that every character is one the font
+can draw, and that **no screen exists for a fault that can never be the
+kernel's**. Each assertion and the silent failure it catches is tabulated in
+[`../design/FAULTSCREEN.md`](../design/FAULTSCREEN.md), Sections 2.3 and 2.4.
+
+It asserts the table and not the drawing, for the reason Section 1 gives about
+the display generally. **Nothing in it draws**, deliberately: drawing would set
+the flag that records a screen as having been shown, and a real fault later in
+the same boot would then find the display taken and draw nothing.
+
+### 5.1 Looking at the screens
+
+Two GRUB entries, which prove different things and must not be confused.
+
+**Oxys-OS (fault screen demonstration)** composes a trap frame and draws one
+vector's page, then halts. It proves the page — that its text fits, that its
+panels lay out, that its colour and title are its own — and nothing about the
+processor. The frame holds values no machine would produce, so a photograph of it
+cannot be mistaken for a real report. Press `e` at the menu to change
+`fault-screen=14` to another vector: 2, 6, 8, 10, 11, 12, 13, 14, 18, or 256 for
+a panic the kernel raises itself. Any other vector draws the general screen,
+which is what a divide by zero within the kernel gets.
+
+**Oxys-OS (raise a genuine page fault)** writes to an unmapped address. It proves
+the wiring — handler, report upon the serial port, screen upon the framebuffer,
+end to end. A page fault is used because it is the one severe fault that can be
+raised deliberately without endangering the machine.
+
+Capture either as in Section 1.1, counting the keystrokes to the entry wanted:
+
+```sh
+( sleep 2;  echo "sendkey down"; sleep 0.25; echo "sendkey down"; sleep 0.25; \
+  echo "sendkey ret"; \
+  sleep 13; echo "screendump /tmp/oxys-fault.ppm"; \
+  sleep 3;  echo "quit" ) \
+  | qemu-system-x86_64 -machine q35 -cpu qemu64 -smp cores=2 -m 512M \
+      -cdrom build/oxys.iso -display none -monitor stdio -serial null
+```
+
+What to look for:
+
+| What to look for | What its absence would mean |
+| ---------------- | --------------------------- |
+| A coloured banner with the fault's title at several times life size, **not clipped at the top** | The banner is shorter than the title, or something scrolled the framebuffer after the screen was drawn. This is exactly the fault [`../design/FAULTSCREEN.md`](../design/FAULTSCREEN.md), Section 1.3, records. |
+| The mnemonic and vector beneath the title | The general screen was drawn, meaning the table has no entry for this vector. |
+| Panels that differ **between faults** — an address for a page fault, a decoded selector for a general protection fault, instruction bytes for an invalid opcode | The evidence flags are not being consulted, and every fault is being given the same page. |
+| The instruction bytes reproduced as real values, or an explicit statement that the address is unmapped | The bytes are being read without asking the paging hierarchy, which would raise a second fault. |
+| Nothing written over the page afterwards | The console was not suspended. |
+| Every character drawn, with **no replacement boxes** in the prose | Text outside the printable ASCII the face covers. An em dash in a string literal is three UTF-8 bytes and renders as three boxes. |
+| At **640 by 480**: the title still fits, paragraphs re-wrap, and the footer is still on the screen | The layout was fitted to 1280 pixels. |
+
+### 5.2 The negative tests
+
+Four, and the first is the one that matters most: it reproduces the fault this
+section was written because of.
+
+**Every fault made fatal.** Remove the privilege-level test from
+`ExceptionDispositionOf` in `kernel/cpu/exceptions.c`, so that everything falls
+through to `EXCEPTION_DISPOSITION_FATAL`. The run must name all seven program
+faults in turn, beginning `a program's own fault would halt the machine rather
+than the program, at vector 0x0` — vector 0 being the divide by zero.
+
+**A duplicated identity.**
+
+```sh
+sed -i 's/{ 11U, "DESCRIPTOR NOT PRESENT",/{ 11U, "MALFORMED TASK STATE SEGMENT",/' \
+    graphics/faultscreen.c
+make verify
+```
+
+The run must report `two fault screens share a title, at vectors 0xA and 0xB`.
+
+**A deleted screen.** Delete the `{ 18U, "MACHINE CHECK", ... }` row. The run
+must report `a fault that threatens the kernel has no screen of its own, at
+vector 0x12` — the fault this catches being the one that would otherwise look
+like nothing at all, the general screen still naming the vector.
+
+**A screen that can never be drawn.** Add an entry for vector 17, the alignment
+check. The run must report `a screen exists for a fault the processor raises only
+outside the kernel, at vector 0x11`. Note that the weaker rule — asking merely
+whether the vector is ever fatal — does not catch this, `#AC` being nominally
+fatal from a kernel selector; the architectural fact that it requires privilege
+level 3 has to be stated before the assertion has any force.
+
+Restore the files afterwards. Each run must end `Fault disposition and screen
+self-test FAILED.`
+
+
+## 6. Verification of the compositor
+
+`KernelVerifyCompositing` and `KernelVerifyCompositor` run at every boot. The
+first asserts the clip stack and the blend upon surfaces composed in memory, so
+it holds upon a machine with no display; the second asserts the damage
+arithmetic and the layer table, which is what can be asserted of a compositor
+that owns one back buffer and one framebuffer and has no second of either to
+compose. Both are tabulated against the failure each would catch in
+[`../design/COMPOSITOR.md`](../design/COMPOSITOR.md), Section 2.5.
+
+### 6.1 What only looking establishes
+
+Three things, and all three are what the sub-task exists for.
+
+| What to look for | What its absence would mean |
+| ---------------- | --------------------------- |
+| The boot log appears at all, from its first line | The console is drawing into a back buffer nothing carries out, or into the framebuffer while presentations copy the back buffer over it |
+| The pointer is drawn **over** the text, its black outline cutting into the letters beneath | The layer is composited under the base, or not at all |
+| After the pointer has crossed the screen, **the text it passed over is intact and there is no trail** | [`../design/COMPOSITOR.md`](../design/COMPOSITOR.md), Section 2.3: a layer that marks only where it has arrived leaves its previous appearance standing. This is the fault the save-under existed to prevent, and reintroducing it would undo the sub-task |
+| A fault screen stays on the screen | [`../design/COMPOSITOR.md`](../design/COMPOSITOR.md), Section 2.6: the compositor must be suspended, or the next `KernelWriteString` carries the back buffer over the page |
+
+The pointer is driven from the monitor rather than by hand, so that the path is
+repeatable:
+
+```sh
+qemu-system-x86_64 -machine q35 -cpu qemu64 -smp cores=2 -m 512M \
+    -cdrom build/oxys.iso -display none -no-reboot \
+    -serial unix:/tmp/oxys-serial.sock,server=on,wait=off \
+    -monitor unix:/tmp/oxys-monitor.sock,server=on,wait=off
+```
+
+Wait upon the serial socket for `A backspace erases, and crosses to the line
+above.`, then send `mouse_move 20 12` to the monitor a dozen times, a quarter of
+a second apart, and `screendump` afterwards. The pointer should stand at the far
+end of the path and nothing should mark the path itself.
+
+A trail is easier to measure than to see: a screendump in which no row holds a
+run of six or more white pixels except at the pointer's final position is a
+screen with one pointer upon it.
+
+### 6.2 The negative tests of the compositor
+
+Each was applied, confirmed, and reverted.
+
+| The damage | What the run reported |
+| ---------- | --------------------- |
+| A push replacing the clip in force rather than intersecting it. | `a push to a wider region widened the clip` |
+| The mask indexed by the destination's width rather than the source's. | `the mask was indexed by the wrong stride` and `the mask was indexed by the destination's width` — but only after the test was corrected; see below. |
+| `CompositorMoveLayer` marking only where the layer has arrived and not where it was. | **Nothing at all** from the self-test, and a trail upon the screen: thirteen pointers along the path of one. Measured rather than admired — a screendump in which four rows hold a run of six or more white pixels holds one pointer, and this one had fifty-two. |
+| The layers taken by the self-test not given back. | Nothing from the self-test, and a machine that boots **with no pointer** and reports no failure: the table was exhausted, `CursorInitialise` was refused a layer, and every routine in the pointer then correctly did nothing. |
+
+**Two of the four are invisible to every assertion available**, and both were
+found by looking at the screen. That is what Section 6.1 is for, and it is why
+the compositor's verification is not finished when `make verify` passes.
+
+The second is worth recording for what it revealed about the test rather than
+the code. Applied to the test as first written it **passed**: the composited
+source and the destination were both sixteen pixels wide, so an index taken from
+either was the same number and the fault the assertion named could not be
+produced. The source is now seven wide against a destination of sixteen with a
+pitch of nineteen, so the three strides differ at every row after the first. An
+assertion that cannot fail is worse than no assertion, because it is counted
+among those that pass.
+
+## 7. Verification of the mouse and the pointer
+
+Neither self-test needs a mouse, and that is what makes them run at every boot
+upon every machine.
+
+**The decoder is driven directly.** `MouseProcessByte` is exposed for the same
+reason `KeyboardProcessScancode` is: the decoding of a movement packet is not a
+property of the 8042, and a byte arriving by any route decodes identically. So
+`KernelVerifyMouse` composes packets — of whichever length the device negotiated
+— and asserts the nine-bit sign extension, the inversion of the vertical sense,
+the confinement of the position at all four edges, the naming of button
+transitions, the discarding of an overflowed movement, the refusal and counting
+of a byte that cannot begin a packet, the recovery of the stream afterwards, the
+abandonment of a partial packet by a flush, and the behaviour of a full buffer.
+
+**The pointer is asserted upon a surface composed in memory**, whose pitch
+exceeds its width and whose padding holds a sentinel. That is what permits the
+assertion that a pointer at the edge writes nothing outside the surface, which a
+framebuffer could not be asked. It also asserts what a lazier test would omit:
+that the **transparent** pixels of the shape still hold the background, without
+which a pointer drawn as a solid rectangle would pass.
+
+Every assertion and the silent failure it catches is tabulated in
+[`../devices/MOUSE.md`](../devices/MOUSE.md), Sections 8.1 and 8.2.
+
+### 7.1 What is skipped, and why that is not a gap
+
+The assertions that need a device — that one answered, that IR12 was claimed and
+unmasked, that the controller agrees the second port is usable — are made only
+where `MouseIsPresent`. A machine may genuinely have no mouse, and the driver is
+required to discover that **without blocking**; reaching the skip at all is
+evidence that it did, every wait upon the controller being bounded.
+
+### 7.2 The negative tests
+
+Apply each, run `make verify`, then revert it.
+
+```sh
+# The device's vertical sign forwarded rather than inverted.
+sed -i 's|movement_y = -MouseExtendMovement|movement_y = MouseExtendMovement|' \
+    drivers/mouse/mouse.c
+
+# The magnitude sign-extended as eight bits rather than nine.
+sed -i 's|return (int32_t)magnitude - (negative ? 256 : 0);|(void)negative;\n    return (int32_t)(int8_t)magnitude;|' \
+    drivers/mouse/mouse.c
+```
+
+For the pointer, change `CursorRestoreUnder` in `graphics/cursor.c` to put the
+pixels back at `CursorPositionX`/`CursorPositionY` rather than at
+`CursorSavedX`/`CursorSavedY`; or move the `CursorSaveUnder` call in
+`CursorDrawAt` from before the drawing loop to after it.
+
+Each run must end `Mouse self-test FAILED.` or `Pointer self-test FAILED.`
+
+### 7.3 A caveat for headless capture
+
+A keystroke injected through the QEMU monitor **before the controller has been
+initialised** makes `Ps2Initialise` fail, and the machine then reports no
+controller, no keyboard and no mouse. The byte lands in the output buffer after
+the single drain at the start of the sequence and is read as the answer to a
+command that follows.
+
+It is an artefact of injecting into an emulated controller whose ports are
+disabled — a real machine does not scan a disabled port — and it is recorded here
+because it is an easy way to spend an hour diagnosing a driver that is working.
+When capturing a screenshot, either let GRUB's timeout elapse or wait for the
+boot to finish before drawing conclusions from the report.
+

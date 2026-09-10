@@ -23,13 +23,16 @@
  *
  * Concurrency. The dispatch table is written during initialisation and read
  * thereafter, which is safe without a lock so long as registration precedes the
- * enabling of interrupts. From sub-task 6.13 a handler registered while other
- * processors are running requires the write to be ordered against their reads.
+ * enabling of interrupts. A handler registered while other processors are
+ * running requires the write to be ordered against their reads; the spinlock of
+ * sub-task 6.13 exists and has not been applied here.
  */
 
 #include <oxys/interrupts.h>
 #include <oxys/idt.h>
 #include <oxys/kernel.h>
+
+#include <stddef.h>
 
 /*
  * The addresses of the stubs, defined in kernel/cpu/interrupt_stubs.asm.
@@ -47,6 +50,10 @@ _Static_assert(sizeof(TrapFrame) == (22U * 8U),
 
 _Static_assert(TRAP_FRAME_REGISTER_COUNT == 15U,
                "The common stub preserves fifteen general-purpose registers.");
+
+_Static_assert(offsetof(TrapFrame, cs) == TRAP_FRAME_CS_OFFSET,
+               "The common stub reads the saved code segment at this offset in "
+               "order to decide whether to exchange the per-processor segment base.");
 
 /* The number of interrupts dispatched, and a copy of the most recent frame.
  *

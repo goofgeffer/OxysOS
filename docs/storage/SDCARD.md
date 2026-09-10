@@ -21,7 +21,7 @@ That is not a corner case. It is the machine this whole line of work was reporte
 from — an **HP Laptop 14-dq0052dx**: an Intel Celeron N4120, four gibibytes of
 memory, 64 GB of eMMC storage and nothing else, booted from a USB drive. Its full
 specification is in [`../project/TESTING.md`](../project/TESTING.md), Section
-10.1. Neither the ATA driver of sub-task 4.4 nor the AHCI driver of 4.7 will ever
+5.1. Neither the ATA driver of sub-task 4.4 nor the AHCI driver of 4.7 will ever
 find anything upon it, and no setting in its firmware would give them something
 to find. The kernel told its owner the machine had no disk, of a laptop
 that had just booted from its own storage; see [`DISK.md`](DISK.md), Section 2.3.

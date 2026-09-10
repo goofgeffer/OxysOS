@@ -66,7 +66,7 @@ Its **optional bit is set**, and that is a statement about this kernel rather
 than a formality: clearing it would declare that the image must not be loaded at
 all unless a framebuffer can be supplied, which is untrue — there is a text
 display driver, a serial port, and an initialisation written to return false and
-let the boot proceed. See [`GRAPHICS.md`](GRAPHICS.md), Section 2.
+let the boot proceed. See [`FRAMEBUFFER.md`](FRAMEBUFFER.md), Section 2.
 
 The header is accordingly 48 bytes rather than 24, the four bytes at offset 36
 being the padding that returns the terminating tag to an 8-byte boundary.

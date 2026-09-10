@@ -19,7 +19,7 @@
  *   - Intel SDM, Volume 3A, Table 11-7: the effective memory type is the
  *     combination of what the PAT selects and what the memory type range
  *     registers say, and the more conservative of the two prevails.
- *   - docs/design/GRAPHICS.md: the design, and every assertion made upon it.
+ *   - docs/design/FRAMEBUFFER.md: the design, and every assertion made upon it.
  *
  * What this is, and what it is not.
  *

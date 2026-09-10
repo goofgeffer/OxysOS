@@ -62,16 +62,16 @@ The two are deliberately alike where it counts. The console implements the same
 four control characters this driver does, with the same meanings and the same
 erase limit, so that one diagnostic path does not behave differently upon two
 displays — Sections 6 and 7 below are the specification of both. See
-[`../design/GRAPHICS.md`](../design/GRAPHICS.md), Section 19.
+[`../design/CONSOLE.md`](../design/CONSOLE.md), Section 2.
 
 What was lost between sub-tasks 6.2 and 6.4 was the screen of a machine with no
 serial adapter, and under VirtualBox — where this kernel detects none — that was
-every readable line; `../project/TESTING.md`, Section 9.1, records it.
+every readable line; `../project/TESTING.md`, Section 4.1, records it.
 
 The framebuffer that displaced this driver never maps the text buffer, even where
 the boot loader reports one. That memory is this driver's, and two mappings of one
 device with different memory types and nothing to decide between them would be
-worse than either. See [`../design/GRAPHICS.md`](../design/GRAPHICS.md),
+worse than either. See [`../design/FRAMEBUFFER.md`](../design/FRAMEBUFFER.md),
 Section 7.
 
 ## 2. The mode, and the memory it occupies
@@ -244,7 +244,7 @@ mistake this section was written to warn against. It is worth saying why the sam
 document did not prevent it. This driver computes the column by reading the
 characters back out of text memory, and a console drawn upon a framebuffer has no
 characters to read back. The rule was implementable here and had to be given a
-record of its own there. See `docs/design/GRAPHICS.md`, Section 19.2.1.
+record of its own there. See `docs/design/CONSOLE.md`, Section 2.2.1.
 
 ### 7.1 The same correction upon a serial terminal
 

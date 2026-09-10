@@ -1,14 +1,14 @@
 # The Advanced Programmable Interrupt Controllers
 
-**Corresponding phase**: Phase 6, sub-task 6.12. This document is revised
-whenever either controller is programmed differently, and will be revised again
-at sub-tasks 6.13 and 6.14, which add the inter-processor interrupt and the
-bring-up that uses it.
+**Corresponding phase**: Phase 6, sub-tasks 6.12 and 6.13. This document is
+revised whenever either controller is programmed differently, and will be revised
+again at sub-task 6.14, whose bring-up uses the command register Section 7
+describes.
 
 **Specifications**: Intel 64 and IA-32 Architectures Software Developer's Manual,
 Volume 3A, Chapter 10 (Advanced Programmable Interrupt Controller), Sections
-10.4.1 to 10.4.8, 10.5.1, 10.5.2, 10.8.5, 10.8.6 and 10.9, Table 10-1 and Figures
-10-5, 10-6, 10-8 and 10-23; Intel 82093AA I/O Advanced Programmable Interrupt
+10.4.1 to 10.4.8, 10.5.1, 10.5.2, 10.6, 10.6.1, 10.6.2.1, 10.8.3, 10.8.5, 10.8.6
+and 10.9, Table 10-1 and Figures 10-5, 10-6, 10-8, 10-12 and 10-23; Intel 82093AA I/O Advanced Programmable Interrupt
 Controller datasheet (order number 290566-001), Sections 3.1, 3.2.1 to 3.2.4;
 ACPI Specification 6.5, Sections 5.2.12.3, 5.2.12.4, 5.2.12.5 and 5.2.12.7.
 
@@ -200,10 +200,12 @@ returned without accessing it would change the meaning of the next access
 somewhere else entirely. Every access here writes the selector and uses the
 window together.
 
-From sub-task 6.13 the sequence requires the spinlock governing the unit: two
-flows of control performing it would interleave into an access of the wrong
-register. It is the same obligation the 8259A's mask registers carry, for the
-same reason.
+The sequence requires the spinlock governing the unit: two flows of control
+performing it would interleave into an access of the wrong register. That lock
+was built by sub-task 6.13 and this sequence has not been brought under it,
+there being one flow of control; sub-task 6.14 is what makes it contended. It
+is the same obligation the 8259A's mask registers carry, for the same reason,
+and discharged at the same moment.
 
 ### 4.2 The registers themselves
 
@@ -302,10 +304,26 @@ signal. The one write completes the request wherever it came from.
 
 ## 7. What is not here
 
-The inter-processor interrupt is not programmed, the interrupt command register
-not being written. The APIC timer is masked. Neither is an omission: both belong
-to sub-tasks 6.13 and 6.15 respectively, and programming them now would be
-programming a mechanism with nothing to use it.
+The APIC timer is masked. That is not an omission: it belongs to sub-task 6.15,
+and programming it now would be programming a mechanism with nothing to use it.
+
+**The interrupt command register was in this section until sub-task 6.13.** It is
+now written, by `LocalApicSendCommand`, and the layer above it is
+[`../design/CONCURRENCY.md`](../design/CONCURRENCY.md), Section 5. This driver
+owns the register and the waits upon its delivery status; it owns none of the
+meanings a vector carries, exactly as it owns none of the meanings a device
+request line carries.
+
+The register's fields, from Intel SDM, Volume 3A, Section 10.6.1 and Figure
+10-12: the vector in bits 7:0, the delivery mode in 10:8, the destination mode in
+11, the read-only delivery status in 12, the level in 14, the trigger mode in 15,
+and the destination shorthand in 19:18. The destination occupies bits 31:24 of
+the high half in xAPIC mode, per Section 10.6.2.1.
+
+**The high half is written first**, because the manual states that "the act of
+writing to the low doubleword of the ICR causes the IPI to be sent" — a
+destination written afterwards is the destination of the next interrupt and not
+of this one.
 
 ## 8. Verification
 
@@ -349,6 +367,8 @@ Under QEMU with `-machine q35 -cpu qemu64 -smp cores=2`:
 | LINT0 | `0x10000` — masked |
 | LINT1 | `0x400` — the non-maskable delivery mode, unmasked |
 | Spurious and error vectors | 255 and 254; neither has yet been delivered |
+| Interprocessor vectors | 253 the shootdown, 252 the halt |
+| Commands sent through the command register | 3, none refused, none abandoned |
 | I/O APIC units | 1, at `0xFEC00000`, version `0x20`, 24 inputs |
 | Global interrupt 1 | vector 33, processor 0, active high, edge — the keyboard |
 | Global interrupt 2 | vector 32, processor 0, active high, edge — **the timer**, by override |
@@ -366,12 +386,20 @@ Under QEMU with `-machine q35 -cpu qemu64 -smp cores=2`:
    [`ACPI.md`](ACPI.md), limitation 2, records as absent.
 2. **One processor is a destination.** Every entry names the bootstrap processor.
    Sub-tasks 6.14 and 6.15 give the destination something to choose between.
-3. **The inter-processor interrupt is not implemented.** Sub-task 6.13.
+3. **~~The inter-processor interrupt is not implemented.~~** Discharged at
+   sub-task 6.13. The command register is written, two vectors are reserved —
+   `0xFD` for the shootdown and `0xFC` for the halt — and the three audiences a
+   sender may address are the two shorthands and a named identifier. See
+   [`../design/CONCURRENCY.md`](../design/CONCURRENCY.md), Section 5.
 4. **The APIC timer is masked and uncalibrated.** The 8253 remains the only time
    source. Sub-task 6.15.
 5. **Nothing here is safe against concurrent access.** The select-then-window
    sequence of the I/O APIC and the mask state of the request layer both require
-   the spinlock of sub-task 6.13.
+   a lock. The lock now **exists** — sub-task 6.13 built it — but neither has
+   been put under one, there being one processor; sub-task 6.14 is what makes
+   them contended. The local controller's own registers need none: each processor
+   reaches its own controller at the same physical address, and no lock could
+   make an access there refer to another's.
 6. **x2APIC mode is not entered**, even where the processor reports it. The xAPIC
    register interface addresses 255 processors, which is more than this kernel
    will schedule for some time, and the extended mode's benefit is entirely in

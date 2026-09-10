@@ -121,7 +121,9 @@ The fourteen refusals are the ones the self-test provoked deliberately.
    the filesystem work of Phase 5.
 4. **No ordering or barriers.** Requests are issued as they arrive, and a driver
    that reordered them would not be contradicted here.
-5. **No concurrency safety.** There is no lock, and there is no second thread of
-   control to need one yet.
+5. **No concurrency safety.** There is no lock, and there is no second flow of
+   control to need one yet. The spinlock the device table will require was built
+   by sub-task 6.13 and has not been applied here; sub-task 6.14 is what makes it
+   necessary.
 6. **Synchronous only.** A request returns when it has completed. Asynchronous
    submission needs a scheduler to return to.

@@ -33,9 +33,29 @@
 ;     the handler, and in 64-bit mode is padded to eight bytes.
 ;   - Intel SDM, Volume 2A, "IRET/IRETQ": returns from the handler, popping the
 ;     frame the processor pushed.
+;   - Intel SDM, Volume 2B, "SWAPGS": exchanges GS.base with the contents of
+;     IA32_KERNEL_GS_BASE. It is valid only at privilege level 0.
+;   - Intel SDM, Volume 3A, Section 6.12.1: the CS the processor pushes carries
+;     the requested privilege level of the interrupted code in its low two bits,
+;     which is how a handler establishes where it was entered from.
 ;   - System V ABI, AMD64 supplement, Section 3.2.3: the first integer argument
 ;     is passed in RDI; Section 3.4.1 requires the direction flag to be clear
 ;     upon entry to a function.
+;
+; Note upon the segment base exchange, added at sub-task 6.13.
+;   The kernel keeps its per-processor data area in GS.base while it executes and
+;   in IA32_KERNEL_GS_BASE while a user program does; docs/design/CONCURRENCY.md,
+;   Section 3.2, states the invariant. An interrupt that arrives while a user
+;   program is running therefore enters kernel code with the program's value in
+;   the register, and every spinlock the handler takes reaches for the area
+;   through it. The exchange below restores the invariant on the way in and undoes
+;   it on the way out, and is performed only where the saved CS says the interrupt
+;   came from privilege level 3 — an interrupt taken in the kernel already has the
+;   area there, and exchanging unconditionally would hand it away.
+;
+;   The test is made against the frame rather than against a register, because at
+;   that moment no register can be trusted to hold anything: the interrupted code
+;   owned all of them.
 ;
 ; Note upon vectors 21, 29 and 30.
 ;   The revision of Table 6-1 consulted lists vectors 21 to 31 as reserved. Later
@@ -147,10 +167,30 @@ InterruptCommonStub:
     ; clear it.
     cld
 
+    ; The per-processor area into GS.base, where the interrupt came from
+    ; privilege level 3. The saved CS lies fifteen registers, the vector, the
+    ; error code and RIP above the current stack pointer, which is 18 quadwords;
+    ; TRAP_FRAME_CS_OFFSET in kernel/include/oxys/interrupts.h asserts the number
+    ; against the structure the two files share.
+    test    qword [rsp + 144], 3
+    jz      .kernel_segment_base
+    swapgs
+.kernel_segment_base:
+
     ; The frame is complete and begins at the current stack pointer. Pass its
     ; address as the first argument.
     mov     rdi, rsp
     call    InterruptDispatch
+
+    ; And back, if the frame says control is returning to privilege level 3. The
+    ; frame is read again rather than a decision being remembered, because a
+    ; handler is permitted to alter it — docs/design/INTERRUPTS.md, Section 7.2 —
+    ; and the exchange must match the privilege level being returned to and not
+    ; the one that was left.
+    test    qword [rsp + 144], 3
+    jz      .kernel_return
+    swapgs
+.kernel_return:
 
     pop     r15
     pop     r14

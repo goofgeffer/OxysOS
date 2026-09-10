@@ -112,10 +112,11 @@
  * upon each channel; the accounting; and the description of the most recent
  * failure. Defined in `ata.c`.
  *
- * None of it is guarded against concurrent access. From sub-task 6.13 the device
- * table, the selection cache and the counters all become the business of that
- * sub-task's lock — the selection cache most urgently, since two processors
- * transferring upon one channel would each believe the other's device selected.
+ * None of it is guarded against concurrent access. The spinlock of sub-task 6.13
+ * exists and has not been applied here; the device table, the selection cache and
+ * the counters all require it before a second processor runs — the selection
+ * cache most urgently, since two processors transferring upon one channel would
+ * each believe the other's device selected.
  */
 extern AtaDevice AtaDevices[ATA_DEVICE_COUNT];
 extern size_t AtaPresent;

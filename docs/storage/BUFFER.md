@@ -155,5 +155,15 @@ slow.
    synchronisation; nothing writes it back in the background, there being no
    background to write it in until Phase 6.
 6. **No concurrency safety.** Reference counts are not atomic and nothing is
-   locked. There is one thread of control, and when there is not, this is the
-   first thing that must change.
+   locked. There is one flow of control, and when there is not, this is the first
+   thing in the storage stack that must change. The spinlock it requires was
+   built by sub-task 6.13 and has not been applied here; sub-task 6.14 is what
+   makes the cache contended. What the lock must cover is the whole of a lookup
+   and its outcome — the search, the eviction it may perform and the reference it
+   takes — because two processors that each searched for one block, each found
+   none, and each then claimed an entry for it would leave the cache holding that
+   block twice, with a writer's changes in one copy and a reader handed the
+   other. This is also the first structure that will genuinely want a lock it may
+   sleep upon, a miss waiting upon a device;
+   [`../design/CONCURRENCY.md`](../design/CONCURRENCY.md), Section 10, limitation
+   4, records why there is none yet.

@@ -7,7 +7,7 @@
  *          kernel intended them to.
  * Key functions: KernelVerifyFramebuffer.
  * References:
- *   - docs/design/GRAPHICS.md, Section 6: every assertion below, paired with the
+ *   - docs/design/FRAMEBUFFER.md, Section 6: every assertion below, paired with the
  *     silent failure it catches.
  *   - Multiboot2 Specification 2.0, Section 3.6.12: the tag the description is
  *     reduced from.
@@ -21,7 +21,7 @@
  * at it, and a framebuffer that is mapped, written and read back correctly may
  * still be scanned out by nothing at all. What the pattern written below is for
  * is the operator: it is the half of this sub-task's verification that a person
- * performs, and docs/project/TESTING.md, Section 15, records how.
+ * performs, and docs/project/TESTING-GRAPHICS.md, Section 1, records how.
  */
 
 #include <oxys/kernel.h>
@@ -352,7 +352,7 @@ static void KernelVerifyFramebufferAccess(void)
      * It is drawn only when the boot loader's command line asks for it. From
      * sub-task 6.4 the console owns the screen and would erase this within the
      * same boot, so the two are exclusive and the command line is where the
-     * choice is made; see docs/project/TESTING.md, Section 15.1.
+     * choice is made; see docs/project/TESTING-GRAPHICS.md, Section 1.1.
      *
      * Its purpose is to be looked at, and it is composed so that looking at it
      * establishes something. If the channel positions were misread, the bands

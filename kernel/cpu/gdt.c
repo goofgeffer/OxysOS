@@ -20,6 +20,7 @@
  */
 
 #include <oxys/gdt.h>
+#include <oxys/percpu.h>
 #include <oxys/kernel.h>
 
 /*
@@ -102,6 +103,29 @@ void GdtInitialise(void)
     GdtLoadAndReloadSegments(&GdtLoadedRegister,
                              GDT_KERNEL_CODE_SELECTOR,
                              GDT_KERNEL_DATA_SELECTOR);
+
+    /*
+     * The reload above destroyed GS.base, and with it the kernel's route to the
+     * per-processor area of sub-task 6.13.
+     *
+     * Intel SDM, Volume 3A, Section 3.4.4: in 64-bit mode the FS and GS bases
+     * are not ignored as the other segment bases are, and loading the segment
+     * register from a descriptor replaces the hidden base with the descriptor's
+     * — which for the flat data descriptor this table holds is zero. The next
+     * per-processor access after this function would therefore read address
+     * sixteen, and address sixteen is where the self pointer would be if the
+     * base were correct.
+     *
+     * It is repaired here, in the function that broke it, rather than by the
+     * caller: a caller that forgot would produce a fault some hundreds of lines
+     * away with nothing connecting the two, which is how this was found in the
+     * first place.
+     *
+     * A false result means no area has been established yet — the ordering an
+     * application processor will have at sub-task 6.14 — and nothing needs to be
+     * done, PerCpuInitialise writing the base itself when it runs.
+     */
+    (void)PerCpuEstablishSegmentBase();
 }
 
 void GdtInstallTaskStateSegment(uint64_t base, uint32_t limit)

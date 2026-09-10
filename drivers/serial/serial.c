@@ -54,6 +54,18 @@
  *   - Intel SDM, Volume 1, Section 3.4.3: bit 9 of RFLAGS is the interrupt
  *     enable flag, read here through ReadRflags in order to decide whether a
  *     wait for an interrupt could ever end.
+ *
+ * Concurrency. Both circular buffers have one producer and one consumer, which
+ * is what a single processor with interrupts provides: for the transmit buffer
+ * the producer is the writing code and the consumer the handler, and for the
+ * receive buffer the reverse. Each side advances its own index alone and reads
+ * the other's without modifying it, so no lock is required today. The spinlock
+ * of sub-task 6.13 exists and has not been applied here; sub-task 6.14 is what
+ * gives the transmit buffer a second producer, at which point a diagnostic line
+ * written from one processor and one written from another would interleave
+ * character by character — and a log in which two panics are shuffled together
+ * is worse than either panic reported alone, which is the failure this note
+ * exists to name.
  */
 
 #include <oxys/serial.h>

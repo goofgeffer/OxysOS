@@ -6,10 +6,11 @@
  *          kernel programmes, the end-of-interrupt it requires, and the
  *          identification of the processor it belongs to.
  * Key definitions: LAPIC_DEFAULT_BASE, LAPIC_REGISTER_*, LAPIC_SPURIOUS_VECTOR,
- *          LAPIC_ERROR_VECTOR, LocalApicIsSupported, LocalApicInitialise,
- *          LocalApicSignalEndOfInterrupt, LocalApicIdentifier,
- *          LocalApicIsEnabled, LocalApicIsBootstrapProcessor, LocalApicRead,
- *          LocalApicWrite, LocalApicReport.
+ *          LAPIC_ERROR_VECTOR, LAPIC_ICR_*, LocalApicIsSupported,
+ *          LocalApicInitialise, LocalApicSignalEndOfInterrupt,
+ *          LocalApicIdentifier, LocalApicIsEnabled,
+ *          LocalApicIsBootstrapProcessor, LocalApicRead, LocalApicWrite,
+ *          LocalApicSendCommand, LocalApicCommandIsIdle, LocalApicReport.
  * References:
  *   - Intel 64 and IA-32 Architectures Software Developer's Manual, Volume 3A,
  *     Chapter 10 (Advanced Programmable Interrupt Controller). The chapter is
@@ -41,6 +42,13 @@
  *   - Intel SDM, Volume 3A, Section 10.9 and Figure 10-23: the
  *     spurious-interrupt vector register, whose bit 8 enables the controller,
  *     and whose handler must return without an end-of-interrupt.
+ *   - Intel SDM, Volume 3A, Section 10.6.1 and Figure 10-12: the interrupt
+ *     command register, its fields, its four destination shorthands, and that
+ *     "the act of writing to the low doubleword of the ICR causes the IPI to be
+ *     sent". Every field is writable by software save the delivery status of bit
+ *     12, which is read-only.
+ *   - Intel SDM, Volume 3A, Section 10.6.2.1: in xAPIC mode the destination
+ *     field is bits 63:56 of the register, being bits 31:24 of the high half.
  *   - docs/devices/APIC.md: why the spurious vector is 0xFF and what each of
  *     these registers is set to at initialisation.
  */
@@ -100,6 +108,47 @@
 
 /* Fields of the spurious-interrupt vector register, per Intel SDM, Figure 10-23. */
 #define LAPIC_SPURIOUS_SOFTWARE_ENABLE UINT32_C(0x00000100)
+
+/*
+ * Fields of the interrupt command register, per Intel SDM, Volume 3A, Section
+ * 10.6.1 and Figure 10-12.
+ *
+ * The register is two 32-bit halves: the low half at 0x300 holds the vector and
+ * every option, the high half at 0x310 holds the destination in its bits 31:24.
+ * Writing the low half is what sends the interrupt, so the destination must be
+ * written first — a machine whose high half still held the previous
+ * destination would deliver this interrupt to the previous target.
+ */
+#define LAPIC_ICR_VECTOR_MASK          UINT32_C(0x000000FF)
+#define LAPIC_ICR_DELIVERY_FIXED       UINT32_C(0x00000000)
+#define LAPIC_ICR_DELIVERY_LOWEST      UINT32_C(0x00000100)
+#define LAPIC_ICR_DELIVERY_SMI         UINT32_C(0x00000200)
+#define LAPIC_ICR_DELIVERY_NMI         UINT32_C(0x00000400)
+#define LAPIC_ICR_DELIVERY_INIT        UINT32_C(0x00000500)
+#define LAPIC_ICR_DELIVERY_STARTUP     UINT32_C(0x00000600)
+#define LAPIC_ICR_DESTINATION_PHYSICAL UINT32_C(0x00000000)
+#define LAPIC_ICR_DESTINATION_LOGICAL  UINT32_C(0x00000800)
+#define LAPIC_ICR_DELIVERY_PENDING     UINT32_C(0x00001000)
+#define LAPIC_ICR_LEVEL_ASSERT         UINT32_C(0x00004000)
+#define LAPIC_ICR_TRIGGER_LEVEL        UINT32_C(0x00008000)
+
+/*
+ * The destination shorthands of Figure 10-12, bits 19:18.
+ *
+ * A shorthand replaces the destination field entirely, and the two this kernel
+ * uses are the ones no list of identifiers could express as cheaply: "every
+ * processor but me", which is the audience of a shootdown, and "me", which is
+ * how a mechanism meant for other processors is exercised upon a machine that
+ * has only started one.
+ */
+#define LAPIC_ICR_SHORTHAND_NONE           UINT32_C(0x00000000)
+#define LAPIC_ICR_SHORTHAND_SELF           UINT32_C(0x00040000)
+#define LAPIC_ICR_SHORTHAND_ALL            UINT32_C(0x00080000)
+#define LAPIC_ICR_SHORTHAND_ALL_BUT_SELF   UINT32_C(0x000C0000)
+
+/* The destination field occupies bits 31:24 of the high half in xAPIC mode, per
+ * Intel SDM, Volume 3A, Section 10.6.2.1. */
+#define LAPIC_ICR_DESTINATION_SHIFT 24U
 
 /* Fields of the version register, per Intel SDM, Section 10.4.8. */
 #define LAPIC_VERSION_MASK           UINT32_C(0x000000FF)
@@ -169,6 +218,36 @@ bool LocalApicIsBootstrapProcessor(void);
 
 /* The physical address the register page was mapped from. */
 PhysicalAddress LocalApicBaseAddress(void);
+
+/*
+ * Sends an interrupt through the interrupt command register.
+ *
+ * `destination` is the APIC identifier of the target and is ignored where the
+ * command carries a shorthand. `command` is the low half of the register: a
+ * vector, a delivery mode, a destination mode, a level, a trigger mode and a
+ * shorthand, composed from the LAPIC_ICR_ definitions above.
+ *
+ * The controller is waited for both before and after: before, because the
+ * register may still be carrying the previous interrupt and writing it then
+ * would discard that one; after, because a caller that must know the interrupt
+ * was accepted has no other way to find out. Intel SDM, Volume 3A, Section
+ * 10.6.1, gives bit 12 as the delivery status, read-only, set while a send is
+ * pending.
+ *
+ * Returns false where the controller is not enabled, or where the delivery
+ * status did not clear within a bound — which is a controller that has stopped
+ * answering, and a caller that waited for an acknowledgement from it would wait
+ * for ever.
+ */
+bool LocalApicSendCommand(uint8_t destination, uint32_t command);
+
+/* Whether the command register is idle, being bit 12 clear. */
+bool LocalApicCommandIsIdle(void);
+
+/* The number of interrupts sent through the command register, and the number of
+ * sends abandoned because the delivery status did not clear. */
+uint64_t LocalApicCommandCount(void);
+uint64_t LocalApicCommandTimeoutCount(void);
 
 /*
  * Reads and writes a register of the mapped page. Exposed so that the self-test
