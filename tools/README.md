@@ -16,7 +16,7 @@ of them is a style rule, and none enforces a preference.
 | Script | What it checks | The defect that motivated it |
 | ------ | -------------- | ---------------------------- |
 | [`spdx.sh`](spdx.sh) | Every tracked file carries the SPDX licence tag that `LICENSING.md`, Section 1, assigns to its path. | `crypto/`, `net/` and `uefi/` stood with no licence at all from the day `LICENSING.md` was written. A table is authoritative and is not machine-readable, so the mapping held only for as long as somebody remembered it. |
-| [`check-docs.sh`](check-docs.sh) | Seven claims the corpus makes about itself and about the source. | `docs/design/SMP.md` was referenced by three source files before it existed; `CONCURRENCY.md` named five files as carrying a note that five of them did not carry; `STATUS.md` reported the wrong count of self-test assertions through two sub-tasks. |
+| [`check-docs.sh`](check-docs.sh) | Eight claims the corpus makes about itself and about the source. | `docs/design/SMP.md` was referenced by three source files before it existed; `CONCURRENCY.md` named five files as carrying a note that five of them did not carry; `STATUS.md` reported the wrong count of self-test assertions through two sub-tasks; and `PROJECT_GUIDELINES.md`, Section 3, went several phases describing a set of build targets that was no longer the set the `Makefile` had. |
 
 ## Running them
 
@@ -52,7 +52,12 @@ drifted should not be reported as a compiler failure.
 6. **The assertion count.** `STATUS.md`'s count of self-tests reporting `passed`
    or `sound` is the number in `build/serial.log`. Skipped where no log exists,
    because the log is the evidence and an absent one is not a failure.
-7. **Stale forward references** — an advisory, not an error. A sub-task that
+7. **Build targets.** The set of targets in the `Makefile`'s `.PHONY` line and
+   the set named in `PROJECT_GUIDELINES.md`, Section 3, are the same set. It is
+   checked both ways: a target the guidelines do not describe, and a target the
+   guidelines tell you to run that does not exist. The second is the worse of
+   the two.
+8. **Stale forward references** — an advisory, not an error. A sub-task that
    `PLAN.md` marks `Implemented`, still written about in the future tense.
 
 ## Errors and advisories

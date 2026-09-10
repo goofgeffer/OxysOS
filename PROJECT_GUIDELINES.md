@@ -29,7 +29,7 @@ practices that are prohibited.
 - **Toolchain**: `x86_64-elf-gcc`, `x86_64-elf-ld`, `nasm`, `grub-mkrescue`, `make`. All must be installed and functional in the WSL2 environment. This is the cross-build host; the long-term objective is that a native toolchain, ported under Section 2, supersedes it.
 - **Boot Protocol**: Multiboot2 (GRUB as the bootloader) for legacy BIOS; UEFI boot path (PE32+ image) added later.
 - **Kernel Image**: ELF64, linked according to `linker.ld`. Higher-half kernel layout is recommended.
-- **Build System**: GNU Make with explicit targets: `all`, `clean`, `iso`, `run-qemu`, `run-vbox`, `run-uefi` (for OVMF testing), `verify` (the automated regression run required by the Testing Mandate of Section 2) and `toolcheck`.
+- **Build System**: GNU Make with explicit targets, in three groups. **Building**: `all`, `clean`, `iso`. **Running**: `run-qemu`, `run-vbox`, `run-uefi` (for OVMF testing). **Checking**: `verify` (the automated regression run required by the Testing Mandate of Section 2), `clang-check` (every translation unit compiled by a second compiler for its diagnostics), `docs-check` and `spdx-check` (the corpus and the licence tags, neither of which builds anything), `lint` (both of those together, and what CI runs), `spdx-apply` (which writes, and is the only one here that does) and `toolcheck`. This list is checked against the `Makefile` by `tools/check-docs.sh`, so a target added without being named here fails `make lint`.
 - **Debugging**: Serial output over COM1 shall be implemented in the earliest device-driver stage to enable remote debugging.
 
 ## 4. Code and Documentation Standards

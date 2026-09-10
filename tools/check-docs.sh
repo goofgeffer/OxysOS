@@ -218,8 +218,46 @@ else
     printf 'SKIPPED  no build/serial.log; run `make verify` for the assertion count check.\n'
 fi
 
+
 # ---------------------------------------------------------------------------
-# 7. Advisory: a sub-task that PLAN.md marks Implemented, still written about in
+# 7. The Makefile's targets and the list in the guidelines are the same set.
+#
+# The defect this catches: PROJECT_GUIDELINES.md, Section 3, enumerates the
+# build targets. `clang-check` was added and the list was not, so the document
+# had been wrong about the build for several phases before anybody noticed — and
+# it was noticed by reading, not by running anything.
+#
+# The check runs both ways. A target present in the Makefile and absent from the
+# list is a build the guidelines do not describe; a target named in the list and
+# absent from the Makefile is an instruction to run something that is not there,
+# which is the worse of the two.
+# ---------------------------------------------------------------------------
+section 'Build targets'
+
+makefile_targets="$(sed -n '/^\.PHONY:/,/[^\\]$/p' Makefile \
+                    | sed 's/^\.PHONY://; s/\\$//' | tr ' ' '\n' \
+                    | grep -E '^[a-z][a-z0-9-]*$' | sort -u)"
+
+guideline_targets="$(grep '\*\*Build System\*\*' PROJECT_GUIDELINES.md \
+                     | grep -o '`[a-z][a-z0-9-]*`' | tr -d '`' | sort -u)"
+
+if [ -z "$makefile_targets" ] || [ -z "$guideline_targets" ]; then
+    fail "Could not read the build targets from the Makefile or from PROJECT_GUIDELINES.md, Section 3."
+else
+    while IFS= read -r target; do
+        [ -n "$target" ] || continue
+        grep -qx "$target" <<< "$guideline_targets" \
+            || fail "The Makefile has target '$target', which PROJECT_GUIDELINES.md, Section 3, does not name."
+    done <<< "$makefile_targets"
+
+    while IFS= read -r target; do
+        [ -n "$target" ] || continue
+        grep -qx "$target" <<< "$makefile_targets" \
+            || fail "PROJECT_GUIDELINES.md, Section 3, names target '$target', which the Makefile does not have."
+    done <<< "$guideline_targets"
+fi
+# ---------------------------------------------------------------------------
+# 8. Advisory: a sub-task that PLAN.md marks Implemented, still written about in
 #    the future tense.
 #
 # The defect this catches is the one that recurred most in this project's
