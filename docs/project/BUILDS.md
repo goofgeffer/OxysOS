@@ -91,3 +91,4 @@ a row already written, and no row here may be disturbed.
 | - | ---------- | ------ | -------- | ------ | --- | ------ | ------------ | ---- |
 | 1 | 2026-09-11 21:39 | `0439d05-modified` | x86_64-elf-gcc 13.2.0 | 1934352 | 7063552 | passed (55 assertions) | QEMU, Bochs, VirtualBox, OVMF (did not boot; the UEFI path is Phase 12) | Sub-task 7.2: the first image carrying the C library's system-call wrappers. |
 | 2 | 2026-09-11 21:39 | `0439d05-modified` | Ubuntu clang version 18.1.3 | 1616936 | 6746112 | passed (55 assertions) | QEMU | The same source built by the second compiler, to establish that the wrappers' assembly and static assertions compile and run under both. |
+| 3 | 2026-09-11 22:28 | `3bb9b20` | x86_64-elf-gcc 13.2.0 | 1934352 | 7063552 | passed (55 assertions) | QEMU | Sub-task 7.2 as committed at 3c0490b, rebuilt clean from the committed tree. |
