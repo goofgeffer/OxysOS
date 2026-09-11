@@ -41,6 +41,7 @@
 #include <oxys/process.h>
 #include <oxys/percpu.h>
 #include <oxys/lapic.h>
+#include <oxys/pit.h>
 
 /*
  * The fixture: a few threads that count and yield.
@@ -68,6 +69,19 @@
  */
 #define VERIFY_SCHEDULER_ROUNDS 8U
 #define VERIFY_SCHEDULER_WORK   2000000U
+
+/*
+ * How long the bootstrap processor waits for the fixture, and the second bound
+ * that applies where there is no clock to measure the first with.
+ *
+ * Five seconds is some tens of times what the fixture needs upon the machines
+ * this is run on, and is well within the twenty-five the `verify` target of the
+ * Makefile allows the whole boot. The yield bound is two orders of magnitude
+ * beyond any sound run and exists only so that a machine whose interval timer
+ * never ticks reports a failed test rather than stopping.
+ */
+#define VERIFY_SCHEDULER_WAIT_MS     5000U
+#define VERIFY_SCHEDULER_YIELD_BOUND 20000000U
 
 static volatile uint64_t VerifySchedulerCounters[VERIFY_SCHEDULER_THREADS];
 static volatile uint32_t VerifySchedulerProcessors[VERIFY_SCHEDULER_THREADS];
@@ -181,6 +195,7 @@ void KernelVerifyScheduler(void)
     uint64_t slices = 0U;
     Thread *adopted;
     uint64_t waited;
+    uint64_t started_at;
 
     KernelWriteString("Scheduler: asserting the run queues and the rotation.\n");
 
@@ -368,6 +383,7 @@ void KernelVerifyScheduler(void)
      * scheduler with never more than one runnable thread has nothing to rotate.
      */
     VerifySchedulerGo = 1U;
+    started_at = PitMillisecondsElapsed();
 
     if (created != VERIFY_SCHEDULER_THREADS)
     {
@@ -384,10 +400,31 @@ void KernelVerifyScheduler(void)
      * what gives the other processors' shares theirs. The wait is bounded,
      * because a scheduler that never runs anything must produce a failed test
      * and not a stopped machine.
+     *
+     * **The bound is a time and not a count of yields**, and it was a count of
+     * yields until it produced a failure that was not one. A yield into an empty
+     * queue returns at once — there is nobody to switch to — so upon a run where
+     * this processor's share of the fixture finished first, the remaining
+     * iterations cost nothing and two hundred thousand of them elapsed in less
+     * time than the fixture upon the *other* processor needed to finish its
+     * rounds. The test then reported three failures, none of which was a defect
+     * in the scheduler, and passed upon the next boot. A bound that shrinks to
+     * nothing when the thing it is waiting for is elsewhere is not a bound.
+     *
+     * The count is kept beside the time as a second condition, and it is
+     * deliberately far beyond anything a sound run reaches. It is there for the
+     * machine whose interval timer is not running at all: PitMillisecondsElapsed
+     * would never advance there, and a wait bounded only by a clock that has
+     * stopped is the stopped machine this bound exists to prevent.
      */
-    for (waited = 0U; waited < 200000U; ++waited)
+    for (waited = 0U; waited < VERIFY_SCHEDULER_YIELD_BOUND; ++waited)
     {
         if (VerifySchedulerFinished >= created)
+        {
+            break;
+        }
+
+        if ((PitMillisecondsElapsed() - started_at) >= VERIFY_SCHEDULER_WAIT_MS)
         {
             break;
         }
