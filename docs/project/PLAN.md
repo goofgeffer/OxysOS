@@ -619,7 +619,12 @@ system depends upon code this project did not write.
   work: a C compiler, an assembler and a linker. Which compiler — a small one,
   or GCC, or LLVM — is not decided here; it is a judgement about how much libc
   and how many system calls each demands, and it is better taken when Phase 7
-  has shown what those cost.
+  has shown what those cost. **The project owner has named `tinycc` as an
+  acceptable candidate**, on 2026-09-10, without narrowing the choice to it —
+  the words were "tinycc or just any C compiler". It is recorded because a
+  candidate somebody has already assented to is worth knowing when the judgement
+  is finally taken, and because `tinycc` is the small end of the range and
+  therefore the cheapest thing to size Phase 7's library against first.
 - **A port is held apart from original source**, in a directory of its own,
   under its own licence, recorded in [`../../LICENSING.md`](../../LICENSING.md)
   before it is committed, and modified no further than the port requires. The
