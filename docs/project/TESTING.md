@@ -158,21 +158,14 @@ cp build/oxys.iso /mnt/c/Users/<user>/oxys-vbox/oxys.iso
 The ISO must be staged upon the Windows filesystem and named by a Windows path;
 the same applies to any file the machine is asked to write.
 
-### 4.1 The serial channel under VirtualBox, which this section used to say did not exist
+### 4.1 The serial channel under VirtualBox
 
-**This section said there was none, and at sub-task 7.2 that was found to be
-false.** It is left standing, corrected, rather than deleted, because a claim
-that was believed for six phases is worth knowing was once believed.
+**VirtualBox presents a working 16550A and this kernel drives it**, so the
+automated assertion of Section 1 can be performed there as it is under QEMU.
 
-What it said: that the kernel did not detect VirtualBox's 16550A, reported
-`Serial self-test skipped; no adapter is present.`, claimed no request line and
-transmitted nothing, so that a `--uartmode1 file` log was written as an empty
-file — and that the automated assertion of Section 1 could therefore not be
-performed under VirtualBox at all.
-
-What was observed at sub-task 7.2, under **VirtualBox 7.2.0r170228** upon the
-Windows host of the WSL2 environment, with the machine configured exactly as
-`make run-vbox` configures it — `--uart1 0x3F8 4 --uartmode1 file`:
+Observed at sub-task 7.2, under **VirtualBox 7.2.0r170228** upon the Windows host
+of the WSL2 environment, with the machine configured exactly as `make run-vbox`
+configures it — `--uart1 0x3F8 4 --uartmode1 file`:
 
 ```
 Serial self-test: this line was carried by interrupt.
@@ -183,16 +176,15 @@ Serial adapter: transmitted 6927, received 0, interrupts 55, queued 0, waits 0, 
 ```
 
 294 lines of boot log, 55 assertions reporting passed or sound, no verdict of
-`FAILED`, and the adapter driven by interrupt throughout. **The automated
-assertion of Section 1 can therefore be performed under VirtualBox**, and the
-screen-reading procedure of Section 4.2 below is no longer the only thing
-available.
-
-Which of the two changed — the emulator across some version, or the way the
-machine was configured in the run that produced the original claim — is not
-established here, and the honest thing is to say so rather than to assert a cause
-this project did not observe. What is established is what the log above says.
+`FAILED`, and the adapter driven by interrupt throughout.
 [`BUILDS.md`](BUILDS.md), build 1, is the image it came from.
+
+**This document asserted the opposite until that run**, having said since Phase 4
+that VirtualBox had no serial channel at all; [`HISTORY.md`](HISTORY.md) records
+the correction. The lesson is worth more than the archaeology and is the reason
+this paragraph is here: **a claim about an environment is only as current as the
+last run in it**, and nothing in `make lint` can check one. Where a statement here
+says an environment cannot do something, the thing to do is try it.
 
 Section 4.2 remains, because reading the screen is still the only way to see what
 the *framebuffer* console draws, and because a machine whose serial adapter is

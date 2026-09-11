@@ -35,22 +35,21 @@ repository is a record that exists upon one machine.
 
 ## The record is [`builds.tsv`](builds.tsv), and this document is a view of it
 
-It was a Markdown table in this file, appended to by a program, and that lasted
-three builds. A Markdown table is a view and not a record, and it could not have
-three things a record must have.
+A Markdown table is a view and cannot be a record. It lacks three things a record
+must have.
 
-**A bounded document.** Every build appended a row to the file a person opens,
-so the thing a reader meets grew without limit and the prose explaining it sank
-further from the top with each build. The generated section below is capped at
-the twenty most recent builds and will be the same size when there are ten
-thousand.
+**A bounded document.** A table in this file would put every build into the file
+a person opens, so the thing a reader meets would grow without limit and the
+prose explaining it would sink further from the top with each build. The
+generated section below is capped at the twenty most recent builds and will be
+the same size when there are ten thousand.
 
-**A schema.** Every field was free text. `passed (55 assertions)`,
-`x86_64-elf-gcc 13.2.0` and a comma-separated list of environments were each one
-opaque string: nothing could be counted, filtered or compared, and nothing
-prevented the next row from spelling any of them differently. The record now has
-twelve columns, three of them drawn from fixed vocabularies, and the count of
-assertions is a number rather than a phrase.
+**A schema.** In a table every field is free text. `passed (55 assertions)`,
+`x86_64-elf-gcc 13.2.0` and a comma-separated list of environments are each one
+opaque string: nothing can be counted, filtered or compared, and nothing prevents
+the next row from spelling any of them differently. The record has twelve
+columns, three of them drawn from fixed vocabularies, and the count of assertions
+is a number rather than a phrase.
 
 **A check.** A record nothing validates drifts, which is the defect every other
 script in [`../../tools/`](../../tools/) was written after.

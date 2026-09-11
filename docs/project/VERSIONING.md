@@ -25,8 +25,10 @@ Section 11 records what happened to the one tag this repository has ever carried
 
 **Three releases are planned and Section 11.1 is the plan**: `Oxys 1 Alpha` at
 sub-task 8.7, `Oxys 1 Beta` at 9.7, and `Oxys 1` at around 11.10. Each is fixed to
-a sub-task of [`PLAN.md`](PLAN.md) and not to a date. That plan is what amended
-Section 5.4, which used to say this scheme had no pre-releases at all.
+a sub-task of [`PLAN.md`](PLAN.md) and not to a date. The alpha and the beta
+belong to the first release alone; everything after it is preceded by internal
+debug builds, which Section 5.5 distinguishes from releases and which are
+numbered in [`BUILDS.md`](BUILDS.md) rather than named here.
 
 ## 1. The premise
 
@@ -172,28 +174,22 @@ of a release note is likely to have open.
 A release may be cut in the middle of a phase, several may be cut within one
 phase, and a phase may pass without one.
 
-### 5.4 There are exactly two pre-releases, and no others
+### 5.4 There are two pre-releases, and they belong to Oxys 1
 
-**This section said there were none.** It was amended on 2026-09-11 at the
-project owner's direction, who decided that Oxys 1 is to be preceded by an alpha
-and a beta at named points of [`PLAN.md`](PLAN.md); Section 11.1 is the plan and
-[`HISTORY.md`](HISTORY.md) records the amendment. What it used to say is kept
-below, because a rule that was in force is worth knowing was in force.
+`Oxys 1` is preceded by an alpha and a beta at named sub-tasks of
+[`PLAN.md`](PLAN.md); Section 11.1 is the plan. **No release after the first is
+expected to have either**, and Section 5.5 is what the rest get instead.
 
-> No alphas, no betas, no release candidates, no `-rc1`. There is one branch, and
-> `main` is the candidate for everything; anybody who wants the unreleased state
-> builds it.
-
-The reasoning behind that was not wrong and is not discarded: `main` is still the
-candidate for everything, anybody who wants the unreleased state still builds it
-in four commands ([`../../README.md`](../../README.md)), and nothing below creates
-a second branch. What changed is narrower — **that a system on the way to its
-first release has two moments worth publishing an image of**, and that publishing
-them unlabelled as `Oxys 1` would misrepresent what they are.
+`main` remains the candidate for everything, anybody who wants the unreleased
+state builds it in four commands ([`../../README.md`](../../README.md)), and
+nothing here creates a second branch. A pre-release exists for one reason: a
+system on the way to its first release has two moments worth publishing an image
+of, and publishing them unlabelled as `Oxys 1` would misrepresent what they are.
 
 | Rule | Why |
 | ---- | --- |
-| There are **two** pre-release qualifiers, `alpha` and `beta`, and the list is closed. No `rc`, no `pre`, no `snapshot`, no `nightly`. | The original section's real objection was to an open-ended ladder of pre-releases, which is a way of never cutting the release. Two named moments decided in advance is not that. |
+| There are **two** pre-release qualifiers, `alpha` and `beta`, and the list is closed. No `rc`, no `pre`, no `snapshot`, no `nightly`. | An open-ended ladder of pre-releases is a way of never cutting the release. Two moments decided in advance is not that. |
+| **Both belong to `Oxys 1`.** There is no `2-alpha`, and the project owner's expectation is that there never will be an alpha or a beta again. | The first release is the one whose shape nobody has seen. Every release after it succeeds something people are already running, and the thing they want before it is not a differently-labelled image but the reasons to install the real one. Reopening this is the owner's to direct, and would be an amendment like this one. |
 | Both are reserved words. **An edition may never be called `alpha` or `beta`**, and a pre-release qualifier may never be anything else. | The ordinal form appends both after a hyphen (`1-alpha`, `4-workspace`), so one reserved list is what keeps `1-alpha` from being ambiguous between a pre-release and an edition of that name. |
 | A pre-release belongs to the ordinal it precedes, and **takes no point**: there is `1-alpha`, never `1.1-alpha`. A correction to a pre-release is the next pre-release, or the ordinal itself. | Section 5.2's argument against a third level, applied here: a pre-release that could take points would need its own sequence, and two sequences under one ordinal is the ladder this scheme refuses. |
 | A pre-release is **superseded by its ordinal** and by nothing else. `Oxys 1` supersedes both `Oxys 1 Alpha` and `Oxys 1 Beta`. | — |
@@ -206,6 +202,33 @@ coincidental.** Section 5.1 stands: a pre-release qualifier here says *when in t
 sequence*, and says nothing whatever about interface compatibility. It is a hyphen
 because Section 7.1 had already established a hyphen for a qualifier, not because
 another scheme uses one.
+
+### 5.5 An internal debug build is not a release
+
+Every release after `Oxys 1` is expected to be preceded by internal debug builds
+and by nothing else that is labelled. **An internal debug build is an image and
+not a release**, and the distinction is the whole of this section: a release is
+published to other people, and an image that is not published is answerable to
+nobody but whoever built it.
+
+| It has | It has not |
+| ------ | ---------- |
+| A number, in [`BUILDS.md`](BUILDS.md) — every image this project produces gets one, which is what that register is for | An ordinal, a point, a pre-release qualifier or an edition |
+| A commit, a compiler, a size and a verification result, recorded by `make build-record` | A tag. Nothing under Section 9.1 is cut for it |
+| A note saying why it was built | Release notes under Section 9.4 |
+| `OXYS_VERSION_STRING` reading `unreleased`, which is what that value is for | A row in the release record of Section 11 |
+
+**This is why the build register exists and why it is not part of this scheme.**
+The register answers *which image*; this document answers *what a released thing
+is called*. An internal build needs the first and has no use for the second, and
+before the register there was nowhere for such an image to be recorded at all.
+
+**The moment an image is handed to somebody else it stops being internal**, and
+at that moment it is a release and every condition of Section 10 applies to it.
+There is no third category — no "preview", no "nightly", no image that is
+published but exempt. That is the rule the word *internal* is carrying, and it is
+stated because it is the one that erodes: an image shared with one person outside
+the project is published, whatever it was called when it was built.
 
 ## 6. Names
 
@@ -437,6 +460,12 @@ Nothing here says `Oxys 1` is the last release, that there will be no points
 beneath it, or that Phases 12 and 13 arrive as `Oxys 2` rather than as `1.1` and
 `1.2`. Section 4's distinction decides that when each is cut, and Section 4.1
 already says that a point release promises nothing about the next one.
+
+**What is not planned is a fourth pre-release.** The alpha and the beta are the
+first release's, and every release after `Oxys 1` is expected to be preceded by
+internal debug builds and nothing else — Section 5.5. So this plan has three
+entries and the next one will have one: an ordinal, cut when the work it names is
+done.
 
 ## 12. Limitations
 

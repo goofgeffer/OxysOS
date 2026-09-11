@@ -274,13 +274,12 @@ and a clean one is therefore evidence about every phase at once. Both reported
 55 assertions passed or sound and no verdict of `FAILED`: VirtualBox 7.2.0 with
 two processors, and Bochs 3.1 likewise.
 
-**Two claims this project had been making were found false by those runs.** The
-first is the VirtualBox serial channel, which [`TESTING.md`](TESTING.md), Section
-4.1, had said did not exist and which carried 6,927 bytes by interrupt; that
-section is corrected and says what it used to say. The second is smaller and is
-the absence of any Bochs column at all before now — the emulator had never been
-tried, and the local build of it could not have run the kernel if it had been,
-having been configured without `--enable-x86-64`.
+**The VirtualBox run carried its whole boot log over the serial adapter**, 6,927
+bytes by interrupt, so the automated assertion is available there and not only
+under QEMU; [`TESTING.md`](TESTING.md), Section 4.1. **Bochs needs a build of its
+own**: configured without `--enable-x86-64` it presents a processor with no long
+mode and cannot run this kernel at all, which is what the rebuild described in
+Section 4A of that document exists to avoid.
 
 **Sub-task 6.12 has its own row because it is the change most likely to differ by
 machine.** Everything it does is programmed from tables the firmware wrote, and

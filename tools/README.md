@@ -37,13 +37,12 @@ and none of them can name an *image*. By sub-task 7.2 this project had produced
 some hundreds, of which not one could be referred to.
 
 **The record is [`../docs/project/builds.tsv`](../docs/project/builds.tsv) and
-the document is a view of it.** It was a Markdown table appended to by a
-program, and that lasted three builds: a table is a view and cannot be a record.
-It grew without bound in the file a person opens, every field was free text so
-nothing could be counted or compared, and nothing validated it. The record now
-has twelve columns and three fixed vocabularies; the document carries the twenty
-most recent builds and a summary, generated between markers; and `check` fails
-`make lint` if the two disagree.
+the document is a view of it**, because a Markdown table is a view and cannot be
+a record: it grows without bound in the file a person opens, every field in it is
+free text so nothing can be counted or compared, and nothing validates it. The
+record has twelve columns and three fixed vocabularies; the document carries the
+twenty most recent builds and a summary, generated between markers; and `check`
+fails `make lint` if the two disagree.
 [`../docs/project/BUILDS.md`](../docs/project/BUILDS.md) sets out why the record
 is tab-separated rather than JSON, and why SQLite is a lens over it rather than
 the thing committed to git.

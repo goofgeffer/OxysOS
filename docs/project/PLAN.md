@@ -72,6 +72,12 @@ Each is marked in the table of its phase, and
 can do that the one before it could not, and — for `Oxys 1` — what it will not
 have, Phases 12 and 13 falling after it.
 
+**The alpha and the beta are the first release's and are not expected to recur.**
+Every release after `Oxys 1` is preceded by internal debug builds, which are
+images rather than releases: they are numbered in [`BUILDS.md`](BUILDS.md), carry
+no tag and no version string, and become releases subject to every condition the
+moment one is handed to anybody. `VERSIONING.md`, Section 5.5.
+
 **Two things Phase 6 leaves for it to inherit.** The scheduler's affinity mask
 names the bootstrap processor alone for every user thread, because the
 allocators, the process tables and the filesystem layer a system call reaches are
@@ -462,8 +468,10 @@ in an *empty* haystack. The assertion now covers it.
 Alpha` is the first image worth handing to somebody, because it is the first one
 that does anything when they type at it.
 [`VERSIONING.md`](VERSIONING.md), Section 11.1, is the plan and Section 5.4 the
-rules a pre-release is published under — which that decision amended, this scheme
-having had no pre-releases until it was taken.
+rules a pre-release is published under. **The alpha and the beta belong to the
+first release alone**; every release after `Oxys 1` is expected to be preceded by
+internal debug builds and nothing else, which Section 5.5 holds apart from
+releases entirely.
 
 ---
 
