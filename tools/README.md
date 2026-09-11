@@ -12,22 +12,21 @@ part of it — [`../LICENSING.md`](../LICENSING.md), Section 1.
 
 Every check here was written after a real defect that a person had missed. None
 of them is a style rule, and none enforces a preference.
-[`record-build.sh`](record-build.sh) is the one exception to the sentence above
-and is described beneath the table: it checks nothing and writes a record
-instead.
+[`builds.sh`](builds.sh) is the one that is more than a check — it keeps a record
+as well as validating it — and is described beneath the table.
 
 | Script | What it checks | The defect that motivated it |
 | ------ | -------------- | ---------------------------- |
 | [`spdx.sh`](spdx.sh) | Every tracked file carries the SPDX licence tag that `LICENSING.md`, Section 1, assigns to its path. | `crypto/`, `net/` and `uefi/` stood with no licence at all from the day `LICENSING.md` was written. A table is authoritative and is not machine-readable, so the mapping held only for as long as somebody remembered it. |
-| [`check-docs.sh`](check-docs.sh) | Eight claims the corpus makes about itself and about the source. | `docs/design/SMP.md` was referenced by three source files before it existed; `CONCURRENCY.md` named five files as carrying a note that five of them did not carry; `STATUS.md` reported the wrong count of self-test assertions through two sub-tasks; and `PROJECT_GUIDELINES.md`, Section 3, went several phases describing a set of build targets that was no longer the set the `Makefile` had. |
+| [`check-docs.sh`](check-docs.sh) | Nine claims the corpus makes about itself and about the source, the ninth being the build register of [`builds.sh`](builds.sh). | `docs/design/SMP.md` was referenced by three source files before it existed; `CONCURRENCY.md` named five files as carrying a note that five of them did not carry; `STATUS.md` reported the wrong count of self-test assertions through two sub-tasks; and `PROJECT_GUIDELINES.md`, Section 3, went several phases describing a set of build targets that was no longer the set the `Makefile` had. |
 
-## The one that is not a check
+## `builds.sh` — the register, and the one script here that writes a record
 
-[`record-build.sh`](record-build.sh) appends one numbered row to
-[`../docs/project/BUILDS.md`](../docs/project/BUILDS.md) describing the image
-presently in `build/` — the commit it came from, the compiler that built it, its
-size, what the serial log of the verification said, and where it has been run.
-`make build-record` invokes it.
+[`builds.sh`](builds.sh) keeps the build register: `record` appends a build,
+`query` selects from it, `render` regenerates the human view, `check` validates
+all of it, and `sql` gives SQL where `sqlite3` happens to be installed.
+`make build-record` invokes the first, and `make lint` the fourth by way of
+`check-docs.sh`.
 
 It is here rather than anywhere else because it belongs to no phase, as
 everything in this directory does, and because it is the same kind of thing: a
@@ -36,6 +35,18 @@ other record in this repository is about the source**. `PLAN.md` says what is
 being built, `HISTORY.md` how it came to be, `TESTING-RECORD.md` what was run —
 and none of them can name an *image*. By sub-task 7.2 this project had produced
 some hundreds, of which not one could be referred to.
+
+**The record is [`../docs/project/builds.tsv`](../docs/project/builds.tsv) and
+the document is a view of it.** It was a Markdown table appended to by a
+program, and that lasted three builds: a table is a view and cannot be a record.
+It grew without bound in the file a person opens, every field was free text so
+nothing could be counted or compared, and nothing validated it. The record now
+has twelve columns and three fixed vocabularies; the document carries the twenty
+most recent builds and a summary, generated between markers; and `check` fails
+`make lint` if the two disagree.
+[`../docs/project/BUILDS.md`](../docs/project/BUILDS.md) sets out why the record
+is tab-separated rather than JSON, and why SQLite is a lens over it rather than
+the thing committed to git.
 
 It builds nothing and runs nothing. It reads the artefacts that are already
 there, which is what makes it safe to call after any target and after a boot a
@@ -48,16 +59,22 @@ person observed themselves in an environment that leaves no log.
 make lint          # both checks, and what CI runs
 make spdx-check    # tags only, changes nothing
 make spdx-apply    # add the tag to files that lack one
-make docs-check    # the corpus only
-make build-record NOTE="…"   # not a check: one row in the build register
+make docs-check    # the corpus, the build register included
+make build-record NOTE="…"   # not a check: one row in the register
+
+tools/builds.sh query --compiler clang --result failed
+tools/builds.sh sql "SELECT compiler, COUNT(*) FROM builds GROUP BY compiler"
 ```
 
 Each of the checks exits non-zero on failure, so it reads like a compiler
 diagnostic rather than like a report somebody has to interpret.
 
 No script here builds anything or needs the cross-toolchain. They read the
-repository. That is why the two checks are a CI job of their own: a corpus that
-has drifted should not be reported as a compiler failure.
+repository. That is why the checks are a CI job of their own: a corpus that
+has drifted should not be reported as a compiler failure. Nothing here needs
+anything beyond bash and coreutils; `builds.sh sql` is the single exception, it
+is the only subcommand that touches `sqlite3`, and it says so plainly when it is
+absent rather than failing obscurely.
 
 ## What `check-docs.sh` checks
 
@@ -84,6 +101,12 @@ has drifted should not be reported as a compiler failure.
    the two.
 8. **Stale forward references** — an advisory, not an error. A sub-task that
    `PLAN.md` marks `Implemented`, still written about in the future tense.
+9. **The build register**, by calling `builds.sh check`: the schema of
+   `docs/project/builds.tsv`, that its numbers are consecutive, that its
+   constrained fields are drawn from their vocabularies, and that
+   `docs/project/BUILDS.md`'s generated section is what the record renders to.
+   The last is the one that matters — a generated document nothing regenerates
+   stops being true the first time somebody edits it by hand.
 
 ## Errors and advisories
 

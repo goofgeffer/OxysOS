@@ -141,7 +141,7 @@ comment_style_for() {
         *.asm)                        echo '; {} no'   ;;
         *.md)                         echo '<!-- --> no' ;;
         *.sh)                         echo '# {} yes'  ;;
-        *.yml|*.yaml|*.cfg|Makefile|.gitignore|.gitattributes)
+        *.yml|*.yaml|*.cfg|*.tsv|Makefile|.gitignore|.gitattributes)
                                       echo '# {} no'   ;;
         *)                            echo ''          ;;
     esac

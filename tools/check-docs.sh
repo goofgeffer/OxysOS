@@ -299,6 +299,32 @@ while IFS= read -r subtask; do
 done <<< "$implemented"
 
 # ---------------------------------------------------------------------------
+# 9. The build register's record and the view generated from it agree.
+#
+# docs/project/builds.tsv is the record and docs/project/BUILDS.md holds a view
+# rendered from it. tools/builds.sh check validates the schema, the
+# consecutiveness of the numbers, the constrained vocabularies, and that the
+# rendered section is what the record renders to.
+#
+# The defect this catches: a generated document that nothing regenerates. It was
+# a hand-appended Markdown table for three builds, and there was nothing to stop
+# a row being spelt differently from the one above it, a number being reused, or
+# the table and the summary above it disagreeing — each of which reads as a fact
+# and is not one. It is invoked here rather than being a `make` target of its own
+# so that `make lint` covers it and PROJECT_GUIDELINES.md, Section 3, needs no
+# further amendment.
+# ---------------------------------------------------------------------------
+section 'Build register'
+
+if [ -x tools/builds.sh ]; then
+    if ! tools/builds.sh check; then
+        fail 'The build register does not validate; see the report above.'
+    fi
+else
+    fail 'tools/builds.sh is missing or not executable.'
+fi
+
+# ---------------------------------------------------------------------------
 
 printf '\n== Summary\n'
 printf 'docs-check: %d error(s), %d advisory/advisories.\n' "$errors" "$advisories"

@@ -126,7 +126,7 @@ permissions.
 | `toolcheck` | Reports the presence or absence of each required tool, and of the one optional one. |
 | `clang-check` | Compiles every translation unit with a second compiler and discards the objects. Builds nothing; see Section 9. |
 | `spdx-check`, `spdx-apply`, `docs-check`, `lint` | The corpus checks of [`../../tools/README.md`](../../tools/README.md). Neither builds anything nor needs this toolchain; `lint` is the two checks together and is what CI runs. |
-| `build-record` | Appends one numbered row to [`BUILDS.md`](BUILDS.md) describing the image presently in `build/`. Builds nothing and runs nothing. `NOTE`, `ENVIRONMENT` and `RESULT` are its variables, and `BUILD_DIR` selects which image it reads. |
+| `build-record` | Appends one numbered row to [`builds.tsv`](builds.tsv), the build register, and re-renders the view in [`BUILDS.md`](BUILDS.md). Builds nothing and runs nothing. `NOTE`, `ENVIRONMENT`, `RESULT` and `ASSERTIONS` are its variables, and `BUILD_DIR` selects which image it reads — which is how an image built by the second compiler is recorded as such. |
 
 ## 7. Header dependency tracking
 

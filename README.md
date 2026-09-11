@@ -46,7 +46,7 @@ way to work once the toolchain stands:
 | [`./build_all.sh`](build_all.sh) | The three stages above in order, then `make iso` and `make verify`. |
 | `make verify` | Boots the ISO under QEMU with no display and asserts upon the serial output. **This is the gate**: `PROJECT_GUIDELINES.md`, Section 2, requires it to pass before a change is final. |
 | `make clang-check` | Compiles every translation unit with a second compiler, for its diagnostics alone. Builds nothing. |
-| `make build-record NOTE="…"` | Appends one numbered row to [`docs/project/BUILDS.md`](docs/project/BUILDS.md) describing the image presently in `build/`. Builds nothing and runs nothing. |
+| `make build-record NOTE="…"` | Appends one numbered row to [`docs/project/builds.tsv`](docs/project/builds.tsv), the build register, and re-renders the view in [`BUILDS.md`](docs/project/BUILDS.md). Builds nothing and runs nothing. |
 
 The toolchain is not placed upon the default `PATH`.
 [`docs/project/TOOLCHAIN.md`](docs/project/TOOLCHAIN.md) states the whole of the
@@ -94,7 +94,7 @@ source of truth for progress, and nothing below restates it.
 | [`TESTING-SYSTEM.md`](docs/project/TESTING-SYSTEM.md) | What the verification of each non-graphical subsystem establishes, and the deliberately-inserted defect that confirmed the assertion was worth making. |
 | [`TESTING-GRAPHICS.md`](docs/project/TESTING-GRAPHICS.md) | The same for the graphical work, which is apart because most of what matters there cannot be asserted by the kernel and has to be looked at. |
 | [`TESTING-RECORD.md`](docs/project/TESTING-RECORD.md) | The dated record of every test performed, with its outcome. |
-| [`BUILDS.md`](docs/project/BUILDS.md) | The numbered register of every image produced: the commit it came from, the compiler that built it, its size, what the verification said and where it was run. It is the only document here written by a program rather than by a person, and it exists because every other record is about the source and none of them can name an artefact. |
+| [`BUILDS.md`](docs/project/BUILDS.md) | The register of every image produced: the commit it came from, the compiler that built it, its size, what the verification said and where it was run. Its record is [`builds.tsv`](docs/project/builds.tsv), a twelve-column delimited file the document is a generated view of; the reasoning for a delimited record rather than a Markdown table or a SQLite database is Section *The record is builds.tsv* there. |
 | [`TOOLCHAIN.md`](docs/project/TOOLCHAIN.md) | The cross-compilation toolchain, its construction, the build system, and the workflow that runs the verification upon GitHub. |
 | [`CODING-STANDARDS.md`](docs/project/CODING-STANDARDS.md) | The mandatory conventions of style, naming, documentation and compiler diagnostics. |
 | [`REFERENCES.md`](docs/project/REFERENCES.md) | The bibliography of authoritative specifications consulted by the project. |

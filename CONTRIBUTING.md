@@ -51,7 +51,7 @@ A change is not complete until all of these are true. This is
 | A boot-time self-test asserts the new behaviour, or the absence of one is recorded | Section 6 |
 | `make verify` passes | Section 7 |
 | `make lint` passes | The licence tags and the corpus checks of [`tools/README.md`](tools/README.md), and what CI runs |
-| The image the run was made against is in [`docs/project/BUILDS.md`](docs/project/BUILDS.md) | `make build-record NOTE="…"`, added at sub-task 7.2 so that an observation about an image can name it |
+| The image the run was made against is in the build register | `make build-record NOTE="…"`, which appends to [`docs/project/builds.tsv`](docs/project/builds.tsv) and re-renders [`BUILDS.md`](docs/project/BUILDS.md). Added at sub-task 7.2 so that an observation about an image can name it |
 
 **A stale document is a defect of the same kind as a bug.** That is the whole of
 the reasoning: the documentation is part of the codebase and not a description of
@@ -81,6 +81,14 @@ make verify        # boots the ISO headless under QEMU; fails if any self-test d
 make clang-check   # compiles every unit with a second compiler, for the diagnostics
 make lint          # the licence tags and the corpus; builds nothing
 make build-record NOTE="what this image is"   # one numbered row per image
+```
+
+The register is a delimited record rather than a table in a document, so it can
+be asked things:
+
+```sh
+tools/builds.sh query --compiler clang --result failed
+tools/builds.sh query --environment Bochs --last 5
 ```
 
 The four further environments — VirtualBox, Bochs, OVMF and the physical machine

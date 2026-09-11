@@ -469,27 +469,37 @@ lint: spdx-check docs-check
 # ------------------------------------------------------------------------------
 # The build register.
 #
-# One numbered row per image produced, appended to docs/project/BUILDS.md. It
-# builds nothing and runs nothing: it reads the artefacts in build/ and the
-# serial log the `verify` target leaves, so it may be called after any target
-# above and after a boot in an environment that leaves no log at all.
+# One numbered row per image produced, appended to docs/project/builds.tsv —
+# which is the record — after which docs/project/BUILDS.md's generated view is
+# re-rendered from it. It builds nothing and runs nothing: it reads the artefacts
+# in $(BUILD_DIR) and the serial log the `verify` target leaves, so it may be
+# called after any target above and after a boot in an environment that leaves no
+# log at all.
 #
 # NOTE is the one field a person supplies, and is the only one that says why the
-# build was made. ENVIRONMENT and RESULT are for a run this project cannot
-# observe from the repository — under VirtualBox, or upon real hardware.
+# build was made. ENVIRONMENT, RESULT and ASSERTIONS are for a run this project
+# cannot observe from the repository — under VirtualBox, or upon real hardware.
 #
 #   make build-record NOTE="sub-task 7.2, first image with the wrappers"
 #   make build-record ENVIRONMENT=Bochs NOTE="the same image under Bochs"
+#   BUILD_DIR=build-clang make build-record ENVIRONMENT=QEMU NOTE="by the second compiler"
+#
+# The register is queried with tools/builds.sh directly; there is no target for
+# it, a target per query being a worse arrangement than a script with options.
+# docs/project/BUILDS.md sets out the schema and why the record is a delimited
+# file rather than a Markdown table or a SQLite database.
 # ------------------------------------------------------------------------------
 
 NOTE        :=
 ENVIRONMENT :=
 RESULT      :=
+ASSERTIONS  :=
 
 build-record:
-	@tools/record-build.sh \
+	@BUILD_DIR=$(BUILD_DIR) tools/builds.sh record \
 		$(if $(ENVIRONMENT),--environment "$(ENVIRONMENT)") \
 		$(if $(RESULT),--result "$(RESULT)") \
+		$(if $(ASSERTIONS),--assertions "$(ASSERTIONS)") \
 		$(if $(NOTE),"$(NOTE)")
 
 # ------------------------------------------------------------------------------

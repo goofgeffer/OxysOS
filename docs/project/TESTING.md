@@ -13,7 +13,7 @@ tests establish is elsewhere, and so is the record of what has actually been run
 | Document | Subject |
 | -------- | ------- |
 | **`TESTING.md`** (this one) | `make verify` and what it asserts; interactive execution under QEMU; the four further environments — OVMF, VirtualBox, Bochs and the physical machine — and what each is good for that the others are not; debugging with GDB; and the judges this project did not write. |
-| [`BUILDS.md`](BUILDS.md) | The numbered register of every image produced, so that an observation made in one of those environments can name the image it was made about. |
+| [`BUILDS.md`](BUILDS.md) | The numbered register of every image produced, so that an observation made in one of those environments can name the image it was made about. Its record is [`builds.tsv`](builds.tsv), which carries the environments an image was run in as a field that can be queried: `tools/builds.sh query --environment Bochs`. |
 | [`TESTING-SYSTEM.md`](TESTING-SYSTEM.md) | The verification of the devices, the storage stack, the privilege apparatus and the concurrency primitives. |
 | [`TESTING-GRAPHICS.md`](TESTING-GRAPHICS.md) | The verification of the framebuffer, the primitives, the font and console, the optimisation, the fault screens, the compositor and the pointer. |
 | [`TESTING-RECORD.md`](TESTING-RECORD.md) | The dated record of every test performed, with its outcome. |

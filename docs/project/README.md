@@ -12,11 +12,11 @@ explains how the kernel functions; that is [`../design/`](../design/),
 | [`STATUS.md`](STATUS.md) | The present condition of the system: what it does today, one paragraph to a phase, and the table of which environments each phase has actually been observed to work in. |
 | [`HISTORY.md`](HISTORY.md) | The revision history: one row per change, pointing at the commit that made it and the design document that reasons about it. |
 | [`VERSIONING.md`](VERSIONING.md) | What a release gets called and why: the ordinal, the optional point beneath it, the name that stands for an ordinal, and the edition that is a variety of a release rather than a successor to it — together with the record of releases, which is empty. |
-| [`TESTING.md`](TESTING.md) | How the kernel is verified and where: what `make verify` asserts, interactive execution under QEMU, the three further environments — OVMF, VirtualBox and the physical machine — debugging with GDB, and the judges this project did not write. |
+| [`TESTING.md`](TESTING.md) | How the kernel is verified and where: what `make verify` asserts, interactive execution under QEMU, the four further environments — OVMF, VirtualBox, Bochs and the physical machine — debugging with GDB, and the judges this project did not write. |
 | [`TESTING-SYSTEM.md`](TESTING-SYSTEM.md) | What the test of each non-graphical subsystem establishes: the devices, the storage stack, the privilege apparatus and the concurrency primitives, each with its negative test. |
 | [`TESTING-GRAPHICS.md`](TESTING-GRAPHICS.md) | The same for sub-tasks 6.2 to 6.6, kept apart because most of what matters there cannot be asserted by the kernel at all and has to be looked at. |
 | [`TESTING-RECORD.md`](TESTING-RECORD.md) | The dated record of every test performed, with its outcome. |
-| [`BUILDS.md`](BUILDS.md) | The numbered register of every image produced: the commit it came from, the compiler that built it, its size, what the verification said and where it was run. Written by [`../../tools/record-build.sh`](../../tools/record-build.sh) and never by hand. |
+| [`BUILDS.md`](BUILDS.md) | The numbered register of every image produced: the commit it came from, the compiler that built it, its size, what the verification said and where it was run. Written by [`../../tools/builds.sh`](../../tools/builds.sh) from [`builds.tsv`](builds.tsv), which is the record; the document is a generated view of it and `make lint` fails if the two disagree. |
 | [`TOOLCHAIN.md`](TOOLCHAIN.md) | The `x86_64-elf` cross-toolchain, its construction, the build system that uses it, and the GitHub workflow that runs the verification upon a machine nobody here has configured. |
 | [`CODING-STANDARDS.md`](CODING-STANDARDS.md) | Style, naming, file headers, the `-Wall -Wextra -Werror` regime, and the register of compiler extensions relied upon with the justification of each. |
 | [`REFERENCES.md`](REFERENCES.md) | Every specification the project relies upon, with the sections relied upon named and, where a specification is not publicly distributed, a note of how its details were cross-verified. |
@@ -44,7 +44,7 @@ commits are in no release, and a release is a decision rather than a change.
 `BUILDS.md` answers a fifth, added at sub-task 7.2 — **which image was that?**
 The three above are all about the source and none of them can name an artefact,
 so an observation about one image and not another had nothing to attach itself
-to. It is the one document here written by a program rather than by a person.
+to. Its record, [`builds.tsv`](builds.tsv), is the one machine-readable file in this directory, and the document itself is half prose and half generated from it.
 
 ## The order of work
 
