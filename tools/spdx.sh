@@ -33,8 +33,11 @@
 # The one thing to be careful of:
 #   A file's *first* matching rule wins, so the specific exceptions must be
 #   tested before the directory rules. `boot/grub/grub.cfg` lives under `boot/`
-#   and is CC0, not LGPL; `boot/README.md` likewise. Reordering the rules below
-#   would relicense both without anything saying so.
+#   and is CC0, not LGPL; `boot/README.md` likewise; and `kernel/abi/` is MIT
+#   although everything else under `kernel/` is LGPL, that directory being the
+#   interface a program is entitled to rather than the kernel's own corpus.
+#   Reordering the rules below would relicense all three without anything saying
+#   so.
 # ==============================================================================
 
 set -o errexit
@@ -109,6 +112,11 @@ identifier_for() {
         Makefile|build_*.sh|boot/grub/grub.cfg|.gitignore|.gitattributes)
                                  echo 'CC0-1.0'; return ;;
         .github/*|tools/*)       echo 'CC0-1.0'; return ;;
+
+        # --- the interface a program is entitled to, which is permissive so
+        #     that an MIT C library may include it; it must be tested before the
+        #     kernel rule below, which would otherwise claim it ---
+        kernel/abi/*)            echo 'MIT'; return ;;
 
         # --- the kernel image: what is linked into it ---
         boot/*|kernel/*|drivers/*|graphics/*|crypto/*|net/*|uefi/*|linker.ld)

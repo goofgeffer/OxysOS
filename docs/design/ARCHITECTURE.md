@@ -40,10 +40,11 @@ than as later additions, in accordance with `PROJECT_GUIDELINES.md`, Section 5:
 | `boot/` | The Multiboot2 header, the 32-bit entry point, the long-mode transition, and the GRUB configuration. | Phase 1 |
 | `kernel/` | The architecture-independent kernel core: entry, memory management, the privilege apparatus, scheduling, system calls, and the virtual filesystem. | Phase 1 |
 | `kernel/include/oxys/` | The kernel's internal header corpus. | Phase 1 |
+| `kernel/abi/oxys/` | A **second include root**: the system-call interface a program is entitled to — the call numbers, the failure results, the register convention and the two limits an argument is judged against — held apart from the corpus above it and licensed permissively so that the `MIT` C library may include it without including the kernel. It holds constants and never a declaration. | Phase 7 (sub-task 7.1) |
 | `kernel/test/` | The boot-time self-tests, one file per subsystem, and the composed volume they are conducted upon. | Phase 2 |
 | `kernel/acpi/` | The reading of the firmware's ACPI description tables. | Phase 6 (sub-task 6.12) |
 | `drivers/` | Device drivers, one subdirectory per device class. | Phase 1 |
-| `libc/` | The minimal C library linked into user programs. | Phase 7 |
+| `libc/` | The minimal C library linked into user programs. `libc/include/` is its header root and `libc/string/` its first material. | Phase 7 (sub-task 7.1) |
 | `userland/` | User programs: the utilities and the shell. | Phase 7 |
 | `graphics/` | The framebuffer, the drawing primitives, the font and the compositing surface. | Phase 6 (established) |
 | `crypto/` | The random-number generator, the hash function and the symmetric cipher. | Phase 10 |

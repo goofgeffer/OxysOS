@@ -46,7 +46,15 @@ rotates round-robin between the threads upon it, and is taken back by a local
 timer calibrated against the interval timer when a ten-millisecond quantum
 expires.
 
-**Next: Phase 7** — the userland and the minimal C library.
+**Phase 7 has begun.** Sub-task 7.1 is complete: the nineteen string and memory
+functions of ISO/IEC 9899:2011, Section 7.24, that do not require a locale or an
+`errno`, in [`../../libc/`](../../libc/) under the userland's permissive licence
+— and, because 7.2 could not be written until it was done,
+`kernel/include/oxys/syscall.h` divided into the interface a program is entitled
+to and the implementation it is not.
+
+**Next: sub-task 7.2** — the system-call wrappers, which the division above
+unblocked.
 
 **Two things Phase 6 leaves for it to inherit.** The scheduler's affinity mask
 names the bootstrap processor alone for every user thread, because the
@@ -98,7 +106,7 @@ sub-task being the verification itself.
 | [4](#phase-4--basic-device-drivers) | Basic device drivers | Implemented |
 | [5](#phase-5--ext2-filesystem) | EXT2 filesystem | Implemented |
 | [6](#phase-6--graphics-system-calls-process-management-and-symmetric-multi-processing) | Graphics, system calls, processes, SMP | Implemented |
-| [7](#phase-7--userland-and-minimal-c-library) | Userland and minimal C library | Planned |
+| [7](#phase-7--userland-and-minimal-c-library) | Userland and minimal C library | In progress |
 | [8](#phase-8--shell) | Shell | Planned |
 | [9](#phase-9--the-desktop-its-system-services-and-its-configuration) | The desktop, its services and its configuration | Planned |
 | [10](#phase-10--cryptography) | Cryptography | Planned |
@@ -353,26 +361,53 @@ are in [`../design/ARCHITECTURE.md`](../design/ARCHITECTURE.md), Section 4.1.
 **Objective**: Provide the runtime environment in which user programs execute.
 
 **Specifications**: ISO/IEC 9899:2011; System V ABI for AMD64.
+**Design**: [`../design/LIBC.md`](../design/LIBC.md).
 
 Phase 7 is also where the filesystem layer's open file table becomes per-process
 and `fork` must decide what a child inherits; a process has no file descriptors
 before it. See [`../storage/VFS.md`](../storage/VFS.md), limitation 2.
 
-**Sub-task 7.2 carries an obligation from the licensing.** The userland is `MIT`
-and the kernel `LGPL-3.0-or-later`, so a C library cannot include a header that
-mixes the user-visible interface with the kernel's implementation of it — and
-`kernel/include/oxys/syscall.h` presently does. It must be divided before the
-wrappers are written. See [`../../LICENSING.md`](../../LICENSING.md), Section 2.1.
+**The obligation sub-task 7.2 carried from the licensing is discharged.** The
+userland is `MIT` and the kernel `LGPL-3.0-or-later`, so a C library could not
+include a header that mixed the user-visible interface with the kernel's
+implementation of it — and `kernel/include/oxys/syscall.h` did. Sub-task 7.1
+divided it: the interface is now `kernel/abi/oxys/syscall_abi.h`, under `MIT` and
+reachable by a second include root of its own, and the implementation stays with
+the kernel. See [`../../LICENSING.md`](../../LICENSING.md), Section 2.1, and
+[`../design/LIBC.md`](../design/LIBC.md), Section 2. **The wrappers of 7.2 are
+now unblocked and must be declared by the C library**, not by the interface
+header: that directory holds constants and a convention and never a symbol.
+
+**Sub-task 7.1 is the first thing in this project whose test subject is not the
+kernel**, and it is asserted by the kernel anyway — `make verify` being the only
+thing here that can execute anything until this phase produces a userland to host
+a harness in. [`../design/LIBC.md`](../design/LIBC.md), Section 7, records the
+arrangement, why it is honest rather than expedient, and what sub-task 7.5
+changes about it.
 
 | # | Sub-task | State | Asserted by |
 | - | -------- | ----- | ----------- |
-| 7.1 | Implement the freestanding string and memory functions (`<string.h>`). | Planned | — |
+| 7.1 | Implement the freestanding string and memory functions (`<string.h>`). | Implemented | `verify_string.c` — see note (a) |
 | 7.2 | Implement system-call wrappers for the complete kernel interface. | Planned | — |
 | 7.3 | Implement a user-space heap allocator (`malloc`, `free`, `realloc`) above `brk`/`mmap`. | Planned | — |
 | 7.4 | Implement buffered input and output (`<stdio.h>`) and formatted conversion. | Planned | — |
 | 7.5 | Author the C runtime startup object (`crt0`) and the static-linking procedure for user programs. | Planned | — |
 | 7.6 | Implement the utilities `ls`, `cat`, `echo`, `mkdir` and `rm`. | Planned | — |
 | 7.7 | Construct an initial ramdisk containing the utilities and mount it as the early root. | Planned | — |
+
+**(a)** Sub-task 7.1 implements nineteen of the twenty-two functions of ISO/IEC
+9899:2011, Section 7.24. The three absent are `strcoll` and `strxfrm`, which
+compare and transform according to a locale this system has not got, and
+`strerror`, whose table belongs beside the thing that will set `errno` in
+sub-task 7.2. [`../design/LIBC.md`](../design/LIBC.md), Section 4, records each.
+
+**The negative test found a defect in the test rather than in the code**, which
+is the class of defect a passing run cannot report. The guard at the head of
+`strstr` was deleted on purpose and every assertion still passed: the search loop
+already handles an empty needle against a haystack that is not empty, and the
+assertion had never covered the one case the guard exists for — an empty needle
+in an *empty* haystack. The assertion now covers it.
+[`../design/LIBC.md`](../design/LIBC.md), Section 5.1.
 
 ---
 
@@ -547,7 +582,7 @@ roadmap for their own reasons.
 | A filesystem that can be written to, with directories and a mountable root | **Phase 5.** Present. |
 | Processes that can fork, execute a program from a volume, and be collected | **Phase 6**, sub-task 6.11. Present. |
 | A scheduler, so that a build runs while other work does | **Phase 6**, sub-task 6.15. Present, though a user thread is confined to the bootstrap processor until the locks of [`../design/CONCURRENCY.md`](../design/CONCURRENCY.md), Section 10, limitation 1, are applied. A parallel build is what will first want that. |
-| A C library a compiler can be built against | **Phase 7**, whose scope Section B enlarges: a libc sized for `ls` and `cat` is nowhere near enough for a ported compiler to link against. |
+| A C library a compiler can be built against | **Phase 7**, begun at sub-task 7.1, whose scope Section B enlarges: a libc sized for `ls` and `cat` is nowhere near enough for a ported compiler to link against. The string functions are the floor and are deliberately unoptimised; [`../design/LIBC.md`](../design/LIBC.md), Section 6, limitation 1, records that a ported compiler is the workload that will justify measuring them. |
 | A shell, a job-control model, and pipes | **Phase 8.** Planned. A build system is a program that runs programs. |
 | An assembler and a linker | **Porting work, not yet scheduled.** Section B settles that they are ports; which ones, and when, is not decided. |
 | A C compiler that runs upon Oxys-OS | **Porting work, not yet scheduled.** Section B settles it; which compiler is a judgement better taken once Phase 7 has shown what each would demand. |

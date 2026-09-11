@@ -1,11 +1,20 @@
 <!-- SPDX-FileCopyrightText: 2026 The Oxys-OS Authors -->
 <!-- SPDX-License-Identifier: CC0-1.0 -->
-# `docs/design/` — The Kernel Itself
+# `docs/design/` — The Kernel Itself, and the Interface It Presents
 
-How the machine is brought up, and how it is arranged once it is. These sixteen
+How the machine is brought up, how it is arranged once it is, and — from
+sub-task 7.1 — what a program standing upon it is given. These seventeen
 documents describe the parts of the kernel that no device driver may assume the
 absence of. Five of them are the graphical work, which
 [`GRAPHICS.md`](GRAPHICS.md) indexes and no longer holds.
+
+**[`LIBC.md`](LIBC.md) is the one whose subject is not the kernel**, and it is
+here rather than in a group of its own because what it describes is the other
+side of a boundary this group already documents: [`PRIVILEGE.md`](PRIVILEGE.md)
+is the system-call interface as the kernel implements it, and `LIBC.md` is the
+same interface as a program is given it, together with the library built above.
+A fifth group for one document would have been a worse arrangement than a
+widened description of this one.
 
 | Document | Subject | Implementation | Phase |
 | -------- | ------- | -------------- | ----- |
@@ -25,6 +34,7 @@ absence of. Five of them are the graphical work, which
 | [`CONCURRENCY.md`](CONCURRENCY.md) | The four mechanisms a second processor cannot safely exist without: the ticket spinlock that masks interrupts for as long as it is held, the per-processor area reached in one instruction through a segment base privilege level 3 cannot write, the interrupt one processor sends to another, and the translation-lookaside-buffer shootdown that waits to be acknowledged. It starts no processor; [`SMP.md`](SMP.md), at sub-task 6.14, does that. | [`../../kernel/cpu/spinlock.c`](../../kernel/cpu/spinlock.c), [`../../kernel/cpu/percpu.c`](../../kernel/cpu/percpu.c), [`../../kernel/cpu/ipi.c`](../../kernel/cpu/ipi.c), [`../../kernel/mm/shootdown.c`](../../kernel/mm/shootdown.c) | 6.13 |
 | [`SMP.md`](SMP.md) | The bring-up of the application processors: the INIT-startup-startup protocol and the delays it prescribes, the real-mode trampoline that carries a processor from a reset to 64-bit mode upon the kernel's own hierarchy, the identity mapping that exists for the duration and is removed by the first shootdown this kernel sends to anybody, and the rule that a starting processor allocates nothing. | [`../../kernel/cpu/smp.c`](../../kernel/cpu/smp.c), [`../../boot/trampoline.asm`](../../boot/trampoline.asm) | 6.14 |
 | [`SCHEDULER.md`](SCHEDULER.md) | The run queue each processor holds and the lock upon it, the round-robin rotation, the affinity mask that decides which queue a thread may join — and which is the state of the outstanding locks written as a value in a field — the local timer whose rate the kernel measures rather than assumes, and the critical section a switch is made inside. | [`../../kernel/proc/sched.c`](../../kernel/proc/sched.c) | 6.15 |
+| [`LIBC.md`](LIBC.md) | The C library: the division of the system-call header into the interface a program is entitled to and the implementation it is not — a licensing obligation discharged before the wrappers depended upon it — and the nineteen string and memory functions of ISO/IEC 9899:2011, Section 7.24, that this library implements, the three it does not, and why a userland library is presently compiled into the kernel image. | [`../../libc/`](../../libc/), [`../../kernel/abi/`](../../kernel/abi/) | 7.1 |
 
 They are listed in the order the phases build them, and that is the order to read
 them in if you are new to the project: each depends upon the ones before it, and

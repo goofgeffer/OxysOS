@@ -65,6 +65,29 @@ One suppression exists elsewhere in the `Makefile` and belongs to the
 `clang-check` target alone: `-Wno-cast-align`, for the reason set out in Section
 9.3. It is not applied to any build, and `-Wcast-align` remains in force above.
 
+### 3.1 The three include roots, and why the kernel is given only two
+
+| Root | Holds | Given to |
+| ---- | ----- | -------- |
+| `kernel/include` | The kernel's own header corpus, `LGPL-3.0-or-later`. | Every translation unit. |
+| `kernel/abi` | The system-call interface a program is entitled to, `MIT`. | Every translation unit, and the C library. |
+| `libc/include` | The C library's headers, `MIT`. | The C library's own translation units, and `kernel/test/verify_string.c` alone. |
+
+**The kernel is deliberately compiled without `libc/include` in reach**, so that
+no kernel translation unit can include `<string.h>` and quietly acquire a
+dependency upon the userland. The two exceptions are named explicitly by rules of
+their own in the `Makefile` rather than by a flag applied to everything, so the
+exception is a line somebody can find. `make clang-check` adds the root to every
+unit, because that target compiles and discards and produces no image: the
+isolation is enforced where it has an effect, and maintaining a second list of
+which files are which would be a worse arrangement than not.
+
+`kernel/abi` is a root and not a subdirectory of `kernel/include` for a licensing
+reason rather than a structural one, which
+[`../design/LIBC.md`](../design/LIBC.md), Section 2, sets out: a library that
+added the kernel's corpus to its include path in order to reach one permissive
+header would have every header of the kernel within reach.
+
 ## 4. Assembler flags
 
 | Flag | Justification |

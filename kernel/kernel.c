@@ -1396,6 +1396,20 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
     KernelVerifyLifecycle();
     ProcessReport();
 
+    /*
+     * Sub-task 7.1, and the first assertion here whose subject is not the
+     * kernel.
+     *
+     * The C library's string and memory functions are freestanding: they call
+     * nothing, allocate nothing and depend upon nothing but the C language. They
+     * are therefore placed at the end of the sequence rather than within it —
+     * they have no dependency upon any subsystem above, and nothing above has
+     * any dependency upon them, the kernel not being compiled against them at
+     * all. Everything else in this function is ordered by what must exist
+     * before it; this is ordered by what a reader of the log should meet last.
+     */
+    KernelVerifyString();
+
     KernelMountRootVolume();
 
     IrqReport();
@@ -1412,15 +1426,18 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
      * than faulting, hanging or resetting on the way. What follows them says
      * which sub-task the boot got as far as, and must be revised with the boot.
      */
-    KernelWriteString("Phase 6 initialisation complete: a program has been loaded, "
+    KernelWriteString("Phase 7 initialisation complete: a program has been loaded, "
                       "run at privilege level 3,\nhas made a child of itself, replaced "
                       "that child's program with one read from a\nvolume, collected "
                       "what it ended with, and ended; every device request is now "
                       "delivered\nby the I/O APIC and completed at the Local APIC, the "
-                      "8259A pair having been retired;\nand every processor this machine "
+                      "8259A pair having been retired;\nevery processor this machine "
                       "has holds an area of its own, takes locks that\nmask its "
-                      "interrupts, and answers a translation-lookaside-buffer shootdown "
-                      "sent\nto it by another.\n");
+                      "interrupts, answers a translation-lookaside-buffer shootdown "
+                      "sent\nto it by another, and rotates between the threads upon a "
+                      "run queue of its own;\nand the C library's string and memory "
+                      "functions stand, asserted by the kernel\nbecause there is not yet "
+                      "a userland to assert them in.\n");
 
     VgaSetColour(VGA_COLOUR_LIGHT_GREY, VGA_COLOUR_BLACK);
 

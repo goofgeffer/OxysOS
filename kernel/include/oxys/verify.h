@@ -16,7 +16,7 @@
  *          KernelVerifyLocalApic, KernelVerifyIoApic, KernelVerifyApicRouting,
  *          KernelVerifyPerCpu, KernelVerifySpinlock, KernelVerifyIpi,
  *          KernelVerifyShootdown, KernelVerifyApplicationProcessors,
- *          KernelVerifyScheduler,
+ *          KernelVerifyScheduler, KernelVerifyString,
  *          KernelVerifyPit, KernelVerifyKeyboard, KernelVerifySerial,
  *          KernelVerifyVga, KernelVerifyPci, KernelVerifyAta, KernelVerifyBlock,
  *          KernelVerifyBuffer, KernelVerifyExt2, KernelVerifyVfs,
@@ -209,6 +209,23 @@ void KernelVerifyApplicationProcessors(void);
  * which yielding cannot be told apart from there.
  */
 void KernelVerifyScheduler(void);
+
+/*
+ * Sub-task 7.1: the C library's string and memory functions.
+ *
+ * The first assertion in this corpus whose subject is not the kernel. The
+ * functions of `libc/string/` are freestanding — they depend upon nothing but
+ * the C language — so anything that can execute C can run them, and `make
+ * verify` is the only thing in this project that can execute anything at all.
+ * They are therefore compiled into the image and asserted here, until the
+ * userland of this phase can host a harness of its own.
+ *
+ * The kernel does not call them. Only this file is compiled against the C
+ * library's include root, by a rule named explicitly in the Makefile, so no
+ * kernel translation unit can acquire a dependency upon the userland by
+ * including <string.h> without that rule being edited.
+ */
+void KernelVerifyString(void);
 
 /* Phases 3 and 4: the remaining devices. */
 void KernelVerifyPit(void);

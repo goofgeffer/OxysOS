@@ -418,8 +418,23 @@ Sections relied upon:
 - **Section 6.7.9, paragraph 4**, the requirement that the initialiser of an
   object of static storage duration be a constant expression.
 - **Sections 7.18, 7.20**, `<stdbool.h>` and `<stdint.h>`.
+- **Section 6.2.5, paragraph 15**: whether plain `char` is signed is
+  implementation-defined. Upon x86_64 with this toolchain it is, which is what
+  makes the requirement below a correctness matter and not a pedantry.
+- **Section 6.5, paragraph 7**: an object's stored value may be accessed through
+  a character type, which is why every byte in `libc/string/` is moved and
+  compared through `unsigned char`.
+- **Section 6.7.3.1**, the meaning of `restrict`, which is what permits `memcpy`
+  to copy forwards without asking whether its objects overlap.
+- **Section 7.24**, string handling, function by function: 7.24.2 and 7.24.3
+  copying, 7.24.4 comparison, 7.24.5 search, 7.24.6 the fill and the length.
+  Each subsection fixes the behaviour of the function `libc/string/` implements
+  under that name, including the three that look like defects and are not —
+  `strncpy` padding without terminating, `strncat` terminating without padding,
+  and `strchr` finding the terminator.
 
-Used by: the whole of the C source.
+Used by: the whole of the C source; Sections 6.2.5, 6.5, 6.7.3.1 and 7.24 by
+`libc/` and `kernel/test/verify_string.c` in particular.
 
 ### National Semiconductor PC16550D datasheet
 The universal asynchronous receiver/transmitter of the IBM Personal Computer AT

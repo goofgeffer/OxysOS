@@ -200,6 +200,32 @@ See [`../design/PRIVILEGE.md`](../design/PRIVILEGE.md),
 [`../devices/ACPI.md`](../devices/ACPI.md) and
 [`../devices/APIC.md`](../devices/APIC.md).
 
+**Phase 7 — userland and the C library.** Begun. Sub-task 7.1 stands: the
+nineteen functions of ISO/IEC 9899:2011, Section 7.24, that do not require a
+locale or an `errno`, in [`../../libc/`](../../libc/) under the userland's
+permissive licence, divided into four translation units as the standard divides
+its own subsections. They are implemented exactly as specified rather than as a
+reader might expect — `strncpy` pads and does not terminate, `strchr` finds the
+terminator, `strtok` keeps its position in a static object — and every byte is
+examined through `unsigned char`, which is the one property whose loss would be
+invisible: a comparison through plain `char` is correct for every byte below 128
+and wrong for every byte above it, upon a machine whose plain `char` is signed.
+
+**Nothing can yet run any of it.** There is no `crt0`, no static-linking
+procedure and no user-mode compilation until sub-task 7.5, so the four
+translation units are compiled into the kernel image and asserted by a boot-time
+self-test — `make verify` being the only thing in this project that can execute
+anything at all. The kernel does not call them and is compiled without the C
+library's include root in reach, so that it cannot begin to.
+
+**The system-call header was divided in the same sub-task**, which is a licensing
+obligation rather than a tidying: the interface a program is entitled to is now
+`kernel/abi/oxys/syscall_abi.h` under the permissive licence, in a second include
+root of its own, and the kernel's configuration, frame, dispatch and validation
+stay behind. Nothing changed in the move. See
+[`../design/LIBC.md`](../design/LIBC.md) and
+[`../../LICENSING.md`](../../LICENSING.md), Section 2.1.
+
 ## 3. Where it has been observed to work
 
 A sub-task marked *implemented* in [`PLAN.md`](PLAN.md) means the code exists and
@@ -222,6 +248,7 @@ The physical machine is one machine — the HP Laptop 14-dq0052dx specified in
 | 6.13 Concurrency | Yes | **Not yet run** | — | **Not yet run** |
 | 6.14 Application processors | Yes | **Not yet run** | — | **Not yet run** |
 | 6.15 The scheduler | Yes | **Not yet run** | — | **Not yet run** |
+| 7.1 The C library's string functions | Yes | **Not yet run** | — | **Not yet run** |
 
 **Sub-task 6.12 has its own row because it is the change most likely to differ by
 machine.** Everything it does is programmed from tables the firmware wrote, and
@@ -267,6 +294,15 @@ measurement and a quantum computed from it: the kernel declines to start any
 timer and says so, and runs unpre-empted rather than upon an invented rate. That
 path has been exercised — it is what the first run of this sub-task did — but not
 upon hardware.
+
+**Sub-task 7.1 has a row although nothing about it is machine-dependent**, and
+saying why is the point of recording it. These are nineteen freestanding
+functions: they call nothing and depend upon nothing but the C language, so a
+machine has almost no way to disagree with them. What has never been run
+anywhere is the code **as a program will use it** — compiled with the flags a
+user program requires rather than the kernel's, and executed at privilege level
+3. That is sub-task 7.5, and it is a genuine second verification rather than a
+formality. [`../design/LIBC.md`](../design/LIBC.md), Section 6, limitation 4.
 
 "Reached, not examined" means the kernel ran that far upon the machine — it must
 have, the storage report of Phase 4 coming after all of it — but nothing about
@@ -317,7 +353,7 @@ functional. [`TESTING.md`](TESTING.md), Section 3.
 There is no test harness and there will be none before Phase 7, there being no
 userland to run one in. The kernel therefore asserts its own properties at boot,
 in the order the subsystems are initialised, and `make verify` fails if any of
-them reports a failure. Fifty-three assertions presently report passed or sound.
+them reports a failure. Fifty-four assertions presently report passed or sound.
 
 Those tests are in [`../../kernel/test/`](../../kernel/test/), one file per
 subsystem. Each subsystem's design document carries a table pairing every

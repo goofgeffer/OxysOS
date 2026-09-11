@@ -86,7 +86,17 @@ LINKER_SCRIPT := linker.ld
 # target alone and is recorded there with its justification.
 # ------------------------------------------------------------------------------
 
-INCLUDE_DIRS := -Ikernel/include
+# The kernel is compiled against two include roots, and the second is not a
+# convenience. `kernel/abi/` holds the system-call interface a program is
+# entitled to, under the permissive licence so that the MIT C library may include
+# it; `kernel/include/` holds the kernel's own corpus, under the kernel's
+# licence. LICENSING.md, Section 2.1, required the division. The two roots carry
+# no file of the same name, so nothing here depends upon the order.
+INCLUDE_DIRS := -Ikernel/abi -Ikernel/include
+
+# What the C library is compiled against, in addition to the two roots above. It
+# is a separate variable because only the C library's own rule uses it.
+LIBC_INCLUDE_DIRS := -Ilibc/include
 
 CFLAGS := -std=c11 -pedantic \
           -ffreestanding -fno-builtin -fno-stack-protector -fno-pic -fno-pie \
@@ -105,6 +115,30 @@ LDFLAGS := -n -T $(LINKER_SCRIPT) -Map $(KERNEL_MAP) -z max-page-size=0x1000
 # ------------------------------------------------------------------------------
 # Source enumeration.
 # ------------------------------------------------------------------------------
+
+# ------------------------------------------------------------------------------
+# The C library of Phase 7.
+#
+# These are not kernel sources and the kernel does not call them. They are
+# compiled into the image for one reason: `make verify` is the only thing in this
+# project that can run code at all, and kernel/test/verify_string.c is what
+# asserts them. Sub-task 7.5 adds the user-mode link, at which point the same
+# sources are compiled a second time — with the flags a program requires, which
+# are not these — into a library a program links against. docs/design/LIBC.md,
+# Section 7, records both paths and why the first exists.
+#
+# They are named in a list of their own rather than merged into C_SOURCES so that
+# the boundary is legible in one place, and so that the second compilation has a
+# list to name. They are compiled by a rule of their own below, which adds
+# -Ilibc/include: the kernel is deliberately not compiled against that root, so
+# that no kernel translation unit can include <string.h> by accident and acquire
+# a dependency upon the userland.
+# ------------------------------------------------------------------------------
+
+LIBC_SOURCES := libc/string/copying.c \
+                libc/string/comparison.c \
+                libc/string/search.c \
+                libc/string/miscellaneous.c
 
 C_SOURCES := kernel/kernel.c \
              kernel/multiboot2.c \
@@ -135,6 +169,7 @@ C_SOURCES := kernel/kernel.c \
              kernel/test/verify_apic.c \
              kernel/test/verify_smp.c \
              kernel/test/verify_sched.c \
+             kernel/test/verify_string.c \
              kernel/mm/pmm.c \
              kernel/mm/paging.c \
              kernel/mm/shootdown.c \
@@ -198,7 +233,8 @@ C_SOURCES := kernel/kernel.c \
              graphics/console.c \
              graphics/compositor.c \
              graphics/faultscreen.c \
-             graphics/cursor.c
+             graphics/cursor.c \
+             $(LIBC_SOURCES)
 
 ASM_SOURCES := boot/boot.asm \
                kernel/cpu/interrupt_stubs.asm \
@@ -245,6 +281,22 @@ $(KERNEL_ELF): $(OBJECTS) $(LINKER_SCRIPT)
 $(BUILD_DIR)/%.c.o: %.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -MMD -MP -MF $(patsubst %.o,%.d,$@) -c $< -o $@
+
+# The C library's own rule. It is chosen over the one above because make prefers
+# the pattern rule with the shorter stem, and `string/copying.c` is shorter than
+# `libc/string/copying.c`. The only difference is the include root: see the note
+# where LIBC_SOURCES is defined for why the kernel does not get it.
+$(BUILD_DIR)/libc/%.c.o: libc/%.c
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) $(LIBC_INCLUDE_DIRS) -MMD -MP -MF $(patsubst %.o,%.d,$@) -c $< -o $@
+
+# The one self-test that is compiled against the C library's include root, being
+# the one that asserts it. An explicit rule, because it is one file and not a
+# class of them, and because naming it here is what keeps the exception visible:
+# every other file in kernel/ is compiled without <string.h> in reach.
+$(BUILD_DIR)/kernel/test/verify_string.c.o: kernel/test/verify_string.c
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) $(LIBC_INCLUDE_DIRS) -MMD -MP -MF $(patsubst %.o,%.d,$@) -c $< -o $@
 
 $(BUILD_DIR)/%.asm.o: %.asm
 	@mkdir -p $(dir $@)
@@ -442,7 +494,13 @@ toolcheck:
 
 CLANG        := clang
 CLANG_TARGET := x86_64-elf
-CLANG_FLAGS  := --target=$(CLANG_TARGET) $(CFLAGS) -Wno-cast-align
+#   The C library's include root is added here for every unit rather than for the
+#   five that need it. This target compiles and discards; it produces no image,
+#   so the isolation the kernel's own rule enforces — that no kernel translation
+#   unit can reach <string.h> — is enforced where it has an effect, and repeating
+#   it here would mean maintaining two lists of which files are which.
+CLANG_FLAGS  := --target=$(CLANG_TARGET) $(CFLAGS) $(LIBC_INCLUDE_DIRS) \
+                -Wno-cast-align
 
 clang-check:
 	@command -v $(CLANG) >/dev/null \

@@ -157,7 +157,9 @@ that makes it. Section 7 of that document.
 ## 7. Licensing of contributions
 
 [`LICENSING.md`](LICENSING.md) records which licence applies where: the kernel is
-`LGPL-3.0-or-later`, the userland `MIT`, the documentation `CC0-1.0`.
+`LGPL-3.0-or-later`, the userland and the system-call interface in `kernel/abi/`
+`MIT`, the documentation `CC0-1.0`. `make spdx-check` is that table expressed as
+code and fails a build whose tags disagree with it.
 
 By contributing you agree that your contribution is licensed under the licence
 applying to the path it touches, and you affirm that you wrote it. **Transcribing

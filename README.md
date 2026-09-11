@@ -61,13 +61,16 @@ Three licences apply, one to each kind of thing here.
 | Path | Licence |
 | ---- | ------- |
 | `boot/`, `kernel/`, `drivers/`, `graphics/` | `LGPL-3.0-or-later` |
-| `libc/`, `userland/` | `MIT` |
+| `kernel/abi/`, `libc/`, `userland/` | `MIT` |
 | `docs/`, the `README.md` files, this one included | `CC0-1.0` |
 | `Makefile`, `build_*.sh`, `.gitignore`, `.gitattributes`, `.github/` | `CC0-1.0` |
 
 **Using this kernel's services through the system-call interface does not make a
-program a derivative work of it.** `LICENSING.md`, Section 2, states the position
-and its one outstanding consequence.
+program a derivative work of it.** `LICENSING.md`, Section 2, states the
+position. Its one outstanding consequence — that the interface a program is
+entitled to had to be held apart from the kernel's implementation of it — was
+discharged at sub-task 7.1 and is Section 2.1 there; `kernel/abi/` is the result,
+and is why one directory under `kernel/` carries the permissive licence.
 
 ## Documentation
 
@@ -113,6 +116,7 @@ source of truth for progress, and nothing below restates it.
 | [`EXECUTABLE.md`](docs/design/EXECUTABLE.md) | The ELF64 loader: a piece of the kernel that does what an untrusted document tells it to, so its design is the list of things it refuses to be told. |
 | [`PROCESS.md`](docs/design/PROCESS.md) | The process, the thread and the saved context; the switch that exchanges one for another, and the descent to privilege level 3 by which a program first ran. |
 | [`CONCURRENCY.md`](docs/design/CONCURRENCY.md) | The ticket spinlock that masks interrupts for as long as it is held, the per-processor area it is built upon and the segment base that reaches it, the interrupt one processor sends to another, and the shootdown that makes a paging-structure change true everywhere — all of it built, and exercised, before there is a second processor. |
+| [`LIBC.md`](docs/design/LIBC.md) | The C library: the division of the system-call header into the interface a program is entitled to and the implementation it is not, and the string and memory functions of ISO/IEC 9899:2011, Section 7.24 — the nineteen implemented, the three not, and why a userland library is presently asserted by the kernel. |
 
 ### [`docs/devices/`](docs/devices/) — the hardware the kernel drives
 
@@ -150,14 +154,16 @@ by subject. The two are complementary.
 | -------- | ------- |
 | [`boot/README.md`](boot/README.md) | The boot directory: the Multiboot2 header, the entry point and the GRUB configuration. |
 | [`kernel/README.md`](kernel/README.md) | The kernel core and its internal header corpus. |
+| [`kernel/abi/README.md`](kernel/abi/README.md) | The second include root: the system-call interface a program is entitled to, held apart from the kernel's own corpus and licensed permissively so that anything may include it. |
+| [`libc/README.md`](libc/README.md) | The C library user programs are linked against. |
 | [`kernel/test/README.md`](kernel/test/README.md) | The boot-time self-tests, one file per subsystem, and the composed volume they are conducted upon. |
 | [`drivers/README.md`](drivers/README.md) | The device drivers, one subdirectory per device class. |
 | [`graphics/README.md`](graphics/README.md) | The framebuffer and the drawing above it. |
 | [`docs/README.md`](docs/README.md) | The documentation corpus itself: what the four groups hold, and the form every document takes. Each group carries a `README.md` of its own. |
 
-The directories `libc/`, `userland/`, `crypto/`, `net/` and `uefi/` are presently
-empty and acquire their documents when material is first placed within them.
-`graphics/` was among them until sub-task 6.2. `LICENSES/` holds licence texts
+The directories `userland/`, `crypto/`, `net/` and `uefi/` are presently empty
+and acquire their documents when material is first placed within them.
+`graphics/` was among them until sub-task 6.2 and `libc/` until sub-task 7.1. `LICENSES/` holds licence texts
 alone and carries no `README.md`; [`LICENSING.md`](LICENSING.md) describes it.
 `.github/` likewise carries none: it holds the configuration by which GitHub
 runs the verification, not material of the system, and

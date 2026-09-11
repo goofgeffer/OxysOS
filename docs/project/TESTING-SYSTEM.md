@@ -7,9 +7,13 @@
 **What is here**: the verification of everything but the graphical work — the
 text-mode display, the serial receive path, the backspace that crosses a row
 boundary, the disk, the EXT2 superblock, the virtual filesystem layer, the
-privilege apparatus, the interrupt controllers and the concurrency primitives —
-each with the procedure, what it establishes, and the negative test that
-confirmed the assertion was worth making.
+privilege apparatus, the interrupt controllers, the concurrency primitives, the
+scheduler and the C library's string functions — each with the procedure, what it
+establishes, and the negative test that confirmed the assertion was worth making.
+
+**Section 12 is the first whose subject is not the kernel.** It is here rather
+than in a document of its own because the procedure is this one: the kernel
+asserts it at boot, and `make verify` reads the verdict out of the serial log.
 
 **The other three**: [`TESTING.md`](TESTING.md) is how the machine is tested and
 in which environments; [`TESTING-GRAPHICS.md`](TESTING-GRAPHICS.md) is the
@@ -887,3 +891,101 @@ a processor back.
 not itself a scheduled thread — it executes `KernelMain` — and the self-test
 released the thread it adopted, for the reason the third row of Section 11.3
 gives.
+
+---
+
+## 12. Verification of the C library's string and memory functions
+
+**Corresponding sub-task**: 7.1. **Design**:
+[`../design/LIBC.md`](../design/LIBC.md), Section 5.
+
+### 12.1 The difficulty this section exists for
+
+**Every function here has a correct implementation and several plausible wrong
+ones, and the wrong ones give right answers for the inputs anybody tests with.**
+That is the whole difficulty. A string library is the easiest thing in this
+repository to write and among the hardest to convince oneself of, because the
+obvious test — copy a word, compare two words, measure a length — passes against
+implementations that are wrong in three recurring ways.
+
+**The signed byte.** ISO/IEC 9899:2011 requires the comparing and searching
+functions to work upon `unsigned char`. Plain `char` is signed upon x86_64 with
+this toolchain, so an implementation that used it would agree with a correct one
+for every byte below 128 and disagree for every byte above it. Every string of
+letters sorts correctly; the first UTF-8 sequence, hash or binary buffer sorts
+backwards, and nothing faults.
+
+**The byte just past the end.** A loop bounded by `<=` where it should be `<`
+writes one byte too many. In a test whose buffers are adjacent zeroes, that byte
+is a zero written into a zero and is invisible.
+
+**The empty case.** A length of zero, an empty string, an empty set, an empty
+needle. Each is where the standard says something a natural loop does not do.
+
+### 12.2 What `make verify` asserts
+
+`KernelVerifyString`, in
+[`../../kernel/test/verify_string.c`](../../kernel/test/verify_string.c). See
+[`../design/LIBC.md`](../design/LIBC.md), Section 5, for the table pairing each
+assertion with the failure it catches. In outline: the three comparing functions
+and both searching ones are asserted upon `0x80` and `0xFF` rather than upon
+letters; every destination is a region inside a buffer filled with the sentinel
+`0x5A`, whose margin either side is asserted intact afterwards; `memmove` is
+asserted over an overlap in both directions against eight distinguishable bytes;
+`strncpy` is asserted to pad and **not** to terminate what it fills; `strchr` and
+`strrchr` are asserted to find the terminator and to disagree upon a subject
+holding a byte twice; and a finished `strtok` scan is asserted to stay finished.
+
+The sentinel is neither `0x00` nor `0xFF` because both are values these functions
+legitimately write — a terminator and a `memset` fill. A sentinel a correct
+function may produce is not a sentinel.
+
+### 12.3 The negative tests, and the one that found something
+
+Five defects were inserted and removed. Four behaved as intended and are
+tabulated in [`../design/LIBC.md`](../design/LIBC.md), Section 5.1: `memcmp`
+comparing through plain `char`, `memcpy` bounded by `<=`, `strncpy` made to
+terminate, `memmove` copying forwards in both directions, and `strrchr` keeping
+the first match.
+
+**The fifth found a gap, and it was in the test.** The guard at the head of
+`strstr` — which returns the haystack when the needle is empty — was deleted, and
+every assertion still passed. The search loop already produces the right answer
+for an empty needle against a haystack that is not empty; the guard is
+load-bearing in exactly one case, an empty needle in an *empty* haystack, and the
+self-test had asserted the empty needle only against a subject that was not
+empty. So the test asserted a property that could not fail, beside a comment
+describing a job the code was not doing. The assertion now covers the empty
+haystack and the comment was corrected in the same change.
+
+This is the ordinary yield of the discipline and is recorded because the defect
+it found was in the test, which is the class of defect a passing run cannot
+report.
+
+### 12.4 What this verification cannot establish
+
+**Nothing here has ever run in a program.** The four translation units are
+compiled into the kernel image and called by a boot-time self-test, because
+`make verify` is the only thing in this project that can execute anything at all
+until this phase produces a userland to host a harness in.
+
+What has therefore never been exercised is the code as a program will use it:
+compiled with the flags a user program requires rather than the kernel's —
+`-mcmodel=kernel` puts every symbol in the topmost two gibibytes of the address
+space, and a program does not live there — and executed at privilege level 3.
+Sub-task 7.5 is where that first happens, and it is a genuine second verification
+rather than a formality. [`../design/LIBC.md`](../design/LIBC.md), Section 7.
+
+### 12.5 Reading the log
+
+```
+String: asserting the C library's string and memory functions.
+String self-test passed.
+```
+
+**Two lines, and that is the whole of a passing run.** It is the quietest test in
+the corpus, and deliberately: there is nothing a correct string function can
+report about itself that is worth a line of the boot log. Every line between
+those two is a failure, each naming the function and the property that failed —
+`strncpy terminated a destination it filled FAILED.` — so a run that fails says
+which of the nineteen, and in which of the three ways of Section 12.1.

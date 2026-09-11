@@ -18,6 +18,7 @@ intended to be used differently.
 | Path | Licence | SPDX identifier |
 | ---- | ------- | --------------- |
 | `boot/`, `kernel/`, `drivers/`, `graphics/`, `crypto/`, `net/`, `uefi/`, `linker.ld` | GNU Lesser General Public License, version 3 or later | `LGPL-3.0-or-later` |
+| `kernel/abi/` — the interface a program is entitled to, and an exception to the row above it | MIT License | `MIT` |
 | `libc/`, `userland/` | MIT License | `MIT` |
 | A ported third-party tool, in the directory of its own that `PROJECT_GUIDELINES.md`, Section 2, requires | Whatever licence it arrived under, unchanged | The upstream project's own identifier |
 | `docs/`, every `README.md`, `PROJECT_GUIDELINES.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SECURITY.md`, this file | Creative Commons CC0 1.0 Universal | `CC0-1.0` |
@@ -31,11 +32,31 @@ interface is a header and a library, and those belong in `libc/` when they
 arrive, not beside the implementation. `uefi/` is LGPL for the same reason as
 `boot/` — it is a way into this kernel, not a program upon it.
 
-`libc/`, `userland/`, `crypto/`, `net/` and `uefi/` are empty at the time of
-writing; they acquire material in Phases 7, 10, 11 and 12. Their licences are
-declared in advance so that the first file placed in each is placed under a
-licence already decided, rather than one settled afterwards when there is code to
-argue about.
+**`kernel/abi/` is the one row the rule above does not decide, and it is a row
+rather than an exception made quietly.** It holds no code at all — it holds the
+constants and the calling convention by which a program reaches this kernel, and
+a header defining constants is linked into nothing. What decides it is therefore
+not what links it but who must be able to include it, and the answer is
+everybody: this kernel, the C library of `libc/`, a program whose author has
+never seen this repository, and a C library that is not this one. Section 2.1
+records why the division was made and what it cost to leave undone.
+
+**And one file crosses the boundary in the other direction, deliberately.** The
+four translation units of `libc/string/` are `MIT` and are compiled into the
+kernel image, because `make verify` is the only thing in this project that can
+execute anything and the boot-time self-test is how they are asserted. MIT
+permits that combination provided its notice is retained, which the per-file SPDX
+tags do; the resulting image is distributed under `LGPL-3.0-or-later` with those
+notices intact. The kernel does not call them, and is compiled without
+`libc/include` in reach so that it cannot begin to.
+[`docs/design/LIBC.md`](docs/design/LIBC.md), Section 7, is the whole of the
+arrangement and what sub-task 7.5 changes about it.
+
+`userland/`, `crypto/`, `net/` and `uefi/` are empty at the time of writing; they
+acquire material in Phases 7, 10, 11 and 12. Their licences are declared in
+advance so that the first file placed in each is placed under a licence already
+decided, rather than one settled afterwards when there is code to argue about.
+`libc/` was among them until sub-task 7.1.
 
 **A port carries its own licence and does not acquire this project's.** The row
 above is not a licence this repository grants; it is a record that the licence of
@@ -67,29 +88,35 @@ That is the same position the Linux kernel takes, and it is the position this
 project intends. It is recorded here because the intent of a copyright holder is
 worth having in writing before there is a dispute rather than after.
 
-### 2.1 The interface definitions, and a consequence still to be discharged
+### 2.1 The interface definitions — discharged at sub-task 7.1
 
-The paragraph above disposes of the *calls*. It does not by itself dispose of
-the **headers**, and this is a real loose end rather than a formality.
+The paragraph above disposes of the *calls*. It did not by itself dispose of the
+**headers**, and that was a real loose end rather than a formality.
 
-`kernel/include/oxys/syscall.h` presently holds two different things: the
-user-visible interface — the call numbers, the error values, the limit an
-argument is validated against — and the kernel's own configuration of the
-mechanism, which is `IA32_STAR`, `IA32_LSTAR`, the flag mask, the dispatcher and
-the validation. The first of those is what a C library of Phase 7 must know; the
-second is no business of any program.
+`kernel/include/oxys/syscall.h` held two different things: the user-visible
+interface — the call numbers, the error values, the limit an argument is
+validated against — and the kernel's own configuration of the mechanism, which is
+`IA32_STAR`, `IA32_LSTAR`, the flag mask, the dispatcher and the validation. The
+first of those is what a C library of Phase 7 must know; the second is no
+business of any program. An MIT-licensed C library cannot cleanly include a
+header that mixes them.
 
-An MIT-licensed C library cannot cleanly include a header that mixes them.
-**The header must therefore be divided before sub-task 7.2**, into the interface
-a program is entitled to and the implementation it is not — the former licensed
-permissively so that it may be included by anything, the latter remaining with
-the kernel. This is the same division Linux draws between its user-visible
-headers and its internal ones, and it is easier to make now, while the interface
-is three calls, than after a library depends upon it.
+**The division was made at sub-task 7.1**, before the wrappers of 7.2 as this
+section required. The interface is now `kernel/abi/oxys/syscall_abi.h`, licensed
+`MIT` so that it may be included by anything; the implementation stays in
+`kernel/include/oxys/syscall.h` under the kernel's licence and includes it. This
+is the same division Linux draws between its user-visible headers and its
+internal ones, and it was made while the interface was seven calls rather than
+after a library depended upon it.
 
-This is recorded as a limitation in Section 5 rather than acted upon here,
-because it is a change to the source tree and this document is not the place to
-make one.
+`kernel/abi/` is a **second include root** and not a subdirectory of
+`kernel/include/`. The difference is the substance of the remedy: a library that
+added `kernel/include` to its include path in order to reach one permissive
+header would have every header of the kernel within reach, and would be one
+`#include` away from the thing this division exists to prevent.
+[`docs/design/LIBC.md`](docs/design/LIBC.md), Section 2, records the change in
+full, including that nothing was altered in the move — every constant kept its
+name, its value and its commentary.
 
 ## 3. Why these three
 
@@ -137,10 +164,18 @@ recollection.
 
 ## 5. Limitations
 
-1. **`kernel/include/oxys/syscall.h` mixes the user-visible interface with the
-   kernel's implementation of it.** Section 2.1. It must be divided before
-   sub-task 7.2, and this is the first thing to be done about licensing after
-   this document.
+1. **~~`kernel/include/oxys/syscall.h` mixes the user-visible interface with the
+   kernel's implementation of it.~~** Discharged at sub-task 7.1, before the
+   wrappers of 7.2 as Section 2.1 required. The interface is
+   `kernel/abi/oxys/syscall_abi.h`, under `MIT` and reachable by a second include
+   root of its own; the implementation stays with the kernel. Section 2.1 records
+   the division and [`docs/design/LIBC.md`](docs/design/LIBC.md), Section 2,
+   records how it was made.
+
+   **The rule it leaves behind** is that `kernel/abi/` holds constants and a
+   convention and never a declaration. A function declared there would be a
+   symbol the kernel and every program had to agree existed, which is the
+   coupling the division was made to avoid rather than a smaller version of it.
 2. **~~No `SPDX-License-Identifier` headers are present in the source files.~~**
    Discharged. Every tracked file carries `SPDX-FileCopyrightText` and
    `SPDX-License-Identifier` lines, in the comment syntax its type requires,

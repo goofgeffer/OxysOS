@@ -2,13 +2,17 @@
 /* SPDX-License-Identifier: LGPL-3.0-or-later */
 /*
  * File: kernel/include/oxys/syscall.h
- * Purpose: Declares the configuration of the fast system-call mechanism: the
- *          three model-specific registers that fix the selectors, the entry
- *          point and the flags cleared upon entry, and the accessors by which
- *          the configuration may be read back and asserted.
- * Key definitions: SYSCALL_FLAG_MASK, SyscallInitialise, SyscallIsEnabled,
- *          SyscallEntryAddress, SyscallStar, SyscallLstar, SyscallFmask,
- *          SyscallDerivedKernelCode, SyscallDerivedUserCode, SyscallEntries,
+ * Purpose: Declares the kernel's implementation of the fast system-call
+ *          mechanism: the three model-specific registers that fix the
+ *          selectors, the entry point and the flags cleared upon entry, the
+ *          frame the entry path saves, the dispatch, and the validation of a
+ *          caller's arguments. The interface a program is entitled to is not
+ *          here; it is in <oxys/syscall_abi.h>, which this file includes.
+ * Key definitions: SYSCALL_FLAG_MASK, SyscallFrame, SyscallInitialise,
+ *          SyscallIsEnabled, SyscallEntryAddress, SyscallStar, SyscallLstar,
+ *          SyscallFmask, SyscallDerivedKernelCode, SyscallDerivedUserCode,
+ *          SyscallEntries, SyscallDispatch, SyscallNumberIsValid, SyscallName,
+ *          SyscallUserRangeIsReadable, SyscallUserRangeIsWritable,
  *          SyscallReport, SyscallSetKernelStack, SyscallEstablishKernelGsBase,
  *          SyscallEstablishUserGsBase, SyscallCopyUserString.
  * References:
@@ -28,6 +32,24 @@
  *   - System V Application Binary Interface, AMD64 supplement, Section 3.2.1:
  *     the direction flag is required to be clear at a function's entry, which is
  *     among the reasons it appears in the mask.
+ *   - docs/design/LIBC.md, Section 2: why the interface was divided out of this
+ *     file, and what was left behind.
+ *
+ * What this file no longer holds.
+ *
+ * The call numbers, the failure results, the register convention and the two
+ * limits an argument is judged against moved to <oxys/syscall_abi.h> in
+ * sub-task 7.1. They moved for a licensing reason and not a tidying one: this
+ * header is LGPL-3.0-or-later and the C library that must know those constants
+ * is MIT, so a library including this file would have been including the
+ * kernel. LICENSING.md, Section 2.1, required the division before the wrappers
+ * of sub-task 7.2 were written.
+ *
+ * Nothing was changed in the move. The constants stand in the other file with
+ * the same names, the same values and the same commentary, and this file
+ * includes it — so every consumer of this header sees exactly what it saw
+ * before, and a consumer that needs only the interface may now include the
+ * other alone.
  */
 
 #ifndef OXYS_SYSCALL_H
@@ -35,6 +57,7 @@
 
 #include <oxys/types.h>
 #include <oxys/cpu.h>
+#include <oxys/syscall_abi.h>
 
 /*
  * The bits SYSCALL clears in RFLAGS upon entry, being those the kernel must not
@@ -193,80 +216,11 @@ typedef struct SyscallFrame
 } SyscallFrame;
 
 /*
- * Where the arguments are, and why the fourth is not where a C caller would put
- * it.
- *
- * The System V AMD64 convention passes the first six integer arguments in RDI,
- * RSI, RDX, RCX, R8 and R9. SYSCALL destroys RCX — it puts the return address
- * there — so the fourth argument moves to R10 and everything else stands. This
- * is the convention Linux adopted and it is adopted here for the same reason:
- * there is no other register the instruction leaves alone.
- *
- * The call number is in RAX and the result returns in RAX.
+ * The register convention, the call numbers, the failure results,
+ * SYSCALL_PATH_MAXIMUM and SYSCALL_USER_LIMIT are in <oxys/syscall_abi.h>,
+ * included above. They are used freely below; the include is what makes them
+ * visible, and moving them did not make them less this kernel's.
  */
-#define SYSCALL_ARGUMENT_MAXIMUM 6U
-
-/* The calls this kernel implements. The numbers are its own: there is no library
- * to agree with, and none of these is a POSIX call in anything but spirit. */
-#define SYSCALL_WRITE   0U
-#define SYSCALL_TICKS   1U
-#define SYSCALL_VERSION 2U
-
-/*
- * The four calls of sub-task 6.11, by which a program may make another program,
- * become another program, end, and collect what one of its children ended with.
- *
- * They are numbered after the three that existed rather than interleaved among
- * them, because a number already handed to a program is a number that must not
- * change: the self-test of sub-task 6.10 assembles `write` as call zero by hand,
- * and every program written before this sub-task would call something else if
- * the numbering were rearranged to look tidier.
- */
-#define SYSCALL_FORK    3U
-#define SYSCALL_EXECVE  4U
-#define SYSCALL_EXIT    5U
-#define SYSCALL_WAIT    6U
-#define SYSCALL_COUNT   7U
-
-/*
- * The results a call may fail with.
- *
- * They are negative so that a caller may distinguish a failure from a length or
- * a count without a second register, which is the convention every kernel of
- * this shape uses. The numbers are this kernel's own and are not POSIX's: there
- * is no C library yet to agree with, and inventing agreement with one that does
- * not exist would be inventing a compatibility nobody had tested.
- */
-#define SYSCALL_OK             INT64_C(0)
-#define SYSCALL_ENOSYS         INT64_C(-1)  /* No such call. */
-#define SYSCALL_EFAULT         INT64_C(-2)  /* An address the caller may not use. */
-#define SYSCALL_EINVAL         INT64_C(-3)  /* An argument that cannot be right. */
-#define SYSCALL_EBADF          INT64_C(-4)  /* No such descriptor. */
-#define SYSCALL_ECHILD         INT64_C(-5)  /* The caller has no children to wait for. */
-#define SYSCALL_ENOENT         INT64_C(-6)  /* No such file, or one that will not load. */
-#define SYSCALL_ENOMEM         INT64_C(-7)  /* A frame, a table or a slot could not be had. */
-
-/*
- * The greatest length of a path a caller may name, excluding its terminator.
- *
- * A bound is needed before the string is copied, and it must be the copy that is
- * bounded rather than the search for the terminator: a caller may name a page of
- * bytes with no zero in it at all, and a kernel that looked for one before
- * deciding how much to read would walk off the end of the caller's mapping and
- * fault in its own name.
- */
-#define SYSCALL_PATH_MAXIMUM 255U
-
-/*
- * The boundary between what a user may name and what it may not.
- *
- * Every address at or above this belongs to the kernel. It is the lowest address
- * of the higher half, so the test is the sign bit of the canonical address and
- * costs one comparison — and it is made before the page tables are consulted,
- * because a kernel address that happens to be mapped and marked user would
- * otherwise be accepted by the walk alone.
- */
-#define SYSCALL_USER_LIMIT UINT64_C(0x0000800000000000)
 
 /*
  * Whether a range of addresses may be read from, or written to, on behalf of a
