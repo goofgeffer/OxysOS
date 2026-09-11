@@ -2,13 +2,19 @@
 <!-- SPDX-License-Identifier: CC0-1.0 -->
 # The C Library
 
-**Phase**: 7, sub-task 7.1, of [`../project/PLAN.md`](../project/PLAN.md).
-Section 2 is the division of the system-call header, which is not part of 7.1
-but was required to happen before 7.2 and is done here because this is the
-change that first had a reason to touch both sides of it. Section 3 is what the
-sub-task implements; Section 4 is what it deliberately does not; Section 5 is
-the verification, and Section 5.1 is the negative test that found a real gap in
-it. Section 7 is why a userland library is presently compiled into the kernel.
+**Phase**: 7, sub-tasks 7.1 and 7.2, of [`../project/PLAN.md`](../project/PLAN.md).
+
+**Sub-task 7.1** is Sections 2 to 7. Section 2 is the division of the system-call
+header, which is not part of 7.1 but was required to happen before 7.2 and is
+done here because this is the change that first had a reason to touch both sides
+of it. Section 3 is what the sub-task implements; Section 4 is what it
+deliberately does not; Section 5 is the verification, and Section 5.1 is the
+negative test that found a real gap in it. Section 7 is why a userland library is
+presently compiled into the kernel.
+
+**Sub-task 7.2** is Section 8: the system-call wrappers, the `errno` they set,
+and `strerror`. Section 8.7 is the negative test that found the first version of
+its assertion worthless, and is the reason that assertion is shaped as it is.
 
 **Authority**: `PROJECT_GUIDELINES.md`, Sections 2, 3, 4 and 6; and
 [`../../LICENSING.md`](../../LICENSING.md), Section 2.1, which named the division
@@ -16,20 +22,28 @@ of Section 2 below as the first thing to be done about licensing and required it
 before sub-task 7.2.
 
 **Implementation**: [`../../libc/include/string.h`](../../libc/include/string.h)
-and the four translation units beneath
+and the five translation units beneath
 [`../../libc/string/`](../../libc/string/) — `copying.c`, `comparison.c`,
-`search.c` and `miscellaneous.c`, divided as ISO/IEC 9899:2011 divides Section
-7.24 itself. The interface header of Section 2 is
+`search.c`, `miscellaneous.c` and `error.c`, the first four divided as ISO/IEC
+9899:2011 divides Section 7.24 itself. The interface header of Section 2 is
 [`../../kernel/abi/oxys/syscall_abi.h`](../../kernel/abi/oxys/syscall_abi.h);
 what was left behind is
 [`../../kernel/include/oxys/syscall.h`](../../kernel/include/oxys/syscall.h),
-whose design is [`PRIVILEGE.md`](PRIVILEGE.md). The assertion is
-[`../../kernel/test/verify_string.c`](../../kernel/test/verify_string.c).
+whose design is [`PRIVILEGE.md`](PRIVILEGE.md). The wrappers of Section 8 are
+[`../../libc/include/syscall.h`](../../libc/include/syscall.h),
+[`../../libc/include/errno.h`](../../libc/include/errno.h),
+[`../../libc/syscall/invoke.asm`](../../libc/syscall/invoke.asm),
+[`../../libc/syscall/result.c`](../../libc/syscall/result.c) and
+[`../../libc/syscall/calls.c`](../../libc/syscall/calls.c). The assertions are
+[`../../kernel/test/verify_string.c`](../../kernel/test/verify_string.c) and
+[`../../kernel/test/verify_wrappers.c`](../../kernel/test/verify_wrappers.c).
 
-**Specifications**: ISO/IEC 9899:2011, Section 7.24 (string handling) and
-Section 4, paragraph 6 (what a freestanding implementation must provide); System
-V Application Binary Interface, AMD64 supplement, Section 3.1.2 (the LP64 model)
-and Section 3.2.3 (the argument registers Section 2 departs from in one place).
+**Specifications**: ISO/IEC 9899:2011, Section 7.24 (string handling), Section
+7.5 (`<errno.h>`) and Section 4, paragraph 6 (what a freestanding implementation
+must provide); System V Application Binary Interface, AMD64 supplement, Section
+3.1.2 (the LP64 model) and Section 3.2.3 (the argument registers Section 2
+departs from in one place); Intel 64 and IA-32 Architectures Software Developer's
+Manual, Volume 2B, "SYSCALL".
 
 ## 1. What this sub-task is, and what it is not
 
@@ -118,6 +132,7 @@ as 7.24 is, and can see at a glance what is missing.
 | [`comparison.c`](../../libc/string/comparison.c) | 7.24.4 | `memcmp`, `strcmp`, `strncmp` |
 | [`search.c`](../../libc/string/search.c) | 7.24.5 | `memchr`, `strchr`, `strcspn`, `strpbrk`, `strrchr`, `strspn`, `strstr`, `strtok` |
 | [`miscellaneous.c`](../../libc/string/miscellaneous.c) | 7.24.6 | `memset`, `strlen` |
+| [`error.c`](../../libc/string/error.c) | 7.24.6.2 | `strerror` — **added at sub-task 7.2**, not at 7.1, for the reason Section 4 gave when it was absent. It is listed here so that the whole of Section 7.24 can be seen in one table. |
 
 ### 3.1 The one property that decides whether they are correct
 
@@ -165,14 +180,16 @@ under a standard name. Section 6, limitation 3.
 
 ## 4. What is not implemented, and why
 
-Three functions of Section 7.24 are absent. None is absent by oversight, and the
-header says so where a reader will meet it.
+**Two** functions of Section 7.24 are absent — three were, when this section was
+written at sub-task 7.1, and the third is now Section 8.5. Neither of the
+remaining two is absent by oversight, and the header says so where a reader will
+meet it.
 
 | Function | Standard | Why not |
 | -------- | -------- | ------- |
 | `strcoll` | 7.24.4.3 | Compares according to the current locale. There is no locale in this system and no `<locale.h>` to establish one, so it would be `strcmp` under another name — an agreement with the standard that this library could not yet keep. It arrives with the locale. |
 | `strxfrm` | 7.24.4.5 | The same, in the other direction: a transformation defined by a locale that does not exist. |
-| `strerror` | 7.24.6.2 | Maps an integer to a message, and the integers are the failure results of `<oxys/syscall_abi.h>` as the wrappers of sub-task 7.2 will present them through `errno`. The table belongs beside the thing that sets `errno`; putting it here would fix the spelling of every error message in the system before a single call had a wrapper. |
+| ~~`strerror`~~ | 7.24.6.2 | **Implemented at sub-task 7.2**, which is what this row said would happen: the integers it maps are the failure results of `<oxys/syscall_abi.h>` as the wrappers present them through `errno`, and the table belongs beside the thing that sets `errno`. Section 8.5. |
 
 **No non-standard function has been added either.** `strnlen`, `strdup`,
 `strlcpy` and `memccpy` are each useful and each is somebody else's standard, not
@@ -279,9 +296,12 @@ in the Makefile or anywhere else.
    and Section 3.2 says why it is not repaired. What is wanted beside it is a
    function that truncates and always terminates — `strlcpy` is one spelling of
    it, `strcpy_s` another, and neither is ISO C's. Which to adopt is a decision
-   about what a ported compiler and a ported toolchain expect to link against,
-   and it is better taken when sub-task 7.2 has shown what those are, than
-   invented here.
+   about what a ported compiler and a ported toolchain expect to link against.
+   Sub-task 7.2 has now been written and **did not settle it**: nothing in the
+   wrappers copies a string at all, the one bounded copy in the system being the
+   kernel's own `SyscallCopyUserString`. The decision therefore moves to the
+   first sub-task that links a program — 7.5 — or to the port itself, and this
+   limitation stands as written.
 3. **`strtok` is not re-entrant and cannot be made so.** Section 3.3. A
    `strtok_r` belongs beside it and is not added in this sub-task for the same
    reason as limitation 2.
@@ -336,3 +356,285 @@ not the kernel's: `-mcmodel=kernel` places every symbol in the topmost two
 gibibytes of the address space, and a program does not live there. Until then,
 `LIBC_SOURCES` in the `Makefile` is the list that second compilation will name,
 which is why it is a list of its own rather than merged into `C_SOURCES`.
+
+---
+
+## 8. Sub-task 7.2: the system-call wrappers
+
+**Phase**: 7, sub-task 7.2, of [`../project/PLAN.md`](../project/PLAN.md).
+
+**What it adds**: a function for each of the seven calls
+[`../../kernel/abi/oxys/syscall_abi.h`](../../kernel/abi/oxys/syscall_abi.h)
+numbers; the `SYSCALL` instruction beneath them; the `errno` of ISO/IEC
+9899:2011, Section 7.5, which is the only thing in this library that any of them
+writes; and `strerror`, which Section 4 said would arrive with them and has.
+
+**What it does not add**: any way for a program to be built, still. There is no
+`crt0`, no archive and no user-mode compilation — those remain sub-task 7.5. The
+wrappers are compiled for the kernel's image exactly as the string functions are,
+and Section 7 governs them unchanged.
+
+### 8.1 The instruction is a translation unit of assembly
+
+Everything else here is C above four routines in
+[`../../libc/syscall/invoke.asm`](../../libc/syscall/invoke.asm), one for each
+number of arguments a call of this kernel takes — none, one, two and three. Each
+moves the caller's arguments one register to the left, executes `SYSCALL`, and
+returns what the kernel put in `RAX`.
+
+The shift is the whole of what they do, and it exists because two conventions
+disagree by one place. The System V ABI, Section 3.2.3, passes a C function's
+first four integer arguments in `RDI`, `RSI`, `RDX` and `RCX`; the kernel reads a
+call's number from `RAX` and its arguments from `RDI`, `RSI` and `RDX`. So
+`OxysSyscallInvoke3(number, a, b, c)` arrives with the number in `RDI` and must
+leave with it in `RAX`, and every argument moves down one. The order of the moves
+is not free: `RCX` must be consumed before `SYSCALL` executes, the instruction
+putting the return address there (Intel SDM, Volume 2B).
+
+**Why assembly rather than inline assembly**, when the kernel uses inline
+assembly in twenty-one translation units. Two reasons, and the second is the
+larger.
+
+1. `PROJECT_GUIDELINES.md`, Section 8, prohibits a GCC-specific extension that
+   has not been justified. A NASM translation unit is not an extension of the C
+   language at all, and Section 3 of the guidelines already names NASM as this
+   project's language for architecture-specific routines. A system-call
+   invocation is one.
+2. **It must contain no relocation**, and inline assembly cannot promise that.
+   These four routines hold no memory operand, no relative displacement and no
+   absolute address, so the bytes the assembler emits mean the same thing at
+   every address. That is what allows the self-test of Section 8.4 to copy them
+   out of the kernel image into a program's own address space and execute them at
+   privilege level 3 — asserting the code this library ships rather than a
+   reconstruction of it. A compiler given the same instructions would have been
+   free to add a prologue, a frame and a reference to a kernel address, and the
+   copy would then have been impossible.
+
+**There is no invocation for four, five or six arguments.** The convention
+reserves `R10`, `R8` and `R9` for them, no call of this kernel uses one, and a
+wrapper nothing calls is a wrapper nothing asserts. They arrive with the first
+call that needs them, by which time there will be something to assert them
+against. `R10` in particular deserves an assertion when it appears and cannot
+have one now: it is the one register where this kernel's convention departs from
+the C one, which makes it the one most likely to be got wrong.
+
+### 8.2 The translation, and the `errno` it sets
+
+A call returns a length, a count, an identifier — or a negative failure result.
+[`../../libc/syscall/result.c`](../../libc/syscall/result.c) turns that into the
+convention a C program expects: `-1` and an `errno`, or the value unchanged.
+
+Three properties, and each is asserted:
+
+- **A result that is not negative is returned exactly, and `errno` is not
+  touched.** Section 7.5, paragraph 3, would permit a library to set `errno` upon
+  a call that succeeded. This one promises not to, and `<syscall.h>` says so,
+  because a program that clears `errno`, calls a wrapper that succeeds and then
+  finds `errno` set has been told of a failure that did not happen.
+- **A negative result within the reserved range becomes its own name**, by
+  negation. There is no table: [`../../libc/include/errno.h`](../../libc/include/errno.h)
+  defines each number *as* the negation of the kernel's result, and asserts the
+  correspondence with `_Static_assert`. A table would be a second list that must
+  agree with a first, and the way that fails is that somebody adds a failure
+  result and forgets the other half — whereupon a program reports the wrong cause
+  and nothing faults. Renumber a result in the kernel's interface now and this
+  library fails to compile.
+- **A negative result outside that range becomes `ENOSYS`.** Nothing this kernel
+  returns is outside it, so this branch guards against a kernel that has changed
+  and a library that has not. It must not simply negate: an arbitrary value would
+  put a number into a program's `errno` that names nothing, and `INT64_MIN` has
+  no positive counterpart at all — negating it is the undefined behaviour
+  `PROJECT_GUIDELINES.md`, Section 8, forbids. `ENOSYS` is the answer because it
+  is the one failure that says exactly what is known in that case: the system did
+  not perform the call, and the library cannot say why.
+
+**The numbers are reserved in two ranges and the reservation is load-bearing.**
+One to thirty-one belong to the derivation from the kernel's results; `EDOM`,
+`EILSEQ` and `ERANGE` — which Section 7.5, paragraph 2, requires to exist — stand
+at thirty-two and above. Had `EDOM` been eight, the eighth failure result this
+kernel ever acquires would have arrived in a program's `errno` wearing the name
+of a mathematical domain error.
+
+**`errno` is a function call and not a variable**, which Section 7.5, footnote
+201, exists to permit: "the macro `errno` need not be the identifier of an
+object. It might expand to a modifiable lvalue resulting from a function call".
+The standard requires `errno` to have thread local storage duration; this system
+has no userland threads and the object is therefore one object. A library that
+exported a plain `extern int errno` would have published the wrong thing —
+callers would resolve the object at link time, and giving each thread its own
+would become a change to the interface rather than to the implementation. As
+written, that change touches this one file. Section 8.6, limitation 1.
+
+### 8.3 The seven wrappers
+
+[`../../libc/syscall/calls.c`](../../libc/syscall/calls.c). Each is a cast of its
+arguments, an invocation and the translation above.
+
+| Wrapper | Call | What it returns |
+| ------- | ---- | --------------- |
+| `OxysWrite(descriptor, buffer, length)` | `write` | Bytes written, which may be fewer than asked: the kernel bounds a single transfer. `EBADF` for a descriptor other than 1 or 2 — there are no files yet — and `EFAULT` for a range the program may not read. |
+| `OxysTicks()` | `ticks` | The interval timer's count. It cannot fail. |
+| `OxysVersion(buffer, capacity)` | `version` | Bytes copied, excluding the terminator the kernel always writes. `EINVAL` for a capacity of zero. |
+| `OxysFork()` | `fork` | The child's identifier to the parent and zero to the child; `ENOMEM` where the frames, tables or slot could not be had. |
+| `OxysExecve(path, argv, envp)` | `execve` | Does not return upon success. `EINVAL` unless both vectors are null; `ENOENT` for a file that is not there or will not load. |
+| `OxysExit(status)` | `exit` | Does not return, and is declared `_Noreturn`. |
+| `OxysWait(status)` | `wait` | The identifier of a child collected; `ECHILD` where there is none, `EFAULT` where the status has nowhere to go. |
+
+**The names are this project's and not POSIX's**, and that is a decision rather
+than an omission. Five of the seven have a POSIX name that means very nearly this
+and none of the five means exactly it: this `execve` refuses an argument vector,
+this `wait` takes no process identifier and no options, this `write` reaches two
+diagnostic descriptors and no file. A function bearing a standard name and
+behaving otherwise is worse than either the standard function or a differently
+named one — which is the judgement Section 4 already records about `strlcpy` and
+`strdup`, applied in the other direction. The POSIX spellings arrive when the
+semantics do; meanwhile these comply with `PROJECT_GUIDELINES.md`, Section 4,
+under which a global function is `PascalCase`.
+
+**Two places a reader would guess wrong**, and both are commented where they
+stand:
+
+- **`OxysExecve` passes its vectors on rather than dropping them.** The refusal
+  is the kernel's to make and not the library's to conceal; a wrapper that
+  quietly passed null in their place would turn a refusal into a program running
+  with no arguments and no way to discover why.
+- **`OxysExit` ends in an infinite loop that is never executed.** The call does
+  not return, so the loop is unreachable — but a `_Noreturn` function a compiler
+  can see falling off its end is a diagnostic in both compilers this project uses,
+  and the loop is what makes the declaration true by construction rather than by
+  the kernel keeping a promise no compiler can check.
+
+### 8.4 Verification
+
+`KernelVerifyWrappers`, in
+[`../../kernel/test/verify_wrappers.c`](../../kernel/test/verify_wrappers.c). It
+is in two halves because the subject is.
+
+**`SYSCALL` cannot be executed by this kernel.** The instruction itself works at
+any privilege level, but the `SYSRET` that ends the kernel's handling of it
+returns to privilege level 3 unconditionally — so a kernel that called `OxysWrite`
+would enter its own entry path and leave it as a user program, upon a stack and
+in an address space that are not a user program's. There is no arrangement in
+which it survives. `PRIVILEGE.md`, Section 9.4, records the same thing from the
+other side: since sub-task 6.7 the only executor of `SYSCALL` in this system is a
+program.
+
+So the translation, which is on this side of the instruction, is asserted by
+calling it; and the invocation, which is not, is asserted by **copying the bytes
+this library ships into a program composed for the purpose** and running them.
+
+| Assertion | The failure it detects |
+| --------- | ---------------------- |
+| **A successful result leaves `errno` as it was** — asserted at zero, at a length, and at `INT64_MAX` | A translation that set `errno` unconditionally. Every program that checks `errno` after a call that worked is then told of a failure that did not happen, and the program is right to believe it. |
+| `INT64_MAX` is returned unchanged | A sign test performed by casting to a narrower type. It agrees with a correct one for every result this kernel actually returns. |
+| **Each of the seven failure results names itself**, from a previous `errno` that no result maps to | A translation that returns `-1` and leaves `errno` alone, which is the commonest way to write this wrong; and a derivation that is off for one entry, which a single assertion would not distinguish from one that is right. |
+| **A negative result beyond the reserved range becomes `ENOSYS`** | A translation that simply negates. It would put 32 into `errno` here — which is `EDOM`, so a program would be told that a system call had reported a mathematical domain error. |
+| **`INT64_MIN` becomes `ENOSYS`** | The same, at the one value where negating is undefined behaviour. The commonest outcome on this architecture is the value negated to itself, cast to `int` as zero — and `errno` set to zero is the one thing Section 7.5 says a library function never does. The assertion that no translation leaves `errno` at zero is what catches it. |
+| **Every number `<errno.h>` defines has a message, and no two of them share one** | A table with an entry omitted. Every number still answers something and every one of them answers wrongly; a check that each message was non-empty would pass. Distinctness is what does not. |
+| `strerror` answers for `-1`, for an unassigned number, and for `INT32_MAX` and `INT32_MIN` | A table-driven implementation walking off its own ends. Section 7.24.6.2 requires *any* value of type `int` to be mapped. |
+| `strerror(errno)` after a failed translation describes that failure | A library whose `strerror` and whose `errno` disagree. Every assertion above would still pass. |
+| **The library's invocation block fits where the program expects it, and the composed driver does not run into it** | `invoke.asm` growing. The block would then be executed as whatever the driver's last bytes happened to be. |
+| **A program at privilege level 3 makes exactly seven calls** | An invocation whose call displacement was wrong. It would land in the middle of another routine — which within this block is still a valid instruction sequence and still returns — so the count of calls that reached the dispatcher is what distinguishes that from seven correct ones. |
+| **The sum of what every call returned is exactly what the kernel computes it must be** | Any argument lost or misplaced by the invocation. See Section 8.7, which is where this assertion came from. |
+| **The tick count the program read lies between what this processor observed either side of the run** | An invocation that returned something other than the kernel's result. The count is carried in the low digits of the status, beneath a scale no boot reaches, so that its unavoidable imprecision cannot absorb an error in the exact sum above it. |
+| The program ended, its process is marked ended, and the boot continued | The whole path. A program that faulted instead ends with a negative vector and fails the sum. |
+
+The program itself is the system's name fetched by one call and written by
+another, so the log carries a line no part of the kernel composed:
+
+```
+  A program at privilege level 3 reports, through the library's own invocation: Oxys-OS unreleased
+```
+
+### 8.5 `strerror`
+
+[`../../libc/string/error.c`](../../libc/string/error.c). Section 4 said this
+function belonged beside the thing that sets `errno`, and this is that change.
+
+Two properties are worth stating because the standard's wording invites the
+opposite of each. **It maps any value of type `int`** — 7.24.6.2, paragraph 2 —
+so an unrecognised number is a case to answer and not a case to refuse. And
+**the messages are arrays rather than string literals**, because this project
+compiles with `-Wwrite-strings`, under which a literal has type `const char[]`
+and returning one from a function declared `char *` is a diagnostic. The choice
+was between casting the qualifier away at every return — a lie told eleven times
+— and giving each message an array of its own, which is what the standard's own
+wording contemplates: it speaks of "the array pointed to" and of a program that
+must not modify it.
+
+### 8.6 Limitations
+
+1. **`errno` is one object and the standard requires one per thread.** Section
+   7.5, paragraph 2, is explicit about thread local storage duration. There are
+   no userland threads to give one to and no thread-local storage block for a
+   `_Thread_local` object to live in. The function form is what makes this a
+   change to one file when threads arrive; until then this library is conforming
+   only for a program with one thread, which is every program there is.
+2. **The typed wrappers are not asserted, only the layers above and below
+   them.** `OxysSyscallResult` is asserted by calling it and `invoke.asm` by
+   running its own bytes at privilege level 3 — but `OxysWrite` passing its
+   `length` where the kernel reads a length is checked by nothing. It cannot be
+   until a program is linked against this library, because the wrappers are
+   compiled `-mcmodel=kernel` and hold a reference to `errno` at a kernel
+   address, which is exactly the property that makes the invocation copyable and
+   them not. **Sub-task 7.5 closes this**, and it is the largest single thing
+   outstanding about this sub-task.
+3. **There is no invocation of four, five or six arguments**, and therefore no
+   assertion upon `R10` — the one register where this kernel's convention departs
+   from the C one. Section 8.1.
+4. **Nothing here has run in a user program**, in the sense of having been linked
+   into one: the bytes of `invoke.asm` have executed at privilege level 3, but as
+   a block copied by a self-test, driven by a hand-assembled caller. The first
+   genuine link is sub-task 7.5, and limitation 4 of Section 6 applies to this
+   sub-task word for word.
+5. **`errno` is never set by anything but a system call.** That is true today and
+   is a property of what exists rather than a decision: there is no allocator, no
+   formatted conversion and no mathematical library to set it. The three numbers
+   ISO C requires are defined and nothing writes them.
+
+### 8.7 The negative tests, and the one that found something
+
+`PROJECT_GUIDELINES.md`, Section 2, and the practice of
+[`../project/TESTING-SYSTEM.md`](../project/TESTING-SYSTEM.md) require each
+assertion to be confirmed by a defect deliberately inserted. Seven were inserted
+and removed.
+
+| Defect inserted | What the run said |
+| --------------- | ----------------- |
+| `OxysSyscallResult` negating without the range check | `a failure beyond the reserved range was not refused FAILED.`, `the least representable result was not refused FAILED.` and `a translation left errno at zero FAILED.` — the third being the `INT64_MIN` case arriving exactly as Section 8.2 predicts it would. |
+| `OxysSyscallResult` setting `errno` upon success | `a successful call altered errno FAILED.` and the two assertions beside it. |
+| `strerror`'s table with one entry removed | `strerror returned an empty message FAILED.` |
+| `invoke.asm`'s two-argument routine losing its shift | `the program's calls did not return what they had to return FAILED.` |
+| `invoke.asm`'s three-argument routine losing its shift | The same. |
+| `invoke.asm`'s no-argument routine not placing the number in `RAX` | The same, and `the tick count the program read follows the run FAILED.` |
+| A failure result renumbered in `<oxys/syscall_abi.h>` | `error: static assertion failed: "EBADF does not name SYSCALL_EBADF."` — a compile-time failure, which is the class of report about a two-sided agreement that cannot be missed. |
+
+**The fourth and fifth of those passed the first time they were tried, and that
+is why this section exists.**
+
+The assertion, as first written, was that the program end with a status composed
+of the result of one call that had to fail. `invoke.asm`'s three-argument routine
+was then altered to drop `mov rdx, rcx` — losing the third argument of every
+three-argument call, which is precisely the defect the whole copy-the-bytes
+arrangement exists to catch — and **every assertion passed**.
+
+It passed for a reason worth recording, because the reason is general. The lost
+argument was a *length*, and the kernel bounds a length rather than refusing an
+implausible one: a length of 0x402000 became 4096, the range was readable because
+the program's data page is a whole page, and the write emitted the same string it
+would have emitted anyway. The only trace was a newline that did not appear in
+the log — and nothing was asserting the log.
+
+So the status is now the **sum of what every call returned**, and every call's
+result is in it. The sum is exact and the kernel computes it from the same
+version string the kernel's own call copies; the tick count, which cannot be
+exact, is carried beneath a scale of a million so that its imprecision cannot
+absorb an error in the sum. A second `version` call was added with a capacity
+*smaller* than the string, because a capacity larger than the string is not a
+capacity the result depends upon — which is how the two-argument defect had
+passed as well.
+
+**Two of the seven defects were invisible to the first version of this test, and
+both were defects in the one file the test was written for.** That is the ordinary
+yield of this discipline, and it is recorded at length for the same reason
+Section 5.1 is: a passing run cannot report a test that does not test.

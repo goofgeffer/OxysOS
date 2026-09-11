@@ -366,8 +366,13 @@ Sections relied upon:
 - **Section 3.1.2**, data representation: the LP64 model.
 - **Section 3.2.2**, the stack frame: the 128-byte red zone below the stack
   pointer, which is inadmissible in kernel code.
-- **Section 3.2.3**, parameter passing: the first two integer arguments are
-  passed in `RDI` and `RSI`.
+- **Section 3.2.3**, parameter passing: the first six integer arguments are
+  passed in `RDI`, `RSI`, `RDX`, `RCX`, `R8` and `R9`, in that order, the
+  seventh and beyond upon the stack; an integer result returns in `RAX`. The
+  first two are what `kernel/proc/switch.asm` relies upon; all six are what
+  `libc/syscall/invoke.asm` shifts by one place, the kernel reading a call's
+  arguments from `RDI`, `RSI`, `RDX`, `R10`, `R8` and `R9` — `R10` in the fourth
+  position because `SYSCALL` destroys `RCX`.
 - **Section 3.2.1**, the direction flag is required to be clear at a function's
   entry, which is among the reasons it appears in `IA32_FMASK`.
 - **Section 3.2.2**, the stack pointer is sixteen-byte aligned at a function's
@@ -378,7 +383,7 @@ Sections relied upon:
 
 Used by: `boot/boot.asm`, `linker.ld`, `Makefile`, `kernel/cpu/tss.c`,
 `kernel/include/oxys/tss.h`, `kernel/include/oxys/syscall.h`,
-`kernel/exec/elf.c`, `docs/design/PRIVILEGE.md`.
+`kernel/exec/elf.c`, `libc/syscall/invoke.asm`, `docs/design/PRIVILEGE.md`.
 
 ### Executable and Linking Format Specification, version 1.2
 Tool Interface Standard, together with the **ELF-64 Object File Format**,
@@ -427,14 +432,35 @@ Sections relied upon:
 - **Section 6.7.3.1**, the meaning of `restrict`, which is what permits `memcpy`
   to copy forwards without asking whether its objects overlap.
 - **Section 7.24**, string handling, function by function: 7.24.2 and 7.24.3
-  copying, 7.24.4 comparison, 7.24.5 search, 7.24.6 the fill and the length.
-  Each subsection fixes the behaviour of the function `libc/string/` implements
-  under that name, including the three that look like defects and are not —
-  `strncpy` padding without terminating, `strncat` terminating without padding,
-  and `strchr` finding the terminator.
+  copying, 7.24.4 comparison, 7.24.5 search, 7.24.6 the fill, the error message
+  and the length. Each subsection fixes the behaviour of the function
+  `libc/string/` implements under that name, including the three that look like
+  defects and are not — `strncpy` padding without terminating, `strncat`
+  terminating without padding, and `strchr` finding the terminator.
+- **Section 7.24.6.2**, `strerror`: it "shall map any value of type `int` to a
+  message", so a number the library has no name for is a case to answer and not
+  a case to refuse; and the array returned may be overwritten by a subsequent
+  call, which this implementation does not do.
+- **Section 7.5**, `<errno.h>`, and it is relied upon paragraph by paragraph.
+  **Paragraph 2**: the header defines `EDOM`, `EILSEQ` and `ERANGE`, which expand
+  to integer constant expressions of type `int` with distinct positive values and
+  are suitable for use in `#if` directives; and `errno`, which expands to a
+  modifiable lvalue of type `int` and **thread local storage duration**.
+  **Footnote 201**: "The macro `errno` need not be the identifier of an object.
+  It might expand to a modifiable lvalue resulting from a function call (for
+  example, `*errno()`)" — which is why `libc/include/errno.h` defines it as a
+  call and not as a variable. **Paragraph 3**: `errno` is zero at program startup
+  and "is never set to zero by any library function". **Paragraph 4**: an
+  implementation may define further macros beginning with `E` and an uppercase
+  letter, which is what permits the seven this kernel's failure results are named
+  by.
+- **Section 6.7.10**, `_Static_assert`, by which `libc/include/errno.h` holds its
+  numbers to the kernel's failure results at compile time.
 
 Used by: the whole of the C source; Sections 6.2.5, 6.5, 6.7.3.1 and 7.24 by
-`libc/` and `kernel/test/verify_string.c` in particular.
+`libc/` and `kernel/test/verify_string.c` in particular; Sections 7.5, 7.24.6.2
+and 6.7.10 by `libc/include/errno.h`, `libc/syscall/` and
+`kernel/test/verify_wrappers.c`.
 
 ### National Semiconductor PC16550D datasheet
 The universal asynchronous receiver/transmitter of the IBM Personal Computer AT

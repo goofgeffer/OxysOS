@@ -12,7 +12,8 @@ tests establish is elsewhere, and so is the record of what has actually been run
 
 | Document | Subject |
 | -------- | ------- |
-| **`TESTING.md`** (this one) | `make verify` and what it asserts; interactive execution under QEMU; the three further environments — OVMF, VirtualBox and the physical machine — and what each is good for that the others are not; debugging with GDB; and the judges this project did not write. |
+| **`TESTING.md`** (this one) | `make verify` and what it asserts; interactive execution under QEMU; the four further environments — OVMF, VirtualBox, Bochs and the physical machine — and what each is good for that the others are not; debugging with GDB; and the judges this project did not write. |
+| [`BUILDS.md`](BUILDS.md) | The numbered register of every image produced, so that an observation made in one of those environments can name the image it was made about. |
 | [`TESTING-SYSTEM.md`](TESTING-SYSTEM.md) | The verification of the devices, the storage stack, the privilege apparatus and the concurrency primitives. |
 | [`TESTING-GRAPHICS.md`](TESTING-GRAPHICS.md) | The verification of the framebuffer, the primitives, the font and console, the optimisation, the fault screens, the compositor and the pointer. |
 | [`TESTING-RECORD.md`](TESTING-RECORD.md) | The dated record of every test performed, with its outcome. |
@@ -157,21 +158,47 @@ cp build/oxys.iso /mnt/c/Users/<user>/oxys-vbox/oxys.iso
 The ISO must be staged upon the Windows filesystem and named by a Windows path;
 the same applies to any file the machine is asked to write.
 
-### 4.1 There is no serial channel under VirtualBox
+### 4.1 The serial channel under VirtualBox, which this section used to say did not exist
 
-The serial port is omitted from the commands above deliberately. The kernel does
-not detect VirtualBox's 16550A: it reports `Serial self-test skipped; no adapter
-is present.` and `Serial adapter: absent; no diagnostic channel.`, claims no
-request line, and therefore transmits nothing. A `--uartmode1 file` log is
-written as an empty file and a `--uartmode1 tcpserver` socket accepts a
-connection and delivers no byte. This is a property of the machine and not of any
-one sub-task; it predates the tests recorded here and is not investigated by
-them.
+**This section said there was none, and at sub-task 7.2 that was found to be
+false.** It is left standing, corrected, rather than deleted, because a claim
+that was believed for six phases is worth knowing was once believed.
 
-The consequence is that **the automated assertion of [`TESTING.md`](TESTING.md), Section 1, cannot be
-performed under VirtualBox**, that assertion being made upon the serial output.
+What it said: that the kernel did not detect VirtualBox's 16550A, reported
+`Serial self-test skipped; no adapter is present.`, claimed no request line and
+transmitted nothing, so that a `--uartmode1 file` log was written as an empty
+file — and that the automated assertion of Section 1 could therefore not be
+performed under VirtualBox at all.
 
-What can be read instead is the screen. Until sub-task 6.2 that was the VGA text
+What was observed at sub-task 7.2, under **VirtualBox 7.2.0r170228** upon the
+Windows host of the WSL2 environment, with the machine configured exactly as
+`make run-vbox` configures it — `--uart1 0x3F8 4 --uartmode1 file`:
+
+```
+Serial self-test: this line was carried by interrupt.
+Serial self-test passed.
+Serial adapter: base 0x3F8, divisor 1, requested 115200 baud, realised 115200 baud.
+Serial adapter: 8 data bits, parity none, 1 stop bit(s), interrupt-driven upon line 4, unmasked.
+Serial adapter: transmitted 6927, received 0, interrupts 55, queued 0, waits 0, line errors 0 (last status 0x0), receive overruns 0.
+```
+
+294 lines of boot log, 55 assertions reporting passed or sound, no verdict of
+`FAILED`, and the adapter driven by interrupt throughout. **The automated
+assertion of Section 1 can therefore be performed under VirtualBox**, and the
+screen-reading procedure of Section 4.2 below is no longer the only thing
+available.
+
+Which of the two changed — the emulator across some version, or the way the
+machine was configured in the run that produced the original claim — is not
+established here, and the honest thing is to say so rather than to assert a cause
+this project did not observe. What is established is what the log above says.
+[`BUILDS.md`](BUILDS.md), build 1, is the image it came from.
+
+Section 4.2 remains, because reading the screen is still the only way to see what
+the *framebuffer* console draws, and because a machine whose serial adapter is
+absent — the physical one of Section 5 is such a machine — leaves nothing else.
+
+What can be read besides the serial port is the screen. Until sub-task 6.2 that was the VGA text
 console; between sub-tasks 6.2 and 6.4 it was nothing at all, requesting a
 framebuffer having put the adapter in a graphics mode with no console upon it;
 and from sub-task 6.4 it is the graphical console, which draws the boot log upon
@@ -195,8 +222,49 @@ sleep 5.9          # the boot menu, then the interval up to the line wanted
 
 The interval is found by bisection and jitters by some tenths of a second
 between runs, so several attempts may be needed to place a particular line upon
-the screen. It is a crude procedure and it is the only one available while the
-machine has no serial channel.
+the screen. It is a crude procedure, and until sub-task 7.2 it was the only one
+available under VirtualBox; Section 4.1 records what changed. It remains the only
+way to see what the framebuffer console draws, which the serial port does not
+carry.
+
+## 4A. Execution under Bochs
+
+Bochs is a fifth environment, added at sub-task 7.2. It is not a `make` target:
+it requires a configuration file naming absolute paths and a build of the
+emulator this project does not produce, and a target that assumed either would be
+a target that failed upon somebody else's machine.
+
+```sh
+bochs -q -f bochsrc
+```
+
+with a `bochsrc` naming the ISO as an ATA CD-ROM, `boot: cdrom`, and
+`com1: enabled=1, mode=file, dev=<path>` — after which the captured file is read
+exactly as `build/serial.log` is.
+
+**What Bochs is good for that the others are not.** It is an interpreter and not
+a virtualiser: every instruction is decoded and checked against the architecture,
+and it reports in its own log what it considered wrong — an unsupported pixel
+format, a `HLT` executed with interrupts masked, a paging structure with a
+reserved bit set. QEMU's translation is faster and says nothing of the kind.
+Against that, it is slow: a boot that takes two seconds under QEMU takes some
+minutes, so it is a deliberate run and not a regression gate.
+
+**The build matters, and the one this project first met could not run the
+kernel at all.** A Bochs configured without `--enable-x86-64` reports a CPU whose
+`CPUID` leaf `0x80000001` is zero — no long mode — and the kernel cannot leave
+protected mode upon it; one configured without `--enable-smp` refuses
+`cpu: count=2`. Both were the case at sub-task 7.2 and both were a property of
+the local build rather than of Bochs. The configuration that works:
+
+```sh
+./configure --enable-x86-64 --enable-smp --enable-cpu-level=6 \
+            --enable-pci --enable-cdrom --enable-long-phy-address --with-nogui
+```
+
+The `BXVGA` messages about an unsupported guest pixel format are the display
+stub declining to render a 32-bit framebuffer upon a display library that has
+none, and are not the kernel's.
 
 ## 5. Testing upon physical hardware
 

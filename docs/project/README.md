@@ -16,6 +16,7 @@ explains how the kernel functions; that is [`../design/`](../design/),
 | [`TESTING-SYSTEM.md`](TESTING-SYSTEM.md) | What the test of each non-graphical subsystem establishes: the devices, the storage stack, the privilege apparatus and the concurrency primitives, each with its negative test. |
 | [`TESTING-GRAPHICS.md`](TESTING-GRAPHICS.md) | The same for sub-tasks 6.2 to 6.6, kept apart because most of what matters there cannot be asserted by the kernel at all and has to be looked at. |
 | [`TESTING-RECORD.md`](TESTING-RECORD.md) | The dated record of every test performed, with its outcome. |
+| [`BUILDS.md`](BUILDS.md) | The numbered register of every image produced: the commit it came from, the compiler that built it, its size, what the verification said and where it was run. Written by [`../../tools/record-build.sh`](../../tools/record-build.sh) and never by hand. |
 | [`TOOLCHAIN.md`](TOOLCHAIN.md) | The `x86_64-elf` cross-toolchain, its construction, the build system that uses it, and the GitHub workflow that runs the verification upon a machine nobody here has configured. |
 | [`CODING-STANDARDS.md`](CODING-STANDARDS.md) | Style, naming, file headers, the `-Wall -Wextra -Werror` regime, and the register of compiler extensions relied upon with the justification of each. |
 | [`REFERENCES.md`](REFERENCES.md) | Every specification the project relies upon, with the sections relied upon named and, where a specification is not publicly distributed, a note of how its details were cross-verified. |
@@ -39,6 +40,11 @@ does a released thing get called?** — and it is apart from them for the same
 reason they are apart from each other. A commit and a release are published to
 different audiences, and the release record is not a subset of `HISTORY.md`: most
 commits are in no release, and a release is a decision rather than a change.
+
+`BUILDS.md` answers a fifth, added at sub-task 7.2 — **which image was that?**
+The three above are all about the source and none of them can name an artefact,
+so an observation about one image and not another had nothing to attach itself
+to. It is the one document here written by a program rather than by a person.
 
 ## The order of work
 

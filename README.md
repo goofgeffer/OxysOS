@@ -15,7 +15,7 @@ Oxys-OS is a monolithic, Unix-like operating system for x86_64. Its kernel and
 userland are written from scratch in ISO C11 and NASM assembly; the toolchain it
 will eventually build itself with is ported rather than written, which is the one
 place it depends upon code this project did not write. It targets real hardware
-and is tested under QEMU and VirtualBox.
+and is tested under QEMU, VirtualBox and Bochs.
 
 The conventions binding upon all work in this repository are set out in
 [`PROJECT_GUIDELINES.md`](PROJECT_GUIDELINES.md). In accordance with its
@@ -46,6 +46,7 @@ way to work once the toolchain stands:
 | [`./build_all.sh`](build_all.sh) | The three stages above in order, then `make iso` and `make verify`. |
 | `make verify` | Boots the ISO under QEMU with no display and asserts upon the serial output. **This is the gate**: `PROJECT_GUIDELINES.md`, Section 2, requires it to pass before a change is final. |
 | `make clang-check` | Compiles every translation unit with a second compiler, for its diagnostics alone. Builds nothing. |
+| `make build-record NOTE="…"` | Appends one numbered row to [`docs/project/BUILDS.md`](docs/project/BUILDS.md) describing the image presently in `build/`. Builds nothing and runs nothing. |
 
 The toolchain is not placed upon the default `PATH`.
 [`docs/project/TOOLCHAIN.md`](docs/project/TOOLCHAIN.md) states the whole of the
@@ -89,10 +90,11 @@ source of truth for progress, and nothing below restates it.
 | [`STATUS.md`](docs/project/STATUS.md) | The present condition of the system, one paragraph to a phase, and which environments each phase has been observed to work in. |
 | [`HISTORY.md`](docs/project/HISTORY.md) | The revision history: one row per change, pointing at the commit and the design document that hold the detail. |
 | [`VERSIONING.md`](docs/project/VERSIONING.md) | What a release gets called. One repository, many releases: `Oxys 1`, `Oxys 1.1`, `Oxys Aetos` — which is `Oxys 4` with a name — and editions such as `Oxys Aetos Workspace Edition`, which are varieties of a release rather than successors to it. Nothing has been released yet; the scheme is written before the first one rather than under the pressure of it. |
-| [`TESTING.md`](docs/project/TESTING.md) | The test procedure and the four environments — QEMU, VirtualBox, OVMF and physical hardware — with what each is good for that the others are not. |
+| [`TESTING.md`](docs/project/TESTING.md) | The test procedure and the five environments — QEMU, VirtualBox, Bochs, OVMF and physical hardware — with what each is good for that the others are not. |
 | [`TESTING-SYSTEM.md`](docs/project/TESTING-SYSTEM.md) | What the verification of each non-graphical subsystem establishes, and the deliberately-inserted defect that confirmed the assertion was worth making. |
 | [`TESTING-GRAPHICS.md`](docs/project/TESTING-GRAPHICS.md) | The same for the graphical work, which is apart because most of what matters there cannot be asserted by the kernel and has to be looked at. |
 | [`TESTING-RECORD.md`](docs/project/TESTING-RECORD.md) | The dated record of every test performed, with its outcome. |
+| [`BUILDS.md`](docs/project/BUILDS.md) | The numbered register of every image produced: the commit it came from, the compiler that built it, its size, what the verification said and where it was run. It is the only document here written by a program rather than by a person, and it exists because every other record is about the source and none of them can name an artefact. |
 | [`TOOLCHAIN.md`](docs/project/TOOLCHAIN.md) | The cross-compilation toolchain, its construction, the build system, and the workflow that runs the verification upon GitHub. |
 | [`CODING-STANDARDS.md`](docs/project/CODING-STANDARDS.md) | The mandatory conventions of style, naming, documentation and compiler diagnostics. |
 | [`REFERENCES.md`](docs/project/REFERENCES.md) | The bibliography of authoritative specifications consulted by the project. |
@@ -116,7 +118,7 @@ source of truth for progress, and nothing below restates it.
 | [`EXECUTABLE.md`](docs/design/EXECUTABLE.md) | The ELF64 loader: a piece of the kernel that does what an untrusted document tells it to, so its design is the list of things it refuses to be told. |
 | [`PROCESS.md`](docs/design/PROCESS.md) | The process, the thread and the saved context; the switch that exchanges one for another, and the descent to privilege level 3 by which a program first ran. |
 | [`CONCURRENCY.md`](docs/design/CONCURRENCY.md) | The ticket spinlock that masks interrupts for as long as it is held, the per-processor area it is built upon and the segment base that reaches it, the interrupt one processor sends to another, and the shootdown that makes a paging-structure change true everywhere — all of it built, and exercised, before there is a second processor. |
-| [`LIBC.md`](docs/design/LIBC.md) | The C library: the division of the system-call header into the interface a program is entitled to and the implementation it is not, and the string and memory functions of ISO/IEC 9899:2011, Section 7.24 — the nineteen implemented, the three not, and why a userland library is presently asserted by the kernel. |
+| [`LIBC.md`](docs/design/LIBC.md) | The C library: the division of the system-call header into the interface a program is entitled to and the implementation it is not; the string and memory functions of ISO/IEC 9899:2011, Section 7.24 — twenty implemented, two not — and why a userland library is presently asserted by the kernel; and, at Section 8, the system-call wrappers, the `errno` they set, and how an instruction the kernel cannot execute is nevertheless asserted by the kernel. |
 
 ### [`docs/devices/`](docs/devices/) — the hardware the kernel drives
 

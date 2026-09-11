@@ -53,8 +53,15 @@ functions of ISO/IEC 9899:2011, Section 7.24, that do not require a locale or an
 `kernel/include/oxys/syscall.h` divided into the interface a program is entitled
 to and the implementation it is not.
 
-**Next: sub-task 7.2** — the system-call wrappers, which the division above
-unblocked.
+**Sub-task 7.2 is complete**: a wrapper for each of the seven calls the kernel
+implements, the `SYSCALL` instruction beneath them in a translation unit of NASM,
+the `errno` of ISO/IEC 9899:2011, Section 7.5, and the `strerror` that 7.1 left
+for it. **The instruction cannot be executed by the kernel** — `SYSRET` returns
+to privilege level 3 unconditionally — so the invocation is asserted by copying
+the bytes the library ships into a program composed for the purpose and running
+them there. [`../design/LIBC.md`](../design/LIBC.md), Section 8.
+
+**Next: sub-task 7.3** — a user-space heap.
 
 **Two things Phase 6 leaves for it to inherit.** The scheduler's affinity mask
 names the bootstrap processor alone for every user thread, because the
@@ -375,8 +382,9 @@ divided it: the interface is now `kernel/abi/oxys/syscall_abi.h`, under `MIT` an
 reachable by a second include root of its own, and the implementation stays with
 the kernel. See [`../../LICENSING.md`](../../LICENSING.md), Section 2.1, and
 [`../design/LIBC.md`](../design/LIBC.md), Section 2. **The wrappers of 7.2 are
-now unblocked and must be declared by the C library**, not by the interface
-header: that directory holds constants and a convention and never a symbol.
+declared by the C library**, in `libc/include/syscall.h`, and not by the
+interface header: that directory holds constants and a convention and never a
+symbol.
 
 **Sub-task 7.1 is the first thing in this project whose test subject is not the
 kernel**, and it is asserted by the kernel anyway — `make verify` being the only
@@ -388,7 +396,7 @@ changes about it.
 | # | Sub-task | State | Asserted by |
 | - | -------- | ----- | ----------- |
 | 7.1 | Implement the freestanding string and memory functions (`<string.h>`). | Implemented | `verify_string.c` — see note (a) |
-| 7.2 | Implement system-call wrappers for the complete kernel interface. | Planned | — |
+| 7.2 | Implement system-call wrappers for the complete kernel interface. | Implemented | `verify_wrappers.c` — see note (b) |
 | 7.3 | Implement a user-space heap allocator (`malloc`, `free`, `realloc`) above `brk`/`mmap`. | Planned | — |
 | 7.4 | Implement buffered input and output (`<stdio.h>`) and formatted conversion. | Planned | — |
 | 7.5 | Author the C runtime startup object (`crt0`) and the static-linking procedure for user programs. | Planned | — |
@@ -396,10 +404,26 @@ changes about it.
 | 7.7 | Construct an initial ramdisk containing the utilities and mount it as the early root. | Planned | — |
 
 **(a)** Sub-task 7.1 implements nineteen of the twenty-two functions of ISO/IEC
-9899:2011, Section 7.24. The three absent are `strcoll` and `strxfrm`, which
-compare and transform according to a locale this system has not got, and
-`strerror`, whose table belongs beside the thing that will set `errno` in
-sub-task 7.2. [`../design/LIBC.md`](../design/LIBC.md), Section 4, records each.
+9899:2011, Section 7.24, and sub-task 7.2 adds `strerror`, making twenty. The two
+absent are `strcoll` and `strxfrm`, which compare and transform according to a
+locale this system has not got. [`../design/LIBC.md`](../design/LIBC.md), Section
+4, records each.
+
+**(b)** Sub-task 7.2's assertion is in two halves because its subject is.
+`SYSCALL` cannot be executed by this kernel at all — the `SYSRET` that ends the
+kernel's handling of it returns to privilege level 3 unconditionally — so the
+translation of a result into an `errno`, which is on this side of the
+instruction, is asserted by calling it; and the invocation, which is not, is
+asserted by copying the bytes `libc/syscall/invoke.asm` ships into a program
+composed for the purpose and running them at privilege level 3.
+[`../design/LIBC.md`](../design/LIBC.md), Section 8.4.
+
+**The negative test found the first version of that assertion worthless.** A
+three-argument invocation was altered to lose its third argument — the defect the
+whole arrangement exists to catch — and every assertion passed, the lost argument
+being a length the kernel bounds rather than refuses. The status a program ends
+with is now the sum of what every one of its calls returned, and Section 8.7 of
+that document records the reasoning at length.
 
 **The negative test found a defect in the test rather than in the code**, which
 is the class of defect a passing run cannot report. The guard at the head of

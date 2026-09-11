@@ -34,6 +34,7 @@ complementary, and neither replaces the other.
 | [`TESTING-SYSTEM.md`](project/TESTING-SYSTEM.md) | What the test of each non-graphical subsystem establishes, and the negative test that confirmed it. |
 | [`TESTING-GRAPHICS.md`](project/TESTING-GRAPHICS.md) | The same for the graphical work, where most of what matters must be looked at rather than asserted. |
 | [`TESTING-RECORD.md`](project/TESTING-RECORD.md) | The dated record of every test performed, with its outcome. |
+| [`BUILDS.md`](project/BUILDS.md) | The numbered register of every image produced: its commit, its compiler, its size, what the verification said and where it was run. Written by a program. |
 | [`TOOLCHAIN.md`](project/TOOLCHAIN.md) | The cross-compilation toolchain, the build system, and the continuous integration workflow. |
 | [`CODING-STANDARDS.md`](project/CODING-STANDARDS.md) | Style, naming, documentation, the diagnostic regime, and the register of compiler extensions relied upon. |
 | [`REFERENCES.md`](project/REFERENCES.md) | Every specification the project relies upon, with the sections relied upon named. |

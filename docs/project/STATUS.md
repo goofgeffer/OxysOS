@@ -211,10 +211,27 @@ examined through `unsigned char`, which is the one property whose loss would be
 invisible: a comparison through plain `char` is correct for every byte below 128
 and wrong for every byte above it, upon a machine whose plain `char` is signed.
 
-**Nothing can yet run any of it.** There is no `crt0`, no static-linking
-procedure and no user-mode compilation until sub-task 7.5, so the four
-translation units are compiled into the kernel image and asserted by a boot-time
-self-test — `make verify` being the only thing in this project that can execute
+**Sub-task 7.2 stands beside it**: a wrapper for each of the seven calls the
+kernel implements, the `SYSCALL` instruction beneath them in a translation unit
+of NASM, the `errno` of ISO/IEC 9899:2011, Section 7.5, and the `strerror` that
+7.1 had left for it — twenty of Section 7.24's twenty-two functions now, the two
+absent being the locale's. A wrapper returns `-1` and sets `errno` where the
+kernel refused, and returns what the kernel returned where it did not; the
+numbers in `errno` are the kernel's failure results negated, and `_Static_assert`
+holds the two halves together, so renumbering a result in the kernel's interface
+fails the build rather than misreporting a cause.
+
+**The instruction cannot be executed by this kernel**, `SYSRET` returning to
+privilege level 3 unconditionally. So the wrappers are asserted where they run:
+the invocation contains no relocation, and the boot-time self-test copies the
+bytes the library ships into a program composed for the purpose and runs them at
+privilege level 3. The log carries a line no part of the kernel composed — the
+system's name, fetched by one call and written by another.
+
+**Nothing can yet be linked against any of it.** There is no `crt0`, no
+static-linking procedure and no user-mode compilation until sub-task 7.5, so the
+translation units are compiled into the kernel image and asserted by boot-time
+self-tests — `make verify` being the only thing in this project that can execute
 anything at all. The kernel does not call them and is compiled without the C
 library's include root in reach, so that it cannot begin to.
 
@@ -236,19 +253,34 @@ there.
 The physical machine is one machine — the HP Laptop 14-dq0052dx specified in
 [`TESTING.md`](TESTING.md), Section 5.1.
 
-| Phase | QEMU | VirtualBox | OVMF (UEFI) | Physical hardware |
-| ----- | ---- | ---------- | ----------- | ----------------- |
-| 1 Bootstrapping | Yes | Yes | No — no UEFI path until Phase 12 | **Yes**, on one machine — 1.12 |
-| 2 Memory | Yes | Yes | — | Reached, not examined |
-| 3 Interrupts | Yes | Yes | — | Reached, not examined |
-| 4 Device drivers | Yes | Yes, less the serial adapter | — | **Yes, and it found two faults** — see below |
-| 5 EXT2 | Yes | Yes | — | Reached, not examined |
-| 6 Graphics and processes | Yes | Yes, as far as sub-task 6.11 | — | Reached, not examined |
-| 6.12 The APIC | Yes | **Not yet run** | — | **Not yet run** |
-| 6.13 Concurrency | Yes | **Not yet run** | — | **Not yet run** |
-| 6.14 Application processors | Yes | **Not yet run** | — | **Not yet run** |
-| 6.15 The scheduler | Yes | **Not yet run** | — | **Not yet run** |
-| 7.1 The C library's string functions | Yes | **Not yet run** | — | **Not yet run** |
+| Phase | QEMU | VirtualBox | Bochs | OVMF (UEFI) | Physical hardware |
+| ----- | ---- | ---------- | ----- | ----------- | ----------------- |
+| 1 Bootstrapping | Yes | Yes | Yes — 7.2 | No — no UEFI path until Phase 12 | **Yes**, on one machine — 1.12 |
+| 2 Memory | Yes | Yes | Yes — 7.2 | — | Reached, not examined |
+| 3 Interrupts | Yes | Yes | Yes — 7.2 | — | Reached, not examined |
+| 4 Device drivers | Yes | Yes, the serial adapter included since 7.2 | Yes — 7.2 | — | **Yes, and it found two faults** — see below |
+| 5 EXT2 | Yes | Yes | Yes — 7.2 | — | Reached, not examined |
+| 6 Graphics and processes | Yes | Yes | Yes — 7.2 | — | Reached, not examined |
+| 6.12 The APIC | Yes | **Yes — 7.2** | Yes — 7.2 | — | **Not yet run** |
+| 6.13 Concurrency | Yes | **Yes — 7.2** | Yes — 7.2 | — | **Not yet run** |
+| 6.14 Application processors | Yes | **Yes — 7.2** | Yes — 7.2 | — | **Not yet run** |
+| 6.15 The scheduler | Yes | **Yes — 7.2** | Yes — 7.2 | — | **Not yet run** |
+| 7.1 The C library's string functions | Yes | **Yes — 7.2** | Yes — 7.2 | — | **Not yet run** |
+| 7.2 The system-call wrappers | Yes | **Yes** | **Yes** | — | **Not yet run** |
+
+**The rows marked "— 7.2" were all established by two boots of one image**, build
+1 of [`BUILDS.md`](BUILDS.md), because a boot runs every self-test in the corpus
+and a clean one is therefore evidence about every phase at once. Both reported
+55 assertions passed or sound and no verdict of `FAILED`: VirtualBox 7.2.0 with
+two processors, and Bochs 3.1 likewise.
+
+**Two claims this project had been making were found false by those runs.** The
+first is the VirtualBox serial channel, which [`TESTING.md`](TESTING.md), Section
+4.1, had said did not exist and which carried 6,927 bytes by interrupt; that
+section is corrected and says what it used to say. The second is smaller and is
+the absence of any Bochs column at all before now — the emulator had never been
+tried, and the local build of it could not have run the kernel if it had been,
+having been configured without `--enable-x86-64`.
 
 **Sub-task 6.12 has its own row because it is the change most likely to differ by
 machine.** Everything it does is programmed from tables the firmware wrote, and
@@ -353,7 +385,7 @@ functional. [`TESTING.md`](TESTING.md), Section 3.
 There is no test harness and there will be none before Phase 7, there being no
 userland to run one in. The kernel therefore asserts its own properties at boot,
 in the order the subsystems are initialised, and `make verify` fails if any of
-them reports a failure. Fifty-four assertions presently report passed or sound.
+them reports a failure. Fifty-five assertions presently report passed or sound.
 
 Those tests are in [`../../kernel/test/`](../../kernel/test/), one file per
 subsystem. Each subsystem's design document carries a table pairing every

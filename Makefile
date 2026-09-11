@@ -22,6 +22,8 @@
 #               the one optional one.
 #   clang-check - Compiles every translation unit with a second compiler and
 #               discards the objects, for the diagnostics alone. Builds nothing.
+#   build-record - Appends one numbered row to docs/project/BUILDS.md describing
+#               the image presently in build/. Builds nothing and runs nothing.
 #
 # References:
 #   - GNU Make Manual, Section 10.5.3 (automatic variables) and Section 4.12
@@ -138,7 +140,26 @@ LDFLAGS := -n -T $(LINKER_SCRIPT) -Map $(KERNEL_MAP) -z max-page-size=0x1000
 LIBC_SOURCES := libc/string/copying.c \
                 libc/string/comparison.c \
                 libc/string/search.c \
-                libc/string/miscellaneous.c
+                libc/string/miscellaneous.c \
+                libc/string/error.c \
+                libc/syscall/result.c \
+                libc/syscall/calls.c
+
+# The C library's one assembly translation unit, which is the system-call
+# instruction itself.
+#
+# It is named here rather than in ASM_SOURCES below for the same reason
+# LIBC_SOURCES is not merged into C_SOURCES: it is not the kernel's, and the
+# boundary is worth being able to see in one place. It is assembled by the same
+# pattern rule as the kernel's assembly, there being nothing about the flags that
+# differs — NASM has no include root and no code model.
+#
+# docs/design/LIBC.md, Section 8.1, records why the invocation is a translation
+# unit of assembly rather than inline assembly inside the C wrappers: it must
+# contain no relocation, so that kernel/test/verify_wrappers.c can copy the bytes
+# this library ships into a program's address space and execute them at privilege
+# level 3.
+LIBC_ASM_SOURCES := libc/syscall/invoke.asm
 
 C_SOURCES := kernel/kernel.c \
              kernel/multiboot2.c \
@@ -170,6 +191,7 @@ C_SOURCES := kernel/kernel.c \
              kernel/test/verify_smp.c \
              kernel/test/verify_sched.c \
              kernel/test/verify_string.c \
+             kernel/test/verify_wrappers.c \
              kernel/mm/pmm.c \
              kernel/mm/paging.c \
              kernel/mm/shootdown.c \
@@ -241,7 +263,8 @@ ASM_SOURCES := boot/boot.asm \
                kernel/cpu/gdt.asm \
                kernel/cpu/smp_trampoline.asm \
                kernel/cpu/syscall_entry.asm \
-               kernel/proc/switch.asm
+               kernel/proc/switch.asm \
+               $(LIBC_ASM_SOURCES)
 
 OBJECTS := $(patsubst %.c,$(BUILD_DIR)/%.c.o,$(C_SOURCES)) \
            $(patsubst %.asm,$(BUILD_DIR)/%.asm.o,$(ASM_SOURCES))
@@ -262,7 +285,7 @@ OVMF_FIRMWARE := /usr/share/ovmf/OVMF.fd
 VBOX_VM_NAME := Oxys-OS
 
 .PHONY: all iso clean run-qemu run-uefi run-vbox verify toolcheck clang-check \
-        spdx-check spdx-apply docs-check lint
+        spdx-check spdx-apply docs-check lint build-record
 
 # ------------------------------------------------------------------------------
 # Principal targets.
@@ -295,6 +318,15 @@ $(BUILD_DIR)/libc/%.c.o: libc/%.c
 # class of them, and because naming it here is what keeps the exception visible:
 # every other file in kernel/ is compiled without <string.h> in reach.
 $(BUILD_DIR)/kernel/test/verify_string.c.o: kernel/test/verify_string.c
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) $(LIBC_INCLUDE_DIRS) -MMD -MP -MF $(patsubst %.o,%.d,$@) -c $< -o $@
+
+# The second, and for the same reason: it asserts the C library's system-call
+# wrappers of sub-task 7.2, so it must see <syscall.h> and <errno.h>. Two named
+# files are still two lines a reader can find, which a pattern over
+# kernel/test/ would not be — that would put every future self-test in reach of
+# the userland's headers whether or not it asserted the userland.
+$(BUILD_DIR)/kernel/test/verify_wrappers.c.o: kernel/test/verify_wrappers.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) $(LIBC_INCLUDE_DIRS) -MMD -MP -MF $(patsubst %.o,%.d,$@) -c $< -o $@
 
@@ -433,6 +465,32 @@ docs-check:
 
 lint: spdx-check docs-check
 	@echo "LINT SUCCEEDED: the licence tags and the corpus agree with the source."
+
+# ------------------------------------------------------------------------------
+# The build register.
+#
+# One numbered row per image produced, appended to docs/project/BUILDS.md. It
+# builds nothing and runs nothing: it reads the artefacts in build/ and the
+# serial log the `verify` target leaves, so it may be called after any target
+# above and after a boot in an environment that leaves no log at all.
+#
+# NOTE is the one field a person supplies, and is the only one that says why the
+# build was made. ENVIRONMENT and RESULT are for a run this project cannot
+# observe from the repository — under VirtualBox, or upon real hardware.
+#
+#   make build-record NOTE="sub-task 7.2, first image with the wrappers"
+#   make build-record ENVIRONMENT=Bochs NOTE="the same image under Bochs"
+# ------------------------------------------------------------------------------
+
+NOTE        :=
+ENVIRONMENT :=
+RESULT      :=
+
+build-record:
+	@tools/record-build.sh \
+		$(if $(ENVIRONMENT),--environment "$(ENVIRONMENT)") \
+		$(if $(RESULT),--result "$(RESULT)") \
+		$(if $(NOTE),"$(NOTE)")
 
 # ------------------------------------------------------------------------------
 # Toolchain verification.

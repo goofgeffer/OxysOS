@@ -8,12 +8,16 @@
 text-mode display, the serial receive path, the backspace that crosses a row
 boundary, the disk, the EXT2 superblock, the virtual filesystem layer, the
 privilege apparatus, the interrupt controllers, the concurrency primitives, the
-scheduler and the C library's string functions — each with the procedure, what it
-establishes, and the negative test that confirmed the assertion was worth making.
+scheduler, the C library's string functions and its system-call wrappers — each
+with the procedure, what it establishes, and the negative test that confirmed the
+assertion was worth making.
 
-**Section 12 is the first whose subject is not the kernel.** It is here rather
-than in a document of its own because the procedure is this one: the kernel
-asserts it at boot, and `make verify` reads the verdict out of the serial log.
+**Section 12 is the first whose subject is not the kernel**, and Section 13 the
+second. Both are here rather than in a document of their own because the
+procedure is this one: the kernel asserts them at boot, and `make verify` reads
+the verdict out of the serial log. **Section 13 is the only one in this document
+whose subject the kernel cannot call at all**, and Section 13.1 is what is done
+about that.
 
 **The other three**: [`TESTING.md`](TESTING.md) is how the machine is tested and
 in which environments; [`TESTING-GRAPHICS.md`](TESTING-GRAPHICS.md) is the
@@ -989,3 +993,136 @@ report about itself that is worth a line of the boot log. Every line between
 those two is a failure, each naming the function and the property that failed —
 `strncpy terminated a destination it filled FAILED.` — so a run that fails says
 which of the nineteen, and in which of the three ways of Section 12.1.
+
+---
+
+## 13. Verification of the C library's system-call wrappers
+
+**Corresponding sub-task**: 7.2. **Design**:
+[`../design/LIBC.md`](../design/LIBC.md), Section 8. **Implementation of the
+test**: [`../../kernel/test/verify_wrappers.c`](../../kernel/test/verify_wrappers.c).
+
+### 13.1 The difficulty this section exists for
+
+**The kernel cannot call the thing under test.** `SYSCALL` executes at any
+privilege level, but the `SYSRET` that ends the kernel's handling of it returns
+to privilege level 3 unconditionally — so a kernel that called `OxysWrite` would
+enter its own entry path and leave it as a user program, upon a stack and in an
+address space that are not a user program's. Nothing survives that. Since
+sub-task 6.7 the only executor of `SYSCALL` in this system is a program, and
+[`../design/PRIVILEGE.md`](../design/PRIVILEGE.md), Section 9.4, records the same
+fact from the kernel's side.
+
+Every earlier section of this document asserts something the kernel may call.
+This one cannot, and the ways out of that are three:
+
+1. **Assert nothing below the instruction**, and say so. It would leave the whole
+   substance of the sub-task — the register shift, which is the one thing a
+   wrapper is *for* — covered by inspection alone.
+2. **Substitute a test double for the invocation.** It would assert that the
+   layers above the instruction agree with a fiction this project wrote, which is
+   the kind of test that passes for ever and reports nothing.
+3. **Run the real thing where it can run.** Which is what is done.
+
+The third is possible only because of how the invocation is written.
+[`../../libc/syscall/invoke.asm`](../../libc/syscall/invoke.asm) contains no
+memory operand, no relative displacement, no absolute address and no relocation,
+so the bytes the assembler emits mean the same thing at every address. The test
+copies them out of the kernel image, into a program composed for the purpose, and
+runs them at privilege level 3 — so what is asserted is the code this library
+ships and not a reconstruction of it. That property is the reason the invocation
+is a translation unit of assembly rather than inline assembly inside the C
+wrappers; [`../design/LIBC.md`](../design/LIBC.md), Section 8.1.
+
+### 13.2 What `make verify` asserts
+
+**On this side of the instruction**, by ordinary calls:
+
+- A result that is not negative is returned exactly, at zero, at a length and at
+  `INT64_MAX`, and `errno` is not touched by any of them.
+- Each of the seven failure results produces `-1` and its own `errno`, from a
+  previous `errno` that no result maps to.
+- A negative result beyond the reserved range, and `INT64_MIN`, both produce
+  `ENOSYS` — and no translation ever leaves `errno` at zero.
+- Every number `<errno.h>` defines has a message, no two of them share one, and
+  `strerror` answers for `-1`, for an unassigned number and for both extremes of
+  `int`.
+- `strerror(errno)` after a failed translation describes that failure.
+
+**On the far side**, by a program at privilege level 3 that the test composes:
+
+1. `ticks()`, kept in `RBP`.
+2. `version(buffer, 64)`, which begins a sum in `RBX`.
+3. `write(1, buffer, that length)` — so the system's name appears in the log.
+4. `write(1, newline, 1)`.
+5. `version(buffer, 8)`, a capacity *smaller* than the string.
+6. `write(99, buffer, 1)`, which must fail with `EBADF`.
+7. `exit(sum × 1,000,000 + ticks)`.
+
+and then, of what came back: that exactly seven calls reached the dispatcher;
+that the program ended and its process is marked ended; that the sum is exactly
+what the kernel computes it must be from its own version string; and that the
+tick count lies between what this processor observed either side of the run.
+
+**The status carries two numbers on purpose.** The sum is exact and the kernel
+knows it; the tick count cannot be exact, nobody being able to say what it was in
+between two observations. Multiplying the first by a scale no boot reaches keeps
+the uncertainty in the second from absorbing an error in the first — added
+together they would be one number with a tolerance, and an off-by-one in the sum
+would hide inside it.
+
+### 13.3 The negative tests, and the two that found something
+
+Seven defects were inserted and removed. The table is in
+[`../design/LIBC.md`](../design/LIBC.md), Section 8.7, with what each run said.
+Five behaved as intended, including a failure result renumbered in the kernel's
+interface header, which fails at compile time rather than at boot:
+`static assertion failed: "EBADF does not name SYSCALL_EBADF."`
+
+**Two did not, and both were defects in the one file the test was written for.**
+The three-argument invocation was made to drop `mov rdx, rcx` — losing the third
+argument of every three-argument call — and **every assertion passed**. The lost
+argument was a *length*, and the kernel bounds a length rather than refusing an
+implausible one: 0x402000 became 4096, the range was readable because a program's
+data page is a whole page, and the write emitted the same string it would have
+emitted anyway. The only trace was a newline missing from the log, and nothing
+was asserting the log. The two-argument invocation passed for the same reason: a
+capacity larger than the string is not a capacity the result depends upon.
+
+The assertion is now the sum of *every* result, and step 5 above exists solely so
+that one capacity is smaller than the string it is given. Both defects now fail
+it.
+
+This is the second time in this phase that the negative-test discipline has
+found the defect in the test rather than in the code — Section 12.3 is the first
+— and the two are worth reading together. A passing run cannot report a test that
+does not test.
+
+### 13.4 What this verification cannot establish
+
+- **The typed wrappers.** `OxysSyscallResult` is asserted by calling it and the
+  invocation by running its own bytes; `OxysWrite` passing its `length` where the
+  kernel reads a length is checked by nothing. It cannot be until a program is
+  linked against this library, the wrappers being compiled `-mcmodel=kernel` and
+  holding a reference to `errno` at a kernel address — which is exactly the
+  property that makes the invocation copyable and them not. Sub-task 7.5.
+- **`R10`.** There is no invocation of four or more arguments, no call needing
+  one, and therefore no assertion upon the one register where this kernel's
+  convention departs from the C one.
+- **`errno` per thread.** ISO/IEC 9899:2011, Section 7.5, requires thread local
+  storage duration and there is one object. Nothing can assert the difference
+  while there is one thread.
+
+### 13.5 Reading the log
+
+```
+Wrappers: asserting the C library's system-call wrappers.
+  A program at privilege level 3 reports, through the library's own invocation: Oxys-OS unreleased
+Wrapper self-test passed.
+```
+
+**The middle line is the point of the whole section.** No part of the kernel
+composed it: the name was fetched by one system call and written by another, both
+made through the bytes `libc/syscall/invoke.asm` ships, by a program executing at
+privilege level 3 in an address space of its own. Every other line between the
+first and the last is a failure, each naming the property that failed.

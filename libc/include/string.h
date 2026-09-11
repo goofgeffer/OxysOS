@@ -6,7 +6,7 @@
  *          9899:2011, Section 7.24, as this C library implements them.
  * Key definitions: memcpy, memmove, memcmp, memchr, memset, strcpy, strncpy,
  *          strcat, strncat, strcmp, strncmp, strchr, strrchr, strspn, strcspn,
- *          strpbrk, strstr, strtok, strlen.
+ *          strpbrk, strstr, strtok, strlen, strerror.
  * References:
  *   - ISO/IEC 9899:2011, Section 7.24: the whole of this header. Each function
  *     below cites the subsection that defines it.
@@ -18,8 +18,7 @@
  *   - docs/design/LIBC.md, Sections 3 and 4: what is implemented here, what is
  *     not, and the reason in each case.
  *
- * Three functions of Section 7.24 are absent, and each is absent for a reason
- * rather than by oversight.
+ * Two functions of Section 7.24 are absent, and neither is absent by oversight.
  *
  *   strcoll and strxfrm compare and transform according to the current locale.
  *   There is no locale in this system and no <locale.h> to establish one; both
@@ -27,16 +26,17 @@
  *   an agreement with a standard this library could not yet keep. They arrive
  *   with the locale.
  *
- *   strerror maps an integer to a message, and the integers it would map are
- *   the failure results of <oxys/syscall_abi.h> as the wrappers of sub-task 7.2
- *   will present them through errno. The table belongs beside the thing that
- *   sets errno and not here, where it would fix the spelling of every error
- *   message before a single call had a wrapper.
+ *   strerror was the third until sub-task 7.2. It maps an integer to a message,
+ *   and the integers it maps are the failure results of <oxys/syscall_abi.h> as
+ *   the wrappers present them through errno; the table therefore belongs beside
+ *   the thing that sets errno, and that is what 7.2 built. It is declared below
+ *   and implemented in libc/string/error.c.
  *
- * Nothing here allocates, and nothing here calls the kernel. These are the
- * functions a freestanding program may use before it has a heap, a descriptor or
- * a process, which is why they are sub-task 7.1 and everything else in Phase 7
- * comes after them.
+ * Nothing here allocates. Every function here but strerror is freestanding in
+ * the strict sense and calls nothing at all; strerror reads a table of its own
+ * and calls nothing either. These are the functions a program may use before it
+ * has a heap, a descriptor or a process, which is why they are the floor of this
+ * phase and everything else in it comes after them.
  */
 
 #ifndef OXYS_LIBC_STRING_H
@@ -148,6 +148,21 @@ char *strtok(char *restrict string, const char *restrict separators);
 
 /* Sets n bytes of an object to c, converted to unsigned char. 7.24.6.1. */
 void *memset(void *object, int c, size_t n);
+
+/*
+ * Maps an error number to a message. 7.24.6.2.
+ *
+ * The numbers are those of <errno.h>, and any other value of type int is mapped
+ * too — the standard requires it, and a program that received a number from a
+ * part of this system that does not exist yet would otherwise be told nothing.
+ * The array returned must not be modified by the program; this implementation
+ * never overwrites it, which the standard permits and does not require.
+ *
+ * It arrives with the system-call wrappers of sub-task 7.2 and not with the rest
+ * of Section 7.24, because until those existed there was no number for it to
+ * map. See libc/string/error.c.
+ */
+char *strerror(int errnum);
 
 /* The number of bytes before a string's terminator. 7.24.6.3. */
 size_t strlen(const char *string);

@@ -16,7 +16,7 @@
  *          KernelVerifyLocalApic, KernelVerifyIoApic, KernelVerifyApicRouting,
  *          KernelVerifyPerCpu, KernelVerifySpinlock, KernelVerifyIpi,
  *          KernelVerifyShootdown, KernelVerifyApplicationProcessors,
- *          KernelVerifyScheduler, KernelVerifyString,
+ *          KernelVerifyScheduler, KernelVerifyString, KernelVerifyWrappers,
  *          KernelVerifyPit, KernelVerifyKeyboard, KernelVerifySerial,
  *          KernelVerifyVga, KernelVerifyPci, KernelVerifyAta, KernelVerifyBlock,
  *          KernelVerifyBuffer, KernelVerifyExt2, KernelVerifyVfs,
@@ -226,6 +226,22 @@ void KernelVerifyScheduler(void);
  * including <string.h> without that rule being edited.
  */
 void KernelVerifyString(void);
+
+/*
+ * Sub-task 7.2: the C library's system-call wrappers.
+ *
+ * It runs after the string test because it is the same subject — the userland —
+ * and because it depends upon far more of the kernel: a process, an address
+ * space, an executable loader and a descent to privilege level 3. Half of it is
+ * an ordinary call and half of it is a program, and the division is not a
+ * convenience. SYSCALL cannot be executed by this kernel at all: the SYSRET that
+ * ends the kernel's handling of it returns to privilege level 3
+ * unconditionally, so a kernel that called a wrapper would leave its own entry
+ * path as a user program. The translation of a result into an errno is
+ * therefore asserted by calling it; the invocation is asserted by copying the
+ * bytes the library ships into a program and running them where they belong.
+ */
+void KernelVerifyWrappers(void);
 
 /* Phases 3 and 4: the remaining devices. */
 void KernelVerifyPit(void);

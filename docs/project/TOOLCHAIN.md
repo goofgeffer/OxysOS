@@ -71,7 +71,7 @@ One suppression exists elsewhere in the `Makefile` and belongs to the
 | ---- | ----- | -------- |
 | `kernel/include` | The kernel's own header corpus, `LGPL-3.0-or-later`. | Every translation unit. |
 | `kernel/abi` | The system-call interface a program is entitled to, `MIT`. | Every translation unit, and the C library. |
-| `libc/include` | The C library's headers, `MIT`. | The C library's own translation units, and `kernel/test/verify_string.c` alone. |
+| `libc/include` | The C library's headers, `MIT`. | The C library's own translation units, and the two self-tests that assert them — `kernel/test/verify_string.c` and `kernel/test/verify_wrappers.c` — and nothing else. |
 
 **The kernel is deliberately compiled without `libc/include` in reach**, so that
 no kernel translation unit can include `<string.h>` and quietly acquire a
@@ -125,6 +125,8 @@ permissions.
 | `verify` | Executes the ISO under QEMU without a display, captures the serial output, and asserts that the expected banner appears. |
 | `toolcheck` | Reports the presence or absence of each required tool, and of the one optional one. |
 | `clang-check` | Compiles every translation unit with a second compiler and discards the objects. Builds nothing; see Section 9. |
+| `spdx-check`, `spdx-apply`, `docs-check`, `lint` | The corpus checks of [`../../tools/README.md`](../../tools/README.md). Neither builds anything nor needs this toolchain; `lint` is the two checks together and is what CI runs. |
+| `build-record` | Appends one numbered row to [`BUILDS.md`](BUILDS.md) describing the image presently in `build/`. Builds nothing and runs nothing. `NOTE`, `ENVIRONMENT` and `RESULT` are its variables, and `BUILD_DIR` selects which image it reads. |
 
 ## 7. Header dependency tracking
 

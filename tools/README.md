@@ -12,27 +12,52 @@ part of it — [`../LICENSING.md`](../LICENSING.md), Section 1.
 
 Every check here was written after a real defect that a person had missed. None
 of them is a style rule, and none enforces a preference.
+[`record-build.sh`](record-build.sh) is the one exception to the sentence above
+and is described beneath the table: it checks nothing and writes a record
+instead.
 
 | Script | What it checks | The defect that motivated it |
 | ------ | -------------- | ---------------------------- |
 | [`spdx.sh`](spdx.sh) | Every tracked file carries the SPDX licence tag that `LICENSING.md`, Section 1, assigns to its path. | `crypto/`, `net/` and `uefi/` stood with no licence at all from the day `LICENSING.md` was written. A table is authoritative and is not machine-readable, so the mapping held only for as long as somebody remembered it. |
 | [`check-docs.sh`](check-docs.sh) | Eight claims the corpus makes about itself and about the source. | `docs/design/SMP.md` was referenced by three source files before it existed; `CONCURRENCY.md` named five files as carrying a note that five of them did not carry; `STATUS.md` reported the wrong count of self-test assertions through two sub-tasks; and `PROJECT_GUIDELINES.md`, Section 3, went several phases describing a set of build targets that was no longer the set the `Makefile` had. |
 
+## The one that is not a check
+
+[`record-build.sh`](record-build.sh) appends one numbered row to
+[`../docs/project/BUILDS.md`](../docs/project/BUILDS.md) describing the image
+presently in `build/` — the commit it came from, the compiler that built it, its
+size, what the serial log of the verification said, and where it has been run.
+`make build-record` invokes it.
+
+It is here rather than anywhere else because it belongs to no phase, as
+everything in this directory does, and because it is the same kind of thing: a
+discipline that was somebody's memory. The defect it answers is that **every
+other record in this repository is about the source**. `PLAN.md` says what is
+being built, `HISTORY.md` how it came to be, `TESTING-RECORD.md` what was run —
+and none of them can name an *image*. By sub-task 7.2 this project had produced
+some hundreds, of which not one could be referred to.
+
+It builds nothing and runs nothing. It reads the artefacts that are already
+there, which is what makes it safe to call after any target and after a boot a
+person observed themselves in an environment that leaves no log.
+`BUILD_DIR` selects where it reads from, as it does for the `Makefile`.
+
 ## Running them
 
 ```sh
-make lint          # both, and what CI runs
+make lint          # both checks, and what CI runs
 make spdx-check    # tags only, changes nothing
 make spdx-apply    # add the tag to files that lack one
 make docs-check    # the corpus only
+make build-record NOTE="…"   # not a check: one row in the build register
 ```
 
-Each exits non-zero on failure, so a check reads like a compiler diagnostic
-rather than like a report somebody has to interpret.
+Each of the checks exits non-zero on failure, so it reads like a compiler
+diagnostic rather than like a report somebody has to interpret.
 
-Neither script builds anything or needs the cross-toolchain. They read the
-repository. That is why they are a CI job of their own: a corpus that has
-drifted should not be reported as a compiler failure.
+No script here builds anything or needs the cross-toolchain. They read the
+repository. That is why the two checks are a CI job of their own: a corpus that
+has drifted should not be reported as a compiler failure.
 
 ## What `check-docs.sh` checks
 

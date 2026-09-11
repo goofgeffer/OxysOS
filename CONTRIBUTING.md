@@ -50,6 +50,8 @@ A change is not complete until all of these are true. This is
 | [`docs/project/HISTORY.md`](docs/project/HISTORY.md) has a row for the change | About sixty words, pointing at the commit and the design document |
 | A boot-time self-test asserts the new behaviour, or the absence of one is recorded | Section 6 |
 | `make verify` passes | Section 7 |
+| `make lint` passes | The licence tags and the corpus checks of [`tools/README.md`](tools/README.md), and what CI runs |
+| The image the run was made against is in [`docs/project/BUILDS.md`](docs/project/BUILDS.md) | `make build-record NOTE="…"`, added at sub-task 7.2 so that an observation about an image can name it |
 
 **A stale document is a defect of the same kind as a bug.** That is the whole of
 the reasoning: the documentation is part of the codebase and not a description of
@@ -77,7 +79,15 @@ in the order the subsystems are initialised.
 ```sh
 make verify        # boots the ISO headless under QEMU; fails if any self-test does
 make clang-check   # compiles every unit with a second compiler, for the diagnostics
+make lint          # the licence tags and the corpus; builds nothing
+make build-record NOTE="what this image is"   # one numbered row per image
 ```
+
+The four further environments — VirtualBox, Bochs, OVMF and the physical machine
+— are [`docs/project/TESTING.md`](docs/project/TESTING.md). None of them is a
+gate; each is good for something QEMU is not, and Section 4.1 of that document is
+a standing reminder that a claim about an environment nobody has run lately is a
+claim that may have stopped being true.
 
 Three things are expected of a new self-test, and the first is the one that
 matters:

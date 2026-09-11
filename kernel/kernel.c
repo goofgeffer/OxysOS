@@ -1410,6 +1410,21 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
      */
     KernelVerifyString();
 
+    /*
+     * Sub-task 7.2, which must follow everything above and not merely the line
+     * before it.
+     *
+     * The string test above depends upon nothing; this one depends upon almost
+     * everything. It composes a program, loads it into an address space of its
+     * own, and runs it at privilege level 3 — so it needs the loader of
+     * sub-task 6.8, the address spaces of 6.9, the descent of 6.10 and the
+     * dispatch of 6.7, all of which stand by this point in the sequence. It is
+     * placed after the string test rather than before it because the two are
+     * the same subject and a reader of the log should meet the library's floor
+     * before the thing built upon it.
+     */
+    KernelVerifyWrappers();
+
     KernelMountRootVolume();
 
     IrqReport();

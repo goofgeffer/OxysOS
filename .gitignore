@@ -37,7 +37,13 @@ sysroot/
 *.lib
 
 # Build directories
+#
+# build-*/ covers the alternative BUILD_DIR the Makefile accepts — `make
+# BUILD_DIR=build-clang` produces one, and docs/project/BUILDS.md documents that
+# as the way a second compiler's image is built and recorded. Without the
+# pattern, the first such build offers its object tree to the index.
 build/
+build-*/
 obj/
 out/
 dist/
