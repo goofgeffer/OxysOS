@@ -63,6 +63,15 @@ them there. [`../design/LIBC.md`](../design/LIBC.md), Section 8.
 
 **Next: sub-task 7.3** — a user-space heap.
 
+**Three releases are planned, and each is fixed to a sub-task below rather than
+to a date**: `Oxys 1 Alpha` at **8.7**, `Oxys 1 Beta` at **9.7**, and `Oxys 1` at
+or about **11.10**. A sub-task rather than a date, because a date is a guess about
+how long work takes and a sub-task is a statement about what the system can do.
+Each is marked in the table of its phase, and
+[`VERSIONING.md`](VERSIONING.md), Section 11.1, holds the plan, what each release
+can do that the one before it could not, and — for `Oxys 1` — what it will not
+have, Phases 12 and 13 falling after it.
+
 **Two things Phase 6 leaves for it to inherit.** The scheduler's affinity mask
 names the bootstrap processor alone for every user thread, because the
 allocators, the process tables and the filesystem layer a system call reaches are
@@ -447,7 +456,14 @@ in an *empty* haystack. The assertion now covers it.
 | 8.4 | Implement external program execution by `fork()` and `execve()`. | Planned | — |
 | 8.5 | Implement input and output redirection. | Planned | — |
 | 8.6 | Implement pipelines. | Planned | — |
-| 8.7 | Implement job control, process groups and terminal signal delivery. | Planned | — |
+| 8.7 | Implement job control, process groups and terminal signal delivery. **`Oxys 1 Alpha` is cut here.** | Planned | — |
+
+**Sub-task 8.7 closes Phase 8 and is where the first release is cut.** `Oxys 1
+Alpha` is the first image worth handing to somebody, because it is the first one
+that does anything when they type at it.
+[`VERSIONING.md`](VERSIONING.md), Section 11.1, is the plan and Section 5.4 the
+rules a pre-release is published under — which that decision amended, this scheme
+having had no pre-releases until it was taken.
 
 ---
 
@@ -485,8 +501,14 @@ rather than left implied.
 | 9.4 | Define the system configuration format, its parser, and the `/etc` hierarchy the services and the desktop read at start. | Planned | — |
 | 9.5 | Implement the session: the desktop root, the panel, the launcher, and the ownership of the display that decides who may draw upon it. | Planned | — |
 | 9.6 | Implement a terminal emulator window hosting the Phase 8 shell. | Planned | — |
-| 9.7 | Implement the utilities the desktop is not usable without: a file manager, a text viewer and a clock. | Planned | — |
+| 9.7 | Implement the utilities the desktop is not usable without: a file manager, a text viewer and a clock. **`Oxys 1 Beta` is cut here.** | Planned | — |
 | 9.8 | Implement the settings application, by which the configuration of 9.4 is edited rather than hand-written. | Planned | — |
+
+**`Oxys 1 Beta` is cut at 9.7 and not at the end of this phase**, which is
+deliberate: a desktop whose settings are edited in a text file is a desktop
+somebody can use and complain about, and that is what a beta is for. Waiting for
+9.8 would leave the beta and the release two phases apart.
+[`VERSIONING.md`](VERSIONING.md), Section 11.1.
 
 ---
 
@@ -529,7 +551,15 @@ datasheet.
 | 11.7 | Implement UDP. | Planned | — |
 | 11.8 | Implement TCP: the state machine, sequence-number handling, retransmission and flow control. | Planned | — |
 | 11.9 | Implement the BSD-style socket system-call interface. | Planned | — |
-| 11.10 | Implement DHCP client configuration and the `ping` utility. | Planned | — |
+| 11.10 | Implement DHCP client configuration and the `ping` utility. **`Oxys 1` is cut at or about here.** | Planned | — |
+
+**Sub-task 11.10 closes Phase 11, and `Oxys 1` is cut at or about it** — "about",
+because it is the one of the three planned releases whose trigger the project
+owner left approximate. **It is cut before Phases 12 and 13**, so `Oxys 1` boots
+by BIOS alone, carries none of Phase 13's hardening, and will not have been tested
+upon the three machines sub-task 13.7 requires. Those are what `Oxys 2` is for.
+[`VERSIONING.md`](VERSIONING.md), Section 11.1, states each of them plainly rather
+than leaving them to be discovered by whoever installs it.
 
 ---
 

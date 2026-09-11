@@ -11,7 +11,7 @@ explains how the kernel functions; that is [`../design/`](../design/),
 | [`PLAN.md`](PLAN.md) | The thirteen-phase roadmap and the sub-task tracker: what is being built, what state each sub-task is in, and what comes next. Every other document opens by citing the phase and sub-task it belongs to, and this is where those are defined. It is the single source of truth for what is done. |
 | [`STATUS.md`](STATUS.md) | The present condition of the system: what it does today, one paragraph to a phase, and the table of which environments each phase has actually been observed to work in. |
 | [`HISTORY.md`](HISTORY.md) | The revision history: one row per change, pointing at the commit that made it and the design document that reasons about it. |
-| [`VERSIONING.md`](VERSIONING.md) | What a release gets called and why: the ordinal, the optional point beneath it, the name that stands for an ordinal, and the edition that is a variety of a release rather than a successor to it — together with the record of releases, which is empty. |
+| [`VERSIONING.md`](VERSIONING.md) | What a release gets called and why: the ordinal, the optional point beneath it, the two pre-releases that precede the first ordinal, the name that stands for an ordinal, and the edition that is a variety of a release rather than a successor to it — together with the record of releases, which is empty, and the plan of the three that are intended. |
 | [`TESTING.md`](TESTING.md) | How the kernel is verified and where: what `make verify` asserts, interactive execution under QEMU, the four further environments — OVMF, VirtualBox, Bochs and the physical machine — debugging with GDB, and the judges this project did not write. |
 | [`TESTING-SYSTEM.md`](TESTING-SYSTEM.md) | What the test of each non-graphical subsystem establishes: the devices, the storage stack, the privilege apparatus and the concurrency primitives, each with its negative test. |
 | [`TESTING-GRAPHICS.md`](TESTING-GRAPHICS.md) | The same for sub-tasks 6.2 to 6.6, kept apart because most of what matters there cannot be asserted by the kernel at all and has to be looked at. |
@@ -40,6 +40,12 @@ does a released thing get called?** — and it is apart from them for the same
 reason they are apart from each other. A commit and a release are published to
 different audiences, and the release record is not a subset of `HISTORY.md`: most
 commits are in no release, and a release is a decision rather than a change.
+
+Its Section 11.1 also answers **when** — three releases, each fixed to a sub-task
+of `PLAN.md` rather than to a date. That sits there and not in `PLAN.md` because
+it is a statement about releases that happens to be indexed by sub-task, and
+`PLAN.md` carries a marker at each of the three rather than a second copy of the
+plan.
 
 `BUILDS.md` answers a fifth, added at sub-task 7.2 — **which image was that?**
 The three above are all about the source and none of them can name an artefact,
