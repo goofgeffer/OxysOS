@@ -9,7 +9,8 @@
  *          ProcessInitialise, ProcessCreate, ProcessDestroy, ThreadCreate,
  *          ThreadDestroy, ThreadSetCurrent, ThreadCurrent, ProcessRecordImage,
  *          ProcessCreateUserStack, ProcessReport, ProcessFork, ProcessExecute,
- *          ProcessExit, ProcessWait, ProcessCurrent.
+ *          ProcessExit, ProcessWait, ProcessCurrent, ProcessEstablishBreak,
+ *          ProcessSetBreak, ProcessBreak.
  * References:
  *   - docs/design/PROCESS.md: the design of these structures and the reasons for
  *     their shape.
@@ -89,6 +90,34 @@
  */
 #define PROCESS_USER_STACK_PAGES 16U
 #define PROCESS_USER_STACK_TOP   UINT64_C(0x0000700000000000)
+
+/*
+ * The heap, and where it begins, of sub-task 7.3.
+ *
+ * A process's *break* is the address one past the last byte of the region it may
+ * use for a heap. It begins immediately above the program's image, rounded up to
+ * a page and then advanced by a guard, and it grows upward by the `brk` system
+ * call. The stack grows downward from PROCESS_USER_STACK_TOP, so the two
+ * approach one another across the whole of the address space between them and
+ * the maximum below is what stops either reaching the other.
+ *
+ * **The guard is not decoration.** The image's highest address is the end of a
+ * program's `.bss`, and a program that walks off the end of its last static
+ * array would otherwise walk into the first byte of its own heap — where it
+ * would find memory that is mapped, writable and holding an allocator's
+ * bookkeeping. One unmapped page turns that into a fault at the instruction that
+ * caused it.
+ *
+ * The maximum is a bound upon what one process may ask for, not upon what the
+ * machine has. It exists because `brk` maps a frame for every page it grows by:
+ * a program asking for its whole address space would otherwise consume every
+ * frame in the machine before the request was refused, and the refusal would
+ * arrive with nothing left to report it with. Sixteen mebibytes is four thousand
+ * and ninety-six pages, which is more than anything this system runs will ask
+ * for and far less than the memory a machine running it has.
+ */
+#define PROCESS_BREAK_GAP_PAGES  1U
+#define PROCESS_BREAK_MAXIMUM    UINT64_C(0x0000000001000000)
 
 /*
  * What a process is doing. The states are what a scheduler will need to tell
@@ -258,6 +287,26 @@ struct Process
     /* The user stack, and its extent. */
     uint64_t user_stack_top;
     uint64_t user_stack_pages;
+
+    /*
+     * The heap, of sub-task 7.3: where it may begin and where it presently ends.
+     *
+     * Both are recorded here for the reason the image extent is: an address
+     * space is a paging hierarchy and cannot say what it maps or why, so the
+     * distinction between a heap page and any other mapped page exists in this
+     * structure alone. `break_start` is fixed when a program is loaded and never
+     * moves; `break_current` is what the program has asked for and is the only
+     * one of the two a system call may change.
+     *
+     * `break_start` is page-aligned and `break_current` need not be. A program
+     * may ask for a break part way through a page, and the page it falls within
+     * is mapped entire — there being no finer granularity to map with — so the
+     * bytes between the break and the end of that page are addressable and are
+     * not the program's to use. That is a property of every kernel of this shape
+     * and is recorded rather than corrected.
+     */
+    uint64_t break_start;
+    uint64_t break_current;
 
     Thread *threads[PROCESS_THREAD_MAXIMUM];
     size_t thread_count;
@@ -515,5 +564,59 @@ Process *ProcessCurrent(void);
 uint64_t ProcessForkCount(void);
 uint64_t ProcessExecuteCount(void);
 uint64_t ProcessReapCount(void);
+
+/* ------------------------------------------------------------------------------
+ * Sub-task 7.3: the break, which is where a program's heap ends.
+ * ------------------------------------------------------------------------------ */
+
+/*
+ * Fixes where a process's heap may begin, from the image it is running.
+ *
+ * Called whenever the image changes and at no other time: once when a program is
+ * first loaded and again when `execve` replaces it. The break is placed a guard
+ * page above the end of the image and the process begins with a heap of no
+ * bytes, which is the state in which the first request for memory maps the first
+ * page.
+ *
+ * A process whose image was never recorded — one that has been created and not
+ * loaded — keeps a break of zero, and every request against it is refused. That
+ * is deliberate: a heap placed at an address derived from an image that does not
+ * exist would be placed at zero, which is the one page in the address space that
+ * must stay unmapped.
+ */
+void ProcessEstablishBreak(Process *process);
+
+/*
+ * Moves a process's break to the requested address and returns where it stands
+ * afterwards, or one of the SYSCALL_ results of <oxys/syscall_abi.h>.
+ *
+ * Growing maps a zeroed, writable, user-accessible frame for every page the
+ * region gains; shrinking withdraws the pages the region has given up and
+ * releases their frames. **A growth that cannot be completed is undone**: a
+ * caller told that it has memory it has not got would discover otherwise at some
+ * later instruction, so the pages mapped by a failed attempt are withdrawn again
+ * and the break is left where it was.
+ *
+ * Returns SYSCALL_EINVAL for an address below where the heap begins, and
+ * SYSCALL_ENOMEM for one beyond PROCESS_BREAK_MAXIMUM or where a frame could not
+ * be had.
+ */
+int64_t ProcessSetBreak(Process *process, uint64_t requested);
+
+/* Where a process's break stands, or zero where it has no heap. */
+uint64_t ProcessBreak(const Process *process);
+
+/*
+ * Accounting: how many requests moved the break each way, and how many pages the
+ * call has mapped and not itself withdrawn.
+ *
+ * The third is a count of what this call did and not a census of the machine. A
+ * process destroyed while it holds a heap releases its pages through
+ * AddressSpaceDestroy without passing through here, and a forked child's heap
+ * pages are shared rather than mapped, so neither event is visible to it.
+ */
+uint64_t ProcessBreakGrowthCount(void);
+uint64_t ProcessBreakShrinkCount(void);
+uint64_t ProcessBreakPageCount(void);
 
 #endif /* OXYS_PROCESS_H */

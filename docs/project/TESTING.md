@@ -247,12 +247,38 @@ kernel at all.** A Bochs configured without `--enable-x86-64` reports a CPU whos
 `CPUID` leaf `0x80000001` is zero — no long mode — and the kernel cannot leave
 protected mode upon it; one configured without `--enable-smp` refuses
 `cpu: count=2`. Both were the case at sub-task 7.2 and both were a property of
-the local build rather than of Bochs. The configuration that works:
+the local build rather than of Bochs. **Both were the case again at sub-task
+7.3**, the installed binary having reverted to a default build: the symptom to
+look for is `bochs --help cpu` listing nothing above `atom_n270`, every model in
+that list being 32-bit, and the run then failing at
+`>>PANIC<< numerical parameter 'n_processors' was set to 2` or — with one
+processor — silently, the kernel halting where it tries to enter long mode. The
+configuration that works:
 
 ```sh
 ./configure --enable-x86-64 --enable-smp --enable-cpu-level=6 \
             --enable-pci --enable-cdrom --enable-long-phy-address --with-nogui
 ```
+
+The `bochsrc` that boots it, with the CPU model named explicitly because a
+default-built Bochs and a 64-bit one do not agree upon what the default is:
+
+```
+megs: 512
+cpu: count=2, ips=100000000, model=corei7_sandy_bridge_2600k
+romimage: file=/usr/local/share/bochs/BIOS-bochs-latest
+vgaromimage: file=/usr/local/share/bochs/VGABIOS-lgpl-latest.bin
+ata0: enabled=1, ioaddr1=0x1f0, ioaddr2=0x3f0, irq=14
+ata0-master: type=cdrom, path=<absolute path to build/oxys.iso>, status=inserted
+boot: cdrom
+com1: enabled=1, mode=file, dev=<absolute path for the captured log>
+display_library: nogui
+```
+
+`display_library: nogui` requires `--with-nogui`; a build without it reports
+`display library 'nogui' not available` and there is no headless run to be had.
+A boot takes some minutes and the captured file is then read exactly as
+`build/serial.log` is.
 
 The `BXVGA` messages about an unsupported guest pixel format are the display
 stub declining to render a 32-bit framebuffer upon a display library that has

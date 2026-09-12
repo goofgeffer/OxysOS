@@ -679,6 +679,47 @@ static int64_t SyscallDoWait(uint64_t status_address)
     return (int64_t)collected;
 }
 
+/* ------------------------------------------------- the call of sub-task 7.3 */
+
+/*
+ * Moves the caller's break, or reports where it stands.
+ *
+ * No user address is dereferenced here, so there is nothing to validate: the
+ * argument is an address the kernel is asked to *make* valid, not one it is
+ * asked to read. What bounds it is ProcessSetBreak, which refuses anything below
+ * where the heap begins or beyond PROCESS_BREAK_MAXIMUM above it — so a caller
+ * cannot name a kernel address, the maximum being far below SYSCALL_USER_LIMIT
+ * and the start being an address the kernel itself chose.
+ *
+ * SYSCALL_BREAK_QUERY reports rather than moves. It is the first call a heap
+ * makes, there being no other way for a program to learn where its own heap
+ * begins: the address is derived from the image the loader placed, and a program
+ * has no view of its own program headers.
+ */
+static int64_t SyscallDoBrk(uint64_t requested)
+{
+    Process *const process = ProcessCurrent();
+
+    if (process == NULL)
+    {
+        return SYSCALL_EINVAL;
+    }
+
+    if (requested == SYSCALL_BREAK_QUERY)
+    {
+        const uint64_t established = ProcessBreak(process);
+
+        /*
+         * A process with no heap at all reports a refusal rather than zero. Zero
+         * is not an address, so a program told it could produce no heap in any
+         * arrangement it can distinguish from one that has yet to grow.
+         */
+        return (established == 0U) ? SYSCALL_ENOMEM : (int64_t)established;
+    }
+
+    return ProcessSetBreak(process, requested);
+}
+
 /* ------------------------------------------------------------- the dispatch */
 
 /* A call: what it is named, and how many arguments it reads. The count is
@@ -697,7 +738,8 @@ static const SyscallEntryDescriptor SyscallTable[SYSCALL_COUNT] = {
     { "fork", 0U },
     { "execve", 3U },
     { "exit", 1U },
-    { "wait", 1U }
+    { "wait", 1U },
+    { "brk", 1U }
 };
 
 bool SyscallNumberIsValid(uint64_t number)
@@ -760,6 +802,10 @@ void SyscallDispatch(SyscallFrame *frame)
 
     case SYSCALL_WAIT:
         frame->rax = (uint64_t)SyscallDoWait(frame->rdi);
+        break;
+
+    case SYSCALL_BRK:
+        frame->rax = (uint64_t)SyscallDoBrk(frame->rdi);
         break;
 
     default:

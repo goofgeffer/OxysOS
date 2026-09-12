@@ -61,7 +61,19 @@ to privilege level 3 unconditionally — so the invocation is asserted by copyin
 the bytes the library ships into a program composed for the purpose and running
 them there. [`../design/LIBC.md`](../design/LIBC.md), Section 8.
 
-**Next: sub-task 7.3** — a user-space heap.
+**Sub-task 7.3 is complete**: `malloc`, `calloc`, `realloc` and `free` of ISO/IEC
+9899:2011, Section 7.22.3, above a first-fit allocator over an address-ordered
+free list — and beneath it the **eighth system call**, `brk`, the first added
+since Phase 6, by which a program asks this kernel for memory and gives it back.
+The sub-task divides in two because it has to: the policy is ordinary C and is
+asserted by calling it against a region the self-test supplies, while the call
+beneath it cannot be executed by this kernel at all and is asserted by a program
+at privilege level 3 which grows its heap, has the kernel write into the page it
+gained, reads it back, and gives the page up.
+[`../design/LIBC.md`](../design/LIBC.md), Section 9.
+
+**Next: sub-task 7.4** — buffered input and output, and formatted conversion.
+It is the first thing in this project that will allocate.
 
 **Three releases are planned, and each is fixed to a sub-task below rather than
 to a date**: `Oxys 1 Alpha` at **8.7**, `Oxys 1 Beta` at **9.7**, and `Oxys 1` at
@@ -412,7 +424,7 @@ changes about it.
 | - | -------- | ----- | ----------- |
 | 7.1 | Implement the freestanding string and memory functions (`<string.h>`). | Implemented | `verify_string.c` — see note (a) |
 | 7.2 | Implement system-call wrappers for the complete kernel interface. | Implemented | `verify_wrappers.c` — see note (b) |
-| 7.3 | Implement a user-space heap allocator (`malloc`, `free`, `realloc`) above `brk`/`mmap`. | Planned | — |
+| 7.3 | Implement a user-space heap allocator (`malloc`, `free`, `realloc`) above `brk`/`mmap`. | Implemented | `verify_heap.c` — see note (c) |
 | 7.4 | Implement buffered input and output (`<stdio.h>`) and formatted conversion. | Planned | — |
 | 7.5 | Author the C runtime startup object (`crt0`) and the static-linking procedure for user programs. | Planned | — |
 | 7.6 | Implement the utilities `ls`, `cat`, `echo`, `mkdir` and `rm`. | Planned | — |
@@ -447,6 +459,29 @@ already handles an empty needle against a haystack that is not empty, and the
 assertion had never covered the one case the guard exists for — an empty needle
 in an *empty* haystack. The assertion now covers it.
 [`../design/LIBC.md`](../design/LIBC.md), Section 5.1.
+
+**(c)** Sub-task 7.3's assertion is in two halves for the same reason 7.2's is,
+and the division is the sub-task's own rather than the test's. The allocator's
+policy calls nothing that can fail outside the C language, so it is given a
+region by `OxysHeapAdopt` and exercised directly; `brk` is a system call and is
+asserted by a program at privilege level 3. `mmap` is **not** implemented and the
+heap does not need it: the sub-task's title names both because either would
+serve, and a second way of obtaining memory is a second thing to get right for no
+present gain. [`../design/LIBC.md`](../design/LIBC.md), Section 9.1.
+
+**Sub-task 7.3 added the eighth system call, and the numbering rule held.** `brk`
+is call 7 and `SYSCALL_COUNT` is now 8. It is numbered after the seven for the
+reason the four of sub-task 6.11 were numbered after the three before them: a
+number already handed to a program is a number that must not change, and there
+are now programs — the self-tests of 7.2 and 7.3 — compiled against the old ones.
+
+**Two negative tests of 7.3 found something the passing run could not.** One
+removed the undo of a failed heap growth and every assertion passed, no test here
+being able to exhaust the frame allocator; that is recorded as a limitation
+rather than papered over. The other removed a size check from `OxysHeapAdopt` and
+every assertion passed, because a second check made later rejects strictly more —
+so the first was deleted rather than kept for appearances.
+[`../design/LIBC.md`](../design/LIBC.md), Section 9.7.
 
 ---
 

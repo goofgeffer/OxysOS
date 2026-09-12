@@ -6,7 +6,8 @@
  *          created, cloned by copy-on-write, activated and destroyed. This is
  *          the substrate upon which fork() is built in sub-task 6.11.
  * Key definitions: AddressSpace, AddressSpaceCreate, AddressSpaceClone,
- *          AddressSpaceDestroy, AddressSpaceSwitch, AddressSpaceMapPage.
+ *          AddressSpaceDestroy, AddressSpaceSwitch, AddressSpaceMapPage,
+ *          AddressSpaceUnmapPage.
  * References:
  *   - Intel 64 and IA-32 Architectures Software Developer's Manual, Volume 3A,
  *     Section 4.5 and Figure 4-8: four-level paging. The page-map level 4 index
@@ -111,6 +112,21 @@ void AddressSpaceSwitch(const AddressSpace *space);
  */
 void AddressSpaceMapPage(AddressSpace *space, VirtualAddress virtual_address,
                          PhysicalAddress physical_address, uint64_t flags);
+
+/*
+ * Withdraws a 4 KiB mapping from an address space and returns the frame it
+ * named, or FRAME_ALLOCATION_FAILED where nothing was mapped there.
+ *
+ * The frame is returned and not released, for the reason PagingUnmapPageIn
+ * gives: a frame shared by a copy-on-write clone has more than one referrer, and
+ * only the caller knows whether withdrawing this mapping ends the last of them.
+ * Every present caller passes it straight to FrameFree, which releases it upon
+ * the last reference and does nothing before then.
+ *
+ * Added at sub-task 7.3 for the break that shrinks, which is the first operation
+ * in this kernel that takes a mapping away from a live address space.
+ */
+PhysicalAddress AddressSpaceUnmapPage(AddressSpace *space, VirtualAddress virtual_address);
 
 /* The address space describing the kernel hierarchy alone. */
 const AddressSpace *AddressSpaceKernel(void);

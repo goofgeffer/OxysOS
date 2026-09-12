@@ -42,6 +42,13 @@ field rather than as a rule somebody must remember. Two locks are applied: the
 diagnostic channel of sub-task 6.14, and the process and thread tables, which
 6.15 made contended.
 
+**A program may now ask for memory.** Since sub-task 7.3 the kernel carries an
+eighth system call, `brk`, which moves the boundary of a program's heap — mapping
+a zeroed, writable page for each one gained and releasing the frame of each one
+given back — and the C library carries `malloc`, `calloc`, `realloc` and `free`
+above it. Nothing in this system allocates yet; the heap exists for the things
+that will.
+
 ## 2. By phase
 
 **Phase 1 — bootstrapping.** The kernel builds without diagnostics under the full
@@ -118,7 +125,7 @@ the GRUB entry that permits writing. See
   rather than one for all; and composites all of it over a back buffer, after
   which **nothing reads the framebuffer**.
 - A `SYSCALL` entry path swaps `GS`, loads a kernel stack from a per-processor
-  block, dispatches through a table of seven calls and validates a caller's
+  block, dispatches through a table of eight calls and validates a caller's
   arguments against both the canonical user limit and the paging hierarchy — and
   resolves a copy-on-write fault upon a page it is asked to write, rather than
   refusing an address a fork had protected.
@@ -228,6 +235,36 @@ bytes the library ships into a program composed for the purpose and runs them at
 privilege level 3. The log carries a line no part of the kernel composed — the
 system's name, fetched by one call and written by another.
 
+**Sub-task 7.3 stands above both**: `malloc`, `calloc`, `realloc` and `free` of
+ISO/IEC 9899:2011, Section 7.22.3, over a first-fit allocator upon an
+address-ordered free list of thirty-two-byte-headed blocks, which splits a block
+too large and joins a released one to whichever of its neighbours lies against
+it. Every pointer it returns is aligned for any type with a fundamental
+alignment; `malloc(0)` returns a distinct pointer rather than a null one, a null
+being indistinguishable from a failure; `calloc` refuses a count and a size whose
+product would wrap, which is the one arithmetic fault here with a security
+consequence; and `free` of something that is not an allocation is **defined as a
+refusal** rather than left undefined, the header carrying an eight-byte mark that
+a stray pointer will not accidentally hold.
+
+**Beneath it the kernel gained its eighth system call**, `brk` — the first added
+since Phase 6. A program's break begins one guard page above its image and moves
+by a call that maps a zeroed, writable, user-accessible frame per page it gains
+and releases the frames of every page it gives back. It returns the new break and
+reports a failure as a negative result, which the traditional call of that name
+does not; and a growth that cannot be completed is undone entire, because a heap
+that is part there is a heap whose owner discovers the fact at whichever byte it
+happens to touch first.
+
+**The two halves are asserted apart because the sub-task is two things.** The
+policy is ordinary C and is exercised directly against a region the self-test
+gives it; the call beneath it cannot be executed by this kernel, and is asserted
+by a program at privilege level 3 which asks for its break, is refused when it
+reads there, grows the heap by a page, has the kernel write the system's name
+into that page, reads it back into the log, gives the page up, and is refused
+again. Nothing in this system allocates yet; sub-task 7.4 is the first thing that
+will.
+
 **Nothing can yet be linked against any of it.** There is no `crt0`, no
 static-linking procedure and no user-mode compilation until sub-task 7.5, so the
 translation units are compiled into the kernel image and asserted by boot-time
@@ -267,12 +304,16 @@ The physical machine is one machine — the HP Laptop 14-dq0052dx specified in
 | 6.15 The scheduler | Yes | **Yes — 7.2** | Yes — 7.2 | — | **Not yet run** |
 | 7.1 The C library's string functions | Yes | **Yes — 7.2** | Yes — 7.2 | — | **Not yet run** |
 | 7.2 The system-call wrappers | Yes | **Yes** | **Yes** | — | **Not yet run** |
+| 7.3 The heap and `brk` | Yes | **Yes** | **Yes** | — | **Not yet run** |
 
 **The rows marked "— 7.2" were all established by two boots of one image**, build
 1 of [`BUILDS.md`](BUILDS.md), because a boot runs every self-test in the corpus
 and a clean one is therefore evidence about every phase at once. Both reported
 55 assertions passed or sound and no verdict of `FAILED`: VirtualBox 7.2.0 with
-two processors, and Bochs 3.1 likewise.
+two processors, and Bochs 3.1 likewise. **The same is true of sub-task 7.3's
+row**, established by builds 5 to 8: every row above it was re-confirmed by those
+boots and none is restated here, a clean boot being evidence about the whole
+corpus and not about the sub-task that prompted it.
 
 **The VirtualBox run carried its whole boot log over the serial adapter**, 6,927
 bytes by interrupt, so the automated assertion is available there and not only
@@ -384,7 +425,7 @@ functional. [`TESTING.md`](TESTING.md), Section 3.
 There is no test harness and there will be none before Phase 7, there being no
 userland to run one in. The kernel therefore asserts its own properties at boot,
 in the order the subsystems are initialised, and `make verify` fails if any of
-them reports a failure. Fifty-five assertions presently report passed or sound.
+them reports a failure. Fifty-six assertions presently report passed or sound.
 
 Those tests are in [`../../kernel/test/`](../../kernel/test/), one file per
 subsystem. Each subsystem's design document carries a table pairing every

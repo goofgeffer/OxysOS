@@ -661,10 +661,19 @@ needing no validation performs none.
 is a promise the kernel does not keep. The process control block they act upon
 arrived at sub-task 6.9, and at 6.11 the four of them arrived in fact rather than
 as numbers — see [`PROCESS.md`](PROCESS.md), Sections 11 to 16, for what each
-does and why. The table now holds seven, and the four were **numbered 3 to 6
+does and why. The table now holds eight, and the four were **numbered 3 to 6
 after the three above rather than interleaved among them**: a number handed to a
 program is a number that must not change, and `write` is call zero in machine
 code that was written before they existed.
+
+**The eighth is `brk`, of sub-task 7.3**, and is numbered eighth for the same
+reason. It is the first call added since Phase 6 and the first whose caller is a
+C library rather than a program written by hand; its design is
+[`LIBC.md`](LIBC.md), Section 9.2, which records the three places it departs from
+the traditional call of that name and what each departure prevents. It needs no
+validation of its own: the argument is an address the kernel is asked to *make*
+valid rather than one it is asked to read, and what bounds it is the process's
+own heap extent.
 
 The numbers and the error values are this kernel's own. Inventing agreement with
 a library that does not exist would be inventing a compatibility nobody had

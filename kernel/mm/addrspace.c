@@ -316,6 +316,16 @@ void AddressSpaceMapPage(AddressSpace *space, VirtualAddress virtual_address,
     PagingMapPageIn(space->root, virtual_address, physical_address, flags);
 }
 
+PhysicalAddress AddressSpaceUnmapPage(AddressSpace *space, VirtualAddress virtual_address)
+{
+    if ((space == NULL) || (space->root == FRAME_ALLOCATION_FAILED))
+    {
+        return FRAME_ALLOCATION_FAILED;
+    }
+
+    return PagingUnmapPageIn(space->root, virtual_address);
+}
+
 const AddressSpace *AddressSpaceKernel(void)
 {
     AddressSpaceKernelSpace.root = PagingKernelRoot();

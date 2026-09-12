@@ -209,6 +209,18 @@ void PagingMapPageIn(PhysicalAddress root, VirtualAddress virtual_address,
                      PhysicalAddress physical_address, uint64_t flags);
 
 /*
+ * Withdraws a 4 KiB mapping from an arbitrary hierarchy and returns the frame it
+ * named, invalidating the translation if that hierarchy is the active one.
+ *
+ * Returns FRAME_ALLOCATION_FAILED where nothing was mapped, which is a report and
+ * not a failure. The frame is returned rather than released: whether the caller
+ * holds the last reference to it is something only the caller knows, and a
+ * function that decided for it would free a frame another address space is still
+ * translating through. Added at sub-task 7.3, for the break that shrinks.
+ */
+PhysicalAddress PagingUnmapPageIn(PhysicalAddress root, VirtualAddress virtual_address);
+
+/*
  * Invalidates the translation-lookaside-buffer entry for one page of the active
  * hierarchy, per Intel SDM, Volume 3A, Section 4.10.4.1, upon every processor.
  *

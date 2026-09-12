@@ -30,7 +30,7 @@ exactly what it is entitled to.
 
 | Path | Description |
 | ---- | ----------- |
-| [`oxys/syscall_abi.h`](oxys/syscall_abi.h) | The system-call interface: the register convention and its one departure from the System V AMD64 convention, the seven call numbers, the eight results a call may fail with, the bound upon a path, and the address at which the kernel's half of the address space begins. |
+| [`oxys/syscall_abi.h`](oxys/syscall_abi.h) | The system-call interface: the register convention and its one departure from the System V AMD64 convention, the eight call numbers, the eight results a call may fail with, the bound upon a path, the argument that asks where a program's heap ends rather than moving it, and the address at which the kernel's half of the address space begins. |
 
 ## The rule this directory is under
 
@@ -45,7 +45,9 @@ C library's.
 already fixed before this directory existed — sub-task 6.11 appended its four
 rather than interleaving them for exactly this reason — and the obligation binds
 harder now that this file is the thing programs are compiled against rather than
-a header internal to the kernel.
+a header internal to the kernel. **Sub-task 7.3 was the first test of the rule
+after it was written down**: `brk` is call 7, appended after the seven, and it is
+not where a reader would put it if the list were being arranged for looks.
 
 ## What the kernel kept
 

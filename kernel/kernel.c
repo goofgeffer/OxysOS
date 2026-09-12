@@ -1425,6 +1425,18 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
      */
     KernelVerifyWrappers();
 
+    /*
+     * Sub-task 7.3, which is the same subject one storey higher.
+     *
+     * It depends upon everything the wrapper test depends upon — the loader, the
+     * address spaces, the descent to privilege level 3 — and upon the frame
+     * allocator besides, `brk` mapping a frame for every page a heap gains. It
+     * is placed immediately after the wrappers because a reader of the log
+     * should meet the library's floor, then the calls it is built upon, then the
+     * first thing built upon those.
+     */
+    KernelVerifyHeap();
+
     KernelMountRootVolume();
 
     IrqReport();
@@ -1451,8 +1463,10 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
                       "interrupts, answers a translation-lookaside-buffer shootdown "
                       "sent\nto it by another, and rotates between the threads upon a "
                       "run queue of its own;\nand the C library's string and memory "
-                      "functions stand, asserted by the kernel\nbecause there is not yet "
-                      "a userland to assert them in.\n");
+                      "functions, its system-call wrappers and its heap\nstand, "
+                      "asserted by the kernel because there is not yet a userland to "
+                      "assert\nthem in — a program having asked this kernel for a page "
+                      "of memory, used it,\nand given it back.\n");
 
     VgaSetColour(VGA_COLOUR_LIGHT_GREY, VGA_COLOUR_BLACK);
 

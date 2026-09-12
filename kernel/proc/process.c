@@ -59,6 +59,16 @@
  * docs/design/CONCURRENCY.md, Section 10, limitation 1, still names it. What
  * makes that sound is that the one path a second processor takes through this
  * file — ThreadAdoptCurrent — allocates nothing.
+ *
+ * **The break of sub-task 7.3 is guarded by nothing either**, and needs to be by
+ * the same lock the rest of the process control block will take. Two threads of
+ * one process moving the break at once would each read `break_current`, each map
+ * the pages between it and what they asked for, and the second would map frames
+ * over the first's — a leak of every frame the first obtained and a heap holding
+ * pages it did not put there. There are no userland threads yet, and a user
+ * thread's affinity names the bootstrap processor alone, so the case cannot
+ * arise; docs/design/CONCURRENCY.md, Section 10, limitation 1, is where it is
+ * counted with the rest.
  */
 
 #include <oxys/process.h>
@@ -1202,6 +1212,8 @@ void ProcessRecordImage(Process *process, const ElfImage *image)
     process->image_highest = image->highest;
     process->image_entry = image->entry;
     process->mapped_pages += image->pages;
+
+    ProcessEstablishBreak(process);
 }
 
 uint64_t ProcessCreateUserStack(Process *process)
@@ -1304,6 +1316,19 @@ Process *ProcessFork(Process *parent, const SyscallFrame *frame)
     child->user_stack_pages = parent->user_stack_pages;
 
     /*
+     * The heap comes across with everything else, and both of its bounds must.
+     *
+     * The pages between them were cloned by the call above like any other, so the
+     * child's heap holds exactly what its parent's held at the moment of the
+     * fork. Copying `break_start` alone and letting the child begin with an empty
+     * heap would leave those pages mapped and unaccounted: the child would grow
+     * its break over memory it already had, and the second growth would map a
+     * fresh frame over a page whose contents the program was still using.
+     */
+    child->break_start = parent->break_start;
+    child->break_current = parent->break_current;
+
+    /*
      * The child begins where its parent will resume: at the address SYSCALL put
      * in RCX, upon the stack the entry path saved. The stack is the parent's
      * address and is the child's stack all the same, the cloned space mapping
@@ -1390,6 +1415,14 @@ int64_t ProcessExecute(Process *process, const char *path)
      * mapped over the first. */
     process->user_stack_top = 0U;
     process->user_stack_pages = 0U;
+
+    /*
+     * The old heap went with the old address space, so the break is placed anew
+     * from the image that replaced it. A break carried across would name an
+     * address derived from a program that no longer exists — which, the new
+     * image being smaller, may lie within the new program's own `.bss`.
+     */
+    ProcessEstablishBreak(process);
 
     stack = ProcessCreateUserStack(process);
 
@@ -1538,6 +1571,210 @@ uint64_t ProcessReapCount(void)
     return ProcessReaps;
 }
 
+/* ------------------------------------------------------- sub-task 7.3 */
+
+/* Accounting for the break. */
+static uint64_t ProcessBreakGrowths;
+static uint64_t ProcessBreakShrinks;
+static uint64_t ProcessBreakPages;
+
+void ProcessEstablishBreak(Process *process)
+{
+    if ((process == NULL) || !process->used)
+    {
+        return;
+    }
+
+    /*
+     * A process with no image gets no heap. Deriving one from an image_highest
+     * of zero would place the break in the lowest page of the address space,
+     * which is the page deliberately left unmapped so that a null pointer
+     * dereference faults; a heap there would take that away from every program.
+     */
+    if (process->image_highest == 0U)
+    {
+        process->break_start = 0U;
+        process->break_current = 0U;
+
+        return;
+    }
+
+    process->break_start = AlignUp(process->image_highest, PAGE_SIZE) +
+                           ((uint64_t)PROCESS_BREAK_GAP_PAGES * PAGE_SIZE);
+    process->break_current = process->break_start;
+}
+
+uint64_t ProcessBreak(const Process *process)
+{
+    if ((process == NULL) || !process->used)
+    {
+        return 0U;
+    }
+
+    return process->break_current;
+}
+
+/*
+ * Maps one zeroed, writable, user-accessible page of heap.
+ *
+ * Zeroed for the reason ProcessCreateUserStack zeroes a stack: a frame arrives
+ * holding whatever its last owner left in it, and handing that to a program is a
+ * disclosure with nothing to report it. An allocator is the one caller most
+ * likely to hand the bytes straight on without writing them first.
+ *
+ * Returns false where no frame could be had, having mapped nothing.
+ */
+static bool ProcessMapBreakPage(Process *process, uint64_t page)
+{
+    const PhysicalAddress frame = FrameAllocate();
+    uint8_t *contents;
+
+    if (frame == FRAME_ALLOCATION_FAILED)
+    {
+        return false;
+    }
+
+    contents = (uint8_t *)(uintptr_t)PhysicalToDirect(frame);
+
+    for (uint64_t offset = 0U; offset < PAGE_SIZE; ++offset)
+    {
+        contents[offset] = 0U;
+    }
+
+    AddressSpaceMapPage(&process->space, page, frame,
+                        PAGE_ENTRY_WRITABLE | PAGE_ENTRY_USER);
+
+    ++process->mapped_pages;
+    ++ProcessBreakPages;
+
+    return true;
+}
+
+/* Withdraws one page of heap and releases the frame beneath it. FrameFree
+ * returns the frame to the allocator only upon the last reference, so a page
+ * still shared with a forked relation survives this. */
+static void ProcessUnmapBreakPage(Process *process, uint64_t page)
+{
+    const PhysicalAddress frame = AddressSpaceUnmapPage(&process->space, page);
+
+    if (frame == FRAME_ALLOCATION_FAILED)
+    {
+        return;
+    }
+
+    FrameFree(frame);
+
+    if (process->mapped_pages > 0U)
+    {
+        --process->mapped_pages;
+    }
+
+    if (ProcessBreakPages > 0U)
+    {
+        --ProcessBreakPages;
+    }
+}
+
+int64_t ProcessSetBreak(Process *process, uint64_t requested)
+{
+    uint64_t established;
+    uint64_t wanted;
+
+    if ((process == NULL) || !process->used || (process->break_start == 0U))
+    {
+        return SYSCALL_EINVAL;
+    }
+
+    /*
+     * Below where the heap begins is refused rather than clamped. A program that
+     * asked for a break beneath its own image has computed an address wrongly,
+     * and a kernel that silently moved the request to the nearest legal value
+     * would leave the program believing the arithmetic that produced it was
+     * sound.
+     */
+    if (requested < process->break_start)
+    {
+        return SYSCALL_EINVAL;
+    }
+
+    if ((requested - process->break_start) > PROCESS_BREAK_MAXIMUM)
+    {
+        return SYSCALL_ENOMEM;
+    }
+
+    /* The pages presently covering the heap, and those the request asks for. The
+     * break itself is byte-granular and the mapping is not, so both bounds are
+     * rounded up: a break part way through a page needs the whole of that page. */
+    established = AlignUp(process->break_current, PAGE_SIZE);
+    wanted = AlignUp(requested, PAGE_SIZE);
+
+    if (wanted > established)
+    {
+        for (uint64_t page = established; page < wanted; page += PAGE_SIZE)
+        {
+            if (!ProcessMapBreakPage(process, page))
+            {
+                /*
+                 * The attempt is undone entire.
+                 *
+                 * A partial growth is worse than no growth at all: the call must
+                 * report either the break it was asked for or a failure, and a
+                 * break left part way between the two would be a heap whose
+                 * first pages are mapped and whose last are not — which the
+                 * program discovers at whichever byte it happens to touch first,
+                 * far from the request that failed.
+                 */
+                for (uint64_t undo = established; undo < page; undo += PAGE_SIZE)
+                {
+                    ProcessUnmapBreakPage(process, undo);
+                }
+
+                return SYSCALL_ENOMEM;
+            }
+        }
+
+        ++ProcessBreakGrowths;
+    }
+    else if (wanted < established)
+    {
+        for (uint64_t page = wanted; page < established; page += PAGE_SIZE)
+        {
+            ProcessUnmapBreakPage(process, page);
+        }
+
+        ++ProcessBreakShrinks;
+    }
+    else
+    {
+        /*
+         * The request moves the break within a page that is already mapped.
+         * Nothing is mapped and nothing withdrawn, and it is neither a growth
+         * nor a shrink for the purpose of the accounting — but the break moves,
+         * because it is the break and not the mapping that says how much of the
+         * heap the program owns.
+         */
+    }
+
+    process->break_current = requested;
+
+    return (int64_t)requested;
+}
+
+uint64_t ProcessBreakGrowthCount(void)
+{
+    return ProcessBreakGrowths;
+}
+
+uint64_t ProcessBreakShrinkCount(void)
+{
+    return ProcessBreakShrinks;
+}
+
+uint64_t ProcessBreakPageCount(void)
+{
+    return ProcessBreakPages;
+}
+
 uint64_t ProcessesCreated(void)
 {
     return ProcessCreations;
@@ -1580,6 +1817,18 @@ void ProcessReport(void)
     KernelWriteDecimal(ProcessReaps);
     KernelWriteString(" child(ren) collected.\n");
 
+    /* The break, of sub-task 7.3. The two directions are printed apart because a
+     * heap that only ever grows and one that grows and gives memory back are
+     * different behaviours, and a single count of requests would not tell them
+     * apart. */
+    KernelWriteString("Processes: ");
+    KernelWriteDecimal(ProcessBreakGrowths);
+    KernelWriteString(" break growth(s), ");
+    KernelWriteDecimal(ProcessBreakShrinks);
+    KernelWriteString(" shrink(s), ");
+    KernelWriteDecimal(ProcessBreakPages);
+    KernelWriteString(" heap page(s) presently mapped by them.\n");
+
     for (size_t index = 0U; index < PROCESS_CAPACITY; ++index)
     {
         const Process *const process = &ProcessTable[index];
@@ -1601,6 +1850,10 @@ void ProcessReport(void)
         KernelWriteDecimal(process->mapped_pages);
         KernelWriteString(" page(s) mapped, entry ");
         KernelWriteHexadecimal(process->image_entry);
+        KernelWriteString(", break ");
+        KernelWriteHexadecimal(process->break_current);
+        KernelWriteString(" of ");
+        KernelWriteHexadecimal(process->break_start);
         KernelWriteString("\n");
     }
 

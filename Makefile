@@ -143,7 +143,9 @@ LIBC_SOURCES := libc/string/copying.c \
                 libc/string/miscellaneous.c \
                 libc/string/error.c \
                 libc/syscall/result.c \
-                libc/syscall/calls.c
+                libc/syscall/calls.c \
+                libc/stdlib/heap.c \
+                libc/stdlib/system.c
 
 # The C library's one assembly translation unit, which is the system-call
 # instruction itself.
@@ -190,8 +192,10 @@ C_SOURCES := kernel/kernel.c \
              kernel/test/verify_apic.c \
              kernel/test/verify_smp.c \
              kernel/test/verify_sched.c \
+             kernel/test/program.c \
              kernel/test/verify_string.c \
              kernel/test/verify_wrappers.c \
+             kernel/test/verify_heap.c \
              kernel/mm/pmm.c \
              kernel/mm/paging.c \
              kernel/mm/shootdown.c \
@@ -322,11 +326,19 @@ $(BUILD_DIR)/kernel/test/verify_string.c.o: kernel/test/verify_string.c
 	$(CC) $(CFLAGS) $(LIBC_INCLUDE_DIRS) -MMD -MP -MF $(patsubst %.o,%.d,$@) -c $< -o $@
 
 # The second, and for the same reason: it asserts the C library's system-call
-# wrappers of sub-task 7.2, so it must see <syscall.h> and <errno.h>. Two named
-# files are still two lines a reader can find, which a pattern over
-# kernel/test/ would not be — that would put every future self-test in reach of
-# the userland's headers whether or not it asserted the userland.
+# wrappers of sub-task 7.2, so it must see <syscall.h> and <errno.h>. Named
+# files are still lines a reader can find, which a pattern over kernel/test/
+# would not be — that would put every future self-test in reach of the
+# userland's headers whether or not it asserted the userland.
 $(BUILD_DIR)/kernel/test/verify_wrappers.c.o: kernel/test/verify_wrappers.c
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) $(LIBC_INCLUDE_DIRS) -MMD -MP -MF $(patsubst %.o,%.d,$@) -c $< -o $@
+
+# The third: it asserts the C library's heap of sub-task 7.3, so it must see
+# <stdlib.h> and <heap.h>. The exception remains a list of named files rather
+# than becoming a rule about a directory, which is what keeps it legible as an
+# exception.
+$(BUILD_DIR)/kernel/test/verify_heap.c.o: kernel/test/verify_heap.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) $(LIBC_INCLUDE_DIRS) -MMD -MP -MF $(patsubst %.o,%.d,$@) -c $< -o $@
 

@@ -456,11 +456,41 @@ Sections relied upon:
   by.
 - **Section 6.7.10**, `_Static_assert`, by which `libc/include/errno.h` holds its
   numbers to the kernel's failure results at compile time.
+- **Section 7.22.3**, the memory management functions, which sub-task 7.3
+  implements. **Paragraph 1** is the whole of what an allocator is obliged to:
+  the order and contiguity of successive allocations is unspecified; the pointer
+  returned is aligned for any type with a fundamental alignment requirement; each
+  allocation yields a pointer **disjoint from any other object**; the pointer
+  names the lowest byte of the space; a null pointer means the space could not be
+  allocated; and a request of zero bytes is **implementation-defined** — either a
+  null pointer or a pointer that must not be used to access an object.
+  **7.22.3.2** `calloc`, whose space "is initialized to all bits zero";
+  **7.22.3.3** `free`, under which a null pointer is no action and anything that
+  did not come from a memory management function is undefined; **7.22.3.4**
+  `malloc`; and **7.22.3.5** `realloc`, whose paragraph 3 requires that where the
+  new object cannot be allocated "the old object is not deallocated and its value
+  is unchanged". **7.22.3.1** `aligned_alloc` is cited for what is *not*
+  implemented and why.
+- **Section 6.2.8, paragraph 2**: a fundamental alignment is one no stricter than
+  `_Alignof(max_align_t)`, which upon this architecture is sixteen. That is the
+  alignment every pointer `libc/stdlib/heap.c` returns satisfies, and a
+  `_Static_assert` there holds the two together.
+- **Section 6.5.8, paragraph 5**: the relational operators are defined for
+  pointers only within one array object or one structure. The blocks of a heap
+  lie in regions obtained at unrelated times, so every comparison of two block
+  addresses in `libc/stdlib/heap.c` is made upon `uintptr_t` instead.
+- **Section 6.3.2.3, paragraph 5**: the conversion of a pointer to an integer is
+  *implementation-defined*, which is what makes the comparison above defined
+  where the pointer comparison would not have been.
+- **Section 6.5, paragraph 6**: storage with no declared type takes the effective
+  type of the lvalue it is first stored through — which is what makes a block
+  header written into memory the system supplied a defined thing to read back.
 
 Used by: the whole of the C source; Sections 6.2.5, 6.5, 6.7.3.1 and 7.24 by
 `libc/` and `kernel/test/verify_string.c` in particular; Sections 7.5, 7.24.6.2
 and 6.7.10 by `libc/include/errno.h`, `libc/syscall/` and
-`kernel/test/verify_wrappers.c`.
+`kernel/test/verify_wrappers.c`; Sections 7.22.3, 6.2.8, 6.5.8 and 6.3.2.3 by
+`libc/stdlib/` and `kernel/test/verify_heap.c`.
 
 ### National Semiconductor PC16550D datasheet
 The universal asynchronous receiver/transmitter of the IBM Personal Computer AT

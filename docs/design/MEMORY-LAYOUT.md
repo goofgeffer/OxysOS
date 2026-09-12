@@ -1054,3 +1054,71 @@ the real hierarchy, not by a probe.
    of Section 14.4 goes through `PagingInvalidate`, which announces the address to
    every other processor upon which the source may be active. See
    [`CONCURRENCY.md`](CONCURRENCY.md), Sections 6 and 10.
+
+---
+
+## 15. The user address space, and the break that divides it
+
+**Corresponding sub-task**: 7.3, which is where a user address space first
+acquired a region that grows.
+
+Until this sub-task a user address space held two things the kernel had placed
+and nothing else: the program's image, at the addresses its program headers
+named, and a stack of sixteen pages below `PROCESS_USER_STACK_TOP`. Both are
+fixed at the moment the program is loaded and neither ever moves. A heap is the
+first region whose extent a *program* decides.
+
+| Range | Assignment |
+| ----- | ---------- |
+| `0x0000000000000000` – one page | Never mapped. This is what makes a null pointer dereference a fault. |
+| The image | Wherever the program headers name, which for everything this project loads is at or above `0x0000000000400000`. |
+| One page above the image | **The guard.** Never mapped. |
+| From there upward to the break | **The heap.** Grown and shrunk by `SYSCALL_BRK`, bounded at `PROCESS_BREAK_MAXIMUM` above its first byte. |
+| … | Unmapped. The gap between the two growing regions is the width of the address space. |
+| One page below the stack | The stack's guard. Never mapped. |
+| `0x00006FFFFFFF0000` – `0x0000700000000000` | The stack, sixteen pages, growing downward. |
+| Above that to `0x0000800000000000` | Unmapped. |
+
+**The heap grows up and the stack grows down, and nothing enforces the gap
+between them.** It is not enforced because it does not need to be: the bound upon
+the break is sixteen mebibytes above the image, and the image is at four
+mebibytes, so the heap's greatest reach is some twenty mebibytes — against a
+stack at 112 tebibytes. The day either bound changes, `ProcessSetBreak` is where
+the check belongs, and the reason it is not there now is that a check against a
+condition that cannot arise is a check nothing can test.
+
+**Why the guard above the image is a page and not a byte.** The image's highest
+address is the end of the program's `.bss`, and the granularity of a mapping is a
+page; a guard smaller than a page is not a guard at all, since the page holding
+it would be mapped for the sake of the heap's first byte and the overrun would
+find it writable.
+
+**The two extents are recorded in the process control block**, beside the image
+extent and for the same reason Section 14.8, limitation 2, gives: an address
+space is a paging hierarchy and cannot say what it maps or why. `break_start` is
+fixed when the program is loaded and never moves; `break_current` is what the
+program has asked for. See [`PROCESS.md`](PROCESS.md), Section 2, and
+[`LIBC.md`](LIBC.md), Section 9.2, which holds the design of the call itself.
+
+### 15.1 The unmapping primitive this required
+
+`AddressSpaceUnmapPage`, above `PagingUnmapPageIn`, is new at this sub-task and
+is **the first operation in this kernel that takes a mapping away from a live
+address space**. Everything before it either established a mapping or destroyed
+an entire hierarchy.
+
+It returns the frame it withdrew rather than releasing it. Whether the caller
+holds the last reference is something only the caller knows: a frame shared by a
+copy-on-write clone has more than one referrer, and a function that decided for
+its caller would free a frame another address space is still translating through.
+Every present caller passes the result to `FrameFree`, which releases it upon the
+last reference and does nothing before then — so a heap page a forked child still
+holds survives its parent giving it back.
+
+**The intermediate paging structures are left standing.** A page table that has
+gone empty describes a region the caller is very likely to use again — a heap
+that shrank is a heap that will grow — and releasing it would mean allocating one
+again upon the next byte asked for. They are released with the address space, by
+`AddressSpaceDestroy`, which is the one moment nothing can ask for them back.
+That is a deliberate retention and not a leak: it is bounded by the extent of the
+address space and is reclaimed in full when the process ends.

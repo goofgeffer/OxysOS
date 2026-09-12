@@ -2,12 +2,12 @@
 /* SPDX-License-Identifier: MIT */
 /*
  * File: libc/syscall/calls.c
- * Purpose: The seven system-call wrappers, one for each call
+ * Purpose: The eight system-call wrappers, one for each call
  *          <oxys/syscall_abi.h> numbers: the arguments named rather than
  *          numbered, and the result translated into the convention a C program
  *          expects.
  * Key functions: OxysWrite, OxysTicks, OxysVersion, OxysFork, OxysExecve,
- *          OxysExit, OxysWait.
+ *          OxysExit, OxysWait, OxysBrk, OxysSbrk.
  * References:
  *   - kernel/abi/oxys/syscall_abi.h: the call numbers and what each call means.
  *   - kernel/cpu/syscall.c: the kernel's half, which is what these agree with.
@@ -19,7 +19,7 @@
  *
  * Every function here is a cast of its arguments, an invocation and a
  * translation, and a program could perform all three itself. What it could not
- * do itself is get them right once. The kernel's interface is seven numbers and
+ * do itself is get them right once. The kernel's interface is eight numbers and
  * a register convention; a program that wrote out the invocation at each call
  * site would repeat that convention at every one of them, and the way that fails
  * is not that the program stops working but that one call site puts an argument
@@ -112,4 +112,94 @@ int64_t OxysWait(int64_t *status)
 {
     return OxysSyscallResult(OxysSyscallInvoke1(SYSCALL_WAIT,
                                                 (uint64_t)(uintptr_t)status));
+}
+
+/* ---------------------------------------------------------- sub-task 7.3 */
+
+int64_t OxysBrk(void *address)
+{
+    return OxysSyscallResult(OxysSyscallInvoke1(SYSCALL_BRK,
+                                                (uint64_t)(uintptr_t)address));
+}
+
+/*
+ * The relative form, built from the absolute one, and the arithmetic between
+ * them is the whole of what it adds.
+ *
+ * Three things are done in an order that is not free, and each of them answers a
+ * way this function is commonly written wrongly.
+ *
+ * **The break is read before it is moved.** The caller is owed the address of the
+ * memory it has just obtained, which is where the break stood *before* the
+ * growth; a function that moved first and subtracted afterwards would be right
+ * only so long as the kernel granted exactly what was asked, and this kernel is
+ * entitled to refuse.
+ *
+ * **The sum is checked before it is made.** A caller may pass an increment that
+ * carries the break past the greatest representable address, and the sum would
+ * then wrap to a small one — which the kernel would refuse as being below the
+ * heap's first byte, reporting EINVAL for what is in truth a request too large
+ * to be met. The check is written as a comparison against what remains, for the
+ * reason the kernel's own range check is: a sum that has already overflowed
+ * cannot be tested for having overflowed.
+ *
+ * **A negative increment is a shrink and not an error.** It is the only way a
+ * program gives memory back, and the same bound applies from the other side: an
+ * increment more negative than the break's distance above zero would wrap
+ * upward.
+ */
+void *OxysSbrk(intptr_t increment)
+{
+    const int64_t established = OxysBrk(NULL);
+    uint64_t wanted;
+
+    if (established < 0)
+    {
+        return (void *)(intptr_t)-1;
+    }
+
+    if (increment == 0)
+    {
+        return (void *)(uintptr_t)established;
+    }
+
+    if (increment > 0)
+    {
+        if ((uint64_t)increment > (UINT64_MAX - (uint64_t)established))
+        {
+            errno = ENOMEM;
+
+            return (void *)(intptr_t)-1;
+        }
+
+        wanted = (uint64_t)established + (uint64_t)increment;
+    }
+    else
+    {
+        /*
+         * The magnitude is taken by negating the value as an unsigned quantity
+         * rather than as a signed one. Negating INTPTR_MIN is undefined
+         * behaviour — there is no positive counterpart of it — and the
+         * conversion to uint64_t followed by an unsigned negation is defined for
+         * every value by ISO/IEC 9899:2011, Section 6.3.1.3, paragraph 2, and
+         * Section 6.2.5, paragraph 9.
+         */
+        const uint64_t magnitude = (uint64_t)0 - (uint64_t)increment;
+
+        if (magnitude > (uint64_t)established)
+        {
+            errno = EINVAL;
+
+            return (void *)(intptr_t)-1;
+        }
+
+        wanted = (uint64_t)established - magnitude;
+    }
+
+    if (OxysBrk((void *)(uintptr_t)wanted) < 0)
+    {
+        return (void *)(intptr_t)-1;
+    }
+
+    return (void *)(uintptr_t)established;
 }

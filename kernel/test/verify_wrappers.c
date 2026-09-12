@@ -66,6 +66,8 @@
 #include <string.h>
 #include <syscall.h>
 
+#include "program.h"
+
 static bool VerifyWrappersSucceeded;
 
 static void VerifyWrappersRequire(bool condition, const char *statement)
@@ -323,133 +325,12 @@ extern const uint8_t OxysSyscallInvokeBytes3[];
 static uint8_t VerifyWrappersImage[VERIFY_WRAPPERS_IMAGE_BYTES];
 static uint64_t VerifyWrappersDriverEnd;
 
-static void VerifyWrappersPut16(uint64_t at, uint16_t value)
-{
-    VerifyWrappersImage[at] = (uint8_t)(value & 0xFFU);
-    VerifyWrappersImage[at + 1U] = (uint8_t)((value >> 8) & 0xFFU);
-}
-
-static void VerifyWrappersPut32(uint64_t at, uint32_t value)
-{
-    for (uint64_t index = 0U; index < 4U; ++index)
-    {
-        VerifyWrappersImage[at + index] = (uint8_t)((value >> (index * 8U)) & 0xFFU);
-    }
-}
-
-static void VerifyWrappersPut64(uint64_t at, uint64_t value)
-{
-    for (uint64_t index = 0U; index < 8U; ++index)
-    {
-        VerifyWrappersImage[at + index] = (uint8_t)((value >> (index * 8U)) & 0xFFU);
-    }
-}
-
-static void VerifyWrappersProgramHeader(uint64_t at, uint32_t flags, uint64_t file_offset,
-                                        uint64_t address, uint64_t size)
-{
-    VerifyWrappersPut32(at + 0U, ELF_SEGMENT_LOAD);
-    VerifyWrappersPut32(at + 4U, flags);
-    VerifyWrappersPut64(at + 8U, file_offset);
-    VerifyWrappersPut64(at + 16U, address);
-    VerifyWrappersPut64(at + 24U, address);
-    VerifyWrappersPut64(at + 32U, size);
-    VerifyWrappersPut64(at + 40U, size);
-    VerifyWrappersPut64(at + 48U, PAGE_SIZE);
-}
-
-/* ------------------------------------------------- the driver, by hand */
-
-/*
- * The five instruction forms the driver needs, each emitted at a cursor the
- * caller advances.
- *
- * They are written out rather than being a table of opcodes because a table
- * would have to be read against the manual anyway, and a reader checking this
- * against Intel's Volume 2 wants the mnemonic beside the byte.
- */
-
-/* mov r32, imm32 — B8+rd. The 32-bit form zero-extends to the full register,
- * which is why a call number and a descriptor need no REX prefix. */
-static uint64_t VerifyWrappersMoveImmediate32(uint64_t at, uint8_t reg, uint32_t value)
-{
-    VerifyWrappersImage[at] = (uint8_t)(0xB8U + reg);
-    VerifyWrappersPut32(at + 1U, value);
-
-    return at + 5U;
-}
-
-/* mov r64, imm64 — REX.W + B8+rd, which is the only form that can name an
- * address in a program's data page. */
-static uint64_t VerifyWrappersMoveImmediate64(uint64_t at, uint8_t reg, uint64_t value)
-{
-    VerifyWrappersImage[at] = 0x48U;
-    VerifyWrappersImage[at + 1U] = (uint8_t)(0xB8U + reg);
-    VerifyWrappersPut64(at + 2U, value);
-
-    return at + 10U;
-}
-
-/* mov r/m64, r64 — REX.W + 89 /r, with both operands registers. */
-static uint64_t VerifyWrappersMoveRegister(uint64_t at, uint8_t destination,
-                                           uint8_t source)
-{
-    VerifyWrappersImage[at] = 0x48U;
-    VerifyWrappersImage[at + 1U] = 0x89U;
-    VerifyWrappersImage[at + 2U] = (uint8_t)(0xC0U | (source << 3) | destination);
-
-    return at + 3U;
-}
-
-/*
- * call rel32 — E8 cd, the displacement being relative to the address of the
- * instruction after the call. Both addresses are within the one page, so the
- * displacement is small and the arithmetic is done in the image's own offsets.
- */
-static uint64_t VerifyWrappersCall(uint64_t at, uint64_t target_offset)
-{
-    const int64_t displacement = (int64_t)target_offset - (int64_t)(at + 5U);
-
-    VerifyWrappersImage[at] = 0xE8U;
-    VerifyWrappersPut32(at + 1U, (uint32_t)(int32_t)displacement);
-
-    return at + 5U;
-}
-
-/* add r/m64, r64 — REX.W + 01 /r. */
-static uint64_t VerifyWrappersAddRegister(uint64_t at, uint8_t destination,
-                                          uint8_t source)
-{
-    VerifyWrappersImage[at] = 0x48U;
-    VerifyWrappersImage[at + 1U] = 0x01U;
-    VerifyWrappersImage[at + 2U] = (uint8_t)(0xC0U | (source << 3) | destination);
-
-    return at + 3U;
-}
-
-/* imul r64, r/m64, imm32 — REX.W + 69 /r id, the three-operand form, which is
- * what scales the accumulator without a second register to hold the multiplier
- * in. */
-static uint64_t VerifyWrappersMultiplyImmediate(uint64_t at, uint8_t reg,
-                                                uint32_t value)
-{
-    VerifyWrappersImage[at] = 0x48U;
-    VerifyWrappersImage[at + 1U] = 0x69U;
-    VerifyWrappersImage[at + 2U] = (uint8_t)(0xC0U | (reg << 3) | reg);
-    VerifyWrappersPut32(at + 3U, value);
-
-    return at + 7U;
-}
-
-/* The register numbers of the encoding, which are not the order a reader would
- * guess: RAX 0, RCX 1, RDX 2, RBX 3, RSP 4, RBP 5, RSI 6, RDI 7. */
-#define VERIFY_WRAPPERS_RAX 0U
-#define VERIFY_WRAPPERS_RCX 1U
-#define VERIFY_WRAPPERS_RDX 2U
-#define VERIFY_WRAPPERS_RBX 3U
-#define VERIFY_WRAPPERS_RBP 5U
-#define VERIFY_WRAPPERS_RSI 6U
-#define VERIFY_WRAPPERS_RDI 7U
+/* Whether the composer refused an emission for want of room. It is the whole of
+ * what a bounded composer buys over an unbounded one, and it is checked below
+ * before the program is loaded: a program composed into a buffer that was too
+ * small is a program whose last instructions are missing, which at privilege
+ * level 3 is a fault in an unrelated place. */
+static bool VerifyWrappersOverran;
 
 /*
  * Composes the whole image: the ELF header, the two program headers, the
@@ -516,114 +397,92 @@ static void VerifyWrappersCompose(void)
         (uint64_t)(OxysSyscallInvokeBytes3 - OxysSyscallInvokeBegin);
     const uint64_t buffer = VERIFY_WRAPPERS_DATA_ADDRESS + VERIFY_WRAPPERS_BUFFER_AT;
     const uint64_t newline = VERIFY_WRAPPERS_DATA_ADDRESS + VERIFY_WRAPPERS_NEWLINE_AT;
-    uint64_t at = VERIFY_WRAPPERS_TEXT_OFFSET;
+    TestProgram program;
 
-    for (uint64_t index = 0U; index < VERIFY_WRAPPERS_IMAGE_BYTES; ++index)
-    {
-        VerifyWrappersImage[index] = 0U;
-    }
+    TestProgramInitialise(&program, VerifyWrappersImage, VERIFY_WRAPPERS_IMAGE_BYTES);
 
-    VerifyWrappersImage[0] = 0x7FU;
-    VerifyWrappersImage[1] = 'E';
-    VerifyWrappersImage[2] = 'L';
-    VerifyWrappersImage[3] = 'F';
-    VerifyWrappersImage[4] = (uint8_t)ELF_CLASS_64;
-    VerifyWrappersImage[5] = (uint8_t)ELF_DATA_LITTLE_ENDIAN;
-    VerifyWrappersImage[6] = (uint8_t)ELF_VERSION_CURRENT;
-
-    VerifyWrappersPut16(16U, (uint16_t)ELF_TYPE_EXECUTABLE);
-    VerifyWrappersPut16(18U, (uint16_t)ELF_MACHINE_X86_64);
-    VerifyWrappersPut32(20U, ELF_VERSION_CURRENT);
-    VerifyWrappersPut64(24U, VERIFY_WRAPPERS_TEXT_ADDRESS);
-    VerifyWrappersPut64(32U, ELF_HEADER_BYTES);
-    VerifyWrappersPut16(52U, (uint16_t)ELF_HEADER_BYTES);
-    VerifyWrappersPut16(54U, (uint16_t)ELF_PROGRAM_HEADER_BYTES);
-    VerifyWrappersPut16(56U, 2U);
-
-    VerifyWrappersProgramHeader(ELF_HEADER_BYTES,
-                                ELF_SEGMENT_READ | ELF_SEGMENT_EXECUTE,
-                                VERIFY_WRAPPERS_TEXT_OFFSET, VERIFY_WRAPPERS_TEXT_ADDRESS,
-                                VERIFY_WRAPPERS_TEXT_BYTES);
-    VerifyWrappersProgramHeader(ELF_HEADER_BYTES + ELF_PROGRAM_HEADER_BYTES,
-                                ELF_SEGMENT_READ | ELF_SEGMENT_WRITE,
-                                VERIFY_WRAPPERS_DATA_OFFSET, VERIFY_WRAPPERS_DATA_ADDRESS,
-                                VERIFY_WRAPPERS_DATA_BYTES);
+    TestProgramElfHeader(&program, VERIFY_WRAPPERS_TEXT_ADDRESS, 2U);
+    TestProgramSegment(&program, 0U, ELF_SEGMENT_READ | ELF_SEGMENT_EXECUTE,
+                       VERIFY_WRAPPERS_TEXT_OFFSET, VERIFY_WRAPPERS_TEXT_ADDRESS,
+                       VERIFY_WRAPPERS_TEXT_BYTES);
+    TestProgramSegment(&program, 1U, ELF_SEGMENT_READ | ELF_SEGMENT_WRITE,
+                       VERIFY_WRAPPERS_DATA_OFFSET, VERIFY_WRAPPERS_DATA_ADDRESS,
+                       VERIFY_WRAPPERS_DATA_BYTES);
 
     /* The library's own bytes, verbatim. This is the copy the whole arrangement
      * exists for: nothing here reassembles the instructions, and a change to
      * invoke.asm is a change to what this program executes. */
-    for (uint64_t index = 0U; index < block; ++index)
-    {
-        VerifyWrappersImage[VERIFY_WRAPPERS_TEXT_OFFSET + VERIFY_WRAPPERS_INVOKE_AT +
-                            index] = OxysSyscallInvokeBegin[index];
-    }
+    TestProgramCopy(&program,
+                    VERIFY_WRAPPERS_TEXT_OFFSET + VERIFY_WRAPPERS_INVOKE_AT,
+                    OxysSyscallInvokeBegin, (size_t)block);
+
+    TestProgramSeek(&program, VERIFY_WRAPPERS_TEXT_OFFSET);
 
     /* 1. ticks(), kept in RBP across everything that follows. */
-    at = VerifyWrappersMoveImmediate32(at, VERIFY_WRAPPERS_RDI, (uint32_t)SYSCALL_TICKS);
-    at = VerifyWrappersCall(at, invoke0);
-    at = VerifyWrappersMoveRegister(at, VERIFY_WRAPPERS_RBP, VERIFY_WRAPPERS_RAX);
+    TestProgramMoveImmediate32(&program, TEST_PROGRAM_RDI, (uint32_t)SYSCALL_TICKS);
+    TestProgramCall(&program, invoke0);
+    TestProgramMoveRegister(&program, TEST_PROGRAM_RBP, TEST_PROGRAM_RAX);
 
     /* 2. version(buffer, 64), which begins the sum in RBX and supplies the
      * length the next call writes. Both are taken from RAX before anything else
      * is loaded, that being the one register the call left something in. */
-    at = VerifyWrappersMoveImmediate32(at, VERIFY_WRAPPERS_RDI, (uint32_t)SYSCALL_VERSION);
-    at = VerifyWrappersMoveImmediate64(at, VERIFY_WRAPPERS_RSI, buffer);
-    at = VerifyWrappersMoveImmediate32(at, VERIFY_WRAPPERS_RDX, VERIFY_WRAPPERS_BUFFER_SIZE);
-    at = VerifyWrappersCall(at, invoke2);
-    at = VerifyWrappersMoveRegister(at, VERIFY_WRAPPERS_RCX, VERIFY_WRAPPERS_RAX);
-    at = VerifyWrappersMoveRegister(at, VERIFY_WRAPPERS_RBX, VERIFY_WRAPPERS_RAX);
+    TestProgramMoveImmediate32(&program, TEST_PROGRAM_RDI, (uint32_t)SYSCALL_VERSION);
+    TestProgramMoveImmediate64(&program, TEST_PROGRAM_RSI, buffer);
+    TestProgramMoveImmediate32(&program, TEST_PROGRAM_RDX, VERIFY_WRAPPERS_BUFFER_SIZE);
+    TestProgramCall(&program, invoke2);
+    TestProgramMoveRegister(&program, TEST_PROGRAM_RCX, TEST_PROGRAM_RAX);
+    TestProgramMoveRegister(&program, TEST_PROGRAM_RBX, TEST_PROGRAM_RAX);
 
     /* 3. write(1, buffer, what version returned). */
-    at = VerifyWrappersMoveImmediate32(at, VERIFY_WRAPPERS_RDI, (uint32_t)SYSCALL_WRITE);
-    at = VerifyWrappersMoveImmediate32(at, VERIFY_WRAPPERS_RSI, 1U);
-    at = VerifyWrappersMoveImmediate64(at, VERIFY_WRAPPERS_RDX, buffer);
-    at = VerifyWrappersCall(at, invoke3);
-    at = VerifyWrappersAddRegister(at, VERIFY_WRAPPERS_RBX, VERIFY_WRAPPERS_RAX);
+    TestProgramMoveImmediate32(&program, TEST_PROGRAM_RDI, (uint32_t)SYSCALL_WRITE);
+    TestProgramMoveImmediate32(&program, TEST_PROGRAM_RSI, 1U);
+    TestProgramMoveImmediate64(&program, TEST_PROGRAM_RDX, buffer);
+    TestProgramCall(&program, invoke3);
+    TestProgramAddRegister(&program, TEST_PROGRAM_RBX, TEST_PROGRAM_RAX);
 
     /* 4. write(1, newline, 1). The length is an immediate one, so a call that
      * lost its third argument returns something other than one here — which is
      * the defect the first version of this test could not see. */
-    at = VerifyWrappersMoveImmediate32(at, VERIFY_WRAPPERS_RDI, (uint32_t)SYSCALL_WRITE);
-    at = VerifyWrappersMoveImmediate32(at, VERIFY_WRAPPERS_RSI, 1U);
-    at = VerifyWrappersMoveImmediate64(at, VERIFY_WRAPPERS_RDX, newline);
-    at = VerifyWrappersMoveImmediate32(at, VERIFY_WRAPPERS_RCX, 1U);
-    at = VerifyWrappersCall(at, invoke3);
-    at = VerifyWrappersAddRegister(at, VERIFY_WRAPPERS_RBX, VERIFY_WRAPPERS_RAX);
+    TestProgramMoveImmediate32(&program, TEST_PROGRAM_RDI, (uint32_t)SYSCALL_WRITE);
+    TestProgramMoveImmediate32(&program, TEST_PROGRAM_RSI, 1U);
+    TestProgramMoveImmediate64(&program, TEST_PROGRAM_RDX, newline);
+    TestProgramMoveImmediate32(&program, TEST_PROGRAM_RCX, 1U);
+    TestProgramCall(&program, invoke3);
+    TestProgramAddRegister(&program, TEST_PROGRAM_RBX, TEST_PROGRAM_RAX);
 
     /* 5. version(buffer, 8), a capacity smaller than the string, so the result
      * is the capacity less one and nothing else could have produced it. */
-    at = VerifyWrappersMoveImmediate32(at, VERIFY_WRAPPERS_RDI, (uint32_t)SYSCALL_VERSION);
-    at = VerifyWrappersMoveImmediate64(at, VERIFY_WRAPPERS_RSI, buffer);
-    at = VerifyWrappersMoveImmediate32(at, VERIFY_WRAPPERS_RDX,
-                                       VERIFY_WRAPPERS_SHORT_CAPACITY);
-    at = VerifyWrappersCall(at, invoke2);
-    at = VerifyWrappersAddRegister(at, VERIFY_WRAPPERS_RBX, VERIFY_WRAPPERS_RAX);
+    TestProgramMoveImmediate32(&program, TEST_PROGRAM_RDI, (uint32_t)SYSCALL_VERSION);
+    TestProgramMoveImmediate64(&program, TEST_PROGRAM_RSI, buffer);
+    TestProgramMoveImmediate32(&program, TEST_PROGRAM_RDX,
+                               VERIFY_WRAPPERS_SHORT_CAPACITY);
+    TestProgramCall(&program, invoke2);
+    TestProgramAddRegister(&program, TEST_PROGRAM_RBX, TEST_PROGRAM_RAX);
 
     /* 6. write(99, buffer, 1), which must fail with EBADF. */
-    at = VerifyWrappersMoveImmediate32(at, VERIFY_WRAPPERS_RDI, (uint32_t)SYSCALL_WRITE);
-    at = VerifyWrappersMoveImmediate32(at, VERIFY_WRAPPERS_RSI,
-                                       VERIFY_WRAPPERS_BAD_DESCRIPTOR);
-    at = VerifyWrappersMoveImmediate64(at, VERIFY_WRAPPERS_RDX, buffer);
-    at = VerifyWrappersMoveImmediate32(at, VERIFY_WRAPPERS_RCX, 1U);
-    at = VerifyWrappersCall(at, invoke3);
-    at = VerifyWrappersAddRegister(at, VERIFY_WRAPPERS_RBX, VERIFY_WRAPPERS_RAX);
+    TestProgramMoveImmediate32(&program, TEST_PROGRAM_RDI, (uint32_t)SYSCALL_WRITE);
+    TestProgramMoveImmediate32(&program, TEST_PROGRAM_RSI,
+                               VERIFY_WRAPPERS_BAD_DESCRIPTOR);
+    TestProgramMoveImmediate64(&program, TEST_PROGRAM_RDX, buffer);
+    TestProgramMoveImmediate32(&program, TEST_PROGRAM_RCX, 1U);
+    TestProgramCall(&program, invoke3);
+    TestProgramAddRegister(&program, TEST_PROGRAM_RBX, TEST_PROGRAM_RAX);
 
     /* 7. exit(sum * scale + ticks). */
-    at = VerifyWrappersMultiplyImmediate(at, VERIFY_WRAPPERS_RBX,
-                                         VERIFY_WRAPPERS_STATUS_SCALE);
-    at = VerifyWrappersAddRegister(at, VERIFY_WRAPPERS_RBX, VERIFY_WRAPPERS_RBP);
-    at = VerifyWrappersMoveRegister(at, VERIFY_WRAPPERS_RSI, VERIFY_WRAPPERS_RBX);
-    at = VerifyWrappersMoveImmediate32(at, VERIFY_WRAPPERS_RDI, (uint32_t)SYSCALL_EXIT);
-    at = VerifyWrappersCall(at, invoke1);
+    TestProgramMultiplyImmediate(&program, TEST_PROGRAM_RBX,
+                                 VERIFY_WRAPPERS_STATUS_SCALE);
+    TestProgramAddRegister(&program, TEST_PROGRAM_RBX, TEST_PROGRAM_RBP);
+    TestProgramMoveRegister(&program, TEST_PROGRAM_RSI, TEST_PROGRAM_RBX);
+    TestProgramMoveImmediate32(&program, TEST_PROGRAM_RDI, (uint32_t)SYSCALL_EXIT);
+    TestProgramCall(&program, invoke1);
 
     /* Not reached: the call above does not return. It is here so that a kernel
      * which somehow returned from exit ends this program upon a fault that
      * belongs to it, rather than executing the zeroes that follow. */
-    VerifyWrappersImage[at] = 0x0FU;
-    VerifyWrappersImage[at + 1U] = 0x0BU;
-    at += 2U;
+    TestProgramUndefined(&program);
 
-    VerifyWrappersDriverEnd = at - VERIFY_WRAPPERS_TEXT_OFFSET;
+    VerifyWrappersDriverEnd = program.at - VERIFY_WRAPPERS_TEXT_OFFSET;
+    VerifyWrappersOverran = program.overran;
 
     /* The data page: the buffer is left as zeroes for the kernel to fill, and
      * the newline is the one byte the program supplies itself. */
@@ -692,6 +551,8 @@ void KernelVerifyWrappers(void)
 
     VerifyWrappersRequire(VerifyWrappersDriverEnd <= VERIFY_WRAPPERS_INVOKE_AT,
                           "the composed driver runs into the invocation block");
+    VerifyWrappersRequire(!VerifyWrappersOverran,
+                          "the composer refused an emission for want of room");
 
     process = ProcessCreate("wrappers", NULL);
     VerifyWrappersRequire(process != NULL, "a process could not be created");

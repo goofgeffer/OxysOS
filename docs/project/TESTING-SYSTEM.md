@@ -8,16 +8,17 @@
 text-mode display, the serial receive path, the backspace that crosses a row
 boundary, the disk, the EXT2 superblock, the virtual filesystem layer, the
 privilege apparatus, the interrupt controllers, the concurrency primitives, the
-scheduler, the C library's string functions and its system-call wrappers — each
-with the procedure, what it establishes, and the negative test that confirmed the
-assertion was worth making.
+scheduler, the C library's string functions, its system-call wrappers and its
+heap — each with the procedure, what it establishes, and the negative test that
+confirmed the assertion was worth making.
 
-**Section 12 is the first whose subject is not the kernel**, and Section 13 the
-second. Both are here rather than in a document of their own because the
-procedure is this one: the kernel asserts them at boot, and `make verify` reads
-the verdict out of the serial log. **Section 13 is the only one in this document
-whose subject the kernel cannot call at all**, and Section 13.1 is what is done
-about that.
+**Section 12 is the first whose subject is not the kernel**, Section 13 the
+second and Section 14 the third. All three are here rather than in a document of
+their own because the procedure is this one: the kernel asserts them at boot, and
+`make verify` reads the verdict out of the serial log. **Sections 13 and 14 have
+subjects the kernel cannot call at all**, and Sections 13.1 and 14.1 are what is
+done about that — Section 14's subject dividing into a half that can be called
+and a half that cannot, which is why that test is in two pieces.
 
 **The other three**: [`TESTING.md`](TESTING.md) is how the machine is tested and
 in which environments; [`TESTING-GRAPHICS.md`](TESTING-GRAPHICS.md) is the
@@ -1126,3 +1127,137 @@ composed it: the name was fetched by one system call and written by another, bot
 made through the bytes `libc/syscall/invoke.asm` ships, by a program executing at
 privilege level 3 in an address space of its own. Every other line between the
 first and the last is a failure, each naming the property that failed.
+
+---
+
+## 14. Verification of the C library's heap, and of the break beneath it
+
+**Sub-task**: 7.3. **Design**: [`../design/LIBC.md`](../design/LIBC.md), Section
+9, whose Section 9.4 holds the two tables pairing every assertion with the silent
+failure it exists to catch. **Test**:
+[`../../kernel/test/verify_heap.c`](../../kernel/test/verify_heap.c).
+
+### 14.1 The difficulty this section exists for
+
+The same one Section 13.1 describes, and one more of its own.
+
+**The kernel cannot execute `SYSCALL`.** `brk` is a system call, so every
+property of it has to be asserted by something that may make one — a program at
+privilege level 3, composed by hand, because there is no compiler to produce one
+until sub-task 7.5.
+
+**But the allocator above it is not a system call**, and asserting it through a
+program would be asserting it through the one thing that cannot be run. So the
+sub-task was built with the seam named:
+[`../../libc/include/heap.h`](../../libc/include/heap.h) declares
+`OxysHeapExtend`, which is the whole of what the allocator knows about the
+machine beneath it, and `OxysHeapAdopt`, by which a caller gives the heap a
+region it obtained itself. The kernel's self-test gives it sixty-four kibibytes
+and exercises the policy directly. **What runs is the code the library ships**,
+not a reconstruction of it and not a copy.
+
+**`OxysHeapAdopt` is not a test hook**, which matters to whether the arrangement
+is honest. A program with a statically reserved arena, or one running before a
+break exists, has the same need and no other way to meet it; the self-test is
+merely its first caller.
+
+### 14.2 What `make verify` asserts
+
+**Of the policy**, by ordinary calls against the adopted region:
+
+- A null region and a region too small for one block are refused, and a refused
+  region is not counted.
+- An adopted region becomes exactly one free block of exactly its own size.
+- Two requests of zero bytes return two different pointers, neither null.
+- Every pointer returned is a multiple of sixteen, which is
+  `_Alignof(max_align_t)` upon this architecture.
+- Three allocations keep three distinct patterns, which is what distinguishes
+  disjoint storage from merely distinct addresses.
+- **Everything released leaves the heap as it began** — one block, one free
+  block, the same available bytes, the same largest request — with the releases
+  performed out of order so that both directions of coalescing must work.
+- `free(NULL)` is neither a release nor a refusal; a pointer that is not an
+  allocation is refused; a block released twice is released once and refused
+  once.
+- `realloc` grows in place where the next block is free, moves and carries the
+  contents where it is not, shrinks without moving, and refuses a pointer that is
+  not an allocation with `EINVAL`.
+- `calloc` clears a block that was **dirtied and released**, and refuses a count
+  and a size whose product would wrap.
+- A request of `SIZE_MAX` is refused by the arithmetic, without the heap asking
+  the system for anything.
+- The census balances, and the heap never asked the system for memory at all.
+
+**Of the break**, by a program at privilege level 3 that the test composes:
+
+1. `brk(0)`, which reports the break. Kept in `RBX`.
+2. `version(break, 64)`, which **must fail with `EFAULT`**.
+3. `brk(break + 4096)`, whose *difference* from `RBX` is summed.
+4. `version(break, 64)`, which now succeeds.
+5. `write(1, break, that length)`, which reads it back into the log.
+6. `write(1, newline, 1)`.
+7. `brk(break)`, giving the page up.
+8. `version(break, 64)`, which **must fail with `EFAULT` again**.
+9. `brk(0)`, which must report where it began.
+10. `exit(sum)`.
+
+and then, of what came back: that exactly ten calls reached the dispatcher; that
+the program ended and its process is marked ended; that the sum is exactly what
+the kernel computes it must be from its own version string; and — independently
+of anything the program said — that the kernel recorded one growth, one shrink,
+and no page left mapped by either.
+
+**Steps 2 and 8 are the two that matter most.** Every other assertion here would
+pass against a `brk` that reported an address without mapping anything, or that
+shrank a number and left the mapping. Those two are the ones that fail.
+
+### 14.3 The negative tests
+
+Fourteen defects were inserted and removed;
+[`../design/LIBC.md`](../design/LIBC.md), Section 9.7, holds the table of what
+each run said. Twelve were caught. **Two were not**, and both are recorded rather
+than explained away:
+
+- **The undo of a failed growth** was removed and nothing reported it. No test
+  here can exhaust the frame allocator, which is the only thing that makes a
+  growth fail part way; asserting it needs a way to make `FrameAllocate` fail on
+  demand, which this kernel has not got. Section 14.4.
+- **A redundant size check in `OxysHeapAdopt`** was removed and nothing reported
+  it — correctly, because a second check made later rejects strictly more. The
+  code was deleted rather than kept, which is the outcome a negative test is
+  supposed to be able to produce and rarely does.
+
+### 14.4 What this verification cannot establish
+
+- **The two halves joined.** `OxysBrk`, `OxysSbrk` and `OxysHeapExtend` are
+  compiled into this image and cannot be called from it, exactly as Section 13.4
+  records of the seven wrappers before them. The first run of the whole path is
+  sub-task 7.5.
+- **A growth that fails part way.** Section 14.3.
+- **A heap page arriving unzeroed.** The composed program has no comparison
+  instruction and no branch, so it cannot read a byte and judge it. What *is*
+  asserted is the allocator's own clearing, by a `calloc` upon a block that was
+  deliberately soiled first.
+- **Anything under concurrent use.** There is no locking in the allocator and
+  there are no userland threads to need one.
+
+### 14.5 Reading the log
+
+```
+Heap: asserting the C library's allocator and the break beneath it.
+  The allocator handled 16 allocation(s), 16 release(s), 3 resize(s), 3 refusal(s); 18 split(s) and 18 join(s).
+  A program at privilege level 3 reports, from a page it asked the kernel for: Oxys-OS unreleased
+Heap self-test passed.
+```
+
+**The third line is the point of the whole section**, as the middle line is in
+Section 13.5. The bytes it carries were written by the kernel into a page that
+did not exist when the program started, at an address the program asked for and
+the kernel granted, and were read back out of that page by the program itself.
+Every other line between the first and the last is a failure, each naming the
+property that failed.
+
+The counts upon the second line are not assertions and are worth reading beside
+them: eighteen splits and eighteen joins is a heap that gave back everything it
+divided, which is the same fact the final assertion states and is visible without
+knowing that it is being asserted.

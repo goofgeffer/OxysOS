@@ -902,6 +902,102 @@ void PagingMapPageIn(PhysicalAddress root, VirtualAddress virtual_address,
     }
 }
 
+/*
+ * Withdraws a 4 KiB mapping from a hierarchy and reports the frame it named.
+ *
+ * The frame is returned rather than released, because this function cannot know
+ * whether the caller is finished with it: a mapping withdrawn from one hierarchy
+ * may be the last reference to its frame or may be one of several, and only the
+ * caller knows which operation it is performing. Releasing here would make the
+ * function unusable for anything but the one case, and — worse — would make the
+ * commoner case look correct while freeing a frame another address space is
+ * still translating through.
+ *
+ * FRAME_ALLOCATION_FAILED is returned where nothing was mapped. That is not a
+ * failure: a caller withdrawing a range it believes it owns may meet a page it
+ * never established, and a caller that treated the answer as a frame would free
+ * frame zero.
+ *
+ * A large page is refused with a panic rather than unmapped, for the reason
+ * PagingUnmapKernelPage gives: a 2 MiB mapping cannot be withdrawn one 4 KiB
+ * page at a time, and nothing in this kernel establishes one in the half of the
+ * address space this function is called upon.
+ */
+PhysicalAddress PagingUnmapPageIn(PhysicalAddress root, VirtualAddress virtual_address)
+{
+    uint64_t *entries;
+    uint64_t entry;
+    PhysicalAddress table;
+    PhysicalAddress frame;
+
+    entries = PagingTableAt(root);
+    entry = entries[PagingLevel4Index(virtual_address)];
+
+    if ((entry & PAGE_ENTRY_PRESENT) == 0U)
+    {
+        return FRAME_ALLOCATION_FAILED;
+    }
+
+    table = entry & PAGE_ENTRY_ADDRESS_MASK;
+    entries = PagingTableAt(table);
+    entry = entries[PagingLevel3Index(virtual_address)];
+
+    if ((entry & PAGE_ENTRY_PRESENT) == 0U)
+    {
+        return FRAME_ALLOCATION_FAILED;
+    }
+
+    if ((entry & PAGE_ENTRY_LARGE) != 0U)
+    {
+        KernelPanic("An attempt was made to unmap a page within a large mapping.");
+    }
+
+    table = entry & PAGE_ENTRY_ADDRESS_MASK;
+    entries = PagingTableAt(table);
+    entry = entries[PagingLevel2Index(virtual_address)];
+
+    if ((entry & PAGE_ENTRY_PRESENT) == 0U)
+    {
+        return FRAME_ALLOCATION_FAILED;
+    }
+
+    if ((entry & PAGE_ENTRY_LARGE) != 0U)
+    {
+        KernelPanic("An attempt was made to unmap a page within a large mapping.");
+    }
+
+    table = entry & PAGE_ENTRY_ADDRESS_MASK;
+    entries = PagingTableAt(table);
+    entry = entries[PagingLevel1Index(virtual_address)];
+
+    if ((entry & PAGE_ENTRY_PRESENT) == 0U)
+    {
+        return FRAME_ALLOCATION_FAILED;
+    }
+
+    frame = entry & PAGE_ENTRY_ADDRESS_MASK;
+    entries[PagingLevel1Index(virtual_address)] = 0U;
+
+    /*
+     * The intermediate structures are left standing. They describe a region the
+     * caller is very likely to use again — a heap that shrank is a heap that will
+     * grow — and releasing a page table because its last entry went empty would
+     * mean allocating one again upon the next byte asked for. They are released
+     * with the address space, by AddressSpaceDestroy, which is the one moment
+     * nothing can ask for them back.
+     *
+     * The invalidation is performed only where this hierarchy is the active one,
+     * for the reason PagingMapPageIn gives: a hierarchy CR3 does not name has no
+     * cached translation to discard.
+     */
+    if (root == PagingActiveTable)
+    {
+        PagingInvalidate(virtual_address);
+    }
+
+    return frame;
+}
+
 void PagingInvalidatePage(VirtualAddress address)
 {
     PagingInvalidate(address);

@@ -243,6 +243,24 @@ void KernelVerifyString(void);
  */
 void KernelVerifyWrappers(void);
 
+/*
+ * Sub-task 7.3: the C library's heap, and the `brk` system call beneath it.
+ *
+ * Two halves again, and the division is the one the sub-task itself has. The
+ * allocator's policy is ordinary C — it calls nothing that can fail for a reason
+ * outside the C language — so it is asserted by giving it a region directly
+ * through OxysHeapAdopt and exercising malloc, calloc, realloc and free against
+ * it, which asserts the code the library ships rather than a description of it.
+ * The break beneath the policy is a system call and cannot be executed by this
+ * kernel, so it is asserted by a program at privilege level 3 which grows its
+ * heap, has the kernel write into the page it gained, reads it back, gives the
+ * page up, and confirms that the address is no longer one it may name.
+ *
+ * It runs after the wrapper test because it depends upon everything that test
+ * depends upon and upon the wrappers besides.
+ */
+void KernelVerifyHeap(void);
+
 /* Phases 3 and 4: the remaining devices. */
 void KernelVerifyPit(void);
 void KernelVerifyKeyboard(void);

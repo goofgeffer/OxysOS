@@ -3,12 +3,13 @@
 /*
  * File: libc/include/syscall.h
  * Purpose: Declares the C library's system-call wrappers — one for each of the
- *          seven calls <oxys/syscall_abi.h> numbers — together with the raw
+ *          eight calls <oxys/syscall_abi.h> numbers — together with the raw
  *          invocation they are built upon and the translation that turns a
  *          kernel result into a library result and an errno.
  * Key definitions: OxysSyscallInvoke0, OxysSyscallInvoke1, OxysSyscallInvoke2,
  *          OxysSyscallInvoke3, OxysSyscallResult, OxysWrite, OxysTicks,
- *          OxysVersion, OxysFork, OxysExecve, OxysExit, OxysWait.
+ *          OxysVersion, OxysFork, OxysExecve, OxysExit, OxysWait, OxysBrk,
+ *          OxysSbrk.
  * References:
  *   - kernel/abi/oxys/syscall_abi.h: the call numbers, the failure results and
  *     the register convention. This header declares symbols; that one declares
@@ -27,7 +28,7 @@
  *
  * Why the names are this project's and not POSIX's.
  *
- * Five of the seven calls have a POSIX name that means very nearly this — write,
+ * Five of the first seven calls have a POSIX name that means very nearly this — write,
  * fork, execve, _exit, wait — and none of the five means exactly it. This
  * execve refuses an argument vector because there is no convention yet fixed for
  * where a program finds one; this wait takes no process identifier and no option
@@ -106,7 +107,7 @@ int64_t OxysSyscallInvoke3(uint64_t number, uint64_t first, uint64_t second,
 int64_t OxysSyscallResult(int64_t result);
 
 /* -------------------------------------------------------------------------
- * The seven calls.
+ * The seven calls of sub-task 7.2.
  * ------------------------------------------------------------------------- */
 
 /*
@@ -169,5 +170,43 @@ _Noreturn void OxysExit(int64_t status);
  * and to EFAULT where the status has nowhere this program may write it.
  */
 int64_t OxysWait(int64_t *status);
+
+/* -------------------------------------------------------------------------
+ * The eighth call, of sub-task 7.3, and the classic spelling above it.
+ * ------------------------------------------------------------------------- */
+
+/*
+ * Moves the program's break — the address one past the last byte of its heap —
+ * to the given address, and returns where it stands afterwards.
+ *
+ * A null argument reports the break rather than moving it, which is how a
+ * program discovers its own heap before it has grown one. That is the kernel's
+ * SYSCALL_BREAK_QUERY, spelled here as the null pointer because a null pointer is
+ * what a C caller has to hand and the two are the same value.
+ *
+ * Returns -1 with errno set to ENOMEM where the address is beyond what the
+ * kernel will map, or where a page of it could not be had; and to EINVAL where
+ * it lies below the heap's first byte. **Upon failure the break has not moved**,
+ * including a growth that ran out of frames half way: the kernel withdraws what
+ * it mapped rather than reporting a heap that is part there.
+ */
+int64_t OxysBrk(void *address);
+
+/*
+ * Moves the break by a relative amount and returns where it stood **before** the
+ * move, which is the address of the memory just obtained.
+ *
+ * This is the operation an allocator actually wants, and it is built here from
+ * OxysBrk rather than given a call of its own: the kernel has no need to know
+ * that a caller thinks in increments, and a second call number would be a second
+ * thing to agree about for no gain. An increment of zero reports the break
+ * without moving it.
+ *
+ * Returns (void *)-1 with errno set, for the reasons OxysBrk does. That is the
+ * failure value this function has to use rather than a null pointer: zero is a
+ * plausible answer for nothing at all, whereas no break this kernel establishes
+ * can be the greatest representable address.
+ */
+void *OxysSbrk(intptr_t increment);
 
 #endif /* OXYS_LIBC_SYSCALL_H */

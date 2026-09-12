@@ -118,6 +118,38 @@ Every page is zeroed, for the reason [`EXECUTABLE.md`](EXECUTABLE.md), Section
 5.3 gives: a frame arrives holding whatever its last owner left in it, and a
 stack is the first thing a program reads.
 
+### 5.3 The heap, of sub-task 7.3
+
+Sub-task 7.3 gave the process control block a third extent beside the image and
+the stack: **the break**, being the address one past the last byte of the region
+a program may use for a heap, and the address at which that region begins.
+
+It is recorded here and not in the address space for the reason the other two
+are — an address space is a paging hierarchy and cannot say what it maps or why —
+and it differs from both in that a *program* decides it. `break_start` is fixed
+when the image is loaded and never moves; `break_current` is what the program has
+asked for, and `SYSCALL_BRK` is the only thing that changes it.
+
+Three consequences fall to this file rather than to the call:
+
+- **`ProcessEstablishBreak` is called whenever the image changes and at no other
+  time** — once when a program is loaded and again when `execve` replaces it. A
+  break carried across an `execve` names an address derived from a program that
+  no longer exists, and the new image being smaller, that address may lie within
+  the new program's own `.bss`.
+- **A process with no image gets no heap.** Deriving one from an `image_highest`
+  of zero would place the break in the lowest page of the address space, which is
+  the page deliberately left unmapped so that a null pointer dereference faults.
+- **A forked child inherits both bounds and not merely the first.** The pages
+  between them were cloned like any other, so copying only `break_start` would
+  leave a child whose heap holds its parent's data and whose break says it holds
+  nothing — after which the child's first growth maps a fresh frame over a page
+  it was still using.
+
+The placement and the guard page beneath it are
+[`MEMORY-LAYOUT.md`](MEMORY-LAYOUT.md), Section 15; the call itself is
+[`LIBC.md`](LIBC.md), Section 9.2.
+
 ## 6. Identifiers are numbers, not indices
 
 A slot in a table is reused the moment its occupant is destroyed. An identifier
@@ -710,7 +742,10 @@ part of the kernel wrote.
 8. **The user stack does not grow.** Sixteen pages, mapped at creation. Growing
    one on demand means faulting below it and deciding whether the fault is a
    stack that wants to grow or a program that has gone wrong, which needs the
-   extent record this sub-task introduces and a policy it does not have.
+   extent record this sub-task introduces and a policy it does not have. **The
+   heap of sub-task 7.3 does grow**, and it is the counter-example that shows why
+   the stack does not: a heap grows because a program *asks*, by a system call
+   naming exactly how far, and nothing has to guess what a fault meant.
 9. **A child runs only when its parent waits for it.** Section 13.2. A parent
    that forks and never waits is a child that never runs, and a parent that ends
    before waiting leaves its child in the table with a parent identifier naming

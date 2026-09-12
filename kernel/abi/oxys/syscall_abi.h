@@ -8,10 +8,10 @@
  *          judged against — and nothing of the kernel's implementation of it.
  * Key definitions: SYSCALL_ARGUMENT_MAXIMUM, SYSCALL_WRITE, SYSCALL_TICKS,
  *          SYSCALL_VERSION, SYSCALL_FORK, SYSCALL_EXECVE, SYSCALL_EXIT,
- *          SYSCALL_WAIT, SYSCALL_COUNT, SYSCALL_OK, SYSCALL_ENOSYS,
- *          SYSCALL_EFAULT, SYSCALL_EINVAL, SYSCALL_EBADF, SYSCALL_ECHILD,
- *          SYSCALL_ENOENT, SYSCALL_ENOMEM, SYSCALL_PATH_MAXIMUM,
- *          SYSCALL_USER_LIMIT.
+ *          SYSCALL_WAIT, SYSCALL_BRK, SYSCALL_COUNT, SYSCALL_OK,
+ *          SYSCALL_ENOSYS, SYSCALL_EFAULT, SYSCALL_EINVAL, SYSCALL_EBADF,
+ *          SYSCALL_ECHILD, SYSCALL_ENOENT, SYSCALL_ENOMEM,
+ *          SYSCALL_PATH_MAXIMUM, SYSCALL_USER_LIMIT, SYSCALL_BREAK_QUERY.
  * References:
  *   - Intel 64 and IA-32 Architectures Software Developer's Manual, Volume 2B,
  *     "SYSCALL" and "SYSRET": the instruction places the address of the
@@ -102,7 +102,41 @@
 #define SYSCALL_EXECVE  4U
 #define SYSCALL_EXIT    5U
 #define SYSCALL_WAIT    6U
-#define SYSCALL_COUNT   7U
+
+/*
+ * The call of sub-task 7.3, by which a program asks for memory.
+ *
+ * It moves the *break* — the address one past the last byte of the region a
+ * program may use for a heap — and returns where the break stands afterwards.
+ * An argument of SYSCALL_BREAK_QUERY moves nothing and reports where it stands
+ * now, which is how a program discovers its heap before it has grown one.
+ *
+ * It is numbered eighth for the reason the four above are numbered after the
+ * three that preceded them: a number already handed to a program is a number
+ * that must not change.
+ *
+ * **This call returns the new break and not the old one, and a failure is a
+ * negative result.** Kernels of this lineage traditionally return the break as
+ * it stands whether or not the request succeeded, which obliges every caller to
+ * compare the result against what it asked for and to make a second call to find
+ * out what it has. A caller that omits the comparison — and the comparison is
+ * easy to omit, the result being a plausible address either way — believes it
+ * owns memory that was never mapped, and discovers otherwise at some later
+ * instruction that touches it. Every other call of this kernel reports a failure
+ * as a negative result, and this one does too.
+ */
+#define SYSCALL_BRK     7U
+#define SYSCALL_COUNT   8U
+
+/*
+ * The argument that asks where the break stands rather than moving it.
+ *
+ * Zero is not an address a program could ever want its break at — the lowest
+ * page of every address space is deliberately unmapped, so that a null pointer
+ * dereference faults — which is what makes it free to carry a second meaning
+ * without an argument of its own to say which meaning was intended.
+ */
+#define SYSCALL_BREAK_QUERY UINT64_C(0)
 
 /*
  * The results a call may fail with.

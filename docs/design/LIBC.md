@@ -2,7 +2,7 @@
 <!-- SPDX-License-Identifier: CC0-1.0 -->
 # The C Library
 
-**Phase**: 7, sub-tasks 7.1 and 7.2, of [`../project/PLAN.md`](../project/PLAN.md).
+**Phase**: 7, sub-tasks 7.1, 7.2 and 7.3, of [`../project/PLAN.md`](../project/PLAN.md).
 
 **Sub-task 7.1** is Sections 2 to 7. Section 2 is the division of the system-call
 header, which is not part of 7.1 but was required to happen before 7.2 and is
@@ -15,6 +15,12 @@ presently compiled into the kernel.
 **Sub-task 7.2** is Section 8: the system-call wrappers, the `errno` they set,
 and `strerror`. Section 8.7 is the negative test that found the first version of
 its assertion worthless, and is the reason that assertion is shaped as it is.
+
+**Sub-task 7.3** is Section 9: the heap, the `brk` system call beneath it, and
+the division between the two — Section 9.1 — that is what makes either of them
+assertable. Section 9.4 holds the two tables of assertions and Section 9.7 the
+fourteen negative tests, of which one found a limitation and one found code that
+did nothing.
 
 **Authority**: `PROJECT_GUIDELINES.md`, Sections 2, 3, 4 and 6; and
 [`../../LICENSING.md`](../../LICENSING.md), Section 2.1, which named the division
@@ -34,16 +40,25 @@ whose design is [`PRIVILEGE.md`](PRIVILEGE.md). The wrappers of Section 8 are
 [`../../libc/include/errno.h`](../../libc/include/errno.h),
 [`../../libc/syscall/invoke.asm`](../../libc/syscall/invoke.asm),
 [`../../libc/syscall/result.c`](../../libc/syscall/result.c) and
-[`../../libc/syscall/calls.c`](../../libc/syscall/calls.c). The assertions are
-[`../../kernel/test/verify_string.c`](../../kernel/test/verify_string.c) and
-[`../../kernel/test/verify_wrappers.c`](../../kernel/test/verify_wrappers.c).
+[`../../libc/syscall/calls.c`](../../libc/syscall/calls.c). The heap of Section 9
+is [`../../libc/include/stdlib.h`](../../libc/include/stdlib.h),
+[`../../libc/include/heap.h`](../../libc/include/heap.h),
+[`../../libc/stdlib/heap.c`](../../libc/stdlib/heap.c) and
+[`../../libc/stdlib/system.c`](../../libc/stdlib/system.c), with the kernel's
+half in `SyscallDoBrk` and `ProcessSetBreak`. The assertions are
+[`../../kernel/test/verify_string.c`](../../kernel/test/verify_string.c),
+[`../../kernel/test/verify_wrappers.c`](../../kernel/test/verify_wrappers.c) and
+[`../../kernel/test/verify_heap.c`](../../kernel/test/verify_heap.c), the last
+two composing their programs with
+[`../../kernel/test/program.c`](../../kernel/test/program.c).
 
 **Specifications**: ISO/IEC 9899:2011, Section 7.24 (string handling), Section
-7.5 (`<errno.h>`) and Section 4, paragraph 6 (what a freestanding implementation
-must provide); System V Application Binary Interface, AMD64 supplement, Section
-3.1.2 (the LP64 model) and Section 3.2.3 (the argument registers Section 2
-departs from in one place); Intel 64 and IA-32 Architectures Software Developer's
-Manual, Volume 2B, "SYSCALL".
+7.5 (`<errno.h>`), Section 7.22.3 (the memory management functions), Section
+6.2.8 (fundamental alignment) and Section 4, paragraph 6 (what a freestanding
+implementation must provide); System V Application Binary Interface, AMD64
+supplement, Section 3.1.2 (the LP64 model) and Section 3.2.3 (the argument
+registers Section 2 departs from in one place); Intel 64 and IA-32 Architectures
+Software Developer's Manual, Volume 2B, "SYSCALL".
 
 ## 1. What this sub-task is, and what it is not
 
@@ -334,11 +349,16 @@ and `KernelVerifyString` calls them, and that is the whole of the arrangement.
 Three things make it honest rather than expedient:
 
 1. **The kernel does not call them.** No kernel translation unit is compiled
-   against `libc/include`. The single exception is
-   `kernel/test/verify_string.c`, which is named by an explicit rule in the
-   `Makefile` — so the exception is one line in one file, and a kernel source
-   that tried to include `<string.h>` would fail to compile rather than quietly
-   acquiring a dependency upon the userland.
+   against `libc/include`. The exceptions are the self-tests that assert this
+   library — `kernel/test/verify_string.c` at sub-task 7.1,
+   `kernel/test/verify_wrappers.c` at 7.2 and `kernel/test/verify_heap.c` at 7.3
+   — each named by an explicit rule in the `Makefile`, so the exception is three
+   named lines rather than a rule about a directory, and a kernel source that
+   tried to include `<string.h>` would fail to compile rather than quietly
+   acquiring a dependency upon the userland. **A pattern over `kernel/test/`
+   would have been shorter and is deliberately not written**: it would put every
+   future self-test in reach of the userland's headers whether or not it
+   asserted the userland.
 2. **The image already carries code that is there to be asserted.** Every file
    in `kernel/test/` is in the image for the same reason, and has been since
    Phase 2.
@@ -638,3 +658,385 @@ passed as well.
 both were defects in the one file the test was written for.** That is the ordinary
 yield of this discipline, and it is recorded at length for the same reason
 Section 5.1 is: a passing run cannot report a test that does not test.
+
+---
+
+## 9. Sub-task 7.3: the heap, and the break beneath it
+
+**Phase**: 7, sub-task 7.3, of [`../project/PLAN.md`](../project/PLAN.md).
+
+**What it adds**: the four memory management functions of ISO/IEC 9899:2011,
+Section 7.22.3 — `malloc`, `calloc`, `realloc` and `free` — above an allocator of
+this project's own; the `brk` system call by which a program asks this kernel for
+memory, which is the eighth call the kernel implements and the first one added
+since Phase 6; and the two wrappers that reach it.
+
+**What it does not add**: any way for a program to be built, still. There is no
+`crt0`, no archive and no user-mode compilation; those remain sub-task 7.5, and
+Section 7 governs how this is compiled and asserted exactly as it governs 7.1 and
+7.2. Nothing in this system allocates yet — the heap exists for the things that
+will, beginning with the formatted output of sub-task 7.4.
+
+**Implementation**: [`../../libc/include/stdlib.h`](../../libc/include/stdlib.h),
+[`../../libc/include/heap.h`](../../libc/include/heap.h),
+[`../../libc/stdlib/heap.c`](../../libc/stdlib/heap.c) and
+[`../../libc/stdlib/system.c`](../../libc/stdlib/system.c) on the library's side;
+`SYSCALL_BRK` in
+[`../../kernel/abi/oxys/syscall_abi.h`](../../kernel/abi/oxys/syscall_abi.h),
+`SyscallDoBrk` in [`../../kernel/cpu/syscall.c`](../../kernel/cpu/syscall.c) and
+`ProcessSetBreak` in [`../../kernel/proc/process.c`](../../kernel/proc/process.c)
+on the kernel's. The assertion is
+[`../../kernel/test/verify_heap.c`](../../kernel/test/verify_heap.c), which
+composes its program with
+[`../../kernel/test/program.c`](../../kernel/test/program.c).
+
+**Specifications**: ISO/IEC 9899:2011, Section 7.22.3 (the memory management
+functions), Section 6.2.8 (fundamental alignment), Section 6.5, paragraph 6
+(the effective type of storage with no declared type), Section 6.5.8, paragraph
+5 (where relational comparison of pointers is defined) and Section 6.3.2.3,
+paragraph 5 (the conversion between a pointer and an integer).
+
+### 9.1 The division, and why the sub-task has one
+
+A heap is two things that fail differently.
+
+**The policy** — first fit, splitting, coalescing, the arithmetic of `realloc` —
+is ordinary C. It calls nothing that can fail for a reason outside the C
+language, it runs anywhere C runs, and it is wrong in ways an assertion can see:
+a block one alignment too small, a join that only ever works in one direction, a
+`realloc` that copies when it needed only to grow.
+
+**The source** — where the memory comes from — is a system call, and **this
+kernel cannot execute one**. Section 8.4 records the obstacle in full: `SYSCALL`
+executes at any privilege level, but the `SYSRET` that ends the kernel's handling
+of it returns to privilege level 3 unconditionally, so a kernel that called
+`OxysSbrk` would leave its own entry path as a user program upon a stack that is
+not a user program's.
+
+So the two are named apart. [`../../libc/include/heap.h`](../../libc/include/heap.h)
+declares `OxysHeapExtend`, which is the whole of what the allocator knows about
+the machine beneath it, and `OxysHeapAdopt`, by which a caller gives the heap a
+region it obtained itself. The policy is asserted by giving it a region and
+exercising it; the system call is asserted from the other side, by a program at
+privilege level 3. What joins them is
+[`../../libc/stdlib/system.c`](../../libc/stdlib/system.c), which is six lines.
+
+**`OxysHeapAdopt` is not a test hook.** A program with a statically reserved
+arena, or one running before a break exists, has the same need and no other way
+to meet it. The self-test is merely its first caller, and the design would carry
+the function whether or not there were a test.
+
+### 9.2 The kernel's half: `brk`
+
+A program's **break** is the address one past the last byte of the region it may
+use for a heap. `SYSCALL_BRK` moves it and returns where it stands afterwards;
+`SYSCALL_BREAK_QUERY`, which is zero, reports it without moving it — and is how
+a program discovers its own heap, the address being derived from the image the
+loader placed and a program having no view of its own program headers.
+
+**Where the heap begins.** Immediately above the program's image, rounded up to a
+page and then advanced by one more. That extra page is a guard and is not
+decoration: the image's highest address is the end of a program's `.bss`, so a
+program that walks off the end of its last static array would otherwise walk into
+the first byte of its own heap, where it would find memory that is mapped,
+writable and holding an allocator's bookkeeping. One unmapped page turns that
+into a fault at the instruction that caused it.
+
+**Three departures from the traditional call**, each answering a way the
+traditional one is misused.
+
+1. **It returns the new break, and a failure is negative.** Kernels of this
+   lineage return the break as it stands whether or not the request succeeded,
+   which obliges every caller to compare the result against what it asked for and
+   to make a second call to discover what it has. The comparison is easy to omit,
+   the result being a plausible address either way — and a caller that omits it
+   believes it owns memory that was never mapped. Every other call of this kernel
+   reports a failure as a negative result and this one does too.
+2. **A request below where the heap begins is refused rather than clamped.** A
+   program that asked for such a break computed an address wrongly, and a kernel
+   that moved the request to the nearest legal value would leave it believing the
+   arithmetic was sound.
+3. **A growth that cannot be completed is undone.** `brk` maps a frame for every
+   page the region gains, and a machine may run out part way. A break left
+   between the two is a heap whose first pages are mapped and whose last are not,
+   which the program discovers at whichever byte it happens to touch first — far
+   from the request that failed. The pages mapped by a failed attempt are
+   therefore withdrawn again and the break is left where it was.
+
+**What it maps.** A zeroed, writable, user-accessible frame per page, eagerly.
+Zeroed for the reason the user stack is zeroed: a frame arrives holding whatever
+its last owner left in it, and an allocator is the one caller most likely to hand
+the bytes straight on without writing them first. Eagerly because there is no
+demand paging in this kernel; Section 9.6, limitation 3.
+
+**What bounds it.** `PROCESS_BREAK_MAXIMUM`, sixteen mebibytes. The bound is upon
+what one process may ask for and not upon what the machine has, and it exists
+because the mapping is eager: a program asking for its whole address space would
+otherwise consume every frame in the machine before the request was refused, and
+the refusal would arrive with nothing left to report it with.
+
+**Shrinking withdraws the mapping and releases the frame.** That required a
+primitive this kernel did not have — `AddressSpaceUnmapPage`, above
+`PagingUnmapPageIn` — which is the first operation here that takes a mapping away
+from a live address space. It returns the frame rather than releasing it,
+because whether the caller holds the last reference to it is something only the
+caller knows: a frame shared by a copy-on-write clone has more than one referrer,
+and a function that decided for its caller would free a frame another address
+space is still translating through. The intermediate paging structures are left
+standing, a heap that shrank being a heap that will grow.
+
+**`fork` and `execve`.** A child inherits both bounds of its parent's break, the
+pages between them having been cloned like any other. Copying only where the heap
+begins and letting the child start with an empty one would leave those pages
+mapped and unaccounted: the child would grow its break over memory it already
+had, and the growth would map a fresh frame over a page the program was still
+using. `execve` places the break anew from the image that replaced the old one,
+for the converse reason — a break carried across names an address derived from a
+program that no longer exists, and the new image being smaller, that address may
+lie within the new program's own `.bss`.
+
+### 9.3 The library's half: the allocator
+
+The heap is a set of blocks. Every block carries a thirty-two byte header giving
+its whole size and a mark saying whether it is free; the free ones are linked
+into a single list ordered by address. A request is met by the first block large
+enough, split where the remainder would itself be a block. A release marks the
+block free, inserts it at its place in the order, and joins it to whichever of
+its two neighbours lies against it. When nothing fits, the heap asks
+`OxysHeapExtend` for a region and makes a block of it.
+
+**First fit over an address-ordered list**, and not one of the three obvious
+alternatives:
+
+- **Not best fit.** It costs a walk of the whole list instead of a walk to the
+  first fit, and has been held since Knuth to fragment no less for the trouble:
+  the remainder it leaves is by construction the smallest possible, which is to
+  say the least likely ever to be usable again.
+- **Not a size-ordered list.** It makes a fit cheap and coalescing dear: joining
+  a released block to its neighbour requires knowing which block lies against it
+  *in memory*, which a list ordered by size cannot answer without boundary tags
+  beneath every block or a walk of the whole list.
+- **Not segregated free lists by size class.** That is what a heap under real
+  load wants, and this heap is under no load at all — nothing in this system
+  allocates yet. Choosing it now would mean writing several hundred lines against
+  an allocation profile that has never been measured, which is the judgement
+  Section 6, limitation 1, records about the string functions. The workload that
+  will justify measuring is a ported compiler, and this is one translation unit
+  to replace behind an interface four functions wide.
+
+The address ordering is what makes the release cheap where it matters: the walk
+that finds a released block's place in the list is the same walk that finds both
+of its neighbours, so coalescing costs nothing beyond the insertion it was going
+to perform anyway.
+
+**The order of the two joins is load-bearing.** The successor is absorbed first,
+so that a predecessor which also abuts absorbs a block that has already grown and
+three adjacent free blocks become one. The other order leaves the middle block
+merged backward and the successor stranded — a heap that fragments under exactly
+the pattern a heap meets most, a run of allocations released in the order they
+were made.
+
+**Four decisions about what the standard leaves open**:
+
+- **`malloc(0)` returns a distinct pointer, not a null one.** Section 7.22.3,
+  paragraph 1, makes the choice implementation-defined. The alternative is
+  unusable: a null pointer returned for a zero-sized request cannot be told apart
+  from a failure, and every correct program checks for null. Two such requests
+  return different pointers, which that paragraph does require — every allocation
+  must yield a pointer disjoint from any other object.
+- **A failure sets `errno`.** ISO C does not require it of `malloc` and Section
+  7.5, paragraph 3, permits it. It is done because every other way this library
+  reports a failure sets `errno`, and a caller should not have to know which
+  functions are the exception. `ENOMEM` for a request that cannot be met;
+  `EINVAL` where `realloc` is given something that is not an allocation, the
+  machine not having run out of anything.
+- **`free` of something that is not an allocation is defined as a refusal.**
+  Section 7.22.3.3, paragraph 2, makes it undefined behaviour, and this library
+  defines it: the header is examined for the mark the allocator wrote, and one
+  that does not carry it is left alone and counted. The marks are eight-byte
+  words and not a flag bit — `OXYSFREE` and `OXYSLIVE` in ASCII — because every
+  value of a flag byte is a valid answer and a header written over by an overrun
+  would say whatever the overrun left. That is what makes a double release a
+  refusal instead of a block upon the free list twice, after which two later
+  requests are met with the same memory and the failure appears in whichever of
+  the two callers writes second.
+- **The header is thirty-two bytes and does not overlay the payload.** The usual
+  practice is to carry the free-list link in the first bytes of the payload,
+  which halves the overhead. It is not done here because it makes the payload of
+  an allocated block and the link of a free one the same storage read through two
+  types, and `PROJECT_GUIDELINES.md`, Section 8, binds this project not to rely
+  upon behaviour it cannot point at a paragraph for. The cost is limitation 1
+  below rather than a silence.
+
+**Every comparison of two block addresses is performed upon `uintptr_t`.** ISO/IEC
+9899:2011, Section 6.5.8, paragraph 5, defines the relational operators only for
+pointers into the same array object, and the blocks of a heap are by construction
+not in one array — they lie in regions the system supplied at unrelated times.
+`first < second` upon two block pointers is therefore exactly the undefined
+behaviour Section 8 of the guidelines forbids, however obviously it works. The
+conversion to `uintptr_t` is *implementation-defined* by Section 6.3.2.3,
+paragraph 5, which is a different thing, and is defined by this implementation as
+the address.
+
+### 9.4 Verification
+
+`KernelVerifyHeap`, in
+[`../../kernel/test/verify_heap.c`](../../kernel/test/verify_heap.c), in two
+halves because the subject is.
+
+#### 9.4.1 The policy, asserted by calling it
+
+The allocator is given a sixty-four kibibyte arena by `OxysHeapAdopt` and
+exercised against it. What runs is the code the library ships, not a
+reconstruction of it.
+
+| Assertion | The failure it detects |
+| --------- | ---------------------- |
+| A null region, and a region too small for one block, are refused and are not counted | An adopted region that becomes a block smaller than its own header, after which every walk of the free list reads past the end of the region. |
+| An adopted region becomes exactly one free block of exactly its own size | A region whose head or tail is silently lost, which no later assertion about *changes* to the heap would notice. |
+| **Two requests of zero bytes return different pointers**, and both are not null | An allocator answering every zero-sized request with one shared address, which satisfies every other assertion here and violates 7.22.3, paragraph 1. |
+| Every pointer returned is a multiple of sixteen | An allocator whose header is not a whole number of alignments. Every payload after the first is then misaligned, and on this architecture nothing faults — the failure is a `long double` that is merely slow, until something is compiled that assumes otherwise. |
+| **Three allocations keep three distinct patterns** written into them | A split that left the second block overlapping the tail of the first. The addresses differ and the storage does not, so comparing addresses would pass. |
+| **Everything released leaves the heap as it began** — one block, one free block, the same available bytes, the same largest request | Any defect in the size arithmetic at all. A block one alignment too small or too large produces a heap that never returns to one block, however plausible each individual allocation looked. This is the only assertion here that a defect in splitting or joining cannot hide from. |
+| The release order for that assertion is not the allocation order | A coalescence that only ever works backward. Releasing in the order allocated gives every block a free predecessor and no free successor, so one join alone would pass. The middle block is released last, with a free neighbour upon each side. |
+| `free(NULL)` is neither a release nor a refusal | An allocator reporting an event that did not happen — 7.22.3.3, paragraph 2, makes it no action. |
+| A pointer that is not an allocation is refused | Storage the allocator does not own being linked into the free list and handed to the next caller. |
+| **A block released twice is released once and refused once** | The defect the marks exist for, and the one whose symptom appears furthest from its cause. |
+| **Growing where the next block is free does not move the allocation** | An allocator that is correct and quadratic: every program that reads something of unknown length then copies everything it has read at every step. Nothing but this assertion distinguishes the two. |
+| Growing past an allocated neighbour moves the block **and carries its contents** | A move that allocates and frees and forgets the copy — 7.22.3.5, paragraph 2. |
+| Shrinking does not move the block and gives the difference back | A `realloc` that answers every shrink with a fresh block and a copy. |
+| `realloc` of something that is not an allocation returns null with `EINVAL` | A refusal reported as `ENOMEM`, which sends a caller looking for memory pressure that is not there. |
+| **`calloc` clears a block that was dirtied and released**, not a fresh one | A `calloc` that never clears anything. Every page this kernel maps arrives zeroed, so it would pass upon a fresh heap and fail upon every heap a real program has. |
+| **A count and size whose product wraps is refused** | The one security property here. A wrapped product gives a small block for a large request; the caller writes the elements it asked for and the write runs off the end of a block the allocator believes is smaller than it is. Nothing can detect it afterwards. |
+| A request of `SIZE_MAX` is refused by the arithmetic and **without asking the system for anything** | An allocator that discovers an impossible size by trying to obtain it. |
+| The census balances — headers plus handed out plus free is exactly what was adopted | Any of the three being maintained by a path that forgot to. |
+| **The heap never asked the system for memory** | A change to this test that made it exhaust the arena. `OxysHeapExtend` executes `SYSCALL`, which this kernel cannot survive; the assertion is what states the constraint rather than the comment at the head of the file. |
+
+#### 9.4.2 The break, asserted by a program at privilege level 3
+
+A program is composed by hand — [`../../kernel/test/program.c`](../../kernel/test/program.c)
+emits the instructions — and the C library's own invocation block is copied into
+it, exactly as Section 8.4 arranges for the wrappers. It makes ten calls and ends
+with a status that is the sum of what nine of them returned. The sum is exact and
+the kernel computes what it must be from the same version string its own call
+copies.
+
+| Assertion | The failure it detects |
+| --------- | ---------------------- |
+| The break is reported, and a loaded program has one | A `brk` that answered zero, which is an address no program can use and which every program would take for a heap at the bottom of its address space. |
+| The heap begins a page above the image and upon a page boundary | A heap placed at the image's end, where an overrun of the program's last static object lands in the allocator's own bookkeeping. |
+| **`version` into the break fails with `EFAULT` before the growth** | A `brk` that reported an address it had not mapped. The program would then be told it owns memory that faults at the first byte it touches. |
+| **The growth returns exactly the address asked for** — the difference from where the break began is summed | A kernel returning the *old* break, which is what the traditional call does, and which is a plausible address the program cannot tell from success. |
+| `version` into the page succeeds, which means the page is mapped and **writable at privilege level 3** | A page mapped without the user bit, or without the writable bit. Either faults for the program and neither is visible to a kernel that only reads its own record of what it mapped. |
+| `write` reads the same bytes back, and they appear in the log | A page mapped writable and not readable — and, in passing, the one line in this boot log that came out of memory a program asked the kernel for. |
+| **`version` into the break fails with `EFAULT` again after the shrink** | A shrink that moved a number and left the mapping. The program keeps memory it gave back, and the frames are lost until the process ends. |
+| The break returns to where it began, asked twice — once as the shrink's result and once by a fresh query | A shrink that reported the address asked for without recording it. |
+| Exactly ten calls reached the dispatcher | An invocation whose call displacement was wrong. It would land in the middle of another routine, which within this block is still a valid instruction sequence and still returns. |
+| **The kernel recorded one growth, one shrink, and no page left mapped by either** | The same events from the kernel's side, independent of what the program reported. The last is the assertion that a shrink releases frames rather than merely forgetting about them. |
+
+### 9.5 The composer, and why two tests share one
+
+[`../../kernel/test/program.c`](../../kernel/test/program.c) is new at this
+sub-task and is not part of it. Sub-task 7.2 assembled a program by hand and this
+one needed a second; two copies of an instruction encoder is two places for a
+byte to be wrong, and the second copy would have been wrong in a way the first
+one's assertions could not see. The encoders are now one translation unit and
+each self-test holds only the program it means to run.
+
+It gained one thing neither copy had: **every write goes through a bounds check,
+and a refusal is recorded rather than reported at the call site.** A composer
+that ran off the end of its array would write into whatever the linker placed
+after it, and the failure would appear in an unrelated subsystem long after the
+self-test that caused it had reported success. Both tests now assert that nothing
+was refused.
+
+### 9.6 Limitations
+
+1. **The header is thirty-two bytes per allocation**, where sixteen would do. A
+   sixteen-byte request therefore costs forty-eight. Section 9.3 records the
+   reason — the smaller header requires the payload of an allocated block and the
+   free-list link of a released one to be the same storage read through two
+   types. The workload that would justify revisiting it is the same one that
+   would justify segregated free lists, and neither exists yet.
+2. **`aligned_alloc` is not implemented.** Section 7.22.3.1 requires it to honour
+   any alignment the implementation supports, and every extended alignment is
+   stricter than the sixteen bytes every block already has. Honouring one means
+   returning a pointer that is not at a fixed displacement from its own header,
+   which is the invariant `free` finds a block by and the one thing everything
+   else here depends upon. It arrives when something asks for it.
+3. **`brk` maps eagerly and there is no demand paging.** A program that moves its
+   break by a mebibyte gets a mebibyte of frames whether it touches them or not.
+   This is why `PROCESS_BREAK_MAXIMUM` exists, and it is the reason a heap here
+   costs what it asks for rather than what it uses.
+4. **A region is never given back to the system.** The break is a single boundary
+   and a heap may hold regions that are not the topmost, so `free` returns memory
+   to the free list and never to the kernel. A program's heap therefore only
+   grows. The usual answer is to release the topmost region when it becomes
+   wholly free, and it is not written because nothing has yet allocated enough
+   for it to matter.
+5. **The undo path of a failed growth is not asserted.** The negative test of
+   Section 9.7 removed it and every assertion passed: no test here exhausts the
+   frame allocator, which is the only thing that makes a growth fail part way.
+   Asserting it needs a way to make `FrameAllocate` fail on demand, which this
+   kernel has not got.
+6. **A heap page arriving unzeroed is not asserted either.** The kernel zeroes
+   every page `brk` maps, and the composed program has no way to read a byte and
+   compare it — it has no comparison instruction and no branch. What *is*
+   asserted is the allocator's own clearing, which is the half a program can be
+   harmed by twice over.
+7. **There is no locking.** There are no userland threads to contend with — the
+   same fact Section 8.6, limitation 1, records of `errno` — and a lock taken
+   against nothing is a lock nothing asserts. Every entry point of the allocator
+   needs one the day threads exist.
+8. **The typed wrappers `OxysBrk` and `OxysSbrk` are not asserted**, and neither
+   is `OxysHeapExtend`. They are compiled into this image and cannot be called
+   from it, exactly as limitation 2 of Section 8.6 records of the seven wrappers
+   before them. **Sub-task 7.5 closes this**, and it is the largest single thing
+   outstanding about this sub-task: it is where the two halves above are joined
+   and run together for the first time.
+9. **The whole of `<stdlib.h>` but Section 7.22.3 is absent** — the string
+   conversions, the pseudo-random sequence, the communication with the
+   environment, the searching and sorting, the integer arithmetic and the
+   multibyte conversions. Each arrives with the sub-task that needs it, and none
+   of them is needed by a heap.
+
+### 9.7 The negative tests, and the two that found something
+
+`PROJECT_GUIDELINES.md`, Section 2, and the practice of
+[`../project/TESTING-SYSTEM.md`](../project/TESTING-SYSTEM.md) require each
+assertion to be confirmed by a defect deliberately inserted. Fourteen were
+inserted and removed.
+
+| Defect inserted | What the run said |
+| --------------- | ----------------- |
+| `calloc` not clearing the block | `a cleared allocation was not all bits zero FAILED.` |
+| `calloc` not checking the product | `a count and size whose product wraps was met FAILED.`, and four more — the refused request having been met, the heap never returned to one block. |
+| `free` not checking the mark | `a pointer that is not an allocation was not refused FAILED.`, `a pointer that is not an allocation was released FAILED.`, **and then the boot did not complete**: the free list had a region's foreign storage upon it and the next walk left the heap. |
+| A shrink not withdrawing its pages | `the program's calls did not return what they had to return FAILED.` and `a page mapped by a growth survived the shrink that gave it back FAILED.` — the program's own view and the kernel's, disagreeing with the same defect. |
+| `HeapInsert` without the forward join | `a heap with nothing allocated is not the heap it started as FAILED.` and three more. |
+| `HeapSplit` leaving a remainder one alignment short | `releasing everything did not give back every byte FAILED.`, and the heap did not return to one block. |
+| `HeapAbsorbNext` never finding the next block | `growing into a free neighbour moved the allocation FAILED.` |
+| `brk` returning the old break rather than the new one | `the program's calls did not return what they had to return FAILED.` |
+| The heap placed without its guard page | `the heap begins without a guard page below it FAILED.` |
+| `HeapTake` not marking the block as handed out | Ten assertions, across four of the six phases. |
+| `OxysHeapAdopt` not checking the usable size | `a region smaller than one block was adopted FAILED.`, `a refused region was counted FAILED.`, and the boot did not complete. |
+| `SYSCALL_BRK` in the dispatch table and not in the switch | `the program's calls did not return what they had to return FAILED.` and the two counters — which is the case the `default` arm of that switch exists for, reported as `ENOSYS` rather than as the number the caller passed. |
+| A failed growth not being undone | **Nothing was reported.** Limitation 5. |
+| `OxysHeapAdopt` not checking `bytes` at its head | **Nothing was reported**, and the check was removed rather than kept. See below. |
+
+**The thirteenth found a limitation and the fourteenth found redundant code.**
+
+The fourteenth is the one worth recording. `OxysHeapAdopt` checked twice that a
+region was large enough: once against `bytes` at its head, and once against the
+usable size after the head and tail below an alignment had been taken off.
+Deleting the first changed nothing any assertion could see — and it could not,
+because the second rejects every region the first does and more besides: a region
+of a hundred bytes beginning sixty bytes before an alignment has forty usable
+ones, which the first check passes and the second does not. The first was
+therefore not a guard but a statement of the same intent in a place where it is
+not yet knowable, and it was deleted. **The check that survived is the one asked
+after the adjustment**, and the comment there now says why.
+
+The thirteenth is limitation 5 above, and is the ordinary yield of this
+discipline: an assertion that does not exist cannot be made to fail, and the only
+way to find out which ones those are is to try.
