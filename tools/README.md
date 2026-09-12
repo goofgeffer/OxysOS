@@ -18,7 +18,7 @@ as well as validating it — and is described beneath the table.
 | Script | What it checks | The defect that motivated it |
 | ------ | -------------- | ---------------------------- |
 | [`spdx.sh`](spdx.sh) | Every tracked file carries the SPDX licence tag that `LICENSING.md`, Section 1, assigns to its path. | `crypto/`, `net/` and `uefi/` stood with no licence at all from the day `LICENSING.md` was written. A table is authoritative and is not machine-readable, so the mapping held only for as long as somebody remembered it. |
-| [`check-docs.sh`](check-docs.sh) | Nine claims the corpus makes about itself and about the source, the ninth being the build register of [`builds.sh`](builds.sh). | `docs/design/SMP.md` was referenced by three source files before it existed; `CONCURRENCY.md` named five files as carrying a note that five of them did not carry; `STATUS.md` reported the wrong count of self-test assertions through two sub-tasks; and `PROJECT_GUIDELINES.md`, Section 3, went several phases describing a set of build targets that was no longer the set the `Makefile` had. |
+| [`check-docs.sh`](check-docs.sh) | Ten claims the corpus makes about itself and about the source, the tenth being the build register of [`builds.sh`](builds.sh). | `docs/design/SMP.md` was referenced by three source files before it existed; `CONCURRENCY.md` named five files as carrying a note that five of them did not carry; `STATUS.md` reported the wrong count of self-test assertions through two sub-tasks; and `PROJECT_GUIDELINES.md`, Section 3, went several phases describing a set of build targets that was no longer the set the `Makefile` had. |
 
 ## `builds.sh` — the register, and the one script here that writes a record
 
@@ -98,9 +98,17 @@ absent rather than failing obscurely.
    checked both ways: a target the guidelines do not describe, and a target the
    guidelines tell you to run that does not exist. The second is the worse of
    the two.
-8. **Stale forward references** — an advisory, not an error. A sub-task that
+8. **The architecture boundary.** Every `<oxys/arch/...>` header included by the
+   portable core — `kernel/mm/`, `proc/`, `fs/`, `block/`, `exec/`, `acpi/` and
+   `handoff/` — is one the check's own list records with a reason. It runs both
+   ways: an unrecorded crossing fails, and so does a recorded one that no longer
+   happens, a stale exemption being where things hide. `kernel/kernel.c` and
+   `kernel/test/` are out of scope, the first because it initialises every
+   subsystem and must name them and the second because a test of an architecture
+   subsystem is an architecture test.
+9. **Stale forward references** — an advisory, not an error. A sub-task that
    `PLAN.md` marks `Implemented`, still written about in the future tense.
-9. **The build register**, by calling `builds.sh check`: the schema of
+10. **The build register**, by calling `builds.sh check`: the schema of
    `docs/project/builds.tsv`, that its numbers are consecutive, that its
    constrained fields are drawn from their vocabularies, and that
    `docs/project/BUILDS.md`'s generated section is what the record renders to.

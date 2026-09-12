@@ -241,9 +241,31 @@ instructions that are plainly x86 — `sti; hlt` in the idle loop, `cli; hlt` in
 the termination guard, a `CR3` in a comment about why a switch does what it does.
 They were left where they are because extracting three instructions into an
 architecture shim would cost a layer of indirection to buy a boundary nothing is
-pressing against. They are named here so that the claim this section makes is the
-true one: the line is drawn at the file, and three files sit slightly on the
-wrong side of it.
+pressing against.
+
+**And the boundary is crossed more widely than that, which this section first
+understated.** It said the line was drawn at the file and three files sat
+slightly on the wrong side. Measured rather than asserted, the portable core
+includes `<oxys/arch/...>` headers **fourteen times**, across five files:
+`proc/process.c` six, `proc/sched.c` three, `exec/elf.c` three, and `mm/vmm.c`
+and `acpi/acpi.c` one each. `kernel/arch/README.md` lists them and grades them,
+the shallow ones — a spinlock, which every processor has in some form — apart
+from the deep, such as `process.c` writing `rsp0` into a task state segment,
+which is not a facility another processor has a different version of but a
+question it would not ask.
+
+So the honest statement of what this division achieves is the weaker one:
+**it groups the kernel by what a defect in it is answerable to, and it does not
+isolate the portable part.** The grouping is worth having on that ground alone —
+it is the ground Section 2.4 opens with — but the stronger claim is not yet
+earned and should not be made until the number above comes down.
+
+`tools/check-docs.sh`, Section 8, is what keeps it honest from here. The fourteen
+crossings are recorded with a reason apiece and checked in both directions, so a
+fifteenth fails `make lint` and so does an entry left behind when a crossing is
+removed. The debt can now only change deliberately, which is the property the
+prose alone never had — and which `drivers/` lacking it for three phases, at
+Section 2.3, is the cautionary case for.
 
 ### 2.5 The grouping of the header corpus and of the self-tests
 

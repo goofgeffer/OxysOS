@@ -50,8 +50,41 @@ Applied to the two subsystems that are now split across both trees:
 | — | `arch/x86_64/mm/paging.c` | Four levels, nine bits each, and the entry flags of Intel SDM Volume 3A, Table 4-15. Nothing of it survives a different hierarchy. |
 | — | `arch/x86_64/mm/addrspace.c` | Clones that hierarchy and reloads `CR3`. |
 | — | `arch/x86_64/mm/shootdown.c` | `INVLPG`, an inter-processor interrupt, and an end-of-interrupt owed to the Local APIC. |
-| `proc/process.c`, `proc/sched.c` | — | The process table, the run queues, the affinity mask and the quantum: policy, and portable. |
+| `proc/process.c`, `proc/sched.c` | — | The process table, the run queues, the affinity mask and the quantum. **Not portable as they stand** — see below. |
 | — | `arch/x86_64/proc/switch.asm` | Six named registers, a stack pointer, and `IRETQ`. |
+
+## What the left-hand column does not yet mean
+
+When this directory was created the row above said `proc/process.c` and
+`proc/sched.c` were "policy, and portable". **That was not true when it was
+written**, and nothing checked it. `process.c` includes six architecture headers
+and `sched.c` three; the whole portable core crosses the boundary fourteen times:
+
+| File | Reaches for |
+| ---- | ----------- |
+| `proc/process.c` | `gdt.h`, `tss.h`, `percpu.h`, `spinlock.h`, `paging.h`, `addrspace.h` |
+| `proc/sched.c` | `percpu.h`, `spinlock.h`, `interrupts.h` |
+| `exec/elf.c` | `paging.h`, `addrspace.h`, `syscall.h` |
+| `mm/vmm.c` | `paging.h` |
+| `acpi/acpi.c` | `paging.h` |
+
+Some of those are shallow and some are not. `sched.c` taking a spinlock is a
+dependency on a *facility* every processor has in some form; `process.c` writing
+`rsp0` into a task state segment when a thread becomes current is a dependency on
+**this** processor's mechanism for finding a kernel stack, and a port would not
+merely re-implement it, it would ask a different question.
+
+So the accurate claim is the weaker one: **this division groups the kernel by
+what a defect in it is answerable to, and it does not yet isolate the portable
+part.** Section 2.4 of `ARCHITECTURE.md` gives the reason the grouping is worth
+having on that weaker ground alone.
+
+**The fourteen crossings are now a list rather than an impression.**
+`tools/check-docs.sh`, Section 8, records each with its reason and fails
+`make lint` in both directions — when a file not on the list crosses the
+boundary, and when a file on it stops crossing and the entry is left behind. The
+number is therefore a debt that can only be paid down deliberately, which is the
+property the prose alone did not have.
 
 ## The six subdirectories of `x86_64/`
 

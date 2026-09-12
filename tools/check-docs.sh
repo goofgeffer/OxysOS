@@ -257,7 +257,92 @@ else
     done <<< "$guideline_targets"
 fi
 # ---------------------------------------------------------------------------
-# 8. Advisory: a sub-task that PLAN.md marks Implemented, still written about in
+# 8. The architecture boundary is crossed only where it is recorded.
+#
+# `kernel/arch/x86_64/` holds what could not survive a change of processor, and
+# `kernel/arch/README.md` claims the rest of `kernel/` is the part that could.
+# Nothing enforced that claim when the directory was created, and it was already
+# untrue on the day it was written: five files in the portable core included
+# `<oxys/arch/...>` headers.
+#
+# The defect this catches is a boundary that exists only in prose. A directory
+# division nothing checks is a claim that decays from the moment it is made, and
+# this project has the evidence: `drivers/` held the block layer for three
+# phases while its own README said it held device drivers, and that was found by
+# a person reading, which is the thing this script exists to stop relying upon.
+#
+# It is a **ratchet and not a prohibition**. The five crossings that exist are
+# listed below with the reason each is there, so the list is the debt written
+# down; the check fails when a file not on it crosses the boundary, and equally
+# when a file on it stops crossing and the entry is not removed. Both directions
+# matter, for the same reason the build-target check above runs both ways: a
+# stale allowlist entry is an exemption nobody needs, which is how an allowlist
+# becomes a place to hide things.
+#
+# The scope is the portable core alone. `kernel/kernel.c` is exempt because it
+# initialises every subsystem in dependency order and must therefore name every
+# subsystem; `kernel/test/` is exempt because a test of an architecture subsystem
+# is an architecture test; `drivers/` and `graphics/` are exempt because neither
+# claims to be portable.
+# ---------------------------------------------------------------------------
+section 'Architecture boundary'
+
+# path<TAB>header<TAB>why it is permitted
+architecture_crossings=$(cat <<'CROSSINGS'
+kernel/acpi/acpi.c	arch/mm/paging.h	Maps each firmware table for the duration of its parse and unmaps it afterwards.
+kernel/exec/elf.c	arch/mm/addrspace.h	Places an image's segments into an address space.
+kernel/exec/elf.c	arch/mm/paging.h	Reaches a target space's pages through the direct physical map.
+kernel/exec/elf.c	arch/syscall/syscall.h	Validates a caller-supplied path against the user limit.
+kernel/mm/vmm.c	arch/mm/paging.h	Asks whether a range it is about to hand out is already mapped.
+kernel/proc/process.c	arch/cpu/gdt.h	The selectors a thread descends to privilege level 3 with.
+kernel/proc/process.c	arch/cpu/percpu.h	Records the current thread in the executing processor's area.
+kernel/proc/process.c	arch/cpu/spinlock.h	Guards the process and thread tables.
+kernel/proc/process.c	arch/cpu/tss.h	Writes rsp0 when a thread becomes current.
+kernel/proc/process.c	arch/mm/addrspace.h	Gives a process an address space of its own, and clones one on fork.
+kernel/proc/process.c	arch/mm/paging.h	Maps a thread's kernel stack and the guard page beneath it.
+kernel/proc/sched.c	arch/cpu/percpu.h	The run queue each processor holds is in its own area.
+kernel/proc/sched.c	arch/cpu/spinlock.h	Guards each run queue.
+kernel/proc/sched.c	arch/interrupt/interrupts.h	Registers the local timer handler that ends a quantum.
+CROSSINGS
+)
+
+architecture_scope() {
+    git ls-files 'kernel/mm/*' 'kernel/proc/*' 'kernel/fs/*' 'kernel/block/*' \
+                 'kernel/exec/*' 'kernel/acpi/*' 'kernel/handoff/*' 2>/dev/null \
+        | grep -E '\.(c|h)$'
+}
+
+# Observed: what the source actually does today.
+observed_crossings="$(
+    while IFS= read -r file; do
+        [ -f "$file" ] || continue
+        grep -oE '<oxys/arch/[a-z0-9_/]+\.h>' "$file" 2>/dev/null \
+            | sed 's|<oxys/||; s|>||' | sort -u \
+            | while IFS= read -r header; do printf '%s\t%s\n' "$file" "$header"; done
+    done < <(architecture_scope) | sort -u
+)"
+
+# Permitted: what the list above records, stripped of its reasons.
+permitted_crossings="$(printf '%s\n' "$architecture_crossings" \
+    | awk -F'\t' 'NF>=2 {printf "%s\t%s\n", $1, $2}' | sort -u)"
+
+while IFS= read -r crossing; do
+    [ -n "$crossing" ] || continue
+    grep -qxF "$crossing" <<< "$permitted_crossings" || fail \
+        "$(cut -f1 <<< "$crossing") includes <oxys/$(cut -f2 <<< "$crossing")>, crossing the architecture boundary. Either it does not belong in the portable core, or the crossing belongs in the list in tools/check-docs.sh, Section 8, with its reason."
+done <<< "$observed_crossings"
+
+while IFS= read -r crossing; do
+    [ -n "$crossing" ] || continue
+    grep -qxF "$crossing" <<< "$observed_crossings" || fail \
+        "tools/check-docs.sh, Section 8, permits $(cut -f1 <<< "$crossing") to include <oxys/$(cut -f2 <<< "$crossing")>, which it no longer does. Remove the entry: an exemption nobody needs is where things hide."
+done <<< "$permitted_crossings"
+
+printf 'CHECKED  %d recorded crossing(s) of the architecture boundary.\n' \
+    "$(grep -c . <<< "$permitted_crossings")"
+
+# ---------------------------------------------------------------------------
+# 9. Advisory: a sub-task that PLAN.md marks Implemented, still written about in
 #    the future tense.
 #
 # The defect this catches is the one that recurred most in this project's
@@ -299,7 +384,7 @@ while IFS= read -r subtask; do
 done <<< "$implemented"
 
 # ---------------------------------------------------------------------------
-# 9. The build register's record and the view generated from it agree.
+# 10. The build register's record and the view generated from it agree.
 #
 # docs/project/builds.tsv is the record and docs/project/BUILDS.md holds a view
 # rendered from it. tools/builds.sh check validates the schema, the
