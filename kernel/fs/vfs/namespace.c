@@ -24,11 +24,11 @@
 
 #include "internal.h"
 
-#include <oxys/vfs.h>
+#include <oxys/fs/vfs.h>
 #include <oxys/kernel.h>
-#include <oxys/block.h>
-#include <oxys/heap.h>
-#include <oxys/buffer.h>
+#include <oxys/block/block.h>
+#include <oxys/mm/heap.h>
+#include <oxys/block/buffer.h>
 
 static bool VfsStatCommon(const char *path, VfsAttributes *attributes, bool follow)
 {

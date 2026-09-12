@@ -8,9 +8,9 @@ assert this kernel's EXT2 support, and what each of them is written against.
 **Authority**: `PROJECT_GUIDELINES.md`, Section 2, the testing mandate.
 
 **Asserted by**: `KernelVerifyExt2` in
-[`../../kernel/test/verify_ext2.c`](../../kernel/test/verify_ext2.c), and the
+[`../../kernel/test/storage/ext2.c`](../../kernel/test/storage/ext2.c), and the
 five chapters beneath it in
-[`../../kernel/test/ext2/`](../../kernel/test/ext2/): the composition of a
+[`../../kernel/test/storage/ext2/`](../../kernel/test/storage/ext2/): the composition of a
 volume, the directories, the files, the writing and the probe of whatever volume
 the machine actually carries.
 

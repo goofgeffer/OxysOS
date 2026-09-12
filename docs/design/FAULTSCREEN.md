@@ -10,13 +10,13 @@ all of them.
 
 **Implemented by**:
 [`../../graphics/faultscreen.c`](../../graphics/faultscreen.c),
-[`../../kernel/include/oxys/faultscreen.h`](../../kernel/include/oxys/faultscreen.h).
+[`../../kernel/include/oxys/gfx/faultscreen.h`](../../kernel/include/oxys/gfx/faultscreen.h).
 The disposition each screen reports is decided by `ExceptionDispositionOf` in
 [`../../kernel/arch/x86_64/interrupt/exceptions.c`](../../kernel/arch/x86_64/interrupt/exceptions.c), whose design is
 [`INTERRUPTS.md`](INTERRUPTS.md), Section 8.1.
 
 **Asserted by**: `KernelVerifyFaultScreen` in
-[`../../kernel/test/verify_faultscreen.c`](../../kernel/test/verify_faultscreen.c).
+[`../../kernel/test/gfx/faultscreen.c`](../../kernel/test/gfx/faultscreen.c).
 
 **Specifications**: Intel 64 and IA-32 Architectures Software Developer's
 Manual, Volume 3A, Chapter 6 and Table 6-1, Sections 6.13 and 6.15 with Figures
@@ -173,23 +173,41 @@ shifted the entire layout by three character rows.
 display driver and the serial port go on receiving everything. There is no
 resumption, a machine that has drawn a fault screen being one that is halting.
 
-### 1.5 The two demonstrations, which prove different things
+### 1.5 The two demonstrations, withdrawn
 
-`fault-screen=<vector>` composes a trap frame and draws that vector's page. It
-proves **the page**: that its text fits the display, that its panels lay out one
-beneath another, that its colour and title are its own. It proves nothing about
-the processor, and the frame is filled with values no machine would produce —
-repeated nibbles, and an obviously artificial address — so that a photograph of
-it cannot be filed as evidence of a fault that occurred.
+Two GRUB entries once existed for looking at these screens, and both were removed
+at the project owner's direction. They are recorded here because the distinction
+they drew is worth keeping even though the entries are not, and because anybody
+reading an image built before this change will find them in its menu.
 
-`fault-raise` writes to an unmapped address, which raises a genuine page fault.
-That proves **the wiring**: handler, report, screen, end to end. A page fault is
-used because it is the one severe fault that can be raised deliberately without
+`fault-screen=<vector>` composed a trap frame and drew that vector's page. It
+proved **the page**: that its text fitted the display, that its panels laid out
+one beneath another, that its colour and title were its own. It proved nothing
+about the processor, and the frame was filled with values no machine would
+produce — repeated nibbles, and an obviously artificial address — so that a
+photograph of it could not be filed as evidence of a fault that occurred.
+
+`fault-raise` wrote to an unmapped address, raising a genuine page fault. That
+proved **the wiring**: handler, report, screen, end to end. A page fault was used
+because it is the one severe fault that can be raised deliberately without
 endangering the machine — a double fault is raised by destroying the stack, and a
 machine check cannot be asked for at all.
 
-The two are kept apart because they answer different questions and because
-confusing them would let a broken handler pass a test of the drawing.
+They were kept apart because they answered different questions, and confusing
+them would have let a broken handler pass a test of the drawing. **That
+distinction still holds and is the reason this section remains**; what no longer
+exists is a menu entry for either, together with `FaultScreenDemonstrate`, which
+composed the frame, and `KernelCommandLineOptionNumber`, which read the vector
+from the command line. Each had exactly one caller, and removing the entries left
+both unreachable.
+
+What the removal costs is stated plainly: **there is now no way to look at a
+fault screen without causing the fault it belongs to**, and for the screens that
+cannot be raised safely — the double fault, the machine check, the malformed task
+state segment — there is no way at all. Section 2 below is unaffected; the
+assertions there walk the table and never drew a page. The judgement by eye that
+Section 1.4 describes was made when the screens were written, and its record is
+`docs/project/TESTING-GRAPHICS.md`.
 
 ## 2. Verification of the optimisation, the disposition and the fault screens
 
@@ -321,13 +339,13 @@ been done. Nothing new is claimed; each item cites the section it comes from.
    screen of its own is one the kernel does not consider fatal to itself, and it
    is ended as a program's fault instead. Section 1.2 gives the rule and Section
    2.4 the two assertions that hold the table to it.
-2. **Most severe faults cannot be demonstrated.** Section 1.5: a page fault is
-   the one that can be raised deliberately without endangering the machine, so
-   `fault-raise` raises that and nothing else. A double fault is raised by
+2. **No severe fault can now be demonstrated at all.** Section 1.5: a page fault
+   was the one that could be raised deliberately without endangering the machine,
+   and the withdrawn `fault-raise` entry raised it; a double fault is raised by
    destroying the stack and a machine check cannot be asked for at all, which is
-   why the other screens are shown from a composed frame — filled with values no
-   machine would produce, so that a photograph of one cannot be mistaken for a
-   real report.
+   why the other screens were shown from a composed frame the withdrawn
+   `fault-screen` entry supplied. Both entries are gone, so looking at any of
+   these screens now requires editing the kernel.
 3. **The screen takes the display and does not give it back.** Section 1.4: the
    console is suspended and the fault screen owns the framebuffer from that point
    onward. That is correct for a machine that has stopped and is not a mechanism

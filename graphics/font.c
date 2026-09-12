@@ -47,8 +47,8 @@
  * occupies rows 2 to 6; and the descenders of g, j, p, q and y reach row 7.
  */
 
-#include <oxys/font.h>
-#include <oxys/graphics.h>
+#include <oxys/gfx/font.h>
+#include <oxys/gfx/graphics.h>
 #include <oxys/kernel.h>
 
 /*

@@ -34,7 +34,7 @@ and the five translation units beneath
 9899:2011 divides Section 7.24 itself. The interface header of Section 2 is
 [`../../kernel/abi/oxys/syscall_abi.h`](../../kernel/abi/oxys/syscall_abi.h);
 what was left behind is
-[`../../kernel/include/oxys/syscall.h`](../../kernel/include/oxys/syscall.h),
+[`../../kernel/include/oxys/arch/syscall/syscall.h`](../../kernel/include/oxys/arch/syscall/syscall.h),
 whose design is [`PRIVILEGE.md`](PRIVILEGE.md). The wrappers of Section 8 are
 [`../../libc/include/syscall.h`](../../libc/include/syscall.h),
 [`../../libc/include/errno.h`](../../libc/include/errno.h),
@@ -46,9 +46,9 @@ is [`../../libc/include/stdlib.h`](../../libc/include/stdlib.h),
 [`../../libc/stdlib/heap.c`](../../libc/stdlib/heap.c) and
 [`../../libc/stdlib/system.c`](../../libc/stdlib/system.c), with the kernel's
 half in `SyscallDoBrk` and `ProcessSetBreak`. The assertions are
-[`../../kernel/test/verify_string.c`](../../kernel/test/verify_string.c),
-[`../../kernel/test/verify_wrappers.c`](../../kernel/test/verify_wrappers.c) and
-[`../../kernel/test/verify_heap.c`](../../kernel/test/verify_heap.c), the last
+[`../../kernel/test/libc/string.c`](../../kernel/test/libc/string.c),
+[`../../kernel/test/libc/wrappers.c`](../../kernel/test/libc/wrappers.c) and
+[`../../kernel/test/libc/heap.c`](../../kernel/test/libc/heap.c), the last
 two composing their programs with
 [`../../kernel/test/program.c`](../../kernel/test/program.c).
 
@@ -88,7 +88,7 @@ upon them and none of them depends upon anything.
 
 The kernel is `LGPL-3.0-or-later`; `libc/` and `userland/` are `MIT`. Those two
 licences coexist without difficulty as long as nothing crosses between them, and
-until this change one thing did: `kernel/include/oxys/syscall.h` held both halves
+until this change one thing did: `kernel/include/oxys/arch/syscall/syscall.h` held both halves
 of the system-call interface in one file.
 
 It held **the interface a program is entitled to** — the call numbers, the
@@ -110,7 +110,7 @@ The interface is now
 [`../../kernel/abi/oxys/syscall_abi.h`](../../kernel/abi/oxys/syscall_abi.h),
 under `MIT`, and holds exactly the constants above and the commentary that came
 with them. The implementation stays in
-[`../../kernel/include/oxys/syscall.h`](../../kernel/include/oxys/syscall.h),
+[`../../kernel/include/oxys/arch/syscall/syscall.h`](../../kernel/include/oxys/arch/syscall/syscall.h),
 under the kernel's licence, and includes the other.
 
 **Nothing was changed in the move.** Every constant has the same name, the same
@@ -215,7 +215,7 @@ wanted and what deciding about it depends upon.
 ## 5. Verification
 
 `KernelVerifyString`, in
-[`../../kernel/test/verify_string.c`](../../kernel/test/verify_string.c).
+[`../../kernel/test/libc/string.c`](../../kernel/test/libc/string.c).
 
 **Every function here has a correct implementation and several plausible wrong
 ones**, and the wrong ones give right answers for the inputs anybody tests with.
@@ -350,8 +350,8 @@ Three things make it honest rather than expedient:
 
 1. **The kernel does not call them.** No kernel translation unit is compiled
    against `libc/include`. The exceptions are the self-tests that assert this
-   library — `kernel/test/verify_string.c` at sub-task 7.1,
-   `kernel/test/verify_wrappers.c` at 7.2 and `kernel/test/verify_heap.c` at 7.3
+   library — `kernel/test/libc/string.c` at sub-task 7.1,
+   `kernel/test/libc/wrappers.c` at 7.2 and `kernel/test/libc/heap.c` at 7.3
    — each named by an explicit rule in the `Makefile`, so the exception is three
    named lines rather than a rule about a directory, and a kernel source that
    tried to include `<string.h>` would fail to compile rather than quietly
@@ -527,7 +527,7 @@ stand:
 ### 8.4 Verification
 
 `KernelVerifyWrappers`, in
-[`../../kernel/test/verify_wrappers.c`](../../kernel/test/verify_wrappers.c). It
+[`../../kernel/test/libc/wrappers.c`](../../kernel/test/libc/wrappers.c). It
 is in two halves because the subject is.
 
 **`SYSCALL` cannot be executed by this kernel.** The instruction itself works at
@@ -686,7 +686,7 @@ will, beginning with the formatted output of sub-task 7.4.
 `SyscallDoBrk` in [`../../kernel/arch/x86_64/syscall/syscall.c`](../../kernel/arch/x86_64/syscall/syscall.c) and
 `ProcessSetBreak` in [`../../kernel/proc/process.c`](../../kernel/proc/process.c)
 on the kernel's. The assertion is
-[`../../kernel/test/verify_heap.c`](../../kernel/test/verify_heap.c), which
+[`../../kernel/test/libc/heap.c`](../../kernel/test/libc/heap.c), which
 composes its program with
 [`../../kernel/test/program.c`](../../kernel/test/program.c).
 
@@ -881,7 +881,7 @@ the address.
 ### 9.4 Verification
 
 `KernelVerifyHeap`, in
-[`../../kernel/test/verify_heap.c`](../../kernel/test/verify_heap.c), in two
+[`../../kernel/test/libc/heap.c`](../../kernel/test/libc/heap.c), in two
 halves because the subject is.
 
 #### 9.4.1 The policy, asserted by calling it

@@ -79,8 +79,8 @@
  * the register contended if anything still drove it.
  */
 
-#include <oxys/pic.h>
-#include <oxys/io.h>
+#include <oxys/dev/pic.h>
+#include <oxys/dev/io.h>
 #include <oxys/kernel.h>
 
 /* The command and data ports of the two controllers. */

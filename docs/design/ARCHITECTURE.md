@@ -39,11 +39,11 @@ than as later additions, in accordance with `PROJECT_GUIDELINES.md`, Section 5:
 | --------- | -------- | ---------- |
 | `boot/` | The Multiboot2 header, the 32-bit entry point, the long-mode transition, and the GRUB configuration. | Phase 1 |
 | `kernel/` | The kernel core: entry, memory management, scheduling, the block layer, the virtual filesystem, and the boot-protocol handoff. It was described here as architecture-independent while `kernel/cpu/` sat within it, which it plainly was not; what is architecture-independent is this directory **less** `arch/`, and that is now a statement about the tree rather than about the prose. | Phase 1 |
-| `kernel/include/oxys/` | The kernel's internal header corpus. | Phase 1 |
+| `kernel/include/oxys/` | The kernel's internal header corpus, grouped to mirror the source tree: `arch/`, `mm/`, `proc/`, `exec/`, `acpi/`, `block/`, `fs/`, `boot/`, `dev/`, `gfx/` and `test/`, with `types.h` and `kernel.h` at the root because they belong to no subsystem. Section 2.5 records the grouping and what it buys. | Phase 1 |
 | `kernel/abi/oxys/` | A **second include root**: the system-call interface a program is entitled to — the call numbers, the failure results, the register convention and the two limits an argument is judged against — held apart from the corpus above it and licensed permissively so that the `MIT` C library may include it without including the kernel. It holds constants and never a declaration. | Phase 7 (sub-task 7.1) |
-| `kernel/arch/x86_64/` | Everything in the kernel that could not survive a change of processor, in six subdirectories: `cpu/`, `interrupt/`, `syscall/`, `smp/`, `mm/` and `proc/`. The headers of these subsystems are **not** here; they remain in the corpus above. [`kernel/arch/README.md`](../../kernel/arch/README.md) states the test for admitting a file, and Section 2.4 below records the boundary. | Phase 1, gathered here at the sub-task 7.3 review |
+| `kernel/arch/x86_64/` | Everything in the kernel that could not survive a change of processor, in six subdirectories: `cpu/`, `interrupt/`, `syscall/`, `smp/`, `mm/` and `proc/`. The headers of these subsystems are **not** here; they are in the corpus above, under `oxys/arch/`, which mirrors this tree without naming a processor. [`kernel/arch/README.md`](../../kernel/arch/README.md) states the test for admitting a file, and Section 2.4 below records the boundary. | Phase 1, gathered here at the sub-task 7.3 review |
 | `kernel/test/` | The boot-time self-tests, one file per subsystem, and the composed volume they are conducted upon. | Phase 2 |
-| `kernel/handoff/` | The boot-protocol handoff layer: the reading of whatever structure the boot loader left, reduced to the neutral `BootInformation` of `<oxys/bootinfo.h>`. It carries its own private header rather than one in the corpus above, because the wire format of a boot protocol is exactly what design premise 3 forbids anything above it to know. Multiboot2 is its one member; the UEFI equivalent joins it in Phase 12. | Phase 1 |
+| `kernel/handoff/` | The boot-protocol handoff layer: the reading of whatever structure the boot loader left, reduced to the neutral `BootInformation` of `<oxys/boot/bootinfo.h>`. It carries its own private header rather than one in the corpus above, because the wire format of a boot protocol is exactly what design premise 3 forbids anything above it to know. Multiboot2 is its one member; the UEFI equivalent joins it in Phase 12. | Phase 1 |
 | `kernel/acpi/` | The reading of the firmware's ACPI description tables. | Phase 6 (sub-task 6.12) |
 | `kernel/block/` | The generic block-device layer and the buffer cache above it: the layer a storage driver registers into, and the cache the filesystems read through. Above `drivers/` and below `kernel/fs/`, and in neither. | Phase 4 (sub-tasks 4.5 and 4.6) |
 | `drivers/` | Device drivers, one subdirectory per device class. | Phase 1 |
@@ -78,7 +78,7 @@ they establish is worth stating once.
 | --------- | --- | ------ |
 | `kernel/fs/ext2/` | `kernel/fs/ext2.c`, 4,325 lines | Nine units, 306 to 856 lines, and a private header |
 | `kernel/fs/vfs/` | `kernel/fs/vfs.c`, 2,355 lines | Six units, 184 to 532 lines, and a private header |
-| `kernel/test/ext2/` | part of `kernel/test/verify_ext2.c`, 2,618 lines | Five chapters and a private header, the entry point remaining above them at 318 lines |
+| `kernel/test/storage/ext2/` | part of `kernel/test/verify_ext2.c`, 2,618 lines | Five chapters and a private header, the entry point remaining above them at 318 lines |
 | `drivers/ata/` | `drivers/ata/ata.c`, 1,282 lines | Six units, 160 to 320 lines, and a private header |
 
 A translation unit is divided when it stops being readable as one thing.
@@ -100,7 +100,7 @@ where the *symptoms* diverge: a fault in `port.c` is a timing rule broken and a
 status register believed too early, a fault in `channel.c` is a disk this driver
 never looked in the right place for, and a fault in `transfer.c` is the wrong
 sector returned — and only the last of the three is visible to the caller at all.
-`kernel/test/ext2/probe.c` is separated on a line the project had already drawn
+`kernel/test/storage/ext2/probe.c` is separated on a line the project had already drawn
 in prose: a probe asserts nothing, and `kernel/test/README.md` explains at length
 why the two must not be confused. Making that distinction a file boundary means
 it can no longer be blurred by accident.
@@ -145,14 +145,14 @@ just as plainly — a registry with four validations, and a hash table with a
 recency list. Neither holds a register, a port address or a timing rule, and
 neither cites a hardware specification, which every genuine driver in that
 directory opens by doing. The relation was inverted besides: a driver implements
-an interface this corpus declares, and `block.c` *declares* `<oxys/block.h>`,
+an interface this corpus declares, and `block.c` *declares* `<oxys/block/block.h>`,
 which `ata/ata.c`, `ahci/ahci.c` and `sdhci/sdhci.c` register into. A directory
 that excludes the framebuffer and admits a hash table is not applying a rule.
 
 **The handoff.** `kernel/include/oxys/multiboot2.h` had exactly one consumer in
 the entire tree — the file beside which it now sits. It holds one boot protocol's
 wire format, and premise 3 of Section 1 is that everything above the handoff
-layer consumes `<oxys/bootinfo.h>` instead and cannot tell which protocol
+layer consumes `<oxys/boot/bootinfo.h>` instead and cannot tell which protocol
 supplied it. Leaving the wire format in the public corpus advertised, to every
 future subsystem, a dependency the premise forbids; the corpus is where a
 consumer looks for what it may use. Phase 12 adds the UEFI handoff, and it now
@@ -224,16 +224,17 @@ the process table and the scheduler; the context switch is six registers and an
 `IRETQ`, and is here. A reader looking for "memory management" now looks in two
 places, and the compensation is that they can tell which of the two they are in.
 
-**What this does not achieve, stated rather than left to be discovered.** The
-headers did not move. `<oxys/paging.h>` describes a four-level hierarchy and
-`<oxys/tss.h>` a 104-byte segment, and both sit in `kernel/include/oxys/` beside
-`<oxys/vfs.h>`, which describes nothing of the sort. That is deliberate — a
-second include root under `arch/` would put an architecture in every consumer's
-`#include` line, which is the dependency the arrangement exists to avoid
-advertising, and `drivers/README.md` already states that rule for a driver — but
-the consequence is real: **the corpus does not tell you, by looking at it, which
-of its headers is portable.** The implementations now say so and the interfaces
-do not. Nothing in this change repairs that, and no phase presently plans to.
+**What this did not at first achieve.** The headers did not move with the
+implementations. `<oxys/paging.h>` described a four-level hierarchy and
+`<oxys/tss.h>` a 104-byte segment, and both sat in `kernel/include/oxys/` beside
+`<oxys/vfs.h>`, which described nothing of the sort — so the implementations
+made the distinction and the interfaces did not. This section recorded that as
+the boundary's one loose end, and **Section 2.5 closed it**: the corpus is now
+grouped the way this tree is, and the interface to anything here is reached
+through `<oxys/arch/...>`. What the path names is `arch`, which is a claim about
+portability; what it still does not name is `x86_64`, which would be a claim
+about this processor and is the dependency a second include root would have
+advertised.
 
 `kernel/kernel.c`, `proc/sched.c` and `proc/process.c` each retain a handful of
 instructions that are plainly x86 — `sti; hlt` in the idle loop, `cli; hlt` in
@@ -243,6 +244,71 @@ architecture shim would cost a layer of indirection to buy a boundary nothing is
 pressing against. They are named here so that the claim this section makes is the
 true one: the line is drawn at the file, and three files sit slightly on the
 wrong side of it.
+
+### 2.5 The grouping of the header corpus and of the self-tests
+
+Two directories had stayed flat while everything around them acquired a shape,
+and both were reorganised at the project owner's direction.
+
+**`kernel/include/oxys/` was fifty-four headers in one directory.** It is now
+grouped to mirror the source tree, so that the interface to a subsystem sits
+where the subsystem does:
+
+| Under `oxys/` | Holds | Mirrors |
+| ------------- | ----- | ------- |
+| *(root)* | `types.h`, `kernel.h` | Nothing: these two are universal, included from every corner, and belong to no subsystem. |
+| `arch/cpu/`, `arch/interrupt/`, `arch/syscall/`, `arch/smp/`, `arch/mm/` | The interfaces of the processor-bound subsystems | `kernel/arch/x86_64/` |
+| `mm/` | `memory.h`, `pmm.h`, `vmm.h`, `heap.h` | `kernel/mm/` |
+| `proc/`, `exec/`, `acpi/`, `block/`, `fs/`, `test/` | One group each | The kernel directory of the same name |
+| `boot/` | `bootinfo.h`, the neutral description everything above the handoff consumes | `kernel/handoff/` |
+| `dev/`, `dev/storage/` | The driver interfaces | `drivers/` |
+| `gfx/` | The framebuffer, the drawing, the console, the compositor | `graphics/` |
+
+The gain is the one Section 2.4 asked for and could not have. A header's path is
+now a claim about it, and the claim a reader most needs is the portability one:
+`<oxys/arch/mm/paging.h>` announces that what it describes is answerable to
+Intel's manual, and `<oxys/mm/pmm.h>` announces that what it describes is not.
+Two headers that had sat side by side, indistinguishable, now sort into different
+directories on exactly the line the implementations were sorted on.
+
+`arch/` and not `arch/x86_64/`, deliberately. The consumer's `#include` says that
+a thing is processor-bound; it does not say which processor, because it must not
+have to change if that ever answered differently.
+
+**`kernel/test/` was twenty-four files named `verify_*.c` in one directory.** The
+prefix was doing the work a directory should do — it existed to say "this is a
+self-test" in a directory where nothing else was — and twenty-four files sharing
+one prefix sort as a single undifferentiated block, which is the arrangement a
+reader has to read all of to search any of. They are now grouped by the subsystem
+they assert and the prefix is dropped, `kernel/test/arch/syscall.c` saying what
+`kernel/test/verify_syscall.c` said with one word fewer and a shape besides:
+
+| Directory | Asserts |
+| --------- | ------- |
+| `arch/` | `interrupts.c`, `privilege.c`, `syscall.c`, `usermode.c`, `apic.c`, `smp.c` |
+| `mm/` | `memory.c` |
+| `proc/` | `process.c`, `sched.c`, `lifecycle.c` |
+| `exec/` | `elf.c` |
+| `storage/` | `stack.c`, `ext2.c` with its five chapters beneath, `vfs.c` |
+| `gfx/` | `framebuffer.c`, `graphics.c`, `console.c`, `compositor.c`, `faultscreen.c` |
+| `dev/` | `devices.c`, `mouse.c` |
+| `libc/` | `string.c`, `wrappers.c`, `heap.c` |
+
+The **function** names did not change. `KernelVerifySyscall` is still
+`KernelVerifySyscall`, because `<oxys/test/verify.h>` declares it and `kernel.c`
+calls it by name in the order the tests run; the prefix earns its place there,
+where the symbols of every subsystem do share one namespace. It was only in the
+file names that it was redundant, and only there that it was dropped.
+
+**One consequence was a simplification rather than a rename.** Three self-tests
+are compiled against the C library's include root, and the `Makefile` named them
+in three explicit rules because — its note said — a pattern over `kernel/test/`
+would put every future self-test in reach of the userland's headers whether or
+not it asserted the userland. That was true of `kernel/test/` and is not true of
+`kernel/test/libc/`, whose membership *is* the exception: a file is in it exactly
+when it asserts the C library. The three rules are now one pattern whose scope
+and whose exception are the same set, and a fourth such test is added by putting
+it in the directory rather than by remembering to add a fourth rule.
 
 ## 3. Present composition
 
@@ -281,32 +347,32 @@ either.
 | `graphics/console.c` | The graphical console: a grid of character cells upon the framebuffer, the four control characters, a scroll performed by blitting the surface upon itself, and the replay of what was written before the framebuffer could be mapped. |
 | `graphics/faultscreen.c` | The full-screen page a severe fault produces: one screen for each fault, with its own title, colour, account and evidence. |
 | `kernel/test/volume.c` | The test fixture: two block devices backed by memory, and an EXT2 volume composed within them. |
-| `kernel/test/verify_memory.c` | The self-tests of the frame allocator, the paging hierarchy, the allocators, reference counting, copy-on-write and address spaces. |
-| `kernel/test/verify_interrupts.c` | The self-tests of the descriptor table, the stubs and their trap frame, the dispatcher and the exception handlers. |
-| `kernel/test/verify_graphics.c` | The self-tests of the drawing primitives, conducted upon a surface in memory. |
-| `kernel/test/verify_framebuffer.c` | The self-tests of the framebuffer's description, its mapping, its memory type, and the pattern a person judges. |
-| `kernel/test/verify_console.c` | The self-tests of the bitmap face against its own metrics, of a glyph drawn upon a surface against its own bytes, and of the four control characters upon the live console. |
-| `kernel/test/verify_faultscreen.c` | The self-tests of the fault screen table: that every severe fault has a screen of its own and that no two of them are alike. |
-| `kernel/test/verify_privilege.c` | The self-tests of the descriptors, the task state segment, the interrupt stack table and the system-call configuration. |
-| `kernel/test/verify_syscall.c` | The self-tests of the system-call dispatch table and of the validation of a caller's arguments. |
-| `kernel/test/verify_elf.c` | The self-tests of the ELF64 loader, upon an image composed in memory so that every field may be made wrong on purpose. |
-| `kernel/test/verify_process.c` | The self-tests of the process and thread tables, the per-thread kernel stack and its guard, and the balance of the arena. |
-| `kernel/test/verify_usermode.c` | The self-tests of the context switch, and of a program composed, loaded, entered at privilege level 3 and ended. |
-| `kernel/test/verify_lifecycle.c` | The self-tests of `fork`, `execve`, `exit` and `wait`: a process cloned and examined without running, and a program that forks twice, replaces one child with a program read from a volume, and collects what each ended with. |
-| `kernel/test/verify_compositor.c` | The self-tests of the clip stack, the blend, the damage arithmetic and the layer table. |
-| `kernel/test/verify_mouse.c` | The self-tests of the mouse's packet decoder, driven without a mouse, and of the pointer upon a surface in memory. |
-| `kernel/test/verify_devices.c` | The self-tests of the interrupt controllers, the interval timer, the keyboard, the serial adapter, the display and the bus. |
-| `kernel/test/verify_storage.c` | The self-tests of the disk, the block layer and the buffer cache. |
-| `kernel/test/verify_ext2.c` | The entry point of the EXT2 self-test: the fixture composed, the superblock and its refusals asserted, and the five chapters below called in turn. |
-| `kernel/test/ext2/internal.h` | What those chapters share: their own entry points, the restoration of the fixture between them, and the two helpers more than one judges through. |
-| `kernel/test/ext2/format.c` | The superblock, the group descriptors and the inode, and the dozen ways a volume may contradict itself and be refused. |
-| `kernel/test/ext2/directory.c` | The directory record, its traversal, and the resolution of a path across symbolic links. |
-| `kernel/test/ext2/file.c` | The reading of a file's contents, its holes, and both forms of symbolic link. |
-| `kernel/test/ext2/write.c` | Everything that alters a volume: allocation, writing, truncation, and the insertion and removal of names. |
-| `kernel/test/ext2/probe.c` | The report upon whatever volume the machine actually carries. **Not a self-test**: it asserts nothing, and the distinction is the reason it is a file of its own. |
-| `kernel/test/verify_vfs.c` | The self-tests of the virtual filesystem layer, and the probe of a real volume through it. |
-| `kernel/test/verify_apic.c` | The self-tests of the ACPI parse, the Local APIC, the I/O APIC, and the routing of the request lines through them once the 8259A pair has been retired. |
-| `kernel/test/verify_smp.c` | The self-tests of the per-processor area, the spinlock, the inter-processor interrupt and the shootdown — the first two asserting internal state, since upon one processor a lock that does not lock behaves like one that does, and the last two asserting behaviour by an interrupt the processor sends to itself. |
+| `kernel/test/mm/memory.c` | The self-tests of the frame allocator, the paging hierarchy, the allocators, reference counting, copy-on-write and address spaces. |
+| `kernel/test/arch/interrupts.c` | The self-tests of the descriptor table, the stubs and their trap frame, the dispatcher and the exception handlers. |
+| `kernel/test/gfx/graphics.c` | The self-tests of the drawing primitives, conducted upon a surface in memory. |
+| `kernel/test/gfx/framebuffer.c` | The self-tests of the framebuffer's description, its mapping, its memory type, and the pattern a person judges. |
+| `kernel/test/gfx/console.c` | The self-tests of the bitmap face against its own metrics, of a glyph drawn upon a surface against its own bytes, and of the four control characters upon the live console. |
+| `kernel/test/gfx/faultscreen.c` | The self-tests of the fault screen table: that every severe fault has a screen of its own and that no two of them are alike. |
+| `kernel/test/arch/privilege.c` | The self-tests of the descriptors, the task state segment, the interrupt stack table and the system-call configuration. |
+| `kernel/test/arch/syscall.c` | The self-tests of the system-call dispatch table and of the validation of a caller's arguments. |
+| `kernel/test/exec/elf.c` | The self-tests of the ELF64 loader, upon an image composed in memory so that every field may be made wrong on purpose. |
+| `kernel/test/proc/process.c` | The self-tests of the process and thread tables, the per-thread kernel stack and its guard, and the balance of the arena. |
+| `kernel/test/arch/usermode.c` | The self-tests of the context switch, and of a program composed, loaded, entered at privilege level 3 and ended. |
+| `kernel/test/proc/lifecycle.c` | The self-tests of `fork`, `execve`, `exit` and `wait`: a process cloned and examined without running, and a program that forks twice, replaces one child with a program read from a volume, and collects what each ended with. |
+| `kernel/test/gfx/compositor.c` | The self-tests of the clip stack, the blend, the damage arithmetic and the layer table. |
+| `kernel/test/dev/mouse.c` | The self-tests of the mouse's packet decoder, driven without a mouse, and of the pointer upon a surface in memory. |
+| `kernel/test/dev/devices.c` | The self-tests of the interrupt controllers, the interval timer, the keyboard, the serial adapter, the display and the bus. |
+| `kernel/test/storage/stack.c` | The self-tests of the disk, the block layer and the buffer cache. |
+| `kernel/test/storage/ext2.c` | The entry point of the EXT2 self-test: the fixture composed, the superblock and its refusals asserted, and the five chapters below called in turn. |
+| `kernel/test/storage/ext2/internal.h` | What those chapters share: their own entry points, the restoration of the fixture between them, and the two helpers more than one judges through. |
+| `kernel/test/storage/ext2/format.c` | The superblock, the group descriptors and the inode, and the dozen ways a volume may contradict itself and be refused. |
+| `kernel/test/storage/ext2/directory.c` | The directory record, its traversal, and the resolution of a path across symbolic links. |
+| `kernel/test/storage/ext2/file.c` | The reading of a file's contents, its holes, and both forms of symbolic link. |
+| `kernel/test/storage/ext2/write.c` | Everything that alters a volume: allocation, writing, truncation, and the insertion and removal of names. |
+| `kernel/test/storage/ext2/probe.c` | The report upon whatever volume the machine actually carries. **Not a self-test**: it asserts nothing, and the distinction is the reason it is a file of its own. |
+| `kernel/test/storage/vfs.c` | The self-tests of the virtual filesystem layer, and the probe of a real volume through it. |
+| `kernel/test/arch/apic.c` | The self-tests of the ACPI parse, the Local APIC, the I/O APIC, and the routing of the request lines through them once the 8259A pair has been retired. |
+| `kernel/test/arch/smp.c` | The self-tests of the per-processor area, the spinlock, the inter-processor interrupt and the shootdown — the first two asserting internal state, since upon one processor a lock that does not lock behaves like one that does, and the last two asserting behaviour by an interrupt the processor sends to itself. |
 | `kernel/mm/heap.c` | The kernel heap: a slab allocator of eight size classes over the kernel arena. |
 | `kernel/mm/vmm.c` | The kernel virtual address allocator, issuing ranges of the kernel arena backed by frames. |
 | `kernel/arch/x86_64/mm/paging.c` | The permanent kernel paging hierarchy: its construction, activation, software translation and copy-on-write fault resolution. |

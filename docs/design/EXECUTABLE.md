@@ -9,7 +9,7 @@ format behaviour below carries a citation, and every specification named is
 registered in [`REFERENCES.md`](../project/REFERENCES.md).
 
 **Implementation**: [`../../kernel/exec/elf.c`](../../kernel/exec/elf.c),
-[`../../kernel/include/oxys/elf.h`](../../kernel/include/oxys/elf.h).
+[`../../kernel/include/oxys/exec/elf.h`](../../kernel/include/oxys/exec/elf.h).
 
 ## 1. What a loader is for, and what makes it dangerous
 

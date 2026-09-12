@@ -27,10 +27,10 @@
  * of sub-task 6.13; PagingInvalidate is where that happens.
  */
 
-#include <oxys/paging.h>
-#include <oxys/pmm.h>
-#include <oxys/cpu.h>
-#include <oxys/shootdown.h>
+#include <oxys/arch/mm/paging.h>
+#include <oxys/mm/pmm.h>
+#include <oxys/arch/cpu/cpu.h>
+#include <oxys/arch/mm/shootdown.h>
 #include <oxys/kernel.h>
 
 /*

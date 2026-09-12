@@ -11,7 +11,7 @@ inside, which is where this sub-task's one real defect lived.
 **Authority**: `PROJECT_GUIDELINES.md`, Sections 2, 3 and 6.
 
 **Implementation**: [`../../kernel/proc/sched.c`](../../kernel/proc/sched.c),
-with [`../../kernel/include/oxys/sched.h`](../../kernel/include/oxys/sched.h).
+with [`../../kernel/include/oxys/proc/sched.h`](../../kernel/include/oxys/proc/sched.h).
 The threads it rotates between are
 [`../../kernel/proc/process.c`](../../kernel/proc/process.c), whose design is
 [`PROCESS.md`](PROCESS.md); the timer is in
@@ -147,7 +147,7 @@ was merely the largest one available.
 Bit 2 is reserved; the divisor lives in bits 3, 1 and 0. Divide-by-one is `1011B`
 and **`0000B` is divide-by-two**, so a register written with the value that
 "looks like one" halves every interval the kernel believes it programmed. The
-constants in [`../../kernel/include/oxys/lapic.h`](../../kernel/include/oxys/lapic.h)
+constants in [`../../kernel/include/oxys/dev/lapic.h`](../../kernel/include/oxys/dev/lapic.h)
 are named rather than computed for that reason.
 
 Sixteen is what this kernel uses: far enough from one that a calibration counting
@@ -182,7 +182,7 @@ lock of the scheduler itself.
 ## 4. Affinity is a safety boundary before it is a policy
 
 A `uint64_t` mask over the **dense processor indices** of
-[`../../kernel/include/oxys/percpu.h`](../../kernel/include/oxys/percpu.h), not
+[`../../kernel/include/oxys/arch/cpu/percpu.h`](../../kernel/include/oxys/arch/cpu/percpu.h), not
 the identifiers the local controller answers to. The two differ on any machine
 whose firmware numbers its processors sparsely, and a mask built from the wrong
 one would name processors that do not exist while excluding ones that do.
@@ -263,7 +263,7 @@ sub-task 6.13's spinlock panics about. The outgoing thread is therefore enqueued
 ## 7. Verification
 
 `KernelVerifyScheduler`, in
-[`../../kernel/test/verify_sched.c`](../../kernel/test/verify_sched.c).
+[`../../kernel/test/proc/sched.c`](../../kernel/test/proc/sched.c).
 
 **A count of admissions is not evidence that anything ran.** A scheduler that
 enqueued four threads and never gave any of them a processor produces the same
@@ -318,7 +318,7 @@ good.
 
 The self-test's own adopted thread is released for the same class of reason:
 `ThreadStart` succeeds or fails according to whether a thread is current, and
-[`../../kernel/test/verify_lifecycle.c`](../../kernel/test/verify_lifecycle.c)
+[`../../kernel/test/proc/lifecycle.c`](../../kernel/test/proc/lifecycle.c)
 asserts the failing branch later in the same boot. A thread left current here
 would silently turn that assertion into a test of something else — which is how
 the regression was found.

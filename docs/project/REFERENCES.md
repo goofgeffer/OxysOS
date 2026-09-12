@@ -69,7 +69,7 @@ Sections relied upon:
 
 Used by: `boot/boot.asm`, `kernel/handoff/multiboot2.c`,
 `kernel/handoff/multiboot2.h`, `kernel/kernel.c`, `kernel/acpi/acpi.c`,
-`kernel/include/oxys/bootinfo.h`, `linker.ld`, `boot/grub/grub.cfg`.
+`kernel/include/oxys/boot/bootinfo.h`, `linker.ld`, `boot/grub/grub.cfg`.
 
 ### Intel 64 and IA-32 Architectures Software Developer's Manual
 Intel Corporation. `https://www.intel.com/sdm`
@@ -310,16 +310,16 @@ Sections relied upon:
   (`0xC0000083`), `IA32_FMASK` (`0xC0000084`), `IA32_FS_BASE` (`0xC0000100`),
   `IA32_GS_BASE` (`0xC0000101`) and `IA32_KERNEL_GS_BASE` (`0xC0000102`).
 
-Used by: `boot/boot.asm`, `linker.ld`, `Makefile`, `kernel/include/oxys/io.h`,
-`kernel/kernel.c`, `kernel/include/oxys/pic.h`, `kernel/include/oxys/pit.h`,
-`kernel/include/oxys/lapic.h`, `drivers/apic/lapic.c`, `kernel/arch/x86_64/interrupt/irq.c`,
+Used by: `boot/boot.asm`, `linker.ld`, `Makefile`, `kernel/include/oxys/dev/io.h`,
+`kernel/kernel.c`, `kernel/include/oxys/dev/pic.h`, `kernel/include/oxys/dev/pit.h`,
+`kernel/include/oxys/dev/lapic.h`, `drivers/apic/lapic.c`, `kernel/arch/x86_64/interrupt/irq.c`,
 `docs/devices/APIC.md`,
 `kernel/arch/x86_64/cpu/gdt.c`, `kernel/arch/x86_64/cpu/tss.c`, `kernel/arch/x86_64/syscall/syscall.c`,
-`kernel/arch/x86_64/syscall/syscall_entry.asm`, `kernel/include/oxys/tss.h`,
-`kernel/include/oxys/syscall.h`, `kernel/include/oxys/msr.h`,
-`graphics/framebuffer.c`, `kernel/include/oxys/framebuffer.h`,
-`graphics/faultscreen.c`, `kernel/include/oxys/faultscreen.h`,
-`kernel/test/verify_faultscreen.c`, `docs/design/MEMORY-LAYOUT.md`,
+`kernel/arch/x86_64/syscall/syscall_entry.asm`, `kernel/include/oxys/arch/cpu/tss.h`,
+`kernel/include/oxys/arch/syscall/syscall.h`, `kernel/include/oxys/arch/cpu/msr.h`,
+`graphics/framebuffer.c`, `kernel/include/oxys/gfx/framebuffer.h`,
+`graphics/faultscreen.c`, `kernel/include/oxys/gfx/faultscreen.h`,
+`kernel/test/gfx/faultscreen.c`, `docs/design/MEMORY-LAYOUT.md`,
 `docs/design/INTERRUPTS.md`, `docs/design/PRIVILEGE.md`,
 `docs/design/FAULTSCREEN.md`.
 
@@ -339,7 +339,7 @@ easily forgotten: the choice at each step depends upon the error accumulated
 line, which is why `graphics/draw.c` clips per pixel rather than by moving the
 endpoints. See `docs/design/DRAWING.md`, Section 4.
 
-Used by: `graphics/draw.c`, `kernel/test/verify_graphics.c`,
+Used by: `graphics/draw.c`, `kernel/test/gfx/graphics.c`,
 `docs/design/DRAWING.md`.
 
 ### AMD64 Architecture Programmer's Manual, Volume 2: System Programming
@@ -356,7 +356,7 @@ Sections relied upon:
   behaviour, and the two are cited together where a reader may know it under
   either set of names.
 
-Used by: `kernel/include/oxys/msr.h`, `docs/design/PRIVILEGE.md`.
+Used by: `kernel/include/oxys/arch/cpu/msr.h`, `docs/design/PRIVILEGE.md`.
 
 ### System V Application Binary Interface, AMD64 Architecture Processor Supplement
 `https://gitlab.com/x86-psABIs/x86-64-ABI`
@@ -382,7 +382,7 @@ Sections relied upon:
   object states that it is for this architecture.
 
 Used by: `boot/boot.asm`, `linker.ld`, `Makefile`, `kernel/arch/x86_64/cpu/tss.c`,
-`kernel/include/oxys/tss.h`, `kernel/include/oxys/syscall.h`,
+`kernel/include/oxys/arch/cpu/tss.h`, `kernel/include/oxys/arch/syscall/syscall.h`,
 `kernel/exec/elf.c`, `libc/syscall/invoke.asm`, `docs/design/PRIVILEGE.md`.
 
 ### Executable and Linking Format Specification, version 1.2
@@ -411,7 +411,7 @@ Sections relied upon:
 - **The ordering requirement**: loadable segments appear in the program header
   table in ascending order of virtual address.
 
-Used by: `kernel/exec/elf.c`, `kernel/include/oxys/elf.h`.
+Used by: `kernel/exec/elf.c`, `kernel/include/oxys/exec/elf.h`.
 
 ### ISO/IEC 9899:2011, Programming languages — C
 International Organization for Standardization.
@@ -487,10 +487,10 @@ Sections relied upon:
   header written into memory the system supplied a defined thing to read back.
 
 Used by: the whole of the C source; Sections 6.2.5, 6.5, 6.7.3.1 and 7.24 by
-`libc/` and `kernel/test/verify_string.c` in particular; Sections 7.5, 7.24.6.2
+`libc/` and `kernel/test/libc/string.c` in particular; Sections 7.5, 7.24.6.2
 and 6.7.10 by `libc/include/errno.h`, `libc/syscall/` and
-`kernel/test/verify_wrappers.c`; Sections 7.22.3, 6.2.8, 6.5.8 and 6.3.2.3 by
-`libc/stdlib/` and `kernel/test/verify_heap.c`.
+`kernel/test/libc/wrappers.c`; Sections 7.22.3, 6.2.8, 6.5.8 and 6.3.2.3 by
+`libc/stdlib/` and `kernel/test/libc/heap.c`.
 
 ### National Semiconductor PC16550D datasheet
 The universal asynchronous receiver/transmitter of the IBM Personal Computer AT
@@ -528,7 +528,7 @@ The datasheet is distributed as a scanned document, so the figures within it
 cannot be quoted by number with confidence; the tables and sections above are
 named as they are printed.
 
-Used by: `drivers/serial/serial.c`, `kernel/include/oxys/serial.h`,
+Used by: `drivers/serial/serial.c`, `kernel/include/oxys/dev/serial.h`,
 `docs/devices/SERIAL.md`.
 
 ### Intel 8259A Programmable Interrupt Controller datasheet
@@ -564,7 +564,7 @@ Sections relied upon:
   and the interrupt request register when clear. This is the mechanism by which a
   spurious request is distinguished from a real one.
 
-Used by: `drivers/pic/pic.c`, `kernel/include/oxys/pic.h`, `kernel/kernel.c`.
+Used by: `drivers/pic/pic.c`, `kernel/include/oxys/dev/pic.h`, `kernel/kernel.c`.
 
 ### Intel 8254 Programmable Interval Timer datasheet
 Intel Corporation, order number 231164-005, September 1993.
@@ -591,7 +591,7 @@ Sections relied upon:
   without disturbing the counting in progress. Without it the two halves of a
   sixteen-bit count would be sampled at different instants.
 
-Used by: `drivers/pit/pit.c`, `kernel/include/oxys/pit.h`, `kernel/kernel.c`.
+Used by: `drivers/pit/pit.c`, `kernel/include/oxys/dev/pit.h`, `kernel/kernel.c`.
 
 ### Intel 82093AA I/O Advanced Programmable Interrupt Controller datasheet
 Intel Corporation, order number 290566-001, May 1996.
@@ -623,7 +623,7 @@ specification both speak — the count of interrupt inputs, for instance — the
 register is read and the table is not, ACPI 6.5, Section 5.2.12.3, expressly
 referring the reader to this register.
 
-Used by: `drivers/apic/ioapic.c`, `kernel/include/oxys/ioapic.h`,
+Used by: `drivers/apic/ioapic.c`, `kernel/include/oxys/dev/ioapic.h`,
 `docs/devices/APIC.md`.
 
 ### Advanced Configuration and Power Interface Specification, version 6.5
@@ -672,7 +672,7 @@ Sections relied upon:
   which supersedes the MADT header's 32-bit field for every local controller.
 - **Section 5.2.12.12 and Table 5.34**, the Processor Local x2APIC structure.
 
-Used by: `kernel/acpi/acpi.c`, `kernel/include/oxys/acpi.h`, `kernel/arch/x86_64/interrupt/irq.c`,
+Used by: `kernel/acpi/acpi.c`, `kernel/include/oxys/acpi/acpi.h`, `kernel/arch/x86_64/interrupt/irq.c`,
 `drivers/apic/lapic.c`, `drivers/apic/ioapic.c`, `docs/devices/ACPI.md`,
 `docs/devices/APIC.md`, `docs/design/INTERRUPTS.md`.
 
@@ -724,10 +724,10 @@ Sections relied upon:
 
 Used by: `drivers/pic/pic.c`, `drivers/pit/pit.c`, `drivers/ps2/ps2.c`,
 `drivers/keyboard/keyboard.c`, `drivers/mouse/mouse.c`,
-`drivers/serial/serial.c`, `kernel/include/oxys/pic.h`,
-`kernel/include/oxys/pit.h`, `kernel/include/oxys/ps2.h`,
-`kernel/include/oxys/keyboard.h`, `kernel/include/oxys/mouse.h`,
-`drivers/ata/`, `kernel/include/oxys/ata.h`, `kernel/kernel.c`.
+`drivers/serial/serial.c`, `kernel/include/oxys/dev/pic.h`,
+`kernel/include/oxys/dev/pit.h`, `kernel/include/oxys/dev/ps2.h`,
+`kernel/include/oxys/dev/keyboard.h`, `kernel/include/oxys/dev/mouse.h`,
+`drivers/ata/`, `kernel/include/oxys/dev/storage/ata.h`, `kernel/kernel.c`.
 
 ### The 8042 controller and PS/2 device command sets
 The command sets of the IBM Personal Computer AT keyboard controller and of the
@@ -773,9 +773,9 @@ Note that the two command sets use overlapping numbers for unrelated purposes:
 own self-test passed. The port to which a byte is written is what distinguishes
 them.
 
-Used by: `drivers/ps2/ps2.c`, `kernel/include/oxys/ps2.h`,
-`drivers/keyboard/keyboard.c`, `kernel/include/oxys/keyboard.h`,
-`drivers/mouse/mouse.c`, `kernel/include/oxys/mouse.h`.
+Used by: `drivers/ps2/ps2.c`, `kernel/include/oxys/dev/ps2.h`,
+`drivers/keyboard/keyboard.c`, `kernel/include/oxys/dev/keyboard.h`,
+`drivers/mouse/mouse.c`, `kernel/include/oxys/dev/mouse.h`.
 
 ### The PS/2 auxiliary device movement packet
 The format in which a mouse upon the controller's second port reports. Recorded
@@ -805,7 +805,7 @@ not recognise the sequence accepts three sample rates, continues to report itsel
 as identifier `0x00`, and continues to send three-byte packets. There is no
 command that asks the question directly.
 
-Used by: `drivers/mouse/mouse.c`, `kernel/include/oxys/mouse.h`.
+Used by: `drivers/mouse/mouse.c`, `kernel/include/oxys/dev/mouse.h`.
 
 ### IBM Video Graphics Array technical reference
 The colour text mode 3, presenting 80 columns by 25 rows, whose frame buffer
@@ -842,7 +842,7 @@ and from the VGA register summary of the same lineage, and cross-verified agains
 one another before being relied upon, as Section 6 of `PROJECT_GUIDELINES.md`
 requires.
 
-Used by: `drivers/vga/vga.c`, `kernel/include/oxys/vga.h`, `boot/boot.asm`.
+Used by: `drivers/vga/vga.c`, `kernel/include/oxys/dev/vga.h`, `boot/boot.asm`.
 
 ### ANSI X3.4-1986, Coded Character Set — 7-Bit American National Standard Code for Information Interchange
 American National Standards Institute. Republished, with the same repertoire of
@@ -861,9 +861,9 @@ Also the repertoire the bitmap font of sub-task 6.4 covers: the printable
 characters `0x20` to `0x7E`, and the names given to them, which are the comments
 beside the glyphs in `graphics/font.c`.
 
-Used by: `drivers/vga/vga.c`, `kernel/include/oxys/vga.h`, `kernel/kernel.c`,
-`graphics/font.c`, `graphics/console.c`, `kernel/include/oxys/font.h`,
-`kernel/include/oxys/console.h`.
+Used by: `drivers/vga/vga.c`, `kernel/include/oxys/dev/vga.h`, `kernel/kernel.c`,
+`graphics/font.c`, `graphics/console.c`, `kernel/include/oxys/gfx/font.h`,
+`kernel/include/oxys/gfx/console.h`.
 
 ### ECMA-48, Control Functions for Coded Character Sets
 European Computer Manufacturers Association, fifth edition.
@@ -909,7 +909,7 @@ above were taken from two independent secondary renderings of it and
 cross-verified against one another before being relied upon, as Section 6 of
 `PROJECT_GUIDELINES.md` requires; they agree in every particular used here.
 
-Used by: `drivers/pci/pci.c`, `kernel/include/oxys/pci.h`.
+Used by: `drivers/pci/pci.c`, `kernel/include/oxys/dev/pci.h`.
 
 ### PCI Code and ID Assignment Specification
 PCI Special Interest Group.
@@ -981,7 +981,7 @@ command details above were taken from two independent secondary renderings and
 cross-verified against one another before being relied upon, as Section 6 of
 `PROJECT_GUIDELINES.md` requires.
 
-Used by: `drivers/ata/`, `kernel/include/oxys/ata.h`.
+Used by: `drivers/ata/`, `kernel/include/oxys/dev/storage/ata.h`.
 
 ### Serial ATA Advanced Host Controller Interface Specification, revision 1.3.1
 Intel Corporation, on behalf of the Serial ATA International Organization.
@@ -1030,7 +1030,7 @@ at bit 7 of byte 1, the command at byte 2, the low three address bytes at 4 to 6
 the device register at 7, the high three at 8 to 10, and the sector count at 12
 and 13.
 
-Used by: `drivers/ahci/ahci.c`, `kernel/include/oxys/ahci.h`.
+Used by: `drivers/ahci/ahci.c`, `kernel/include/oxys/dev/storage/ahci.h`.
 
 ### SD Host Controller Simplified Specification, version 4.20
 SD Association.
@@ -1069,7 +1069,7 @@ Sections relied upon:
   registers with its low eight bits — the CRC and the end bit — removed, so that
   bit N of the card specific data appears at bit N - 8 of the response.
 
-Used by: `drivers/sdhci/sdhci.c`, `kernel/include/oxys/sdhci.h`.
+Used by: `drivers/sdhci/sdhci.c`, `kernel/include/oxys/dev/storage/sdhci.h`.
 
 ### SD Physical Layer Simplified Specification, version 8.00
 SD Association.
@@ -1207,7 +1207,7 @@ Sections relied upon:
 - **Byte order**: every quantity upon the volume is stored least significant byte
   first, irrespective of the machine.
 
-Used by: `kernel/fs/ext2/`, `kernel/include/oxys/ext2.h`.
+Used by: `kernel/fs/ext2/`, `kernel/include/oxys/fs/ext2.h`.
 
 ### Linux kernel documentation, the ext2 filesystem
 Linux kernel source, `Documentation/filesystems/ext2.rst`.
@@ -1224,7 +1224,7 @@ filename was longer than 256 characters". That last sentence is the reason this
 kernel decides the width of `name_len` from the feature flag alone and not from
 the revision; see [`../storage/EXT2-FILES.md`](../storage/EXT2-FILES.md), Section 1.2.
 
-Used by: `kernel/fs/ext2/`, `kernel/include/oxys/ext2.h`.
+Used by: `kernel/fs/ext2/`, `kernel/include/oxys/fs/ext2.h`.
 
 ### Linux kernel documentation, the ext4 superblock, group descriptor and inode
 Linux kernel source, `Documentation/filesystems/ext4/super.rst`,
@@ -1250,7 +1250,7 @@ and ext4 reuses as `bg_flags`. This kernel reads it in neither sense, so the
 divergence does not bear upon it; it is recorded because a reader comparing the
 two tables will meet it.
 
-Used by: `kernel/fs/ext2/`, `kernel/include/oxys/ext2.h`.
+Used by: `kernel/fs/ext2/`, `kernel/include/oxys/fs/ext2.h`.
 
 ### IEEE Std 1003.1-2017, the Portable Operating System Interface
 The Open Group and IEEE. Technical Standard Base Specifications, Issue 7,
@@ -1275,7 +1275,7 @@ And from `open()`: `O_APPEND` places each write at the end of the file "prior to
 each write", which is why an appending write here takes the size and not the
 position.
 
-Used by: `kernel/fs/vfs/`, `kernel/include/oxys/vfs.h`.
+Used by: `kernel/fs/vfs/`, `kernel/include/oxys/fs/vfs.h`.
 
 ### The UNIX Time-Sharing System
 Ritchie, D. M., and Thompson, K. Communications of the ACM, volume 17, number 7,

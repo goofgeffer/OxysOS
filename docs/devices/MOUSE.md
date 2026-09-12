@@ -11,7 +11,7 @@ wheel extension of the same.
 **Implementation**: [`../../drivers/ps2/ps2.c`](../../drivers/ps2/ps2.c),
 [`../../drivers/mouse/mouse.c`](../../drivers/mouse/mouse.c) and
 [`../../graphics/cursor.c`](../../graphics/cursor.c), declared by
-`<oxys/ps2.h>`, `<oxys/mouse.h>` and `<oxys/cursor.h>`.
+`<oxys/dev/ps2.h>`, `<oxys/dev/mouse.h>` and `<oxys/gfx/cursor.h>`.
 
 ---
 

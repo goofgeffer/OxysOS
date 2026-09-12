@@ -36,7 +36,7 @@
 #ifndef OXYS_FS_EXT2_INTERNAL_H
 #define OXYS_FS_EXT2_INTERNAL_H
 
-#include <oxys/ext2.h>
+#include <oxys/fs/ext2.h>
 #include <oxys/types.h>
 
 /* The greatest value of s_log_block_size this kernel will accept. */

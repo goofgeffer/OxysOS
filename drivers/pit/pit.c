@@ -54,10 +54,10 @@
  * when that begins to matter.
  */
 
-#include <oxys/pit.h>
-#include <oxys/irq.h>
-#include <oxys/interrupts.h>
-#include <oxys/io.h>
+#include <oxys/dev/pit.h>
+#include <oxys/arch/interrupt/irq.h>
+#include <oxys/arch/interrupt/interrupts.h>
+#include <oxys/dev/io.h>
 #include <oxys/kernel.h>
 
 /* The data port of counter 0, and the write-only control register. The data

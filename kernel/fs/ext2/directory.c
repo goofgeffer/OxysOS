@@ -37,7 +37,7 @@
 
 #include "internal.h"
 
-#include <oxys/buffer.h>
+#include <oxys/block/buffer.h>
 #include <oxys/kernel.h>
 
 uint8_t Ext2FileTypeOfMode(uint16_t mode)

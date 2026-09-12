@@ -31,12 +31,12 @@
  * this file will not be the place it is taken.
  */
 
-#include <oxys/framebuffer.h>
-#include <oxys/bootinfo.h>
-#include <oxys/paging.h>
-#include <oxys/vmm.h>
-#include <oxys/memory.h>
-#include <oxys/msr.h>
+#include <oxys/gfx/framebuffer.h>
+#include <oxys/boot/bootinfo.h>
+#include <oxys/arch/mm/paging.h>
+#include <oxys/mm/vmm.h>
+#include <oxys/mm/memory.h>
+#include <oxys/arch/cpu/msr.h>
 #include <oxys/kernel.h>
 
 /*

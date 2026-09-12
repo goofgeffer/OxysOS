@@ -10,14 +10,14 @@
 [`../../kernel/arch/x86_64/syscall/syscall_entry.asm`](../../kernel/arch/x86_64/syscall/syscall_entry.asm),
 [`../../kernel/arch/x86_64/cpu/idt.c`](../../kernel/arch/x86_64/cpu/idt.c),
 [`../../kernel/arch/x86_64/interrupt/exceptions.c`](../../kernel/arch/x86_64/interrupt/exceptions.c),
-[`../../kernel/include/oxys/gdt.h`](../../kernel/include/oxys/gdt.h),
-[`../../kernel/include/oxys/tss.h`](../../kernel/include/oxys/tss.h),
-[`../../kernel/include/oxys/syscall.h`](../../kernel/include/oxys/syscall.h),
-[`../../kernel/include/oxys/msr.h`](../../kernel/include/oxys/msr.h).
+[`../../kernel/include/oxys/arch/cpu/gdt.h`](../../kernel/include/oxys/arch/cpu/gdt.h),
+[`../../kernel/include/oxys/arch/cpu/tss.h`](../../kernel/include/oxys/arch/cpu/tss.h),
+[`../../kernel/include/oxys/arch/syscall/syscall.h`](../../kernel/include/oxys/arch/syscall/syscall.h),
+[`../../kernel/include/oxys/arch/cpu/msr.h`](../../kernel/include/oxys/arch/cpu/msr.h).
 **Asserted by**: `KernelVerifyPrivilege` in
-[`../../kernel/test/verify_privilege.c`](../../kernel/test/verify_privilege.c),
+[`../../kernel/test/arch/privilege.c`](../../kernel/test/arch/privilege.c),
 and — for the dispatch and validation of Section 9 — `KernelVerifySyscall` in
-[`../../kernel/test/verify_syscall.c`](../../kernel/test/verify_syscall.c).
+[`../../kernel/test/arch/syscall.c`](../../kernel/test/arch/syscall.c).
 
 **Specifications**: Intel 64 and IA-32 Architectures Software Developer's Manual,
 Volume 3A, Sections 3.4.5, 5.8.8, 6.14.4, 8.2.3 and 8.7, and Table 2-1; Volume

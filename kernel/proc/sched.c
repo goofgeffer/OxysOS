@@ -50,12 +50,12 @@
  * figure in a report, and a lock upon the switch path would cost every switch.
  */
 
-#include <oxys/sched.h>
-#include <oxys/process.h>
-#include <oxys/percpu.h>
-#include <oxys/spinlock.h>
-#include <oxys/lapic.h>
-#include <oxys/interrupts.h>
+#include <oxys/proc/sched.h>
+#include <oxys/proc/process.h>
+#include <oxys/arch/cpu/percpu.h>
+#include <oxys/arch/cpu/spinlock.h>
+#include <oxys/dev/lapic.h>
+#include <oxys/arch/interrupt/interrupts.h>
 #include <oxys/kernel.h>
 
 /*

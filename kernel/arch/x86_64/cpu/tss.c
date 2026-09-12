@@ -39,8 +39,8 @@
  * processor it is about to start — and that processor is not running yet.
  */
 
-#include <oxys/tss.h>
-#include <oxys/gdt.h>
+#include <oxys/arch/cpu/tss.h>
+#include <oxys/arch/cpu/gdt.h>
 #include <oxys/kernel.h>
 
 /*

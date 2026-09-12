@@ -30,9 +30,9 @@
  * require protection.
  */
 
-#include <oxys/pmm.h>
+#include <oxys/mm/pmm.h>
 #include <oxys/kernel.h>
-#include <oxys/heap.h>
+#include <oxys/mm/heap.h>
 
 /* The number of frames represented by one element of the bitmap. */
 #define FRAME_BITS_PER_WORD 64U

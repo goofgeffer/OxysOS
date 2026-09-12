@@ -38,15 +38,15 @@
  *   costs is a second walk of the program headers, which are at most sixteen.
  */
 
-#include <oxys/elf.h>
-#include <oxys/addrspace.h>
-#include <oxys/heap.h>
+#include <oxys/exec/elf.h>
+#include <oxys/arch/mm/addrspace.h>
+#include <oxys/mm/heap.h>
 #include <oxys/kernel.h>
-#include <oxys/memory.h>
-#include <oxys/paging.h>
-#include <oxys/pmm.h>
-#include <oxys/syscall.h>
-#include <oxys/vfs.h>
+#include <oxys/mm/memory.h>
+#include <oxys/arch/mm/paging.h>
+#include <oxys/mm/pmm.h>
+#include <oxys/arch/syscall/syscall.h>
+#include <oxys/fs/vfs.h>
 
 /* The program headers of the image most recently decoded. */
 static ElfProgramHeader ElfSegments[ELF_SEGMENT_MAXIMUM];

@@ -117,7 +117,7 @@ an otherwise unmodified display.
    `.boot.text`. See [`../docs/design/BOOT.md`](../docs/design/BOOT.md),
    Section 8.
 6. `trampoline.asm` is assembled at a fixed origin that must equal
-   `SMP_TRAMPOLINE_ADDRESS` in `kernel/include/oxys/smp.h`, and its parameter
+   `SMP_TRAMPOLINE_ADDRESS` in `kernel/include/oxys/arch/smp/smp.h`, and its parameter
    block must match `SmpTrampolineParameters` in that same header. Neither
    agreement is checked by any compiler: the magic value at the head of the block
    is what proves them at run time, and a change to either side that does not

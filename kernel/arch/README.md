@@ -69,17 +69,34 @@ The division between `cpu/` and `smp/` is the one worth stating: `cpu/` is about
 `smp/` because a single-processor kernel still takes it — it masks interrupts,
 and that is the half of its job which has nothing to do with a second core.
 
-## The headers are not here
+## The headers are not here, but they say the same thing
 
-`<oxys/gdt.h>`, `<oxys/paging.h>`, `<oxys/syscall.h>` and the rest stay in
-[`../include/oxys/`](../include/oxys/) with the whole of the corpus, and this is
-deliberate. [`../../drivers/README.md`](../../drivers/README.md) already states
-the rule for a device driver — "the kernel core therefore depends upon the
-interface and never upon a driver's location" — and the same rule answers this
-case. A second include root under `arch/` would mean every consumer's `#include`
-line named an architecture, which is the dependency the arrangement is supposed
-to prevent rather than advertise.
+The declarations stay in [`../include/oxys/`](../include/oxys/) with the whole of
+the corpus — there is no second include root under this directory, and there must
+not be one. [`../../drivers/README.md`](../../drivers/README.md) states the rule
+for a device driver, "the kernel core therefore depends upon the interface and
+never upon a driver's location", and it answers this case too.
 
-The cost of that choice is honest and worth stating: the corpus does not, by
-looking at it, tell you which of its headers describes something portable.
-`ARCHITECTURE.md`, Section 2.4, records it as the boundary's one loose end.
+What **did** change is that the corpus is now grouped the way this directory is,
+so the interfaces make the same distinction the implementations do:
+
+| Implementation | Interface |
+| -------------- | --------- |
+| `arch/x86_64/cpu/gdt.c` | `<oxys/arch/cpu/gdt.h>` |
+| `arch/x86_64/interrupt/irq.c` | `<oxys/arch/interrupt/irq.h>` |
+| `arch/x86_64/mm/paging.c` | `<oxys/arch/mm/paging.h>` |
+| `mm/pmm.c` | `<oxys/mm/pmm.h>` |
+
+**This was recorded as the boundary's one loose end and is no longer one.** When
+`arch/x86_64/` was first established the headers were left flat, and
+`ARCHITECTURE.md`, Section 2.4, said plainly that the corpus therefore could not
+tell you which of its headers was portable: `<oxys/paging.h>` described a
+four-level hierarchy and sat beside `<oxys/vfs.h>`, which described nothing of
+the sort. Grouping the corpus closed it.
+
+Note what the include path says and what it does not. It names `arch`, which is a
+statement about portability, and it does not name `x86_64`, which would be a
+statement about *this* processor and is the dependency the rule above forbids
+advertising. A port would resolve `<oxys/arch/cpu/gdt.h>` to a different file by
+putting an architecture's include directory ahead of the shared one; no consumer's
+source would change, which is the property being protected.

@@ -77,7 +77,7 @@ extern SyscallObservedCodeSelector
 extern SyscallObservedStackSelector
 extern SyscallObservedFlagsValue
 
-; The first two fields of the per-processor area of <oxys/percpu.h>, addressed
+; The first two fields of the per-processor area of <oxys/arch/cpu/percpu.h>, addressed
 ; through GS. Their offsets are asserted against the C structure by a
 ; _Static_assert in kernel/arch/x86_64/cpu/percpu.c; the assembler cannot see the structure
 ; and would otherwise agree with it only by inspection.

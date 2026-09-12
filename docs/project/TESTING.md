@@ -93,7 +93,7 @@ GRUB. Their exact values are not part of the assertion.
 The self-tests are part of the kernel image, there being no harness to run them
 in before Phase 7 and no userland to host one. They are implemented in
 `kernel/test/`, one file per subsystem, and declared by
-`kernel/include/oxys/verify.h`; `KernelMain` calls them in the order the
+`kernel/include/oxys/test/verify.h`; `KernelMain` calls them in the order the
 subsystems are initialised, because a test cannot run before the thing it
 asserts exists.
 
@@ -451,7 +451,7 @@ form of independent judgement available, and the virtual filesystem layer is now
 complete enough to submit to it.
 
 **`readelf` and `objdump` upon the composed ELF images.**
-`kernel/test/verify_elf.c` assembles images to be wrong on purpose. Two questions
+`kernel/test/exec/elf.c` assembles images to be wrong on purpose. Two questions
 follow: whether `readelf` agrees the *valid* one is well formed, and whether the
 loader accepts the output of a real `x86_64-elf-gcc`. It has so far seen only
 images this project composed.

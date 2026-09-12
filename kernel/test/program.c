@@ -18,7 +18,7 @@
  *   - Intel SDM, Volume 2A and 2B: "MOV", "ADD", "SUB", "IMUL", "CALL" and
  *     "UD2", from which each encoding below is taken.
  *   - ELF-64 Object File Format, version 1.5 draft 2: the file header's fields
- *     and the program header's, at the offsets <oxys/elf.h> decodes them from.
+ *     and the program header's, at the offsets <oxys/exec/elf.h> decodes them from.
  *
  * Every write goes through one bounds check.
  *
@@ -33,8 +33,8 @@
 
 #include "program.h"
 
-#include <oxys/elf.h>
-#include <oxys/memory.h>
+#include <oxys/exec/elf.h>
+#include <oxys/mm/memory.h>
 
 /*
  * Whether `count` bytes may be written at `at`, recording the refusal where they

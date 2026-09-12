@@ -10,7 +10,7 @@ hardware behaviour below carries a citation, and every specification named is
 registered in [`REFERENCES.md`](../project/REFERENCES.md).
 
 **Implementation**: [`../drivers/serial/serial.c`](../../drivers/serial/serial.c),
-[`../kernel/include/oxys/serial.h`](../../kernel/include/oxys/serial.h).
+[`../kernel/include/oxys/dev/serial.h`](../../kernel/include/oxys/dev/serial.h).
 
 ## 1. What the adapter is, and why it matters more than it appears to
 
@@ -241,7 +241,7 @@ for one that could not arrive.
 
 ### 8.1 The boot-time self-test
 
-`KernelVerifySerial`, in `kernel/test/verify_devices.c`, asserts the following.
+`KernelVerifySerial`, in `kernel/test/dev/devices.c`, asserts the following.
 Each is a failure that would otherwise be silent.
 
 | Property | The silent failure it guards |

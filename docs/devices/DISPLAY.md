@@ -11,7 +11,7 @@ hardware behaviour below carries a citation, and every specification named is
 registered in [`REFERENCES.md`](../project/REFERENCES.md).
 
 **Implementation**: [`../drivers/vga/vga.c`](../../drivers/vga/vga.c),
-[`../kernel/include/oxys/vga.h`](../../kernel/include/oxys/vga.h).
+[`../kernel/include/oxys/dev/vga.h`](../../kernel/include/oxys/dev/vga.h).
 
 ## 1. What the display is, and what it is for
 

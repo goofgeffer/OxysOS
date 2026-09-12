@@ -71,18 +71,18 @@
  * counted with the rest.
  */
 
-#include <oxys/process.h>
-#include <oxys/addrspace.h>
+#include <oxys/proc/process.h>
+#include <oxys/arch/mm/addrspace.h>
 #include <oxys/kernel.h>
-#include <oxys/memory.h>
-#include <oxys/paging.h>
-#include <oxys/pmm.h>
-#include <oxys/gdt.h>
-#include <oxys/tss.h>
-#include <oxys/vmm.h>
-#include <oxys/percpu.h>
-#include <oxys/sched.h>
-#include <oxys/spinlock.h>
+#include <oxys/mm/memory.h>
+#include <oxys/arch/mm/paging.h>
+#include <oxys/mm/pmm.h>
+#include <oxys/arch/cpu/gdt.h>
+#include <oxys/arch/cpu/tss.h>
+#include <oxys/mm/vmm.h>
+#include <oxys/arch/cpu/percpu.h>
+#include <oxys/proc/sched.h>
+#include <oxys/arch/cpu/spinlock.h>
 
 static Process ProcessTable[PROCESS_CAPACITY];
 static Thread ThreadTable[THREAD_CAPACITY];
@@ -874,7 +874,7 @@ Thread *ThreadCreateKernel(void (*entry)(void))
  *
  * It exists to close the critical section it inherited. The scheduler switches
  * threads from inside a masked region — it masks interrupts, chooses, and
- * switches — and the counted disable of <oxys/percpu.h> belongs to the
+ * switches — and the counted disable of <oxys/arch/cpu/percpu.h> belongs to the
  * processor rather than to the thread. A resumed thread carries on inside its
  * own push and executes the matching pop; a thread that has never run has no
  * such pop, and would run with interrupts masked for ever, taking no timer tick

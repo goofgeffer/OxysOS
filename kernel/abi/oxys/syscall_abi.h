@@ -25,7 +25,7 @@
  *   - docs/design/LIBC.md, Section 2: the division of which this file is one
  *     half, and the licensing obligation that required it.
  *
- * Why this file is separate from <oxys/syscall.h>, and why it is MIT.
+ * Why this file is separate from <oxys/arch/syscall/syscall.h>, and why it is MIT.
  *
  * The kernel is LGPL-3.0-or-later and the C library above it is MIT, and until
  * this file existed both halves of the interface stood in one LGPL header: the
@@ -40,7 +40,7 @@
  * So the interface is here, under the permissive licence, and may be included by
  * anything: this kernel, the C library of Phase 7, a program written by somebody
  * who has never seen the rest of this repository, and a libc that is not this
- * one. The implementation remains in <oxys/syscall.h>, which includes this file
+ * one. The implementation remains in <oxys/arch/syscall/syscall.h>, which includes this file
  * and adds what only the kernel may see. LICENSING.md, Section 2.1, required the
  * division to be made before the wrappers of sub-task 7.2 were written, on the
  * ground that it is easier while the interface is seven calls than after a

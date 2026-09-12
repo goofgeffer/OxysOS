@@ -5,7 +5,7 @@
  * Purpose: Contains the C entry point of the Oxys-OS kernel. It validates the
  *          state established by the boot loader, initialises in dependency order
  *          every subsystem the kernel presently has, runs the boot-time
- *          self-tests declared in <oxys/verify.h>, mounts a volume the machine
+ *          self-tests declared in <oxys/test/verify.h>, mounts a volume the machine
  *          carries at the root, and then either enters the echo loop, where a
  *          keyboard or a mouse is present, or halts the processor where neither
  *          is.
@@ -25,10 +25,10 @@
  *   - System V Application Binary Interface, AMD64 Architecture Processor
  *     Supplement, Section 3.2.3: the first two integer arguments are passed in
  *     RDI and RSI respectively.
- *   - Intel 64 and IA-32 Architectures Software Developer\'s Manual, Volume 2B,
+ *   - Intel 64 and IA-32 Architectures Software Developer's Manual, Volume 2B,
  *     "HLT": the instruction halts the processor until an interrupt, a debug
  *     exception, a non-maskable interrupt, or a reset occurs.
- *   - Intel SDM, Volume 2B, "STI": the instruction\'s effect upon the interrupt
+ *   - Intel SDM, Volume 2B, "STI": the instruction's effect upon the interrupt
  *     flag is delayed by one instruction, so that an interrupt cannot be
  *     delivered until after the instruction following it. This is what makes the
  *     sequence STI followed immediately by HLT free of the window in which a
@@ -46,59 +46,59 @@
  * The self-tests themselves are not here. Until sub-task 6.1 they were, and this
  * file had grown to some nine thousand lines of which the entry point was the
  * last two hundred and fifty. They now stand in kernel/test/, one file per
- * subsystem, declared by <oxys/verify.h>; kernel/test/README.md records the
+ * subsystem, declared by <oxys/test/verify.h>; kernel/test/README.md records the
  * arrangement and the reason for it.
  */
 
 #include <oxys/kernel.h>
-#include <oxys/verify.h>
-#include <oxys/bootinfo.h>
-#include <oxys/pmm.h>
-#include <oxys/paging.h>
-#include <oxys/addrspace.h>
-#include <oxys/vmm.h>
-#include <oxys/heap.h>
-#include <oxys/gdt.h>
-#include <oxys/tss.h>
-#include <oxys/syscall.h>
-#include <oxys/idt.h>
-#include <oxys/interrupts.h>
-#include <oxys/exceptions.h>
-#include <oxys/cpu.h>
-#include <oxys/percpu.h>
-#include <oxys/spinlock.h>
-#include <oxys/ipi.h>
-#include <oxys/shootdown.h>
-#include <oxys/smp.h>
-#include <oxys/sched.h>
-#include <oxys/pic.h>
-#include <oxys/irq.h>
-#include <oxys/acpi.h>
-#include <oxys/lapic.h>
-#include <oxys/ioapic.h>
-#include <oxys/pit.h>
-#include <oxys/ps2.h>
-#include <oxys/keyboard.h>
-#include <oxys/mouse.h>
-#include <oxys/vga.h>
-#include <oxys/framebuffer.h>
-#include <oxys/graphics.h>
-#include <oxys/compositor.h>
-#include <oxys/console.h>
-#include <oxys/cursor.h>
-#include <oxys/faultscreen.h>
-#include <oxys/serial.h>
-#include <oxys/pci.h>
-#include <oxys/ata.h>
-#include <oxys/ahci.h>
-#include <oxys/sdhci.h>
-#include <oxys/block.h>
-#include <oxys/buffer.h>
-#include <oxys/elf.h>
-#include <oxys/process.h>
-#include <oxys/ext2.h>
-#include <oxys/vfs.h>
-#include <oxys/ext2_vfs.h>
+#include <oxys/test/verify.h>
+#include <oxys/boot/bootinfo.h>
+#include <oxys/mm/pmm.h>
+#include <oxys/arch/mm/paging.h>
+#include <oxys/arch/mm/addrspace.h>
+#include <oxys/mm/vmm.h>
+#include <oxys/mm/heap.h>
+#include <oxys/arch/cpu/gdt.h>
+#include <oxys/arch/cpu/tss.h>
+#include <oxys/arch/syscall/syscall.h>
+#include <oxys/arch/cpu/idt.h>
+#include <oxys/arch/interrupt/interrupts.h>
+#include <oxys/arch/interrupt/exceptions.h>
+#include <oxys/arch/cpu/cpu.h>
+#include <oxys/arch/cpu/percpu.h>
+#include <oxys/arch/cpu/spinlock.h>
+#include <oxys/arch/smp/ipi.h>
+#include <oxys/arch/mm/shootdown.h>
+#include <oxys/arch/smp/smp.h>
+#include <oxys/proc/sched.h>
+#include <oxys/dev/pic.h>
+#include <oxys/arch/interrupt/irq.h>
+#include <oxys/acpi/acpi.h>
+#include <oxys/dev/lapic.h>
+#include <oxys/dev/ioapic.h>
+#include <oxys/dev/pit.h>
+#include <oxys/dev/ps2.h>
+#include <oxys/dev/keyboard.h>
+#include <oxys/dev/mouse.h>
+#include <oxys/dev/vga.h>
+#include <oxys/gfx/framebuffer.h>
+#include <oxys/gfx/graphics.h>
+#include <oxys/gfx/compositor.h>
+#include <oxys/gfx/console.h>
+#include <oxys/gfx/cursor.h>
+#include <oxys/gfx/faultscreen.h>
+#include <oxys/dev/serial.h>
+#include <oxys/dev/pci.h>
+#include <oxys/dev/storage/ata.h>
+#include <oxys/dev/storage/ahci.h>
+#include <oxys/dev/storage/sdhci.h>
+#include <oxys/block/block.h>
+#include <oxys/block/buffer.h>
+#include <oxys/exec/elf.h>
+#include <oxys/proc/process.h>
+#include <oxys/fs/ext2.h>
+#include <oxys/fs/vfs.h>
+#include <oxys/fs/ext2_vfs.h>
 
 /*
  * Halts the processor permanently with interrupts masked. Execution does not
@@ -344,12 +344,6 @@ void KernelPanic(const char *message)
  */
 BootInformation KernelBootInformation;
 
-
-
-
-
-
-
 /*
  * True if the boot loader's command line contains the stated option as a
  * complete word.
@@ -360,68 +354,6 @@ BootInformation KernelBootInformation;
  * decision the operator made, and a decision must not be triggered by a longer
  * word that happens to contain it.
  */
-bool KernelCommandLineOptionNumber(const char *option, uint64_t *value)
-{
-    const char *const line = KernelBootInformation.command_line;
-    size_t position = 0U;
-
-    if ((option == NULL) || (value == NULL))
-    {
-        return false;
-    }
-
-    while (line[position] != '\0')
-    {
-        size_t length = 0U;
-
-        while ((line[position] == ' ') || (line[position] == '\t'))
-        {
-            ++position;
-        }
-
-        while ((option[length] != '\0') && (line[position + length] == option[length]))
-        {
-            ++length;
-        }
-
-        if ((option[length] == '\0') && (line[position + length] == '='))
-        {
-            size_t digit = position + length + 1U;
-            uint64_t accumulated = 0U;
-            bool any = false;
-
-            while ((line[digit] >= '0') && (line[digit] <= '9'))
-            {
-                accumulated = (accumulated * 10U) + (uint64_t)(line[digit] - '0');
-                any = true;
-                ++digit;
-            }
-
-            /*
-             * The value must end where the word does. "fault-screen=13x" is a
-             * mistake, and reading it as thirteen would act upon a command line
-             * its author did not write.
-             */
-            if (any && ((line[digit] == '\0') || (line[digit] == ' ') ||
-                        (line[digit] == '\t')))
-            {
-                *value = accumulated;
-                return true;
-            }
-
-            return false;
-        }
-
-        while ((line[position] != '\0') && (line[position] != ' ') &&
-               (line[position] != '\t'))
-        {
-            ++position;
-        }
-    }
-
-    return false;
-}
-
 bool KernelCommandLineHasOption(const char *option)
 {
     const char *const line = KernelBootInformation.command_line;
@@ -1469,47 +1401,6 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
                       "of memory, used it,\nand given it back.\n");
 
     VgaSetColour(VGA_COLOUR_LIGHT_GREY, VGA_COLOUR_BLACK);
-
-    /*
-     * The fault screens of sub-task 6.4, upon request.
-     *
-     * Two options, because there are two different things to establish and one
-     * of them cannot be established safely.
-     *
-     * `fault-screen=<vector>` composes a trap frame and draws that vector's
-     * page. It proves the page: that its text fits the display, that its panels
-     * lay out one beneath another, that its colour and title are its own. It
-     * proves nothing about the processor, and the frame it draws from is filled
-     * with values no machine would produce so that a photograph of it cannot be
-     * mistaken for a real report.
-     *
-     * `fault-raise` writes to an address that is not mapped, which raises a
-     * genuine page fault. That proves the wiring — handler, report, screen — end
-     * to end, and it is chosen because it is the one severe fault that can be
-     * raised deliberately without endangering the machine. A double fault is
-     * raised by destroying the stack, and a machine check cannot be asked for at
-     * all.
-     */
-    {
-        uint64_t demonstration = 0U;
-
-        if (KernelCommandLineOptionNumber("fault-screen", &demonstration))
-        {
-            KernelWriteString("Fault screen demonstration for vector ");
-            KernelWriteDecimal(demonstration);
-            KernelWriteString(". No fault has occurred.\n");
-            FaultScreenDemonstrate(demonstration);
-            KernelHalt();
-        }
-    }
-
-    if (KernelCommandLineHasOption("fault-raise"))
-    {
-        volatile uint64_t *const unmapped = (volatile uint64_t *)UINT64_C(0xFFFF900000000000);
-
-        KernelWriteString("Raising a page fault deliberately, upon request.\n");
-        *unmapped = 1U;
-    }
 
     /*
      * With a keyboard the kernel has something to wait for, and waiting for it

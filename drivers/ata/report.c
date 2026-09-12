@@ -32,10 +32,10 @@
 
 #include "internal.h"
 
-#include <oxys/io.h>
+#include <oxys/dev/io.h>
 #include <oxys/kernel.h>
-#include <oxys/pit.h>
-#include <oxys/block.h>
+#include <oxys/dev/pit.h>
+#include <oxys/block/block.h>
 
 /* The printable name of what was found at an address. */
 static const char *AtaKindName(AtaDeviceKind kind)

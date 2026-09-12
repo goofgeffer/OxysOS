@@ -36,9 +36,9 @@
  * require it before a second processor runs.
  */
 
-#include <oxys/vmm.h>
-#include <oxys/pmm.h>
-#include <oxys/paging.h>
+#include <oxys/mm/vmm.h>
+#include <oxys/mm/pmm.h>
+#include <oxys/arch/mm/paging.h>
 #include <oxys/kernel.h>
 
 /*

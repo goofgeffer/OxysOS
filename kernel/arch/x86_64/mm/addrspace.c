@@ -30,9 +30,9 @@
  * be active, PagingInvalidate announcing every change it makes.
  */
 
-#include <oxys/addrspace.h>
-#include <oxys/paging.h>
-#include <oxys/pmm.h>
+#include <oxys/arch/mm/addrspace.h>
+#include <oxys/arch/mm/paging.h>
+#include <oxys/mm/pmm.h>
 #include <oxys/kernel.h>
 
 /* The address space describing the kernel hierarchy, formed upon first request. */

@@ -44,12 +44,12 @@
  *   a medium that is itself the slow part.
  */
 
-#include <oxys/sdhci.h>
-#include <oxys/block.h>
+#include <oxys/dev/storage/sdhci.h>
+#include <oxys/block/block.h>
 #include <oxys/kernel.h>
-#include <oxys/pci.h>
-#include <oxys/paging.h>
-#include <oxys/vmm.h>
+#include <oxys/dev/pci.h>
+#include <oxys/arch/mm/paging.h>
+#include <oxys/mm/vmm.h>
 
 /* The registers, as byte offsets from the mapped base. */
 #define SDHCI_ARGUMENT            0x08U

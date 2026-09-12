@@ -44,13 +44,13 @@ position came from somewhere else entirely.
 | `framebuffer.c` | Sub-task 6.2. Acquires the framebuffer described in the Multiboot2 boot information, gives its pages the write-combining memory type through the page attribute table, maps them into the kernel arena, and describes what was obtained. `FramebufferInitialise`, `FramebufferIsPresent`, `FramebufferIsGraphical`, `FramebufferAddress`, `FramebufferWidth`, `FramebufferHeight`, `FramebufferPitch`, `FramebufferBitsPerPixel`, `FramebufferBytesPerPixel`, `FramebufferByteCount`, `FramebufferFormat`, `FramebufferEncode`, `FramebufferWriteCombining`, `FramebufferReport`. |
 
 The interfaces are declared in
-[`../kernel/include/oxys/framebuffer.h`](../kernel/include/oxys/framebuffer.h),
-[`../kernel/include/oxys/graphics.h`](../kernel/include/oxys/graphics.h),
-[`../kernel/include/oxys/font.h`](../kernel/include/oxys/font.h) and
-[`../kernel/include/oxys/console.h`](../kernel/include/oxys/console.h),
-[`../kernel/include/oxys/faultscreen.h`](../kernel/include/oxys/faultscreen.h),
-[`../kernel/include/oxys/cursor.h`](../kernel/include/oxys/cursor.h) and
-[`../kernel/include/oxys/compositor.h`](../kernel/include/oxys/compositor.h),
+[`../kernel/include/oxys/gfx/framebuffer.h`](../kernel/include/oxys/gfx/framebuffer.h),
+[`../kernel/include/oxys/gfx/graphics.h`](../kernel/include/oxys/gfx/graphics.h),
+[`../kernel/include/oxys/gfx/font.h`](../kernel/include/oxys/gfx/font.h) and
+[`../kernel/include/oxys/gfx/console.h`](../kernel/include/oxys/gfx/console.h),
+[`../kernel/include/oxys/gfx/faultscreen.h`](../kernel/include/oxys/gfx/faultscreen.h),
+[`../kernel/include/oxys/gfx/cursor.h`](../kernel/include/oxys/gfx/cursor.h) and
+[`../kernel/include/oxys/gfx/compositor.h`](../kernel/include/oxys/gfx/compositor.h),
 with the
 rest of the kernel's header corpus, so that a consumer depends upon an interface
 and not upon this directory.

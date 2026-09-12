@@ -29,10 +29,10 @@
  *   image, which is the whole cost of never having to answer the question.
  */
 
-#include <oxys/percpu.h>
-#include <oxys/msr.h>
-#include <oxys/cpu.h>
-#include <oxys/lapic.h>
+#include <oxys/arch/cpu/percpu.h>
+#include <oxys/arch/cpu/msr.h>
+#include <oxys/arch/cpu/cpu.h>
+#include <oxys/dev/lapic.h>
 #include <oxys/kernel.h>
 
 #include <stddef.h>

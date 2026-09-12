@@ -14,7 +14,7 @@
  *     by block and inode by inode, and the reason each thing within it is there.
  *   - docs/storage/VFS.md, Section 10: the second volume, and why it is a copy
  *     of the first with exactly one field altered.
- *   - The EXT2 field offsets themselves are in <oxys/ext2.h> and are not
+ *   - The EXT2 field offsets themselves are in <oxys/fs/ext2.h> and are not
  *     restated here: a fixture that restated them would agree with a mistaken
  *     decoder as readily as with a correct one.
  *
@@ -36,7 +36,7 @@
  * The composed volume is not a substitute for a real one. It shares this
  * kernel's understanding of the format, so a misreading of the specification
  * would be composed into it and asserted against itself. That is what the
- * diagnostic probes of <oxys/verify.h> and the mke2fs corroboration recorded in
+ * diagnostic probes of <oxys/test/verify.h> and the mke2fs corroboration recorded in
  * docs/project/TESTING.md are for.
  */
 
@@ -44,7 +44,7 @@
 #define OXYS_TEST_VOLUME_H
 
 #include <oxys/types.h>
-#include <oxys/block.h>
+#include <oxys/block/block.h>
 
 /*
  * A block device backed by memory, existing only for the self-test below.
@@ -203,7 +203,7 @@ bool KernelFileBufferIsZero(uint64_t length);
  *
  * These give the offset within the store at which a given field stands, so that
  * a test may alter one field and assert that the alteration is refused. The
- * offsets are those <oxys/ext2.h> names; nothing here restates them.
+ * offsets are those <oxys/fs/ext2.h> names; nothing here restates them.
  * ------------------------------------------------------------------------------ */
 
 size_t KernelVolumeBlock(uint32_t block);

@@ -9,10 +9,10 @@ bound.
 **Authority**: `PROJECT_GUIDELINES.md`, Sections 2 and 4.
 
 **Implemented by**: [`../../graphics/draw.c`](../../graphics/draw.c),
-[`../../kernel/include/oxys/graphics.h`](../../kernel/include/oxys/graphics.h).
+[`../../kernel/include/oxys/gfx/graphics.h`](../../kernel/include/oxys/gfx/graphics.h).
 
 **Asserted by**: `KernelVerifyGraphics` in
-[`../../kernel/test/verify_graphics.c`](../../kernel/test/verify_graphics.c).
+[`../../kernel/test/gfx/graphics.c`](../../kernel/test/gfx/graphics.c).
 
 **Specifications**: J. E. Bresenham, "Algorithm for computer control of a digital
 plotter", IBM Systems Journal 4(1), pages 25 to 30, 1965.

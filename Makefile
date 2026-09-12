@@ -123,7 +123,7 @@ LDFLAGS := -n -T $(LINKER_SCRIPT) -Map $(KERNEL_MAP) -z max-page-size=0x1000
 #
 # These are not kernel sources and the kernel does not call them. They are
 # compiled into the image for one reason: `make verify` is the only thing in this
-# project that can run code at all, and kernel/test/verify_string.c is what
+# project that can run code at all, and kernel/test/libc/string.c is what
 # asserts them. Sub-task 7.5 adds the user-mode link, at which point the same
 # sources are compiled a second time — with the flags a program requires, which
 # are not these — into a library a program links against. docs/design/LIBC.md,
@@ -158,7 +158,7 @@ LIBC_SOURCES := libc/string/copying.c \
 #
 # docs/design/LIBC.md, Section 8.1, records why the invocation is a translation
 # unit of assembly rather than inline assembly inside the C wrappers: it must
-# contain no relocation, so that kernel/test/verify_wrappers.c can copy the bytes
+# contain no relocation, so that kernel/test/libc/wrappers.c can copy the bytes
 # this library ships into a program's address space and execute them at privilege
 # level 3.
 LIBC_ASM_SOURCES := libc/syscall/invoke.asm
@@ -166,36 +166,36 @@ LIBC_ASM_SOURCES := libc/syscall/invoke.asm
 C_SOURCES := kernel/kernel.c \
              kernel/handoff/multiboot2.c \
              kernel/test/volume.c \
-             kernel/test/verify_memory.c \
-             kernel/test/verify_interrupts.c \
-             kernel/test/verify_privilege.c \
-             kernel/test/verify_syscall.c \
-             kernel/test/verify_elf.c \
-             kernel/test/verify_process.c \
-             kernel/test/verify_usermode.c \
-             kernel/test/verify_lifecycle.c \
-             kernel/test/verify_framebuffer.c \
-             kernel/test/verify_graphics.c \
-             kernel/test/verify_console.c \
-             kernel/test/verify_compositor.c \
-             kernel/test/verify_faultscreen.c \
-             kernel/test/verify_mouse.c \
-             kernel/test/verify_devices.c \
-             kernel/test/verify_storage.c \
-             kernel/test/verify_ext2.c \
-             kernel/test/ext2/format.c \
-             kernel/test/ext2/directory.c \
-             kernel/test/ext2/file.c \
-             kernel/test/ext2/write.c \
-             kernel/test/ext2/probe.c \
-             kernel/test/verify_vfs.c \
-             kernel/test/verify_apic.c \
-             kernel/test/verify_smp.c \
-             kernel/test/verify_sched.c \
              kernel/test/program.c \
-             kernel/test/verify_string.c \
-             kernel/test/verify_wrappers.c \
-             kernel/test/verify_heap.c \
+             kernel/test/mm/memory.c \
+             kernel/test/arch/interrupts.c \
+             kernel/test/arch/privilege.c \
+             kernel/test/arch/syscall.c \
+             kernel/test/arch/usermode.c \
+             kernel/test/arch/apic.c \
+             kernel/test/arch/smp.c \
+             kernel/test/exec/elf.c \
+             kernel/test/proc/process.c \
+             kernel/test/proc/sched.c \
+             kernel/test/proc/lifecycle.c \
+             kernel/test/gfx/framebuffer.c \
+             kernel/test/gfx/graphics.c \
+             kernel/test/gfx/console.c \
+             kernel/test/gfx/compositor.c \
+             kernel/test/gfx/faultscreen.c \
+             kernel/test/dev/devices.c \
+             kernel/test/dev/mouse.c \
+             kernel/test/storage/stack.c \
+             kernel/test/storage/ext2.c \
+             kernel/test/storage/ext2/format.c \
+             kernel/test/storage/ext2/directory.c \
+             kernel/test/storage/ext2/file.c \
+             kernel/test/storage/ext2/write.c \
+             kernel/test/storage/ext2/probe.c \
+             kernel/test/storage/vfs.c \
+             kernel/test/libc/string.c \
+             kernel/test/libc/wrappers.c \
+             kernel/test/libc/heap.c \
              kernel/mm/pmm.c \
              kernel/mm/vmm.c \
              kernel/mm/heap.c \
@@ -317,28 +317,23 @@ $(BUILD_DIR)/libc/%.c.o: libc/%.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) $(LIBC_INCLUDE_DIRS) -MMD -MP -MF $(patsubst %.o,%.d,$@) -c $< -o $@
 
-# The one self-test that is compiled against the C library's include root, being
-# the one that asserts it. An explicit rule, because it is one file and not a
-# class of them, and because naming it here is what keeps the exception visible:
-# every other file in kernel/ is compiled without <string.h> in reach.
-$(BUILD_DIR)/kernel/test/verify_string.c.o: kernel/test/verify_string.c
-	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) $(LIBC_INCLUDE_DIRS) -MMD -MP -MF $(patsubst %.o,%.d,$@) -c $< -o $@
-
-# The second, and for the same reason: it asserts the C library's system-call
-# wrappers of sub-task 7.2, so it must see <syscall.h> and <errno.h>. Named
-# files are still lines a reader can find, which a pattern over kernel/test/
-# would not be — that would put every future self-test in reach of the
-# userland's headers whether or not it asserted the userland.
-$(BUILD_DIR)/kernel/test/verify_wrappers.c.o: kernel/test/verify_wrappers.c
-	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) $(LIBC_INCLUDE_DIRS) -MMD -MP -MF $(patsubst %.o,%.d,$@) -c $< -o $@
-
-# The third: it asserts the C library's heap of sub-task 7.3, so it must see
-# <stdlib.h> and <heap.h>. The exception remains a list of named files rather
-# than becoming a rule about a directory, which is what keeps it legible as an
-# exception.
-$(BUILD_DIR)/kernel/test/verify_heap.c.o: kernel/test/verify_heap.c
+# The self-tests that are compiled against the C library's include root, being
+# the ones that assert it: the string and memory functions of sub-task 7.1, the
+# system-call wrappers of 7.2 and the heap of 7.3.
+#
+# This was three explicit rules naming three files, and the note upon them said
+# a pattern was refused because "a pattern over kernel/test/ would put every
+# future self-test in reach of the userland's headers whether or not it asserted
+# the userland". That objection was right about `kernel/test/` and does not
+# apply here. The reorganisation gave those three files a directory **whose
+# membership is the exception** — a file is in `kernel/test/libc/` precisely
+# when it asserts the C library — so the pattern's scope and the exception's
+# scope are now the same set, and a fourth such test is added by putting it in
+# the directory rather than by remembering to add a fourth rule.
+#
+# Every other file under kernel/ is still compiled without <string.h> in reach,
+# which is the property being protected.
+$(BUILD_DIR)/kernel/test/libc/%.c.o: kernel/test/libc/%.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) $(LIBC_INCLUDE_DIRS) -MMD -MP -MF $(patsubst %.o,%.d,$@) -c $< -o $@
 

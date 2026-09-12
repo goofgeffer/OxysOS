@@ -148,7 +148,7 @@ physical map and extends their domain to the whole of physical memory.
 
 From Phase 2, sub-task 2.1, the kernel parses the Multiboot2 memory map into the
 boot-protocol-neutral `BootInformation` structure declared in
-`kernel/include/oxys/bootinfo.h`. The map observed under QEMU with 512 MiB of
+`kernel/include/oxys/boot/bootinfo.h`. The map observed under QEMU with 512 MiB of
 memory is representative:
 
 | Range | Extent | Classification |
@@ -917,7 +917,7 @@ protected, so the argument validation of
 rather than refuse the address.
 
 The implementation is `kernel/arch/x86_64/mm/addrspace.c`; the interface is
-`kernel/include/oxys/addrspace.h`.
+`kernel/include/oxys/arch/mm/addrspace.h`.
 
 ### 14.1 The two halves
 

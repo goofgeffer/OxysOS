@@ -57,11 +57,11 @@
  * not been applied here.
  */
 
-#include <oxys/mouse.h>
-#include <oxys/keyboard.h>
-#include <oxys/ps2.h>
-#include <oxys/irq.h>
-#include <oxys/interrupts.h>
+#include <oxys/dev/mouse.h>
+#include <oxys/dev/keyboard.h>
+#include <oxys/dev/ps2.h>
+#include <oxys/arch/interrupt/irq.h>
+#include <oxys/arch/interrupt/interrupts.h>
 #include <oxys/kernel.h>
 
 /* The device commands this driver issues. */
@@ -130,7 +130,7 @@ static uint8_t MousePacketLength = MOUSE_PACKET_LENGTH_STANDARD;
  *
  * The bounds begin at one by one rather than at some plausible display size, so
  * that a position read before MouseSetBounds has been called is the origin and
- * is obviously not a measurement. See <oxys/mouse.h>.
+ * is obviously not a measurement. See <oxys/dev/mouse.h>.
  */
 static int32_t MousePositionX;
 static int32_t MousePositionY;

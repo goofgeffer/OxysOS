@@ -36,14 +36,14 @@
  *   simple form is the one whose correctness can be argued in a paragraph.
  */
 
-#include <oxys/shootdown.h>
-#include <oxys/spinlock.h>
-#include <oxys/percpu.h>
-#include <oxys/paging.h>
-#include <oxys/ipi.h>
-#include <oxys/interrupts.h>
-#include <oxys/lapic.h>
-#include <oxys/cpu.h>
+#include <oxys/arch/mm/shootdown.h>
+#include <oxys/arch/cpu/spinlock.h>
+#include <oxys/arch/cpu/percpu.h>
+#include <oxys/arch/mm/paging.h>
+#include <oxys/arch/smp/ipi.h>
+#include <oxys/arch/interrupt/interrupts.h>
+#include <oxys/dev/lapic.h>
+#include <oxys/arch/cpu/cpu.h>
 #include <oxys/kernel.h>
 
 /*

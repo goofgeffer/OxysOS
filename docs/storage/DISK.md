@@ -22,7 +22,7 @@ answers and what this driver cannot reach),
 until the review that followed sub-task 6.10; see
 [`../design/ARCHITECTURE.md`](../design/ARCHITECTURE.md), Section 2.2.
 The public interface is
-[`../../kernel/include/oxys/ata.h`](../../kernel/include/oxys/ata.h).
+[`../../kernel/include/oxys/dev/storage/ata.h`](../../kernel/include/oxys/dev/storage/ata.h).
 
 ## 1. What is different about a disk
 

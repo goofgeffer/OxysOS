@@ -17,7 +17,7 @@
  *   - docs/storage/VFS.md, Section 10: the second volume, and why it differs
  *     from the first in exactly one field.
  *   - The Second Extended File System, Dave Poirier: the format. Every field
- *     offset written below is named in <oxys/ext2.h>; none is restated here,
+ *     offset written below is named in <oxys/fs/ext2.h>; none is restated here,
  *     because a fixture that restated an offset would agree with a mistaken
  *     decoder as readily as with a correct one.
  *
@@ -30,9 +30,9 @@
  * with no disk at all.
  *
  * The composition is not evidence that this kernel reads the format correctly.
- * It shares the kernel\'s understanding of it, so a misreading of the
+ * It shares the kernel's understanding of it, so a misreading of the
  * specification would be composed into the volume and then asserted against
- * itself. That is what the diagnostic probes of <oxys/verify.h> and the mke2fs
+ * itself. That is what the diagnostic probes of <oxys/test/verify.h> and the mke2fs
  * corroboration of docs/project/TESTING.md are for, and it is how the defect in
  * the recorded deletion time was found.
  *
@@ -43,8 +43,8 @@
 
 #include <oxys/kernel.h>
 #include "volume.h"
-#include <oxys/block.h>
-#include <oxys/ext2.h>
+#include <oxys/block/block.h>
+#include <oxys/fs/ext2.h>
 
 uint8_t KernelMemoryDeviceStore[KERNEL_MEMORY_DEVICE_BLOCKS * BLOCK_SIZE_DEFAULT];
 

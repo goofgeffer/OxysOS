@@ -38,8 +38,8 @@
  *   past a lock that will not be released; what is recovered is the explanation.
  */
 
-#include <oxys/spinlock.h>
-#include <oxys/percpu.h>
+#include <oxys/arch/cpu/spinlock.h>
+#include <oxys/arch/cpu/percpu.h>
 #include <oxys/kernel.h>
 
 /*

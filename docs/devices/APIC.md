@@ -24,8 +24,8 @@ is cited here.
 
 **Implementation**: [`../../drivers/apic/lapic.c`](../../drivers/apic/lapic.c),
 [`../../drivers/apic/ioapic.c`](../../drivers/apic/ioapic.c),
-[`../../kernel/include/oxys/lapic.h`](../../kernel/include/oxys/lapic.h),
-[`../../kernel/include/oxys/ioapic.h`](../../kernel/include/oxys/ioapic.h). The
+[`../../kernel/include/oxys/dev/lapic.h`](../../kernel/include/oxys/dev/lapic.h),
+[`../../kernel/include/oxys/dev/ioapic.h`](../../kernel/include/oxys/dev/ioapic.h). The
 layer that routes a request to a driver is not here: it is
 [`../design/INTERRUPTS.md`](../design/INTERRUPTS.md), Section 10.
 

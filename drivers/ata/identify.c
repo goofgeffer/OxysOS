@@ -25,10 +25,10 @@
 
 #include "internal.h"
 
-#include <oxys/io.h>
+#include <oxys/dev/io.h>
 #include <oxys/kernel.h>
-#include <oxys/pit.h>
-#include <oxys/block.h>
+#include <oxys/dev/pit.h>
+#include <oxys/block/block.h>
 
 /* Extracts a string field of the identification data, trimmed of its padding. */
 static void AtaExtractString(const uint16_t *identity, size_t first_word, size_t words,

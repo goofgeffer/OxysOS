@@ -31,26 +31,26 @@ below where they used to be described records the move.
 
 | Path | Device | Interface | Phase |
 | ---- | ------ | --------- | ----- |
-| `vga/vga.c` | The VGA text-mode display, mode 3. Displaced by the framebuffer of sub-task 6.2 wherever the boot loader leaves the adapter in a graphics mode; see `docs/devices/DISPLAY.md`, Section 1.1. | `<oxys/vga.h>` | 1, 4.2 |
-| `serial/serial.c` | The 16550-compatible UART at COM1, interrupt-driven. | `<oxys/serial.h>` | 1, 4.1 |
-| `pic/pic.c` | The pair of cascaded 8259A interrupt controllers. Retired at sub-task 6.12; it holds no handler table and routes nothing. | `<oxys/pic.h>` | 3, 6.12 |
-| `apic/lapic.c` | The Local APIC: one per logical processor; what completes every interrupt from sub-task 6.12 onward; from sub-task 6.13 the command register through which one processor interrupts another; from sub-task 6.14 `LocalApicInitialiseThisProcessor`, by which a started processor enables and programmes its own controller; and from sub-task 6.15 the timer that pre-empts it, calibrated against the interval timer because the architecture states no rate for it. | `<oxys/lapic.h>` | 6.12, 6.13, 6.14, 6.15 |
-| `apic/ioapic.c` | The I/O APIC: the redirection table that decides what vector an interrupt input presents, and to which processor. | `<oxys/ioapic.h>` | 6.12 |
-| `pit/pit.c` | Counter 0 of the 8253 interval timer, the system tick; from sub-task 6.14 `PitBusyWaitMicroseconds`, the counter-watching wait the startup protocol's delays are measured by; and from sub-task 6.15 the reference the local APIC timers are calibrated against. | `<oxys/pit.h>` | 3, 6.14, 6.15 |
-| `ps2/ps2.c` | The 8042 keyboard controller itself, and the two device ports it presents. | `<oxys/ps2.h>` | 3, 6.5 |
-| `keyboard/keyboard.c` | The PS/2 keyboard upon the controller's first port. | `<oxys/keyboard.h>` | 3 |
-| `mouse/mouse.c` | The PS/2 mouse upon the controller's second port. | `<oxys/mouse.h>` | 6.5 |
-| `pci/pci.c` | The PCI bus: configuration-space enumeration by mechanism one. | `<oxys/pci.h>` | 4.3 |
-| `ata/` | The ATA disk, in programmed input/output mode, divided into six translation units and a private header; `../docs/design/ARCHITECTURE.md`, Section 2.2, records why. | `<oxys/ata.h>` | 4.4 |
+| `vga/vga.c` | The VGA text-mode display, mode 3. Displaced by the framebuffer of sub-task 6.2 wherever the boot loader leaves the adapter in a graphics mode; see `docs/devices/DISPLAY.md`, Section 1.1. | `<oxys/dev/vga.h>` | 1, 4.2 |
+| `serial/serial.c` | The 16550-compatible UART at COM1, interrupt-driven. | `<oxys/dev/serial.h>` | 1, 4.1 |
+| `pic/pic.c` | The pair of cascaded 8259A interrupt controllers. Retired at sub-task 6.12; it holds no handler table and routes nothing. | `<oxys/dev/pic.h>` | 3, 6.12 |
+| `apic/lapic.c` | The Local APIC: one per logical processor; what completes every interrupt from sub-task 6.12 onward; from sub-task 6.13 the command register through which one processor interrupts another; from sub-task 6.14 `LocalApicInitialiseThisProcessor`, by which a started processor enables and programmes its own controller; and from sub-task 6.15 the timer that pre-empts it, calibrated against the interval timer because the architecture states no rate for it. | `<oxys/dev/lapic.h>` | 6.12, 6.13, 6.14, 6.15 |
+| `apic/ioapic.c` | The I/O APIC: the redirection table that decides what vector an interrupt input presents, and to which processor. | `<oxys/dev/ioapic.h>` | 6.12 |
+| `pit/pit.c` | Counter 0 of the 8253 interval timer, the system tick; from sub-task 6.14 `PitBusyWaitMicroseconds`, the counter-watching wait the startup protocol's delays are measured by; and from sub-task 6.15 the reference the local APIC timers are calibrated against. | `<oxys/dev/pit.h>` | 3, 6.14, 6.15 |
+| `ps2/ps2.c` | The 8042 keyboard controller itself, and the two device ports it presents. | `<oxys/dev/ps2.h>` | 3, 6.5 |
+| `keyboard/keyboard.c` | The PS/2 keyboard upon the controller's first port. | `<oxys/dev/keyboard.h>` | 3 |
+| `mouse/mouse.c` | The PS/2 mouse upon the controller's second port. | `<oxys/dev/mouse.h>` | 6.5 |
+| `pci/pci.c` | The PCI bus: configuration-space enumeration by mechanism one. | `<oxys/dev/pci.h>` | 4.3 |
+| `ata/` | The ATA disk, in programmed input/output mode, divided into six translation units and a private header; `../docs/design/ARCHITECTURE.md`, Section 2.2, records why. | `<oxys/dev/storage/ata.h>` | 4.4 |
 | `ata/internal.h` | What those units share: the register, status, control and command constants, the table of devices found, the addresses each channel answers at, the accounting, and the register-level discipline. | — | 4.4 |
-| `ata/ata.c` | The state, the refusals, the initialisation, the device accessors and the binding to the block layer. | `<oxys/ata.h>` | 4.4 |
+| `ata/ata.c` | The state, the refusals, the initialisation, the device accessors and the binding to the block layer. | `<oxys/dev/storage/ata.h>` | 4.4 |
 | `ata/port.c` | The task file: the settling delay a selection must be followed by, the two waits every command is bracketed by, and the reset of a channel. | — | 4.4 |
 | `ata/identify.c` | `IDENTIFY DEVICE`, and the distinction between a device that is absent and one that answers a different command set. | — | 4.4 |
 | `ata/channel.c` | Where a channel actually answers: the base address registers of a controller in native mode, and the storage this driver cannot reach. | — | 4.4, 4.7, 4.8 |
 | `ata/transfer.c` | The transfer of sectors in both addressing forms, and the cache flush that makes a write durable. | — | 4.4 |
 | `ata/report.c` | The report, including every controller the bus carries and why each was or was not reached. | — | 4.4 |
-| `ahci/ahci.c` | The AHCI disk, by first-party direct memory access. | `<oxys/ahci.h>` | 4.7 |
-| `sdhci/sdhci.c` | The SD card or embedded MultiMediaCard, through its host controller. | `<oxys/sdhci.h>` | 4.8 |
+| `ahci/ahci.c` | The AHCI disk, by first-party direct memory access. | `<oxys/dev/storage/ahci.h>` | 4.7 |
+| `sdhci/sdhci.c` | The SD card or embedded MultiMediaCard, through its host controller. | `<oxys/dev/storage/sdhci.h>` | 4.8 |
 
 ## Planned contents
 
@@ -224,7 +224,7 @@ driver section here opens by doing.
 
 The relation was also the wrong way round. This directory's rule is that a driver
 implements an interface `kernel/include/oxys/` declares and exports none of its
-own; `block.c` declares `<oxys/block.h>`, which is the interface the drivers here
+own; `block.c` declares `<oxys/block/block.h>`, which is the interface the drivers here
 register *into*. `ata/ata.c`, `ahci/ahci.c` and `sdhci/sdhci.c` are its consumers
 and remain here, and the dependency still runs one way: a driver knows the layer
 it presents itself through, and the layer knows nothing of ATA.

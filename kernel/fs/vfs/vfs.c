@@ -48,8 +48,8 @@
 
 #include "internal.h"
 
-#include <oxys/vfs.h>
-#include <oxys/buffer.h>
+#include <oxys/fs/vfs.h>
+#include <oxys/block/buffer.h>
 #include <oxys/kernel.h>
 
 /* ---------------------------------------------------------------------------

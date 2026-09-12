@@ -50,7 +50,7 @@ expires.
 functions of ISO/IEC 9899:2011, Section 7.24, that do not require a locale or an
 `errno`, in [`../../libc/`](../../libc/) under the userland's permissive licence
 — and, because 7.2 could not be written until it was done,
-`kernel/include/oxys/syscall.h` divided into the interface a program is entitled
+`kernel/include/oxys/arch/syscall/syscall.h` divided into the interface a program is entitled
 to and the implementation it is not.
 
 **Sub-task 7.2 is complete**: a wrapper for each of the seven calls the kernel
@@ -173,7 +173,7 @@ Chapters 2, 4 and 9; System V ABI for AMD64.
 | 1.4 | Construct the boot-time paging hierarchy (PML4, two PDPTs, one PD) providing a 1 GiB identity map and a coincident 1 GiB higher-half map using 2 MiB pages. | Implemented | — |
 | 1.5 | Perform the long-mode transition (CR4.PAE, IA32_EFER.LME, CR0.PG) and load a 64-bit GDT. | Implemented | — |
 | 1.6 | Transfer control to the higher-half 64-bit kernel entry point and establish the kernel stack. | Implemented | — |
-| 1.7 | Implement a minimal VGA text-mode output routine and a minimal COM1 serial output routine for early diagnostics. | Implemented | `verify_devices.c` |
+| 1.7 | Implement a minimal VGA text-mode output routine and a minimal COM1 serial output routine for early diagnostics. | Implemented | `dev/devices.c` |
 | 1.8 | Implement `KernelMain`, which clears the screen and prints the string "Oxys-OS". | Implemented | `make verify` banner |
 | 1.9 | Author the `Makefile` with the targets `all`, `clean`, `iso`, `run-qemu`, `run-vbox` and `run-uefi`. | Implemented | — |
 | 1.10 | Generate the ISO image and verify boot under QEMU. | Implemented | `make verify` |
@@ -199,14 +199,14 @@ it was discharged.
 
 | # | Sub-task | State | Asserted by |
 | - | -------- | ----- | ----------- |
-| 2.1 | Parse the Multiboot2 information structure and extract the memory map (tag type 6) and the ELF section headers (tag type 9). | Implemented | `verify_memory.c` (indirect) |
-| 2.2 | Implement a physical frame allocator (bitmap) covering all usable regions, reserving the kernel image, the Multiboot2 structures and the low 1 MiB. | Implemented | `verify_memory.c` |
-| 2.3 | Construct a permanent kernel page-table hierarchy, replacing the boot-time tables and removing the low identity map. | Implemented | `verify_memory.c` |
-| 2.4 | Implement a direct physical map region for kernel access to arbitrary frames. | Implemented | `verify_memory.c` |
-| 2.5 | Implement a kernel virtual-address-space allocator and a general-purpose kernel heap (slab allocator over a buddy-style page allocator). | Implemented | `verify_memory.c` |
-| 2.6 | Implement per-frame reference counting as the substrate for shared pages. | Implemented | `verify_memory.c` |
-| 2.7 | Implement the page-fault handler dispatch path (dependent upon Phase 3) and the copy-on-write fault resolution routine. | Implemented | `verify_memory.c` |
-| 2.8 | Implement address-space cloning that marks writable user pages read-only and increments frame reference counts. | Implemented | `verify_memory.c` |
+| 2.1 | Parse the Multiboot2 information structure and extract the memory map (tag type 6) and the ELF section headers (tag type 9). | Implemented | `mm/memory.c` (indirect) |
+| 2.2 | Implement a physical frame allocator (bitmap) covering all usable regions, reserving the kernel image, the Multiboot2 structures and the low 1 MiB. | Implemented | `mm/memory.c` |
+| 2.3 | Construct a permanent kernel page-table hierarchy, replacing the boot-time tables and removing the low identity map. | Implemented | `mm/memory.c` |
+| 2.4 | Implement a direct physical map region for kernel access to arbitrary frames. | Implemented | `mm/memory.c` |
+| 2.5 | Implement a kernel virtual-address-space allocator and a general-purpose kernel heap (slab allocator over a buddy-style page allocator). | Implemented | `mm/memory.c` |
+| 2.6 | Implement per-frame reference counting as the substrate for shared pages. | Implemented | `mm/memory.c` |
+| 2.7 | Implement the page-fault handler dispatch path (dependent upon Phase 3) and the copy-on-write fault resolution routine. | Implemented | `mm/memory.c` |
+| 2.8 | Implement address-space cloning that marks writable user pages read-only and increments frame reference counts. | Implemented | `mm/memory.c` |
 
 ---
 
@@ -223,13 +223,13 @@ IBM PS/2 controller documentation.
 
 | # | Sub-task | State | Asserted by |
 | - | -------- | ----- | ----------- |
-| 3.1 | Define the IDT and the 64-bit interrupt-gate descriptor format; load it with `lidt`. | Implemented | `verify_interrupts.c` |
-| 3.2 | Author assembly stubs for vectors 0–255, normalising the presence or absence of a processor-pushed error code. | Implemented | `verify_interrupts.c` |
-| 3.3 | Implement a C interrupt dispatcher operating on a formal trap frame structure. | Implemented | `verify_interrupts.c` |
-| 3.4 | Implement exception handlers with register and stack diagnostics emitted over the serial port. | Implemented | `verify_interrupts.c`, `verify_faultscreen.c` |
-| 3.5 | Remap the 8259A PIC to vectors 32–47 and implement end-of-interrupt signalling. | Implemented | `verify_devices.c` |
-| 3.6 | Implement the Programmable Interval Timer as the initial timer source. | Implemented | `verify_devices.c` |
-| 3.7 | Implement the PS/2 keyboard driver: controller initialisation, scancode set 1 translation, modifier state and a circular input buffer. | Implemented | `verify_devices.c` |
+| 3.1 | Define the IDT and the 64-bit interrupt-gate descriptor format; load it with `lidt`. | Implemented | `arch/interrupts.c` |
+| 3.2 | Author assembly stubs for vectors 0–255, normalising the presence or absence of a processor-pushed error code. | Implemented | `arch/interrupts.c` |
+| 3.3 | Implement a C interrupt dispatcher operating on a formal trap frame structure. | Implemented | `arch/interrupts.c` |
+| 3.4 | Implement exception handlers with register and stack diagnostics emitted over the serial port. | Implemented | `arch/interrupts.c`, `gfx/faultscreen.c` |
+| 3.5 | Remap the 8259A PIC to vectors 32–47 and implement end-of-interrupt signalling. | Implemented | `dev/devices.c` |
+| 3.6 | Implement the Programmable Interval Timer as the initial timer source. | Implemented | `dev/devices.c` |
+| 3.7 | Implement the PS/2 keyboard driver: controller initialisation, scancode set 1 translation, modifier state and a circular input buffer. | Implemented | `dev/devices.c` |
 
 ---
 
@@ -252,14 +252,14 @@ the absence of a disk.
 
 | # | Sub-task | State | Asserted by |
 | - | -------- | ----- | ----------- |
-| 4.1 | Promote the early serial routine to a formal, interrupt-driven COM1 driver with configurable line parameters. | Implemented | `verify_devices.c` |
-| 4.2 | Promote the early VGA routine to a formal text-mode driver with scrolling, cursor control and colour attributes. | Implemented | `verify_devices.c` |
-| 4.3 | Implement PCI configuration-space enumeration by the legacy I/O port mechanism, with device and class identification. | Implemented | `verify_devices.c` |
-| 4.4 | Implement an ATA PIO driver: bus reset, `IDENTIFY DEVICE`, 28-bit and 48-bit LBA sector read and write. | Implemented | `verify_storage.c` |
-| 4.5 | Define a generic block-device abstraction layer above the ATA driver. | Implemented | `verify_storage.c` |
-| 4.6 | Implement a buffer cache for block devices. | Implemented | `verify_storage.c` |
-| 4.7 | Implement an AHCI driver, so that a machine whose firmware presents its SATA controller in AHCI mode has a disk at all. *(Added 2026-09-04.)* | Implemented | `verify_storage.c` |
-| 4.8 | Implement an SD host controller driver, so that a machine whose system is upon an embedded MultiMediaCard part has storage at all. *(Added 2026-09-06.)* | Implemented | `verify_storage.c` |
+| 4.1 | Promote the early serial routine to a formal, interrupt-driven COM1 driver with configurable line parameters. | Implemented | `dev/devices.c` |
+| 4.2 | Promote the early VGA routine to a formal text-mode driver with scrolling, cursor control and colour attributes. | Implemented | `dev/devices.c` |
+| 4.3 | Implement PCI configuration-space enumeration by the legacy I/O port mechanism, with device and class identification. | Implemented | `dev/devices.c` |
+| 4.4 | Implement an ATA PIO driver: bus reset, `IDENTIFY DEVICE`, 28-bit and 48-bit LBA sector read and write. | Implemented | `storage/stack.c` |
+| 4.5 | Define a generic block-device abstraction layer above the ATA driver. | Implemented | `storage/stack.c` |
+| 4.6 | Implement a buffer cache for block devices. | Implemented | `storage/stack.c` |
+| 4.7 | Implement an AHCI driver, so that a machine whose firmware presents its SATA controller in AHCI mode has a disk at all. *(Added 2026-09-04.)* | Implemented | `storage/stack.c` |
+| 4.8 | Implement an SD host controller driver, so that a machine whose system is upon an embedded MultiMediaCard part has storage at all. *(Added 2026-09-06.)* | Implemented | `storage/stack.c` |
 
 ---
 
@@ -281,7 +281,7 @@ documentation, `Documentation/filesystems/ext2.rst`.
 | 5.5 | Implement file reading. | Implemented | `ext2/file.c` |
 | 5.6 | Implement block and inode allocation, file writing, extension and truncation. | Implemented | `ext2/write.c` |
 | 5.7 | Implement directory creation and entry insertion and removal. | Implemented | `ext2/write.c` |
-| 5.8 | Define a virtual filesystem layer and mount an EXT2 root volume. | Implemented | `verify_vfs.c` |
+| 5.8 | Define a virtual filesystem layer and mount an EXT2 root volume. | Implemented | `storage/vfs.c` |
 
 ---
 
@@ -308,21 +308,21 @@ BIOS Extensions 3.0.
 
 | # | Sub-task | State | Asserted by |
 | - | -------- | ----- | ----------- |
-| 6.1 | Install the GDT and TSS required for privilege transition; configure IA32_STAR, IA32_LSTAR and IA32_FMASK. | Implemented | `verify_privilege.c` — **partial**, see note (a) |
-| 6.2 | Request a linear framebuffer by the Multiboot2 framebuffer tag and map it into kernel space. | Implemented | `verify_framebuffer.c` |
-| 6.3 | Implement 2D primitives: pixel, line, rectangle, blit and clipping. | Implemented | `verify_graphics.c` |
-| 6.4 | Implement a bitmap font renderer, and a graphical console above it that the diagnostic path may write to. | Implemented | `verify_console.c`, `verify_faultscreen.c` |
-| 6.5 | Implement a PS/2 mouse driver upon the second device port of the 8042, and a cursor. | Implemented | `verify_mouse.c` |
-| 6.6 | Implement a compositing surface abstraction and double buffering. | Implemented | `verify_compositor.c` |
-| 6.7 | Implement the `SYSCALL` entry path, the system-call dispatch table and argument validation. | Implemented | `verify_syscall.c` |
-| 6.8 | Implement the ELF64 loader for statically linked executables. | Implemented | `verify_elf.c` |
-| 6.9 | Define the process control block, the address-space descriptor and the thread structure. | Implemented | `verify_process.c` |
-| 6.10 | Implement context switching and the initial transition to user mode via `IRETQ`. | Implemented | `verify_usermode.c` |
-| 6.11 | Implement `fork()` upon the Phase 2 copy-on-write substrate, together with `execve()`, `exit()` and `wait()`. | Implemented | `verify_lifecycle.c` |
-| 6.12 | Parse the ACPI MADT; initialise the Local APIC and the I/O APIC; retire the 8259A PIC. | Implemented | `verify_apic.c`, `verify_devices.c` — see note (b) |
-| 6.13 | Implement spinlocks, per-CPU data areas and inter-processor interrupts, including TLB shootdown. | Implemented | `verify_smp.c` — see note (c) |
-| 6.14 | Implement application-processor bring-up by INIT-SIPI-SIPI and a real-mode trampoline. | Implemented | `verify_smp.c` — see note (d) |
-| 6.15 | Implement a multiprocessor-aware round-robin scheduler with per-CPU run queues and processor affinity. | Implemented | `verify_sched.c` — see note (e) |
+| 6.1 | Install the GDT and TSS required for privilege transition; configure IA32_STAR, IA32_LSTAR and IA32_FMASK. | Implemented | `arch/privilege.c` — **partial**, see note (a) |
+| 6.2 | Request a linear framebuffer by the Multiboot2 framebuffer tag and map it into kernel space. | Implemented | `gfx/framebuffer.c` |
+| 6.3 | Implement 2D primitives: pixel, line, rectangle, blit and clipping. | Implemented | `gfx/graphics.c` |
+| 6.4 | Implement a bitmap font renderer, and a graphical console above it that the diagnostic path may write to. | Implemented | `gfx/console.c`, `gfx/faultscreen.c` |
+| 6.5 | Implement a PS/2 mouse driver upon the second device port of the 8042, and a cursor. | Implemented | `dev/mouse.c` |
+| 6.6 | Implement a compositing surface abstraction and double buffering. | Implemented | `gfx/compositor.c` |
+| 6.7 | Implement the `SYSCALL` entry path, the system-call dispatch table and argument validation. | Implemented | `arch/syscall.c` |
+| 6.8 | Implement the ELF64 loader for statically linked executables. | Implemented | `exec/elf.c` |
+| 6.9 | Define the process control block, the address-space descriptor and the thread structure. | Implemented | `proc/process.c` |
+| 6.10 | Implement context switching and the initial transition to user mode via `IRETQ`. | Implemented | `arch/usermode.c` |
+| 6.11 | Implement `fork()` upon the Phase 2 copy-on-write substrate, together with `execve()`, `exit()` and `wait()`. | Implemented | `proc/lifecycle.c` |
+| 6.12 | Parse the ACPI MADT; initialise the Local APIC and the I/O APIC; retire the 8259A PIC. | Implemented | `arch/apic.c`, `dev/devices.c` — see note (b) |
+| 6.13 | Implement spinlocks, per-CPU data areas and inter-processor interrupts, including TLB shootdown. | Implemented | `arch/smp.c` — see note (c) |
+| 6.14 | Implement application-processor bring-up by INIT-SIPI-SIPI and a real-mode trampoline. | Implemented | `arch/smp.c` — see note (d) |
+| 6.15 | Implement a multiprocessor-aware round-robin scheduler with per-CPU run queues and processor affinity. | Implemented | `proc/sched.c` — see note (e) |
 
 **(a)** Sub-task 6.1's self-test executed `SYSCALL` until sub-task 6.7 replaced
 the entry point with one returning by `SYSRET`, which returns to privilege level
@@ -331,13 +331,13 @@ the entry point with one returning by `SYSRET`, which returns to privilege level
 hook was added to recover it. The configuration is asserted still; the
 instruction is now executed only by a user program.
 
-**(b)** Sub-task 6.12 is asserted by four routines in `verify_apic.c` — the ACPI
+**(b)** Sub-task 6.12 is asserted by four routines in `arch/apic.c` — the ACPI
 parse, the Local APIC, the I/O APIC and the routing after the adoption — and by
-`KernelVerifyIrq` in `verify_devices.c`, which asserts the routing layer while
+`KernelVerifyIrq` in `dev/devices.c`, which asserts the routing layer while
 the 8259A pair still answers. The division is deliberate: the same path is
 asserted under each controller, so a failure says which of them broke it.
 
-**(c)** Sub-task 6.13 is asserted by four routines in `verify_smp.c`. The first
+**(c)** Sub-task 6.13 is asserted by four routines in `arch/smp.c`. The first
 two — the per-processor area and the spinlock — assert internal state and not
 behaviour, because upon a machine with one processor a lock that does not lock
 behaves exactly like one that does. The last two are behavioural: an interrupt a
@@ -346,7 +346,7 @@ path is exercised, against a mapping the test makes stale on purpose. **Only one
 of the locks has been applied**; see note (d).
 
 **(d)** Sub-task 6.14 is asserted by `KernelVerifyApplicationProcessors`, the
-fifth routine in `verify_smp.c`. **A count is not the assertion**: a kernel that
+fifth routine in `arch/smp.c`. **A count is not the assertion**: a kernel that
 incremented a variable and started nobody would produce the same count, the same
 report and the same banner. What only a running processor can produce is an
 acknowledgement to an interrupt it was sent, so the substance of the test is a
@@ -366,7 +366,7 @@ structure in
 is still unsynchronised; see note (e) for what 6.15 did and did not change.
 
 **(e)** Sub-task 6.15 is asserted by `KernelVerifyScheduler` in
-`verify_sched.c`. **A count of admissions is not evidence that anything ran**: a
+`proc/sched.c`. **A count of admissions is not evidence that anything ran**: a
 scheduler that enqueued four threads and gave none of them a processor produces
 the same admissions, the same queue lengths and the same report. So the fixture
 is four kernel threads that do work and record it, and the assertions are made
@@ -404,7 +404,7 @@ before it. See [`../storage/VFS.md`](../storage/VFS.md), limitation 2.
 **The obligation sub-task 7.2 carried from the licensing is discharged.** The
 userland is `MIT` and the kernel `LGPL-3.0-or-later`, so a C library could not
 include a header that mixed the user-visible interface with the kernel's
-implementation of it — and `kernel/include/oxys/syscall.h` did. Sub-task 7.1
+implementation of it — and `kernel/include/oxys/arch/syscall/syscall.h` did. Sub-task 7.1
 divided it: the interface is now `kernel/abi/oxys/syscall_abi.h`, under `MIT` and
 reachable by a second include root of its own, and the implementation stays with
 the kernel. See [`../../LICENSING.md`](../../LICENSING.md), Section 2.1, and
@@ -422,9 +422,9 @@ changes about it.
 
 | # | Sub-task | State | Asserted by |
 | - | -------- | ----- | ----------- |
-| 7.1 | Implement the freestanding string and memory functions (`<string.h>`). | Implemented | `verify_string.c` — see note (a) |
-| 7.2 | Implement system-call wrappers for the complete kernel interface. | Implemented | `verify_wrappers.c` — see note (b) |
-| 7.3 | Implement a user-space heap allocator (`malloc`, `free`, `realloc`) above `brk`/`mmap`. | Implemented | `verify_heap.c` — see note (c) |
+| 7.1 | Implement the freestanding string and memory functions (`<string.h>`). | Implemented | `libc/string.c` — see note (a) |
+| 7.2 | Implement system-call wrappers for the complete kernel interface. | Implemented | `libc/wrappers.c` — see note (b) |
+| 7.3 | Implement a user-space heap allocator (`malloc`, `free`, `realloc`) above `brk`/`mmap`. | Implemented | `libc/heap.c` — see note (c) |
 | 7.4 | Implement buffered input and output (`<stdio.h>`) and formatted conversion. | Planned | — |
 | 7.5 | Author the C runtime startup object (`crt0`) and the static-linking procedure for user programs. | Planned | — |
 | 7.6 | Implement the utilities `ls`, `cat`, `echo`, `mkdir` and `rm`. | Planned | — |

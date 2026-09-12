@@ -30,9 +30,9 @@
  *     programming interface codes named by PciClassName.
  */
 
-#include <oxys/pci.h>
+#include <oxys/dev/pci.h>
 #include <oxys/kernel.h>
-#include <oxys/io.h>
+#include <oxys/dev/io.h>
 
 /*
  * The number of functions recorded. Sixty-four is far beyond what the machines

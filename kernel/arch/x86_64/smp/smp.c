@@ -65,25 +65,25 @@
  * register is visible to a processor that woke because of it.
  */
 
-#include <oxys/smp.h>
-#include <oxys/percpu.h>
-#include <oxys/spinlock.h>
-#include <oxys/ipi.h>
-#include <oxys/shootdown.h>
-#include <oxys/lapic.h>
-#include <oxys/acpi.h>
-#include <oxys/paging.h>
-#include <oxys/vmm.h>
-#include <oxys/gdt.h>
-#include <oxys/idt.h>
-#include <oxys/tss.h>
-#include <oxys/syscall.h>
-#include <oxys/pit.h>
-#include <oxys/cpu.h>
-#include <oxys/framebuffer.h>
-#include <oxys/sched.h>
-#include <oxys/memory.h>
-#include <oxys/verify.h>
+#include <oxys/arch/smp/smp.h>
+#include <oxys/arch/cpu/percpu.h>
+#include <oxys/arch/cpu/spinlock.h>
+#include <oxys/arch/smp/ipi.h>
+#include <oxys/arch/mm/shootdown.h>
+#include <oxys/dev/lapic.h>
+#include <oxys/acpi/acpi.h>
+#include <oxys/arch/mm/paging.h>
+#include <oxys/mm/vmm.h>
+#include <oxys/arch/cpu/gdt.h>
+#include <oxys/arch/cpu/idt.h>
+#include <oxys/arch/cpu/tss.h>
+#include <oxys/arch/syscall/syscall.h>
+#include <oxys/dev/pit.h>
+#include <oxys/arch/cpu/cpu.h>
+#include <oxys/gfx/framebuffer.h>
+#include <oxys/proc/sched.h>
+#include <oxys/mm/memory.h>
+#include <oxys/test/verify.h>
 #include <oxys/kernel.h>
 
 /* The two ends of the assembled trampoline, embedded by

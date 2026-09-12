@@ -16,7 +16,7 @@ truncation of one, and the creation and destruction of the names that reach it.
 [`../../kernel/fs/ext2/name.c`](../../kernel/fs/ext2/name.c).
 
 **Asserted by**: `KernelVerifyExt2` and the five chapters of
-[`../../kernel/test/ext2/`](../../kernel/test/ext2/), which
+[`../../kernel/test/storage/ext2/`](../../kernel/test/storage/ext2/), which
 [`EXT2-VERIFICATION.md`](EXT2-VERIFICATION.md) sets out.
 
 **Where this sits**: the structures these operations act upon — the superblock,

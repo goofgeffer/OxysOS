@@ -51,7 +51,7 @@ not where a reader would put it if the list were being arranged for looks.
 
 ## What the kernel kept
 
-[`../include/oxys/syscall.h`](../include/oxys/syscall.h): the three
+[`../include/oxys/arch/syscall/syscall.h`](../include/oxys/arch/syscall/syscall.h): the three
 model-specific registers that configure the mechanism, the flags cleared upon
 entry, the frame the entry path saves, the dispatch, and the validation of a
 caller's arguments. It includes the header above, so a consumer of it sees what

@@ -40,8 +40,8 @@
  *   limitation 4, records why there is no such lock yet.
  */
 
-#include <oxys/buffer.h>
-#include <oxys/heap.h>
+#include <oxys/block/buffer.h>
+#include <oxys/mm/heap.h>
 #include <oxys/kernel.h>
 
 /*

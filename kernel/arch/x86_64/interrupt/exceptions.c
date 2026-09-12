@@ -33,15 +33,15 @@
  * processor holds is a fault report that never appears.
  */
 
-#include <oxys/exceptions.h>
-#include <oxys/interrupts.h>
-#include <oxys/cpu.h>
-#include <oxys/paging.h>
-#include <oxys/idt.h>
-#include <oxys/tss.h>
+#include <oxys/arch/interrupt/exceptions.h>
+#include <oxys/arch/interrupt/interrupts.h>
+#include <oxys/arch/cpu/cpu.h>
+#include <oxys/arch/mm/paging.h>
+#include <oxys/arch/cpu/idt.h>
+#include <oxys/arch/cpu/tss.h>
 #include <oxys/kernel.h>
-#include <oxys/process.h>
-#include <oxys/faultscreen.h>
+#include <oxys/proc/process.h>
+#include <oxys/gfx/faultscreen.h>
 
 /* The number of quadwords of stack reproduced in a diagnostic report. */
 #define EXCEPTION_STACK_WORDS 8U

@@ -44,11 +44,11 @@
  * belongs in that layer and in `kernel/fs/ext2/`, not here.
  */
 
-#include <oxys/ext2_vfs.h>
-#include <oxys/ext2.h>
-#include <oxys/vfs.h>
-#include <oxys/buffer.h>
-#include <oxys/heap.h>
+#include <oxys/fs/ext2_vfs.h>
+#include <oxys/fs/ext2.h>
+#include <oxys/fs/vfs.h>
+#include <oxys/block/buffer.h>
+#include <oxys/mm/heap.h>
 
 /* ---------------------------------------------------------------------------
  * Reaching the format's structures from the layer's.

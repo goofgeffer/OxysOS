@@ -18,10 +18,10 @@ corresponded to those units already, which is why the division needed nothing
 rewritten. See [`../design/ARCHITECTURE.md`](../design/ARCHITECTURE.md),
 Section 2.2.
 [`../../kernel/fs/ext2_vfs.c`](../../kernel/fs/ext2_vfs.c),
-[`../../kernel/include/oxys/vfs.h`](../../kernel/include/oxys/vfs.h),
-[`../../kernel/include/oxys/ext2_vfs.h`](../../kernel/include/oxys/ext2_vfs.h).
+[`../../kernel/include/oxys/fs/vfs.h`](../../kernel/include/oxys/fs/vfs.h),
+[`../../kernel/include/oxys/fs/ext2_vfs.h`](../../kernel/include/oxys/fs/ext2_vfs.h).
 **Asserted by**: `KernelVerifyVfs` in
-[`../../kernel/test/verify_vfs.c`](../../kernel/test/verify_vfs.c).
+[`../../kernel/test/storage/vfs.c`](../../kernel/test/storage/vfs.c).
 
 ---
 

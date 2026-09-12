@@ -71,7 +71,7 @@ One suppression exists elsewhere in the `Makefile` and belongs to the
 | ---- | ----- | -------- |
 | `kernel/include` | The kernel's own header corpus, `LGPL-3.0-or-later`. | Every translation unit. |
 | `kernel/abi` | The system-call interface a program is entitled to, `MIT`. | Every translation unit, and the C library. |
-| `libc/include` | The C library's headers, `MIT`. | The C library's own translation units, and the two self-tests that assert them — `kernel/test/verify_string.c` and `kernel/test/verify_wrappers.c` — and nothing else. |
+| `libc/include` | The C library's headers, `MIT`. | The C library's own translation units, and the two self-tests that assert them — `kernel/test/libc/string.c` and `kernel/test/libc/wrappers.c` — and nothing else. |
 
 **The kernel is deliberately compiled without `libc/include` in reach**, so that
 no kernel translation unit can include `<string.h>` and quietly acquire a

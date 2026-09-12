@@ -9,7 +9,7 @@ hardware behaviour below carries a citation, and every specification named is
 registered in [`REFERENCES.md`](../project/REFERENCES.md).
 
 **Implementation**: [`../../drivers/sdhci/sdhci.c`](../../drivers/sdhci/sdhci.c),
-[`../../kernel/include/oxys/sdhci.h`](../../kernel/include/oxys/sdhci.h).
+[`../../kernel/include/oxys/dev/storage/sdhci.h`](../../kernel/include/oxys/dev/storage/sdhci.h).
 
 ## 1. Why this driver exists
 

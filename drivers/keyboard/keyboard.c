@@ -21,7 +21,7 @@
  *     then 0xAA upon a successful self-test, and 0xF4 enables scanning; a device
  *     answers 0xFA to acknowledge a command and 0xFE to ask that it be sent
  *     again. The controller commands, the status register and the configuration
- *     byte are cited in <oxys/ps2.h>, which owns them.
+ *     byte are cited in <oxys/dev/ps2.h>, which owns them.
  *   - docs/devices/KEYBOARD.md, Sections 2 and 3: the controller and the
  *     keyboard upon it, and why they are different devices.
  *
@@ -49,11 +49,11 @@
  * producer's side does not, there being one keyboard and therefore one producer.
  */
 
-#include <oxys/keyboard.h>
-#include <oxys/ps2.h>
-#include <oxys/mouse.h>
-#include <oxys/irq.h>
-#include <oxys/interrupts.h>
+#include <oxys/dev/keyboard.h>
+#include <oxys/dev/ps2.h>
+#include <oxys/dev/mouse.h>
+#include <oxys/arch/interrupt/irq.h>
+#include <oxys/arch/interrupt/interrupts.h>
 #include <oxys/kernel.h>
 
 /*
@@ -61,7 +61,7 @@
  *
  * The acknowledgement and the resend request are not here: every PS/2 device
  * uses them alike, so they belong to the controller module and are declared by
- * <oxys/ps2.h>.
+ * <oxys/dev/ps2.h>.
  */
 #define KEYBOARD_DEVICE_RESET           UINT8_C(0xFF)
 #define KEYBOARD_DEVICE_ENABLE_SCANNING UINT8_C(0xF4)

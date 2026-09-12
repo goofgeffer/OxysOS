@@ -65,12 +65,12 @@
  * is recorded.
  */
 
-#include <oxys/compositor.h>
-#include <oxys/framebuffer.h>
-#include <oxys/graphics.h>
+#include <oxys/gfx/compositor.h>
+#include <oxys/gfx/framebuffer.h>
+#include <oxys/gfx/graphics.h>
 #include <oxys/kernel.h>
-#include <oxys/memory.h>
-#include <oxys/vmm.h>
+#include <oxys/mm/memory.h>
+#include <oxys/mm/vmm.h>
 
 /* A layer: a surface, where it sits, its coverage, and whether it is shown. */
 typedef struct CompositorLayer

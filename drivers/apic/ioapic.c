@@ -49,10 +49,10 @@
  * the same moment.
  */
 
-#include <oxys/ioapic.h>
-#include <oxys/acpi.h>
-#include <oxys/paging.h>
-#include <oxys/vmm.h>
+#include <oxys/dev/ioapic.h>
+#include <oxys/acpi/acpi.h>
+#include <oxys/arch/mm/paging.h>
+#include <oxys/mm/vmm.h>
 #include <oxys/kernel.h>
 
 /* One mapped unit. */

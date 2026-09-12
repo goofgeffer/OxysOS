@@ -9,13 +9,13 @@ supplies, and everything that has to be settled before anything is drawn upon it
 
 **Implemented by**:
 [`../../graphics/framebuffer.c`](../../graphics/framebuffer.c),
-[`../../kernel/include/oxys/framebuffer.h`](../../kernel/include/oxys/framebuffer.h),
+[`../../kernel/include/oxys/gfx/framebuffer.h`](../../kernel/include/oxys/gfx/framebuffer.h),
 [`../../kernel/handoff/multiboot2.c`](../../kernel/handoff/multiboot2.c),
 [`../../boot/boot.asm`](../../boot/boot.asm),
 [`../../kernel/mm/vmm.c`](../../kernel/mm/vmm.c).
 
 **Asserted by**: `KernelVerifyFramebuffer` in
-[`../../kernel/test/verify_framebuffer.c`](../../kernel/test/verify_framebuffer.c).
+[`../../kernel/test/gfx/framebuffer.c`](../../kernel/test/gfx/framebuffer.c).
 
 **Specifications**: Multiboot2 Specification 2.0, Sections 3.1.10 and 3.6.12;
 Intel 64 and IA-32 Architectures Software Developer's Manual, Volume 3A,
@@ -89,7 +89,7 @@ differently — and every one of them will.
 ## 3. Reading what was supplied
 
 The framebuffer information tag of Section 3.6.12 is reduced in
-`kernel/handoff/multiboot2.c` to the neutral `BootFramebuffer` of `<oxys/bootinfo.h>`,
+`kernel/handoff/multiboot2.c` to the neutral `BootFramebuffer` of `<oxys/boot/bootinfo.h>`,
 as every other tag is: the kernel proper depends upon a description of the
 machine, not upon the boot protocol that produced it.
 

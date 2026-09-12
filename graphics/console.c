@@ -28,11 +28,11 @@
  * graphics/faultscreen.c.
  */
 
-#include <oxys/console.h>
-#include <oxys/compositor.h>
-#include <oxys/font.h>
-#include <oxys/graphics.h>
-#include <oxys/framebuffer.h>
+#include <oxys/gfx/console.h>
+#include <oxys/gfx/compositor.h>
+#include <oxys/gfx/font.h>
+#include <oxys/gfx/graphics.h>
+#include <oxys/gfx/framebuffer.h>
 #include <oxys/kernel.h>
 
 /* The control characters, named rather than written as numbers. */

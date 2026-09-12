@@ -33,10 +33,10 @@
  *   mode were ever mistyped.
  */
 
-#include <oxys/ipi.h>
-#include <oxys/lapic.h>
-#include <oxys/percpu.h>
-#include <oxys/interrupts.h>
+#include <oxys/arch/smp/ipi.h>
+#include <oxys/dev/lapic.h>
+#include <oxys/arch/cpu/percpu.h>
+#include <oxys/arch/interrupt/interrupts.h>
 #include <oxys/kernel.h>
 
 /* Accounting. Written by the sender and by the handlers, all of it diagnostic. */

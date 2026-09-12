@@ -138,7 +138,7 @@ end in. The design is
 
 ## 4. The trap frame
 
-Declared in `kernel/include/oxys/interrupts.h`, in ascending order of address:
+Declared in `kernel/include/oxys/arch/interrupt/interrupts.h`, in ascending order of address:
 
 | Offset | Field | Pushed by |
 | ------ | ----- | --------- |
@@ -250,7 +250,7 @@ end.
 ## 7. The dispatcher
 
 Sub-task 3.3 introduces a table of 256 handler pointers and the registration
-interface of `kernel/include/oxys/interrupts.h`.
+interface of `kernel/include/oxys/arch/interrupt/interrupts.h`.
 
 ### 7.1 Routing
 
@@ -468,7 +468,7 @@ the faulting instruction completed.
 
 Sub-task 3.5 remaps the pair of cascaded controllers and establishes the
 end-of-interrupt protocol. The implementation is `drivers/pic/pic.c`; the
-interface is `kernel/include/oxys/pic.h`.
+interface is `kernel/include/oxys/dev/pic.h`.
 
 ### 9.1 Why remapping is not optional
 
@@ -650,7 +650,7 @@ the mask is honoured.
 ## 10. The interrupt request layer
 
 Sub-task 6.12 introduced `kernel/arch/x86_64/interrupt/irq.c` and the interface of
-`kernel/include/oxys/irq.h`. It is the one place a device driver claims a request
+`kernel/include/oxys/arch/interrupt/irq.h`. It is the one place a device driver claims a request
 line through, whichever controller is presently delivering it.
 
 ### 10.1 Why it exists

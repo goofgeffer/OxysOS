@@ -9,7 +9,7 @@ hardware behaviour below carries a citation, and every specification named is
 registered in [`REFERENCES.md`](../project/REFERENCES.md).
 
 **Implementation**: [`../drivers/pci/pci.c`](../../drivers/pci/pci.c),
-[`../kernel/include/oxys/pci.h`](../../kernel/include/oxys/pci.h).
+[`../kernel/include/oxys/dev/pci.h`](../../kernel/include/oxys/dev/pci.h).
 
 ## 1. What the enumeration is for
 

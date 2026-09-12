@@ -50,8 +50,8 @@
  * time and the two handlers being woken by different request lines.
  */
 
-#include <oxys/ps2.h>
-#include <oxys/io.h>
+#include <oxys/dev/ps2.h>
+#include <oxys/dev/io.h>
 #include <oxys/kernel.h>
 
 /* The data port, and the status and command port. */

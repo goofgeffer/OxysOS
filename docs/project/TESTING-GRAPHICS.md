@@ -359,34 +359,30 @@ the display generally. **Nothing in it draws**, deliberately: drawing would set
 the flag that records a screen as having been shown, and a real fault later in
 the same boot would then find the display taken and draw nothing.
 
-### 5.1 Looking at the screens
+### 5.1 Looking at the screens — withdrawn, and what stands in its place
 
-Two GRUB entries, which prove different things and must not be confused.
+**There is no longer a way to look at a fault screen without causing the fault.**
+Two GRUB entries did it — one drawing a composed frame for any vector, one
+raising a genuine page fault — and both were removed at the project owner's
+direction, along with the routine that composed the frame and the command-line
+parser that read the vector. `../design/FAULTSCREEN.md`, Section 1.5, records
+what they were and the distinction between them, which is still worth knowing.
 
-**Oxys-OS (fault screen demonstration)** composes a trap frame and draws one
-vector's page, then halts. It proves the page — that its text fits, that its
-panels lay out, that its colour and title are its own — and nothing about the
-processor. The frame holds values no machine would produce, so a photograph of it
-cannot be mistaken for a real report. Press `e` at the menu to change
-`fault-screen=14` to another vector: 2, 6, 8, 10, 11, 12, 13, 14, 18, or 256 for
-a panic the kernel raises itself. Any other vector draws the general screen,
-which is what a divide by zero within the kernel gets.
+What this costs, stated so that nobody looks for a procedure that is not here:
 
-**Oxys-OS (raise a genuine page fault)** writes to an unmapped address. It proves
-the wiring — handler, report upon the serial port, screen upon the framebuffer,
-end to end. A page fault is used because it is the one severe fault that can be
-raised deliberately without endangering the machine.
+| Screen | How it could be looked at | How it can be looked at now |
+| ------ | ------------------------ | --------------------------- |
+| Page fault | Either entry | By causing a real one, which means editing the kernel |
+| Double fault, machine check, malformed task state segment, and the rest | The composed frame only | Not at all without editing the kernel |
 
-Capture either as in Section 1.1, counting the keystrokes to the entry wanted:
-
-```sh
-( sleep 2;  echo "sendkey down"; sleep 0.25; echo "sendkey down"; sleep 0.25; \
-  echo "sendkey ret"; \
-  sleep 13; echo "screendump /tmp/oxys-fault.ppm"; \
-  sleep 3;  echo "quit" ) \
-  | qemu-system-x86_64 -machine q35 -cpu qemu64 -smp cores=2 -m 512M \
-      -cdrom build/oxys.iso -display none -monitor stdio -serial null
-```
+The screens **were** judged by eye when they were written, against every item in
+the table that follows, and that judgement is recorded in
+[`TESTING-RECORD.md`](TESTING-RECORD.md). The table is kept because it is the
+list of things to look for whenever a screen is next changed, and because a
+screen altered without being looked at is the defect
+`../design/FAULTSCREEN.md`, Section 1.3, exists to describe. Anybody changing one
+must restore a way of drawing it and repeat this list; the cheapest is to call
+`FaultScreenShowException` from a temporary edit to `KernelMain` and revert it.
 
 What to look for:
 

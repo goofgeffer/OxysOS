@@ -93,7 +93,7 @@ worth having in writing before there is a dispute rather than after.
 The paragraph above disposes of the *calls*. It did not by itself dispose of the
 **headers**, and that was a real loose end rather than a formality.
 
-`kernel/include/oxys/syscall.h` held two different things: the user-visible
+`kernel/include/oxys/arch/syscall/syscall.h` held two different things: the user-visible
 interface — the call numbers, the error values, the limit an argument is
 validated against — and the kernel's own configuration of the mechanism, which is
 `IA32_STAR`, `IA32_LSTAR`, the flag mask, the dispatcher and the validation. The
@@ -104,7 +104,7 @@ header that mixes them.
 **The division was made at sub-task 7.1**, before the wrappers of 7.2 as this
 section required. The interface is now `kernel/abi/oxys/syscall_abi.h`, licensed
 `MIT` so that it may be included by anything; the implementation stays in
-`kernel/include/oxys/syscall.h` under the kernel's licence and includes it. This
+`kernel/include/oxys/arch/syscall/syscall.h` under the kernel's licence and includes it. This
 is the same division Linux draws between its user-visible headers and its
 internal ones, and it was made while the interface was seven calls rather than
 after a library depended upon it.
@@ -164,7 +164,7 @@ recollection.
 
 ## 5. Limitations
 
-1. **~~`kernel/include/oxys/syscall.h` mixes the user-visible interface with the
+1. **~~`kernel/include/oxys/arch/syscall/syscall.h` mixes the user-visible interface with the
    kernel's implementation of it.~~** Discharged at sub-task 7.1, before the
    wrappers of 7.2 as Section 2.1 required. The interface is
    `kernel/abi/oxys/syscall_abi.h`, under `MIT` and reachable by a second include

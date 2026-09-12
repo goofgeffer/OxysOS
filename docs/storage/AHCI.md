@@ -9,7 +9,7 @@ hardware behaviour below carries a citation, and every specification named is
 registered in [`REFERENCES.md`](../project/REFERENCES.md).
 
 **Implementation**: [`../../drivers/ahci/ahci.c`](../../drivers/ahci/ahci.c),
-[`../../kernel/include/oxys/ahci.h`](../../kernel/include/oxys/ahci.h).
+[`../../kernel/include/oxys/dev/storage/ahci.h`](../../kernel/include/oxys/dev/storage/ahci.h).
 
 ## 1. Why this driver exists
 

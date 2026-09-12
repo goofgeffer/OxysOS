@@ -29,7 +29,7 @@
  * describes another device.
  */
 
-#include <oxys/block.h>
+#include <oxys/block/block.h>
 #include <oxys/kernel.h>
 
 /* The registry. A slot is occupied while its registered flag is set. */

@@ -54,16 +54,16 @@
  * for it, for the same reason and with the same reasoning; see kernel/kernel.c.
  */
 
-#include <oxys/faultscreen.h>
-#include <oxys/framebuffer.h>
-#include <oxys/graphics.h>
-#include <oxys/font.h>
-#include <oxys/console.h>
-#include <oxys/compositor.h>
-#include <oxys/cursor.h>
-#include <oxys/paging.h>
-#include <oxys/exceptions.h>
-#include <oxys/cpu.h>
+#include <oxys/gfx/faultscreen.h>
+#include <oxys/gfx/framebuffer.h>
+#include <oxys/gfx/graphics.h>
+#include <oxys/gfx/font.h>
+#include <oxys/gfx/console.h>
+#include <oxys/gfx/compositor.h>
+#include <oxys/gfx/cursor.h>
+#include <oxys/arch/mm/paging.h>
+#include <oxys/arch/interrupt/exceptions.h>
+#include <oxys/arch/cpu/cpu.h>
 #include <oxys/kernel.h>
 
 /* The margin, in character cells, between the page's content and its edge. */
@@ -793,61 +793,6 @@ void FaultScreenShowException(const TrapFrame *frame, uint64_t fault_address)
     (void)FaultParagraph(FAULT_MARGIN + 2, row, entry->examine, FaultInk, width - 2);
 
     FaultFooter(rows, width);
-}
-
-void FaultScreenDemonstrate(uint64_t vector)
-{
-    TrapFrame frame;
-
-    if (vector == FAULT_SCREEN_SOFTWARE)
-    {
-        FaultScreenShowPanic("This is a demonstration. No check actually failed.");
-        return;
-    }
-
-    /*
-     * A frame of values that could not have come from a machine.
-     *
-     * They are chosen to be unmistakable — repeated nibbles, and an obviously
-     * artificial address — so that a photograph of this page cannot be filed as
-     * evidence of a fault that occurred. Every field is set: a frame left partly
-     * uninitialised would put whatever the stack held into a panel, and the one
-     * page in this kernel that must not mislead is the page a person reads when
-     * they are already confused.
-     */
-    frame.r15 = UINT64_C(0x0F0F0F0F0F0F0F0F);
-    frame.r14 = UINT64_C(0x0E0E0E0E0E0E0E0E);
-    frame.r13 = UINT64_C(0x0D0D0D0D0D0D0D0D);
-    frame.r12 = UINT64_C(0x0C0C0C0C0C0C0C0C);
-    frame.r11 = UINT64_C(0x0B0B0B0B0B0B0B0B);
-    frame.r10 = UINT64_C(0x0A0A0A0A0A0A0A0A);
-    frame.r9 = UINT64_C(0x0909090909090909);
-    frame.r8 = UINT64_C(0x0808080808080808);
-    frame.rbp = UINT64_C(0x0BBBBBBBBBBBBBB0);
-    frame.rdi = UINT64_C(0x0DDDDDDDDDDDDDD0);
-    frame.rsi = UINT64_C(0x0555555555555550);
-    frame.rdx = UINT64_C(0x0000000000000000);
-    frame.rcx = UINT64_C(0x0000000000000007);
-    frame.rbx = UINT64_C(0x0BBBBBBBBBBBBBBB);
-    frame.rax = UINT64_C(0x00000000DEADBEEF);
-    frame.vector = vector;
-
-    /*
-     * An error code that decodes into something a reader can check against the
-     * panel: selector index 8, in the global descriptor table, raised from
-     * within the program.
-     */
-    frame.error_code = UINT64_C(0x0043);
-
-    /* The instruction pointer names this routine, so that the instruction panel
-     * has real bytes to reproduce and the reader can see that it read them. */
-    frame.rip = (uint64_t)(uintptr_t)&FaultScreenDemonstrate;
-    frame.cs = UINT64_C(0x08);
-    frame.rflags = UINT64_C(0x0000000000000246);
-    frame.rsp = (uint64_t)(uintptr_t)&frame;
-    frame.ss = UINT64_C(0x10);
-
-    FaultScreenShowException(&frame, UINT64_C(0x0000DEAD0000BEEF));
 }
 
 void FaultScreenShowPanic(const char *message)

@@ -13,7 +13,7 @@ this sub-task applies.
 **Implementation**: [`../../kernel/arch/x86_64/smp/smp.c`](../../kernel/arch/x86_64/smp/smp.c),
 [`../../boot/trampoline.asm`](../../boot/trampoline.asm) and
 [`../../kernel/arch/x86_64/smp/smp_trampoline.asm`](../../kernel/arch/x86_64/smp/smp_trampoline.asm),
-with [`../../kernel/include/oxys/smp.h`](../../kernel/include/oxys/smp.h). The
+with [`../../kernel/include/oxys/arch/smp/smp.h`](../../kernel/include/oxys/arch/smp/smp.h). The
 per-processor task state segments are in
 [`../../kernel/arch/x86_64/cpu/tss.c`](../../kernel/arch/x86_64/cpu/tss.c) and their descriptors in
 [`../../kernel/arch/x86_64/cpu/gdt.c`](../../kernel/arch/x86_64/cpu/gdt.c); the command register the
@@ -537,7 +537,7 @@ look identical from outside and have entirely different causes.
 ## 8. Verification
 
 `KernelVerifyApplicationProcessors`, in
-[`../../kernel/test/verify_smp.c`](../../kernel/test/verify_smp.c).
+[`../../kernel/test/arch/smp.c`](../../kernel/test/arch/smp.c).
 
 **A count is not the assertion.** A kernel that incremented a variable and
 started nobody would produce the same count, the same report and the same banner.

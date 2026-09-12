@@ -112,7 +112,7 @@ interpreted in its light.
 
 ## 4. What the decoder produces
 
-A `KeyEvent`, declared in `kernel/include/oxys/keyboard.h`, carrying the
+A `KeyEvent`, declared in `kernel/include/oxys/dev/keyboard.h`, carrying the
 scancode, the character it yields under the modifiers in force, those modifiers,
 whether it was a depression or a release, and whether it was extended.
 

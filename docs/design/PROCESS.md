@@ -12,7 +12,7 @@ the four calls by which it governs another.
 
 **Implementation**: [`../../kernel/proc/process.c`](../../kernel/proc/process.c),
 [`../../kernel/arch/x86_64/proc/switch.asm`](../../kernel/arch/x86_64/proc/switch.asm),
-[`../../kernel/include/oxys/process.h`](../../kernel/include/oxys/process.h).
+[`../../kernel/include/oxys/proc/process.h`](../../kernel/include/oxys/proc/process.h).
 The dispatch and the validation of a caller's arguments are
 [`../../kernel/arch/x86_64/syscall/syscall.c`](../../kernel/arch/x86_64/syscall/syscall.c), whose design is
 [`PRIVILEGE.md`](PRIVILEGE.md).

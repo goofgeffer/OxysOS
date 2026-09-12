@@ -14,7 +14,7 @@ and 5.2.12.12 (the interrupt controller structures), and Table 5.26 (MPS INTI
 Flags); Multiboot2 Specification 2.0, Sections 3.6.16 and 3.6.17.
 
 **Implementation**: [`../../kernel/acpi/acpi.c`](../../kernel/acpi/acpi.c),
-[`../../kernel/include/oxys/acpi.h`](../../kernel/include/oxys/acpi.h).
+[`../../kernel/include/oxys/acpi/acpi.h`](../../kernel/include/oxys/acpi/acpi.h).
 
 ## 1. What this is for, and what it is not
 

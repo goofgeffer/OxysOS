@@ -41,8 +41,8 @@
 #ifndef OXYS_FS_VFS_INTERNAL_H
 #define OXYS_FS_VFS_INTERNAL_H
 
-#include <oxys/vfs.h>
-#include <oxys/block.h>
+#include <oxys/fs/vfs.h>
+#include <oxys/block/block.h>
 #include <oxys/types.h>
 
 /*

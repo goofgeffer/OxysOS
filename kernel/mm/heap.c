@@ -29,9 +29,9 @@
  * and per-processor caches become worthwhile, when a second processor runs.
  */
 
-#include <oxys/heap.h>
-#include <oxys/vmm.h>
-#include <oxys/memory.h>
+#include <oxys/mm/heap.h>
+#include <oxys/mm/vmm.h>
+#include <oxys/mm/memory.h>
 #include <oxys/kernel.h>
 
 /* Identifies a page as belonging to the heap, and distinguishes a corrupt or

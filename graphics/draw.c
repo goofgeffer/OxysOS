@@ -39,8 +39,8 @@
  * taken here, a primitive being far too small a thing to own a lock.
  */
 
-#include <oxys/graphics.h>
-#include <oxys/framebuffer.h>
+#include <oxys/gfx/graphics.h>
+#include <oxys/gfx/framebuffer.h>
 #include <oxys/kernel.h>
 
 /* ------------------------------------------------------------------------------

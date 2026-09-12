@@ -63,9 +63,9 @@
  * lock, by decision; graphics/faultscreen.c records why.
  */
 
-#include <oxys/vga.h>
+#include <oxys/dev/vga.h>
 #include <oxys/kernel.h>
-#include <oxys/io.h>
+#include <oxys/dev/io.h>
 
 /*
  * The index and data ports of the CRT controller in each of the two

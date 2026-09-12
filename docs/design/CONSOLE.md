@@ -10,11 +10,11 @@ console fast enough to keep.
 
 **Implemented by**: [`../../graphics/font.c`](../../graphics/font.c),
 [`../../graphics/console.c`](../../graphics/console.c),
-[`../../kernel/include/oxys/font.h`](../../kernel/include/oxys/font.h),
-[`../../kernel/include/oxys/console.h`](../../kernel/include/oxys/console.h).
+[`../../kernel/include/oxys/gfx/font.h`](../../kernel/include/oxys/gfx/font.h),
+[`../../kernel/include/oxys/gfx/console.h`](../../kernel/include/oxys/gfx/console.h).
 
 **Asserted by**: `KernelVerifyConsole` in
-[`../../kernel/test/verify_console.c`](../../kernel/test/verify_console.c). The
+[`../../kernel/test/gfx/console.c`](../../kernel/test/gfx/console.c). The
 word path of Section 6 is additionally asserted by `KernelVerifyGraphics`, and
 those two assertions are recorded in
 [`FAULTSCREEN.md`](FAULTSCREEN.md), Sections 2.1 and 2.2, with the run they were

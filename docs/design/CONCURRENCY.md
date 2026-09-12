@@ -443,7 +443,7 @@ it from firing.** `KernelVerifyShootdown`, which is the only caller, runs before
 `SmpInitialise` — so one processor is online when it runs, and the condition
 holds. Moving the self-test after the bring-up would turn a passing assertion
 into a refusal upon every multiprocessor machine, which is why
-[`../../kernel/test/verify_smp.c`](../../kernel/test/verify_smp.c) states the
+[`../../kernel/test/arch/smp.c`](../../kernel/test/arch/smp.c) states the
 dependency rather than leaving it to be rediscovered.
 
 ## 7. `PagingInvalidateLocalPage`
@@ -461,7 +461,7 @@ one believes it has taken away.
 
 `KernelVerifyPerCpu`, `KernelVerifySpinlock`, `KernelVerifyIpi` and
 `KernelVerifyShootdown`, in
-[`../../kernel/test/verify_smp.c`](../../kernel/test/verify_smp.c).
+[`../../kernel/test/arch/smp.c`](../../kernel/test/arch/smp.c).
 
 **A lock that does not lock behaves exactly like a lock that does, upon a machine
 with one processor.** Nothing observable distinguishes them until a second

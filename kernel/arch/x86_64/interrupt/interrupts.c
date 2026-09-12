@@ -30,8 +30,8 @@
  * sub-task 6.13 exists and has not been applied here.
  */
 
-#include <oxys/interrupts.h>
-#include <oxys/idt.h>
+#include <oxys/arch/interrupt/interrupts.h>
+#include <oxys/arch/cpu/idt.h>
 #include <oxys/kernel.h>
 
 #include <stddef.h>

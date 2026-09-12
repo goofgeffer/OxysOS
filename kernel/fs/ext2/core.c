@@ -35,7 +35,7 @@
 
 #include "internal.h"
 
-#include <oxys/buffer.h>
+#include <oxys/block/buffer.h>
 #include <oxys/kernel.h>
 
 /* Defined here and declared in internal.h; see the note there. */

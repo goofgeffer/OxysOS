@@ -74,7 +74,7 @@ misleading by omission.
 | Absent | Consequence | Due |
 | ------ | ----------- | --- |
 | **NX / execute-disable.** `IA32_EFER.NXE` is not set, so no page is non-executable. | Every writable page is also executable, kernel and user alike. | Sub-task 13.3 |
-| **SMEP.** The `CR4` bit is named in `kernel/include/oxys/cpu.h` and never written. | The kernel could be induced to execute a user page. | Sub-task 13.3 |
+| **SMEP.** The `CR4` bit is named in `kernel/include/oxys/arch/cpu/cpu.h` and never written. | The kernel could be induced to execute a user page. | Sub-task 13.3 |
 | **SMAP.** Likewise named and never written. | The kernel's reads of user memory are unguarded by hardware; only the software validation of Section 2 stands between them. | Sub-task 13.3 |
 | **Stack canaries.** The build uses `-fno-stack-protector`, the canary requiring runtime support that does not exist. | A stack overwrite in the kernel is not detected at return. | Sub-task 13.4 |
 | **Kernel address-space layout randomisation.** | Every kernel address is the same on every boot and is printed in the boot log. | Sub-task 13.5, marked *if feasible* |

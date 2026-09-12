@@ -38,7 +38,7 @@ block-level transfer),
 [`name.c`](../../kernel/fs/ext2/name.c) (the names, and the files they reach), and
 [`internal.h`](../../kernel/fs/ext2/internal.h).
 The public interface is
-[`../../kernel/include/oxys/ext2.h`](../../kernel/include/oxys/ext2.h) and is
+[`../../kernel/include/oxys/fs/ext2.h`](../../kernel/include/oxys/fs/ext2.h) and is
 unchanged by the division.
 
 This was a single file of 4,325 lines until the review that followed sub-task
@@ -99,7 +99,7 @@ It is not done, for two reasons.
 
 So the superblock is read into a buffer of bytes and decoded field by field into
 a structure of the processor's own types. The offsets are named in
-`kernel/include/oxys/ext2.h` rather than in the parser, because they are the
+`kernel/include/oxys/fs/ext2.h` rather than in the parser, because they are the
 format and not the parser's opinion of it — the self-test composes a volume from
 those same names, and a test that stated the offsets a second time would agree
 with a mistaken parser as readily as with a correct one.

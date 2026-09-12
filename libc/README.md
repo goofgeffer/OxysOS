@@ -97,9 +97,9 @@ holds. The corpus is enumerated in
 
 ## How it is asserted
 
-[`../kernel/test/verify_string.c`](../kernel/test/verify_string.c),
-[`../kernel/test/verify_wrappers.c`](../kernel/test/verify_wrappers.c) and
-[`../kernel/test/verify_heap.c`](../kernel/test/verify_heap.c), all run by
+[`../kernel/test/libc/string.c`](../kernel/test/libc/string.c),
+[`../kernel/test/libc/wrappers.c`](../kernel/test/libc/wrappers.c) and
+[`../kernel/test/libc/heap.c`](../kernel/test/libc/heap.c), all run by
 `make verify` at every boot.
 [`../docs/design/LIBC.md`](../docs/design/LIBC.md), Section 5, holds the table
 pairing each of the first test's assertions with the silent failure it exists to

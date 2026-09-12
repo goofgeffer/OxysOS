@@ -80,12 +80,12 @@
  * this buffer a second consumer.
  */
 
-#include <oxys/serial.h>
+#include <oxys/dev/serial.h>
 #include <oxys/kernel.h>
-#include <oxys/io.h>
-#include <oxys/cpu.h>
-#include <oxys/irq.h>
-#include <oxys/interrupts.h>
+#include <oxys/dev/io.h>
+#include <oxys/arch/cpu/cpu.h>
+#include <oxys/arch/interrupt/irq.h>
+#include <oxys/arch/interrupt/interrupts.h>
 
 /* Register offsets from the adapter's I/O base address. */
 #define SERIAL_REGISTER_DATA                  0U /* Receiver and transmitter buffers. */

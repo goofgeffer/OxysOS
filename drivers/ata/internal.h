@@ -33,8 +33,8 @@
 #ifndef OXYS_DRIVERS_ATA_INTERNAL_H
 #define OXYS_DRIVERS_ATA_INTERNAL_H
 
-#include <oxys/ata.h>
-#include <oxys/pci.h>
+#include <oxys/dev/storage/ata.h>
+#include <oxys/dev/pci.h>
 #include <oxys/types.h>
 
 /* The command block registers, as offsets from the base address. */

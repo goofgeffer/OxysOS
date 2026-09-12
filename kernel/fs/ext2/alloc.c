@@ -26,7 +26,7 @@
 
 #include "internal.h"
 
-#include <oxys/buffer.h>
+#include <oxys/block/buffer.h>
 #include <oxys/kernel.h>
 
 /*

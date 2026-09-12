@@ -11,13 +11,13 @@ which **nothing reads the framebuffer**.
 
 **Implemented by**: [`../../graphics/cursor.c`](../../graphics/cursor.c),
 [`../../graphics/compositor.c`](../../graphics/compositor.c),
-[`../../kernel/include/oxys/cursor.h`](../../kernel/include/oxys/cursor.h),
-[`../../kernel/include/oxys/compositor.h`](../../kernel/include/oxys/compositor.h).
+[`../../kernel/include/oxys/gfx/cursor.h`](../../kernel/include/oxys/gfx/cursor.h),
+[`../../kernel/include/oxys/gfx/compositor.h`](../../kernel/include/oxys/gfx/compositor.h).
 
 **Asserted by**: `KernelVerifyCursor` in
-[`../../kernel/test/verify_mouse.c`](../../kernel/test/verify_mouse.c), and
+[`../../kernel/test/dev/mouse.c`](../../kernel/test/dev/mouse.c), and
 `KernelVerifyCompositing` and `KernelVerifyCompositor` in
-[`../../kernel/test/verify_compositor.c`](../../kernel/test/verify_compositor.c).
+[`../../kernel/test/gfx/compositor.c`](../../kernel/test/gfx/compositor.c).
 
 **Where this sits**: the last of the five documents the graphical work of
 sub-tasks 6.2 to 6.6 is divided into. [`GRAPHICS.md`](GRAPHICS.md) is the index

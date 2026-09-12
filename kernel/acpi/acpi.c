@@ -62,10 +62,10 @@
  * state that is never written again after AcpiInitialise returns.
  */
 
-#include <oxys/acpi.h>
+#include <oxys/acpi/acpi.h>
 #include <oxys/kernel.h>
-#include <oxys/vmm.h>
-#include <oxys/paging.h>
+#include <oxys/mm/vmm.h>
+#include <oxys/arch/mm/paging.h>
 
 /* The length of the header every description table begins with, ACPI 6.5,
  * Table 5.4, and the offsets of the fields this file reads from it. */

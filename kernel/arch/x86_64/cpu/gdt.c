@@ -21,8 +21,8 @@
  *     state segment descriptor, whose type is 9 while available.
  */
 
-#include <oxys/gdt.h>
-#include <oxys/percpu.h>
+#include <oxys/arch/cpu/gdt.h>
+#include <oxys/arch/cpu/percpu.h>
 #include <oxys/kernel.h>
 
 /*

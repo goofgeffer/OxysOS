@@ -487,7 +487,7 @@ A self-test is worth nothing until it has been seen to fail. To repeat it:
 
 ```sh
 # Remove the interrupt flag from the mask the kernel writes into IA32_FMASK.
-sed -i 's/RFLAGS_TRAP | RFLAGS_INTERRUPT_ENABLE |/RFLAGS_TRAP |/'     kernel/include/oxys/syscall.h
+sed -i 's/RFLAGS_TRAP | RFLAGS_INTERRUPT_ENABLE |/RFLAGS_TRAP |/'     kernel/include/oxys/arch/syscall/syscall.h
 make verify
 ```
 
@@ -720,7 +720,7 @@ TLB shootdown self-test passed.
 one processor is online at that point. Since sub-task 6.14 that is a statement
 about the ordering and not about the machine: moving the corpus after the
 bring-up would make the assertion fail upon every multiprocessor machine, and
-[`../../kernel/test/verify_smp.c`](../../kernel/test/verify_smp.c) says so where
+[`../../kernel/test/arch/smp.c`](../../kernel/test/arch/smp.c) says so where
 it would be read.
 
 The fourth line is reported rather than asserted. The architecture nowhere
@@ -930,7 +930,7 @@ needle. Each is where the standard says something a natural loop does not do.
 ### 12.2 What `make verify` asserts
 
 `KernelVerifyString`, in
-[`../../kernel/test/verify_string.c`](../../kernel/test/verify_string.c). See
+[`../../kernel/test/libc/string.c`](../../kernel/test/libc/string.c). See
 [`../design/LIBC.md`](../design/LIBC.md), Section 5, for the table pairing each
 assertion with the failure it catches. In outline: the three comparing functions
 and both searching ones are asserted upon `0x80` and `0xFF` rather than upon
@@ -1001,7 +1001,7 @@ which of the nineteen, and in which of the three ways of Section 12.1.
 
 **Corresponding sub-task**: 7.2. **Design**:
 [`../design/LIBC.md`](../design/LIBC.md), Section 8. **Implementation of the
-test**: [`../../kernel/test/verify_wrappers.c`](../../kernel/test/verify_wrappers.c).
+test**: [`../../kernel/test/libc/wrappers.c`](../../kernel/test/libc/wrappers.c).
 
 ### 13.1 The difficulty this section exists for
 
@@ -1135,7 +1135,7 @@ first and the last is a failure, each naming the property that failed.
 **Sub-task**: 7.3. **Design**: [`../design/LIBC.md`](../design/LIBC.md), Section
 9, whose Section 9.4 holds the two tables pairing every assertion with the silent
 failure it exists to catch. **Test**:
-[`../../kernel/test/verify_heap.c`](../../kernel/test/verify_heap.c).
+[`../../kernel/test/libc/heap.c`](../../kernel/test/libc/heap.c).
 
 ### 14.1 The difficulty this section exists for
 

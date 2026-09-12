@@ -51,14 +51,14 @@
  *   ahead of the description of it.
  */
 
-#include <oxys/ahci.h>
-#include <oxys/block.h>
+#include <oxys/dev/storage/ahci.h>
+#include <oxys/block/block.h>
 #include <oxys/kernel.h>
-#include <oxys/memory.h>
-#include <oxys/paging.h>
-#include <oxys/pci.h>
-#include <oxys/pmm.h>
-#include <oxys/vmm.h>
+#include <oxys/mm/memory.h>
+#include <oxys/arch/mm/paging.h>
+#include <oxys/dev/pci.h>
+#include <oxys/mm/pmm.h>
+#include <oxys/mm/vmm.h>
 
 /* The generic host control registers, as byte offsets from the mapped base. */
 #define AHCI_CAPABILITIES       0x00U

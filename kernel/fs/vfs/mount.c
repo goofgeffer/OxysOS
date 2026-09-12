@@ -26,10 +26,10 @@
 
 #include "internal.h"
 
-#include <oxys/vfs.h>
+#include <oxys/fs/vfs.h>
 #include <oxys/kernel.h>
-#include <oxys/block.h>
-#include <oxys/heap.h>
+#include <oxys/block/block.h>
+#include <oxys/mm/heap.h>
 
 void VfsInitialise(void)
 {

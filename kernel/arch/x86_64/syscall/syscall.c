@@ -32,16 +32,16 @@
  * SYSCALL an invalid opcode.
  */
 
-#include <oxys/syscall.h>
-#include <oxys/percpu.h>
-#include <oxys/msr.h>
-#include <oxys/gdt.h>
+#include <oxys/arch/syscall/syscall.h>
+#include <oxys/arch/cpu/percpu.h>
+#include <oxys/arch/cpu/msr.h>
+#include <oxys/arch/cpu/gdt.h>
 #include <oxys/kernel.h>
-#include <oxys/memory.h>
-#include <oxys/paging.h>
-#include <oxys/pit.h>
-#include <oxys/tss.h>
-#include <oxys/process.h>
+#include <oxys/mm/memory.h>
+#include <oxys/arch/mm/paging.h>
+#include <oxys/dev/pit.h>
+#include <oxys/arch/cpu/tss.h>
+#include <oxys/proc/process.h>
 
 /* Defined in kernel/arch/x86_64/syscall/syscall_entry.asm. */
 extern void SyscallEntry(void);
@@ -96,7 +96,7 @@ static bool SyscallIsSupported(void)
  * The block GS names within the kernel is the executing processor's own area.
  *
  * It was a structure of this file's own from sub-task 6.7 until sub-task 6.13,
- * which replaced it with the per-processor area <oxys/percpu.h> declares — the
+ * which replaced it with the per-processor area <oxys/arch/cpu/percpu.h> declares — the
  * same two fields at the same two offsets, and the rest of what a processor owns
  * after them. The offsets the entry path addresses by number are asserted in
  * kernel/arch/x86_64/cpu/percpu.c, beside the structure they belong to.

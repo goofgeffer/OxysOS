@@ -25,7 +25,7 @@
  *     overwriting it until it has finished using it.
  */
 
-#include <oxys/bootinfo.h>
+#include <oxys/boot/bootinfo.h>
 #include "multiboot2.h"
 #include <oxys/kernel.h>
 

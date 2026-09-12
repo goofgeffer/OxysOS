@@ -44,11 +44,11 @@
  * contended.
  */
 
-#include <oxys/irq.h>
-#include <oxys/pic.h>
-#include <oxys/lapic.h>
-#include <oxys/ioapic.h>
-#include <oxys/acpi.h>
+#include <oxys/arch/interrupt/irq.h>
+#include <oxys/dev/pic.h>
+#include <oxys/dev/lapic.h>
+#include <oxys/dev/ioapic.h>
+#include <oxys/acpi/acpi.h>
 #include <oxys/kernel.h>
 
 /* What each line was claimed by, and what its claimant asked for. */

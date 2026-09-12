@@ -22,7 +22,7 @@
  * a per-processor register, but they may all reference this one table.
  */
 
-#include <oxys/idt.h>
+#include <oxys/arch/cpu/idt.h>
 #include <oxys/kernel.h>
 
 /*

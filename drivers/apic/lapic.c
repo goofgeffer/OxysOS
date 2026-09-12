@@ -77,12 +77,12 @@
  * anything.
  */
 
-#include <oxys/lapic.h>
-#include <oxys/acpi.h>
-#include <oxys/pit.h>
-#include <oxys/msr.h>
-#include <oxys/paging.h>
-#include <oxys/vmm.h>
+#include <oxys/dev/lapic.h>
+#include <oxys/acpi/acpi.h>
+#include <oxys/dev/pit.h>
+#include <oxys/arch/cpu/msr.h>
+#include <oxys/arch/mm/paging.h>
+#include <oxys/mm/vmm.h>
 #include <oxys/kernel.h>
 
 /* The mapped register page, and the physical address it was mapped from. */

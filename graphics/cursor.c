@@ -52,10 +52,10 @@
  * concealment that two parties shared having gone with the save-under.
  */
 
-#include <oxys/cursor.h>
-#include <oxys/compositor.h>
-#include <oxys/framebuffer.h>
-#include <oxys/graphics.h>
+#include <oxys/gfx/cursor.h>
+#include <oxys/gfx/compositor.h>
+#include <oxys/gfx/framebuffer.h>
+#include <oxys/gfx/graphics.h>
 #include <oxys/kernel.h>
 
 /*

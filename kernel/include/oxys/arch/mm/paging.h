@@ -1,0 +1,250 @@
+/* SPDX-FileCopyrightText: 2026 The Oxys-OS Authors */
+/* SPDX-License-Identifier: LGPL-3.0-or-later */
+/*
+ * File: kernel/include/oxys/arch/mm/paging.h
+ * Purpose: Declares the permanent kernel paging hierarchy, which supersedes the
+ *          boot-time structures built in boot/boot.asm, and the paging-structure
+ *          entry flags defined by the architecture.
+ * Key definitions: PAGE_ENTRY_PRESENT and the remaining entry flags,
+ *          PagingInitialise, PagingTranslate, PagingKernelRoot, PagingReport.
+ * References:
+ *   - Intel 64 and IA-32 Architectures Software Developer's Manual, Volume 3A,
+ *     Section 4.5 and Figure 4-8: four-level paging, and the decomposition of a
+ *     linear address into the indices of the four structures.
+ *   - Intel SDM, Volume 3A, Table 4-15: the paging-structure entry flags.
+ *   - Intel SDM, Volume 3A, Section 4.10.4.1: writing CR3 invalidates every
+ *     translation-lookaside-buffer entry associated with the current process
+ *     context, save those for global pages.
+ */
+
+#ifndef OXYS_ARCH_MM_PAGING_H
+#define OXYS_ARCH_MM_PAGING_H
+
+#include <oxys/types.h>
+#include <oxys/mm/memory.h>
+#include <oxys/boot/bootinfo.h>
+
+/*
+ * Paging-structure entry flags, per Intel SDM, Volume 3A, Table 4-15.
+ */
+#define PAGE_ENTRY_PRESENT   UINT64_C(0x001) /* The entry is valid. */
+#define PAGE_ENTRY_WRITABLE  UINT64_C(0x002) /* Writes are permitted. */
+#define PAGE_ENTRY_USER      UINT64_C(0x004) /* Accessible at privilege level 3. */
+#define PAGE_ENTRY_WRITE_THROUGH UINT64_C(0x008)
+#define PAGE_ENTRY_CACHE_DISABLE UINT64_C(0x010)
+#define PAGE_ENTRY_ACCESSED  UINT64_C(0x020) /* Set by the processor upon access. */
+#define PAGE_ENTRY_DIRTY     UINT64_C(0x040) /* Set by the processor upon write. */
+#define PAGE_ENTRY_LARGE     UINT64_C(0x080) /* PS: the entry maps a large page. */
+#define PAGE_ENTRY_GLOBAL    UINT64_C(0x100) /* Not invalidated by a CR3 write. */
+
+/*
+ * Bit 7 of a page-table entry, where it selects the upper half of the page
+ * attribute table: the memory type of the page becomes entry (PAT<<2)|(PCD<<1)|
+ * PWT of IA32_PAT rather than one of the first four.
+ *
+ * It is the same bit as PAGE_ENTRY_LARGE above, and that is not a mistake in
+ * either. Bit 7 means PS in a directory entry, where it says the entry maps a
+ * large page, and PAT in a table entry, where it selects a memory type; the two
+ * names exist because the levels are different and a reader of one should not
+ * have to know the other. In a large-page directory entry the PAT bit moves to
+ * bit 12, which this kernel has no present use for and does not name.
+ */
+#define PAGE_ENTRY_PAT       UINT64_C(0x080)
+
+/*
+ * A flag reserved to software, marking a page as copy-on-write.
+ *
+ * Intel SDM, Volume 3A, Table 4-19 ("Format of a Page-Table Entry that Maps a
+ * 4-KByte Page"), records bits 11:9 as Ignored, meaning the processor neither
+ * interprets nor modifies them. Bit 9 is therefore available, and a page so
+ * marked is one whose frame may be shared and which must be duplicated before
+ * any write to it is permitted.
+ *
+ * A copy-on-write page is always mapped without PAGE_ENTRY_WRITABLE. The two
+ * conditions together are what cause the processor to raise the fault that the
+ * resolution routine then handles; the flag alone would be inert, since the
+ * processor ignores it.
+ */
+#define PAGE_ENTRY_COPY_ON_WRITE UINT64_C(0x200)
+
+/*
+ * The bits of an entry that hold the physical address of the next structure or
+ * of the mapped page. Bits 51:12 of the entry, the remainder being flags or
+ * reserved.
+ */
+#define PAGE_ENTRY_ADDRESS_MASK UINT64_C(0x000FFFFFFFFFF000)
+
+/* The number of entries in every paging structure, each being 4096 bytes of
+ * 8-byte entries. */
+#define PAGE_TABLE_ENTRY_COUNT 512U
+
+/*
+ * Constructs the permanent kernel paging hierarchy from frames obtained from the
+ * physical allocator, activates it by writing CR3, and thereby removes the
+ * identity mapping of low memory that the boot-time hierarchy established.
+ *
+ * The physical frame allocator must have been initialised before this is called.
+ * This function does not return if a required frame cannot be allocated.
+ */
+void PagingInitialise(const BootInformation *information);
+
+/*
+ * Reports whether the direct physical map is established and active. Until it
+ * is, only the first gibibyte of physical memory is addressable by the kernel,
+ * and frames intended for kernel use must be obtained with FrameAllocateBelow.
+ */
+bool PagingDirectMapIsActive(void);
+
+/* The extent of physical memory covered by the direct physical map. */
+uint64_t PagingDirectMapExtent(void);
+
+/*
+ * Resolves a virtual address to the physical address it maps to, by walking the
+ * active hierarchy in software. Returns 0 if the address is not mapped.
+ *
+ * This is the means by which the hierarchy is verified without provoking a page
+ * fault, there being no interrupt descriptor table until Phase 3 and hence no
+ * handler to recover from one.
+ */
+PhysicalAddress PagingTranslate(VirtualAddress address);
+
+/*
+ * Reports whether the mapping governing a virtual address permits writing,
+ * accumulating the writable flag across all four levels. Intel SDM, Volume 3A,
+ * Section 4.6, provides that the permissions of a translation are the
+ * conjunction of those at every level, so every level must be consulted.
+ *
+ * Returns false if the address is not mapped.
+ */
+bool PagingAddressIsWritable(VirtualAddress address);
+
+/*
+ * Reports whether the mapping governing a virtual address permits privilege
+ * level 3 to touch it, accumulating the user flag across all four levels by the
+ * same conjunction rule.
+ *
+ * Returns false if the address is not mapped. This is what the system-call
+ * argument validation asks of every address a caller supplies: a kernel that
+ * copied from a page merely because it was mapped would read its own memory on
+ * behalf of a caller that could never have reached it.
+ */
+bool PagingAddressIsUser(VirtualAddress address);
+
+/*
+ * Establishes a 4 KiB mapping in the kernel hierarchy and invalidates any stale
+ * translation for the address. The flags are those of Table 4-15;
+ * PAGE_ENTRY_PRESENT is supplied by the implementation.
+ */
+void PagingMapKernelPage(VirtualAddress virtual_address,
+                         PhysicalAddress physical_address,
+                         uint64_t flags);
+
+/*
+ * Removes a 4 KiB mapping from the kernel hierarchy and invalidates the
+ * translation. The frame that was mapped is not freed; the caller owns it.
+ */
+void PagingUnmapKernelPage(VirtualAddress virtual_address);
+
+/*
+ * Marks a mapped page as copy-on-write: the writable flag is cleared and the
+ * software flag set, so that the next write to it raises a page fault which
+ * PagingResolveCopyOnWriteFault can resolve.
+ *
+ * Returns false if the address is not mapped by a 4 KiB page. Large pages are
+ * not supported, a copy-on-write fault upon one requiring the mapping to be
+ * split before it could be resolved.
+ */
+bool PagingMarkCopyOnWrite(VirtualAddress address);
+
+/* Reports whether the page containing the address carries the software flag. */
+bool PagingIsCopyOnWrite(VirtualAddress address);
+
+/*
+ * Attempts to resolve a page fault as a copy-on-write fault.
+ *
+ * Returns true if the fault was resolved, in which case the caller must return
+ * from the exception so that the offending instruction is restarted. Returns
+ * false if the fault was not a copy-on-write fault, or could not be resolved,
+ * in which case the caller must report it.
+ */
+bool PagingResolveCopyOnWriteFault(VirtualAddress address);
+
+/* The number of copy-on-write faults resolved, frames duplicated, and faults
+ * resolved without a duplication because the frame had a single referrer. */
+uint64_t PagingCopyOnWriteFaultCount(void);
+uint64_t PagingCopyOnWriteCopyCount(void);
+uint64_t PagingCopyOnWriteSoleOwnerCount(void);
+
+/* The physical address of the kernel's page-map level 4 table. */
+PhysicalAddress PagingKernelRoot(void);
+
+/* The physical address of the page-map level 4 table presently named by CR3. */
+PhysicalAddress PagingActiveRoot(void);
+
+/*
+ * Loads a hierarchy into CR3 and records it as the active one.
+ *
+ * Every hierarchy the kernel constructs holds the same higher-half entries, so
+ * the kernel's own code, stack and data remain mapped across the change and
+ * execution continues at the following instruction.
+ */
+void PagingActivateRoot(PhysicalAddress root);
+
+/*
+ * The primitives with which a paging hierarchy is built, exposed for the
+ * address-space code of sub-task 2.8. A structure obtained from
+ * PagingAllocateStructure is cleared; entries returns a pointer through which a
+ * structure may be read and written, by way of the direct physical map.
+ */
+uint64_t *PagingTableEntries(PhysicalAddress table);
+PhysicalAddress PagingAllocateStructure(void);
+void PagingReleaseStructure(PhysicalAddress table);
+
+/*
+ * Establishes a 4 KiB mapping in an arbitrary hierarchy, creating the
+ * intermediate structures as required, and invalidates the translation if that
+ * hierarchy is the active one.
+ */
+void PagingMapPageIn(PhysicalAddress root, VirtualAddress virtual_address,
+                     PhysicalAddress physical_address, uint64_t flags);
+
+/*
+ * Withdraws a 4 KiB mapping from an arbitrary hierarchy and returns the frame it
+ * named, invalidating the translation if that hierarchy is the active one.
+ *
+ * Returns FRAME_ALLOCATION_FAILED where nothing was mapped, which is a report and
+ * not a failure. The frame is returned rather than released: whether the caller
+ * holds the last reference to it is something only the caller knows, and a
+ * function that decided for it would free a frame another address space is still
+ * translating through. Added at sub-task 7.3, for the break that shrinks.
+ */
+PhysicalAddress PagingUnmapPageIn(PhysicalAddress root, VirtualAddress virtual_address);
+
+/*
+ * Invalidates the translation-lookaside-buffer entry for one page of the active
+ * hierarchy, per Intel SDM, Volume 3A, Section 4.10.4.1, upon every processor.
+ *
+ * From sub-task 6.13 that is two operations and not one: the instruction reaches
+ * the executing processor alone, so the others are told by inter-processor
+ * interrupt and waited for. See docs/design/CONCURRENCY.md, Section 6.
+ */
+void PagingInvalidatePage(VirtualAddress address);
+
+/*
+ * Invalidates the entry upon the executing processor and tells nobody.
+ *
+ * This is the instruction alone. It exists for the shootdown handler, which is
+ * what the other processors run when they are told — an announcement made from
+ * within it would be an announcement of an announcement, and the processors
+ * would tell each other about the same address without end.
+ *
+ * No other caller has any business here: a mapping changed without the
+ * announcement leaves every other processor holding a translation of a page this
+ * one believes it has taken away.
+ */
+void PagingInvalidateLocalPage(VirtualAddress address);
+
+/* Emits a summary of the hierarchy upon the console and the serial port. */
+void PagingReport(void);
+
+#endif /* OXYS_ARCH_MM_PAGING_H */

@@ -7,7 +7,7 @@
 **Authority**: `PROJECT_GUIDELINES.md`, Sections 2, 3 and 6.
 
 **Implementation**: [`../../kernel/block/block.c`](../../kernel/block/block.c),
-[`../kernel/include/oxys/block.h`](../../kernel/include/oxys/block.h).
+[`../kernel/include/oxys/block/block.h`](../../kernel/include/oxys/block/block.h).
 
 ## 1. What the layer is for
 

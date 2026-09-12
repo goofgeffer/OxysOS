@@ -29,10 +29,10 @@
 
 #include "internal.h"
 
-#include <oxys/io.h>
+#include <oxys/dev/io.h>
 #include <oxys/kernel.h>
-#include <oxys/pit.h>
-#include <oxys/block.h>
+#include <oxys/dev/pit.h>
+#include <oxys/block/block.h>
 
 /*
  * Where each channel actually answers, and how that was established.

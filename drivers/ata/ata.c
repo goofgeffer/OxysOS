@@ -84,11 +84,11 @@
 
 #include "internal.h"
 
-#include <oxys/ata.h>
+#include <oxys/dev/storage/ata.h>
 #include <oxys/kernel.h>
-#include <oxys/io.h>
-#include <oxys/block.h>
-#include <oxys/pci.h>
+#include <oxys/dev/io.h>
+#include <oxys/block/block.h>
+#include <oxys/dev/pci.h>
 
 /* The command block registers, the status and control bits, the commands, the
  * words of the identification data, the poll limit and the settling delay are
