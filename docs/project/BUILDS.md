@@ -164,12 +164,12 @@ regenerates it and fails if what is here differs.*
 
 | | |
 | --- | --- |
-| Builds recorded | 6 |
-| Verified | 6 passed, 0 not |
+| Builds recorded | 8 |
+| Verified | 8 passed, 0 not |
 | Compilers | clang, gcc |
 | Environments | Bochs, OVMF, QEMU, VirtualBox |
 | First | 2026-09-11T21:39Z |
-| Latest | 2026-09-12T03:10Z |
+| Latest | 2026-09-12T16:05Z |
 
 ## The builds
 
@@ -181,5 +181,7 @@ regenerates it and fails if what is here differs.*
 | 4 | 2026-09-11T22:42Z | `f5f8e6f` *(modified)* | gcc 13.2.0 | 1934352 | 7063552 | passed (55 assertions) | QEMU | The build register turned into a record with a schema: docs/project/builds.tsv, queried and rendered by tools/builds.sh. |
 | 5 | 2026-09-12T03:09Z | `b7d6cf8` *(modified)* | gcc 13.2.0 | 2025624 | 7155712 | passed (56 assertions) | QEMU;Bochs;VirtualBox | Sub-task 7.3: the first image carrying the C library's heap and the kernel's brk, the eighth system call and the first added since Phase 6. Run in all three environments upon the same image. |
 | 6 | 2026-09-12T03:10Z | `b7d6cf8` *(modified)* | clang 18.1.3 | 1688080 | 6817792 | passed (56 assertions) | QEMU | The same source built by the second compiler, to establish that the allocator's static assertions and its address arithmetic compile and behave identically under both. |
+| 7 | 2026-09-12T16:03Z | `7a87df0` | gcc 13.2.0 | 2026216 | 7155712 | passed (56 assertions) | QEMU | the arch/x86_64 boundary and the three relocations; structure only, no code changed |
+| 8 | 2026-09-12T16:05Z | `7a87df0` *(modified)* | clang 18.1.3 | 1688792 | 6817792 | passed (56 assertions) | QEMU | the same tree by the second compiler |
 
 <!-- END GENERATED -->
