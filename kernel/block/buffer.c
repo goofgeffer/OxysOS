@@ -1,7 +1,7 @@
 /* SPDX-FileCopyrightText: 2026 The Oxys-OS Authors */
 /* SPDX-License-Identifier: LGPL-3.0-or-later */
 /*
- * File: drivers/block/buffer.c
+ * File: kernel/block/buffer.c
  * Purpose: Implements the buffer cache above the generic block layer: the hash
  *          by which a held block is found, the list by which the least recently
  *          used is chosen for eviction, the reference count that protects a

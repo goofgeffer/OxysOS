@@ -1,7 +1,7 @@
 /* SPDX-FileCopyrightText: 2026 The Oxys-OS Authors */
 /* SPDX-License-Identifier: LGPL-3.0-or-later */
 /*
- * File: kernel/cpu/spinlock.c
+ * File: kernel/arch/x86_64/cpu/spinlock.c
  * Purpose: Implements the ticket spinlock: the locked fetch-and-add that issues
  *          a ticket, the bounded wait for it to be served, the release that
  *          admits the next arrival, and the two checks that turn the silent

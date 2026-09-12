@@ -173,7 +173,7 @@ uint64_t SyscallObservedFlags(void);
  * its first two. The kernel stack is where to go; the second is where the
  * caller's stack pointer is put while there is nowhere else to put it — no
  * register may be destroyed and no memory addressed, at that moment, except
- * through GS. Their offsets are asserted in kernel/cpu/percpu.c, the assembly
+ * through GS. Their offsets are asserted in kernel/arch/x86_64/cpu/percpu.c, the assembly
  * addressing them by number.
  *
  * This was a structure of its own — SyscallProcessorBlock — from sub-task 6.7

@@ -1,7 +1,7 @@
 ; SPDX-FileCopyrightText: 2026 The Oxys-OS Authors
 ; SPDX-License-Identifier: LGPL-3.0-or-later
 ; ==============================================================================
-; File: kernel/proc/switch.asm
+; File: kernel/arch/x86_64/proc/switch.asm
 ;
 ; Purpose:
 ;   The two transfers this kernel could not previously make: the exchange of one
@@ -207,7 +207,7 @@ ThreadEnterUser:
 ; instruction after its parent's SYSCALL and with its parent's registers.
 ;
 ; The arguments arrive in RDI, RSI and RDX. RDI names a SyscallFrame exactly as
-; kernel/cpu/syscall_entry.asm builds one; the offsets below are asserted against
+; kernel/arch/x86_64/syscall/syscall_entry.asm builds one; the offsets below are asserted against
 ; the C structure by _Static_assert in kernel/proc/process.c.
 ;
 ; Why IRETQ and not SYSRET.

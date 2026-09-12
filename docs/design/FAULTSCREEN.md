@@ -12,7 +12,7 @@ all of them.
 [`../../graphics/faultscreen.c`](../../graphics/faultscreen.c),
 [`../../kernel/include/oxys/faultscreen.h`](../../kernel/include/oxys/faultscreen.h).
 The disposition each screen reports is decided by `ExceptionDispositionOf` in
-[`../../kernel/cpu/exceptions.c`](../../kernel/cpu/exceptions.c), whose design is
+[`../../kernel/arch/x86_64/interrupt/exceptions.c`](../../kernel/arch/x86_64/interrupt/exceptions.c), whose design is
 [`INTERRUPTS.md`](INTERRUPTS.md), Section 8.1.
 
 **Asserted by**: `KernelVerifyFaultScreen` in

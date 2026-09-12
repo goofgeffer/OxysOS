@@ -161,7 +161,7 @@ void GdtInitialise(void);
  * It is installed after the table has been loaded, which is lawful: the
  * processor re-reads the descriptor when LTR names it, holding nothing of the
  * table between one reference and the next. It is separate from GdtInitialise
- * because the segment it describes belongs to kernel/cpu/tss.c, and a table that
+ * because the segment it describes belongs to kernel/arch/x86_64/cpu/tss.c, and a table that
  * composed the descriptor itself would have to know the segment's size.
  */
 void GdtInstallTaskStateSegment(uint32_t processor_index, uint64_t base,
@@ -178,7 +178,7 @@ void GdtInstallTaskStateSegment(uint32_t processor_index, uint64_t base,
  * it names is not, which is the whole of the distinction.
  *
  * Like GdtInitialise it re-establishes GS.base afterwards, the segment reload
- * having destroyed it; see the note in kernel/cpu/gdt.c.
+ * having destroyed it; see the note in kernel/arch/x86_64/cpu/gdt.c.
  */
 void GdtLoadOnThisProcessor(void);
 

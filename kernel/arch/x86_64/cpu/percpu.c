@@ -1,7 +1,7 @@
 /* SPDX-FileCopyrightText: 2026 The Oxys-OS Authors */
 /* SPDX-License-Identifier: LGPL-3.0-or-later */
 /*
- * File: kernel/cpu/percpu.c
+ * File: kernel/arch/x86_64/cpu/percpu.c
  * Purpose: Implements the per-processor data areas: their static allocation,
  *          the establishment of the executing processor's own and the segment
  *          base through which it is reached, and the counted interrupt-disable
@@ -51,7 +51,7 @@ static PerCpu PerCpuAreas[PER_CPU_MAXIMUM];
 static volatile uint32_t PerCpuEstablishedCount;
 
 /*
- * The assembly of kernel/cpu/syscall_entry.asm addresses the first two fields by
+ * The assembly of kernel/arch/x86_64/syscall/syscall_entry.asm addresses the first two fields by
  * number, and PerCpuCurrent the third, none of them having sight of this
  * structure. A field inserted above them would put the caller's stack pointer
  * where the kernel stack belongs, and the instruction after the one that reads

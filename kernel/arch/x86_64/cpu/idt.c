@@ -1,7 +1,7 @@
 /* SPDX-FileCopyrightText: 2026 The Oxys-OS Authors */
 /* SPDX-License-Identifier: LGPL-3.0-or-later */
 /*
- * File: kernel/cpu/idt.c
+ * File: kernel/arch/x86_64/cpu/idt.c
  * Purpose: Implements the interrupt descriptor table: the storage for the 256
  *          gate descriptors, the installation of a gate, and the loading of the
  *          table into the processor.
@@ -55,7 +55,7 @@ void IdtLoadOnThisProcessor(void)
      * The table is one table. IDTR is per processor, so every processor must
      * execute LIDT, but what each loads is the same base and the same limit —
      * and it must be, because a vector is registered once in
-     * kernel/cpu/interrupts.c and a processor holding a table with a gate
+     * kernel/arch/x86_64/interrupt/interrupts.c and a processor holding a table with a gate
      * missing would take an unhandled interrupt where its fellows took a
      * handled one, upon a machine where nothing distinguishes the two in a log.
      *

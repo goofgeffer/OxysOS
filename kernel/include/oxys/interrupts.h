@@ -34,7 +34,7 @@
  * The order of the members is dictated by the order in which the stub pushes
  * them, and by the order in which the processor pushes its own frame. It must
  * not be rearranged without the corresponding change to
- * kernel/cpu/interrupt_stubs.asm; the two are a single interface expressed in
+ * kernel/arch/x86_64/interrupt/interrupt_stubs.asm; the two are a single interface expressed in
  * two languages, and a discrepancy would misreport every register.
  *
  * The general-purpose registers are pushed by the common stub, RAX first, so
@@ -84,18 +84,18 @@ typedef struct TrapFrame
 /*
  * The count of general-purpose registers the common stub preserves, and the size
  * of the frame the stub must discard before IRETQ. Both are asserted against the
- * structure in kernel/cpu/interrupts.c.
+ * structure in kernel/arch/x86_64/interrupt/interrupts.c.
  */
 #define TRAP_FRAME_REGISTER_COUNT 15U
 
 /*
  * The distance from the frame's base to the saved code segment selector.
  *
- * The common stub of kernel/cpu/interrupt_stubs.asm reads it there to decide
+ * The common stub of kernel/arch/x86_64/interrupt/interrupt_stubs.asm reads it there to decide
  * whether the interrupt came from privilege level 3, and therefore whether the
  * per-processor segment base must be exchanged. The stub has no sight of this
  * structure and addresses the field by number; the number is asserted against
- * the structure in kernel/cpu/interrupts.c, because a field inserted above `cs`
+ * the structure in kernel/arch/x86_64/interrupt/interrupts.c, because a field inserted above `cs`
  * would leave the stub testing the saved RIP — whose low two bits are whatever
  * the interrupted instruction's address happened to end in.
  */

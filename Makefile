@@ -164,7 +164,7 @@ LIBC_SOURCES := libc/string/copying.c \
 LIBC_ASM_SOURCES := libc/syscall/invoke.asm
 
 C_SOURCES := kernel/kernel.c \
-             kernel/multiboot2.c \
+             kernel/handoff/multiboot2.c \
              kernel/test/volume.c \
              kernel/test/verify_memory.c \
              kernel/test/verify_interrupts.c \
@@ -197,22 +197,22 @@ C_SOURCES := kernel/kernel.c \
              kernel/test/verify_wrappers.c \
              kernel/test/verify_heap.c \
              kernel/mm/pmm.c \
-             kernel/mm/paging.c \
-             kernel/mm/shootdown.c \
-             kernel/mm/addrspace.c \
              kernel/mm/vmm.c \
              kernel/mm/heap.c \
-             kernel/cpu/gdt.c \
-             kernel/cpu/idt.c \
-             kernel/cpu/tss.c \
-             kernel/cpu/syscall.c \
-             kernel/cpu/percpu.c \
-             kernel/cpu/spinlock.c \
-             kernel/cpu/ipi.c \
-             kernel/cpu/smp.c \
-             kernel/cpu/interrupts.c \
-             kernel/cpu/irq.c \
-             kernel/cpu/exceptions.c \
+             kernel/arch/x86_64/mm/paging.c \
+             kernel/arch/x86_64/mm/shootdown.c \
+             kernel/arch/x86_64/mm/addrspace.c \
+             kernel/arch/x86_64/cpu/gdt.c \
+             kernel/arch/x86_64/cpu/idt.c \
+             kernel/arch/x86_64/cpu/tss.c \
+             kernel/arch/x86_64/cpu/percpu.c \
+             kernel/arch/x86_64/cpu/spinlock.c \
+             kernel/arch/x86_64/interrupt/interrupts.c \
+             kernel/arch/x86_64/interrupt/irq.c \
+             kernel/arch/x86_64/interrupt/exceptions.c \
+             kernel/arch/x86_64/syscall/syscall.c \
+             kernel/arch/x86_64/smp/ipi.c \
+             kernel/arch/x86_64/smp/smp.c \
              kernel/acpi/acpi.c \
              kernel/exec/elf.c \
              kernel/proc/process.c \
@@ -251,8 +251,8 @@ C_SOURCES := kernel/kernel.c \
              drivers/ata/report.c \
              drivers/ahci/ahci.c \
              drivers/sdhci/sdhci.c \
-             drivers/block/block.c \
-             drivers/block/buffer.c \
+             kernel/block/block.c \
+             kernel/block/buffer.c \
              graphics/framebuffer.c \
              graphics/draw.c \
              graphics/font.c \
@@ -263,11 +263,11 @@ C_SOURCES := kernel/kernel.c \
              $(LIBC_SOURCES)
 
 ASM_SOURCES := boot/boot.asm \
-               kernel/cpu/interrupt_stubs.asm \
-               kernel/cpu/gdt.asm \
-               kernel/cpu/smp_trampoline.asm \
-               kernel/cpu/syscall_entry.asm \
-               kernel/proc/switch.asm \
+               kernel/arch/x86_64/interrupt/interrupt_stubs.asm \
+               kernel/arch/x86_64/cpu/gdt.asm \
+               kernel/arch/x86_64/smp/smp_trampoline.asm \
+               kernel/arch/x86_64/syscall/syscall_entry.asm \
+               kernel/arch/x86_64/proc/switch.asm \
                $(LIBC_ASM_SOURCES)
 
 OBJECTS := $(patsubst %.c,$(BUILD_DIR)/%.c.o,$(C_SOURCES)) \
@@ -355,7 +355,7 @@ $(BUILD_DIR)/%.asm.o: %.asm
 # origin and is available only in the flat binary format, so this cannot be an
 # ordinary member of ASM_SOURCES.
 #
-# kernel/cpu/smp_trampoline.asm embeds the result with `incbin`, and the
+# kernel/arch/x86_64/smp/smp_trampoline.asm embeds the result with `incbin`, and the
 # dependency below is what guarantees the binary exists before that file is
 # assembled. The path in the `incbin` is relative to the directory make runs in,
 # which is the repository root.
@@ -368,7 +368,7 @@ $(TRAMPOLINE_BINARY): $(TRAMPOLINE_SOURCE)
 	@mkdir -p $(dir $@)
 	$(NASM) -f bin -Wall -Werror $< -o $@
 
-$(BUILD_DIR)/kernel/cpu/smp_trampoline.asm.o: $(TRAMPOLINE_BINARY)
+$(BUILD_DIR)/kernel/arch/x86_64/smp/smp_trampoline.asm.o: $(TRAMPOLINE_BINARY)
 
 iso: $(ISO_IMAGE)
 
@@ -544,7 +544,7 @@ toolcheck:
 # wrote, against fixtures this project composed. A compiler written by other
 # people, from the same standard, shares none of those assumptions — so it
 # refuses different things, and what it refuses is what one toolchain has been
-# quietly tolerating. Its first run found exactly one such thing: `kernel/cpu/tss.c`
+# quietly tolerating. Its first run found exactly one such thing: `kernel/arch/x86_64/cpu/tss.c`
 # named a 32-bit register to an instruction defined upon r/m16, which GNU as had
 # accepted and assembled correctly for as long as the file has existed.
 # `docs/project/TESTING.md`, Section 22, records the reasoning at length.
@@ -558,7 +558,7 @@ toolcheck:
 # One warning is suppressed, and this is the record the diagnostic regime above
 # requires of a suppression:
 #
-#   -Wno-cast-align.  kernel/multiboot2.c casts the byte cursor it walks the
+#   -Wno-cast-align.  kernel/handoff/multiboot2.c casts the byte cursor it walks the
 #   Multiboot2 tag series with to each tag's structure type, which raises the
 #   required alignment from 1 to 4 or 8. clang warns upon that irrespective of
 #   target; GCC does not warn upon x86. Both are right. The pointer is in fact

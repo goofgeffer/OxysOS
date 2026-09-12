@@ -1,7 +1,7 @@
 ; SPDX-FileCopyrightText: 2026 The Oxys-OS Authors
 ; SPDX-License-Identifier: LGPL-3.0-or-later
 ; ==============================================================================
-; File: kernel/cpu/gdt.asm
+; File: kernel/arch/x86_64/cpu/gdt.asm
 ;
 ; Purpose:
 ;   Loads the kernel global descriptor table and reloads every segment register,
@@ -51,7 +51,7 @@ GdtLoadAndReloadSegments:
     ; a descriptor sets the hidden base to the descriptor's — which for the flat
     ; data descriptor of this table is zero. The per-processor area of sub-task
     ; 6.13 lives at that base, so it is re-established by the caller in
-    ; kernel/cpu/gdt.c the instant this routine returns; see the note there.
+    ; kernel/arch/x86_64/cpu/gdt.c the instant this routine returns; see the note there.
     mov     ax, dx
     mov     ds, ax
     mov     es, ax

@@ -683,7 +683,7 @@ will, beginning with the formatted output of sub-task 7.4.
 [`../../libc/stdlib/system.c`](../../libc/stdlib/system.c) on the library's side;
 `SYSCALL_BRK` in
 [`../../kernel/abi/oxys/syscall_abi.h`](../../kernel/abi/oxys/syscall_abi.h),
-`SyscallDoBrk` in [`../../kernel/cpu/syscall.c`](../../kernel/cpu/syscall.c) and
+`SyscallDoBrk` in [`../../kernel/arch/x86_64/syscall/syscall.c`](../../kernel/arch/x86_64/syscall/syscall.c) and
 `ProcessSetBreak` in [`../../kernel/proc/process.c`](../../kernel/proc/process.c)
 on the kernel's. The assertion is
 [`../../kernel/test/verify_heap.c`](../../kernel/test/verify_heap.c), which

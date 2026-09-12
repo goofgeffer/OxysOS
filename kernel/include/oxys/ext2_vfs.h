@@ -13,7 +13,7 @@
  *     volume it has opened for writing.
  *
  * This header exists rather than the declaration being added to `ext2.h`
- * because it states a dependency that `ext2.h` must not acquire. `ext2.c`
+ * because it states a dependency that `ext2.h` must not acquire. `kernel/fs/ext2/`
  * implements a format and knows nothing of mounts, nodes or descriptors;
  * `ext2_vfs.c` knows both and is the only file that does. Were the declaration
  * placed in `ext2.h`, every consumer of the format would compile against the

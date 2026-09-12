@@ -11,17 +11,17 @@
  *     docs/storage/BUFFER.md: each has a verification section pairing the
  *     assertions below with the silent failure each would catch.
  *
- * The block and buffer assertions are made against the memory-backed
- * devices of <oxys/testvolume.h>, so they hold upon a machine with no disk. The
- * ATA and AHCI assertions cannot be, a driver for a device being untestable
+ * The block and buffer assertions are made against the memory-backed devices of
+ * `kernel/test/volume.h`, so they hold upon a machine with no disk. The ATA and
+ * AHCI assertions cannot be, a driver for a device being untestable
  * without one; where no device answers, that is reported and nothing is
- * asserted. The write path is exercised only when the boot loader\'s command
+ * asserted. The write path is exercised only when the boot loader's command
  * line asks for it.
  */
 
 #include <oxys/kernel.h>
 #include <oxys/verify.h>
-#include <oxys/testvolume.h>
+#include "volume.h"
 #include <oxys/ata.h>
 #include <oxys/ahci.h>
 #include <oxys/sdhci.h>

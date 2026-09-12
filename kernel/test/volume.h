@@ -1,7 +1,7 @@
 /* SPDX-FileCopyrightText: 2026 The Oxys-OS Authors */
 /* SPDX-License-Identifier: LGPL-3.0-or-later */
 /*
- * File: kernel/include/oxys/testvolume.h
+ * File: kernel/test/volume.h
  * Purpose: Declares the fixture the storage, filesystem and virtual filesystem
  *          self-tests are conducted upon: two block devices backed by memory,
  *          and the EXT2 volume composed within them.
@@ -40,8 +40,8 @@
  * docs/project/TESTING.md are for.
  */
 
-#ifndef OXYS_TESTVOLUME_H
-#define OXYS_TESTVOLUME_H
+#ifndef OXYS_TEST_VOLUME_H
+#define OXYS_TEST_VOLUME_H
 
 #include <oxys/types.h>
 #include <oxys/block.h>
@@ -229,4 +229,4 @@ void KernelComposeGroupDescriptor(void);
  * library before Phase 7, and every test that compares a name needs this. */
 bool KernelSameString(const char *left, const char *right);
 
-#endif /* OXYS_TESTVOLUME_H */
+#endif /* OXYS_TEST_VOLUME_H */

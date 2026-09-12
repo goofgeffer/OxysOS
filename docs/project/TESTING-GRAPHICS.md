@@ -406,7 +406,7 @@ Four, and the first is the one that matters most: it reproduces the fault this
 section was written because of.
 
 **Every fault made fatal.** Remove the privilege-level test from
-`ExceptionDispositionOf` in `kernel/cpu/exceptions.c`, so that everything falls
+`ExceptionDispositionOf` in `kernel/arch/x86_64/interrupt/exceptions.c`, so that everything falls
 through to `EXCEPTION_DISPOSITION_FATAL`. The run must name all seven program
 faults in turn, beginning `a program's own fault would halt the machine rather
 than the program, at vector 0x0` — vector 0 being the divide by zero.

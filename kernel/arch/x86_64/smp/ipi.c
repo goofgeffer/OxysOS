@@ -1,7 +1,7 @@
 /* SPDX-FileCopyrightText: 2026 The Oxys-OS Authors */
 /* SPDX-License-Identifier: LGPL-3.0-or-later */
 /*
- * File: kernel/cpu/ipi.c
+ * File: kernel/arch/x86_64/smp/ipi.c
  * Purpose: Implements the inter-processor interrupt layer: the composition of a
  *          command for each of the three audiences a sender may address, the
  *          accounting of what was sent and what arrived, and the handler by

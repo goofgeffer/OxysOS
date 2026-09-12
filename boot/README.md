@@ -28,8 +28,8 @@ code must execute from a physical page below the first mebibyte and every addres
 it names must be that page's. NASM's `org` directive states that origin and is
 available only in the flat binary format, so the file is assembled with
 `nasm -f bin` to `build/trampoline.bin` and is **not** a member of `ASM_SOURCES`.
-`kernel/cpu/smp_trampoline.asm` embeds the result with `incbin` between two
-symbols the C of `kernel/cpu/smp.c` takes the size from, and the `Makefile`'s
+`kernel/arch/x86_64/smp/smp_trampoline.asm` embeds the result with `incbin` between two
+symbols the C of `kernel/arch/x86_64/smp/smp.c` takes the size from, and the `Makefile`'s
 dependency upon `$(TRAMPOLINE_BINARY)` is what guarantees the image cannot be out
 of step with the source it came from: the link fails if it was not assembled.
 
@@ -38,7 +38,7 @@ of step with the source it came from: the link fails if it was not assembled.
 | File | Description |
 | ---- | ----------- |
 | `boot.asm` | The Multiboot2 header, carrying the framebuffer request tag of sub-task 6.2 alongside the terminating tag; the entry point `_start`; `CPUID` and long-mode feature detection; `BootBuildPageTables`; `BootEnableLongMode`; the 64-bit trampoline `BootLongModeEntry`; the higher-half entry point `KernelEntryHigh`; and, in `.boot.data`, the boot GDT and the boot-time paging structures. |
-| `trampoline.asm` | The real-mode trampoline of sub-task 6.14, which an application processor begins executing when it answers a startup inter-processor interrupt. It carries that processor from 16-bit real mode through 32-bit protected mode into 64-bit long mode upon the kernel's own paging hierarchy, and hands it to `SmpApplicationProcessorEntry`. It holds `SmpTrampolineParameters`, the block the bootstrap processor fills in before each start. **It is assembled to a flat binary and not to an object file**, for the reason the note beneath **Purpose** gives; `kernel/cpu/smp_trampoline.asm` embeds the result in the kernel image. |
+| `trampoline.asm` | The real-mode trampoline of sub-task 6.14, which an application processor begins executing when it answers a startup inter-processor interrupt. It carries that processor from 16-bit real mode through 32-bit protected mode into 64-bit long mode upon the kernel's own paging hierarchy, and hands it to `SmpApplicationProcessorEntry`. It holds `SmpTrampolineParameters`, the block the bootstrap processor fills in before each start. **It is assembled to a flat binary and not to an object file**, for the reason the note beneath **Purpose** gives; `kernel/arch/x86_64/smp/smp_trampoline.asm` embeds the result in the kernel image. |
 | `grub/grub.cfg` | The GRUB configuration embedded within the ISO image, defining the boot menu entries. Staged into the image by the `iso` target of the `Makefile`. |
 
 ## Sequence of execution
@@ -58,7 +58,7 @@ from a different starting point and into a kernel that is already running:
 
 ```
 Startup IPI  --->  SmpTrampolineReal  --->  SmpTrampolineProtected  --->  SmpTrampolineLongMode  --->  SmpApplicationProcessorEntry
-vector 0x08        16-bit real,             32-bit, paging off           64-bit, kernel CR3          (kernel/cpu/smp.c)
+vector 0x08        16-bit real,             32-bit, paging off           64-bit, kernel CR3          (kernel/arch/x86_64/smp/smp.c)
                    CS normalised to 0
 ```
 

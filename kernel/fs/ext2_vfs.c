@@ -2,7 +2,7 @@
 /* SPDX-License-Identifier: LGPL-3.0-or-later */
 /*
  * File: kernel/fs/ext2_vfs.c
- * Purpose: Binds the EXT2 implementation of kernel/fs/ext2.c to the virtual
+ * Purpose: Binds the EXT2 implementation of kernel/fs/ext2/ to the virtual
  *          filesystem layer: the operations vector, the translation between the
  *          format's mode and the layer's neutral node type, the mount that
  *          records upon a volume that this kernel has it open, and the
@@ -29,8 +29,8 @@
  *     directory entry and the formats of i_mode are numbered differently and
  *     both must be translated to the layer's neutral type.
  *
- * Design note. This file stands apart from `ext2.c` because the two answer
- * different questions. `ext2.c` answers what the format is: where a structure
+ * Design note. This file stands apart from `kernel/fs/ext2/` because the two answer
+ * different questions. Those units answer what the format is: where a structure
  * lies, how its bytes are ordered, what makes a volume self-contradictory. This
  * file answers how that format is presented as one filesystem among several: it
  * holds the only code in the project that knows both that a node has a reference
@@ -41,7 +41,7 @@
  * Concurrency. Nothing here holds state of its own beyond the volume attached to
  * a mount and the inode attached to a node, both of which the layer above
  * governs the lifetime of. The locking that sub-task 6.13 introduces therefore
- * belongs in that layer and in `ext2.c`, not here.
+ * belongs in that layer and in `kernel/fs/ext2/`, not here.
  */
 
 #include <oxys/ext2_vfs.h>

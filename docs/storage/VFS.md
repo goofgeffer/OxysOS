@@ -76,8 +76,8 @@ copied in.
                                         |
                           kernel/fs/ext2/    (the format)
                                         |
-                     drivers/block/buffer.c  (the cache)
-                     drivers/block/block.c   (the device)
+                     kernel/block/buffer.c   (the cache)
+                     kernel/block/block.c    (the device)
                      drivers/ata/            (the disk)
 ```
 

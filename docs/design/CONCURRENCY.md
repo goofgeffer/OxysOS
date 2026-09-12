@@ -10,10 +10,10 @@ shootdown built upon that.
 **Authority**: `PROJECT_GUIDELINES.md`, Sections 2, 3 and 6.
 
 **Implementation**:
-[`../../kernel/cpu/spinlock.c`](../../kernel/cpu/spinlock.c),
-[`../../kernel/cpu/percpu.c`](../../kernel/cpu/percpu.c),
-[`../../kernel/cpu/ipi.c`](../../kernel/cpu/ipi.c),
-[`../../kernel/mm/shootdown.c`](../../kernel/mm/shootdown.c), with their headers
+[`../../kernel/arch/x86_64/cpu/spinlock.c`](../../kernel/arch/x86_64/cpu/spinlock.c),
+[`../../kernel/arch/x86_64/cpu/percpu.c`](../../kernel/arch/x86_64/cpu/percpu.c),
+[`../../kernel/arch/x86_64/smp/ipi.c`](../../kernel/arch/x86_64/smp/ipi.c),
+[`../../kernel/arch/x86_64/mm/shootdown.c`](../../kernel/arch/x86_64/mm/shootdown.c), with their headers
 in [`../../kernel/include/oxys/`](../../kernel/include/oxys/). The command
 register the interrupt is sent through belongs to the local controller and is in
 [`../../drivers/apic/lapic.c`](../../drivers/apic/lapic.c), whose design is
@@ -190,8 +190,8 @@ read like any other field.
 | ----- | ------------ |
 | `PerCpuInitialise` | Establishes the area and writes `GS.base` directly. Runs before anything that could take a lock. |
 | `GdtInitialise` | **Repairs** `GS.base`, which the segment reload it performs destroys. Section 3.4. |
-| `kernel/cpu/syscall_entry.asm` | `SWAPGS` on entry and again on the return. `SYSCALL` is only ever executed at privilege level 3, so the exchange is unconditional. |
-| `kernel/cpu/interrupt_stubs.asm` | `SWAPGS` on entry and on the return, **conditionally** — only where the saved `CS` says the interrupt came from privilege level 3. Section 3.3. |
+| `kernel/arch/x86_64/syscall/syscall_entry.asm` | `SWAPGS` on entry and again on the return. `SYSCALL` is only ever executed at privilege level 3, so the exchange is unconditional. |
+| `kernel/arch/x86_64/interrupt/interrupt_stubs.asm` | `SWAPGS` on entry and on the return, **conditionally** — only where the saved `CS` says the interrupt came from privilege level 3. Section 3.3. |
 
 `ThreadSwitchTo` and `ThreadTrampolineEntry` in
 [`../../kernel/proc/process.c`](../../kernel/proc/process.c) *write* the two
@@ -248,8 +248,8 @@ Sub-task 6.7 gave the system-call entry path a two-field structure — a kernel
 stack and a scratch for the caller's stack pointer — reached through `GS` for
 precisely the reason above, and recorded that sub-task 6.13 would replace it with
 the area proper. It has. The two fields are still the first two, at the same two
-offsets, and `kernel/cpu/syscall_entry.asm` is unchanged apart from its comment.
-The offsets are asserted by `_Static_assert` in `kernel/cpu/percpu.c`, beside the
+offsets, and `kernel/arch/x86_64/syscall/syscall_entry.asm` is unchanged apart from its comment.
+The offsets are asserted by `_Static_assert` in `kernel/arch/x86_64/cpu/percpu.c`, beside the
 structure they belong to.
 
 One thing did change. `SyscallInitialise` used to write the area into
@@ -577,10 +577,10 @@ kept, this section describing what the kernel does now.
    the file that owns it: the frame allocator's bitmap and search hint
    (`kernel/mm/pmm.c`), the kernel arena (`kernel/mm/vmm.c`), the heap
    (`kernel/mm/heap.c`), the block layer's device table
-   (`drivers/block/block.c`), the buffer cache (`drivers/block/buffer.c`), the
+   (`kernel/block/block.c`), the buffer cache (`kernel/block/buffer.c`), the
    mount, node and open file tables (`kernel/fs/vfs/vfs.c`, which holds all
-   four), the interrupt dispatch table (`kernel/cpu/interrupts.c`), the request
-   layer's mask state (`kernel/cpu/irq.c`), the 8259A's mask registers
+   four), the interrupt dispatch table (`kernel/arch/x86_64/interrupt/interrupts.c`), the request
+   layer's mask state (`kernel/arch/x86_64/interrupt/irq.c`), the 8259A's mask registers
    (`drivers/pic/pic.c`), the I/O APIC's select-then-window sequence
    (`drivers/apic/ioapic.c`), the 8042's configuration byte
    (`drivers/ps2/ps2.c`), the drawing surfaces (`graphics/draw.c`), the fault

@@ -1,12 +1,12 @@
 ; SPDX-FileCopyrightText: 2026 The Oxys-OS Authors
 ; SPDX-License-Identifier: LGPL-3.0-or-later
 ; ==============================================================================
-; File: kernel/cpu/smp_trampoline.asm
+; File: kernel/arch/x86_64/smp/smp_trampoline.asm
 ;
 ; Purpose:
 ;   Carries the assembled real-mode trampoline of boot/trampoline.asm into the
 ;   kernel image as read-only data, and gives its two ends symbols the C of
-;   kernel/cpu/smp.c can take the size from.
+;   kernel/arch/x86_64/smp/smp.c can take the size from.
 ;
 ; Key data:
 ;   SmpTrampolineImageStart - The first byte of the assembled image.

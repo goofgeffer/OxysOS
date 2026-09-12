@@ -1,7 +1,7 @@
 /* SPDX-FileCopyrightText: 2026 The Oxys-OS Authors */
 /* SPDX-License-Identifier: LGPL-3.0-or-later */
 /*
- * File: kernel/mm/addrspace.c
+ * File: kernel/arch/x86_64/mm/addrspace.c
  * Purpose: Implements the address space: the creation, cloning by copy-on-write,
  *          activation and destruction of a paging hierarchy. Sub-task 2.8, and
  *          the last of the memory-management substrate upon which fork() will be

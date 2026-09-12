@@ -172,7 +172,7 @@ in full and names the several independent judges available to this project.
 A compiler written by other people, from the same standard, is one of them. It
 shares no assumption with `x86_64-elf-gcc` beyond the language, so what it
 refuses is what one toolchain has been quietly tolerating. Its first run found
-exactly that: `kernel/cpu/tss.c` named a 32-bit register to an instruction the
+exactly that: `kernel/arch/x86_64/cpu/tss.c` named a 32-bit register to an instruction the
 architecture defines upon r/m16, which GNU `as` had accepted, and assembled
 correctly, for as long as the file had existed.
 
@@ -196,7 +196,7 @@ business.
 
 `-Wno-cast-align`, confined to this target.
 
-`kernel/multiboot2.c` casts the byte cursor it walks the Multiboot2 tag series
+`kernel/handoff/multiboot2.c` casts the byte cursor it walks the Multiboot2 tag series
 with to each tag's structure type, which raises the required alignment from 1 to
 4 or to 8. `clang` warns upon that whatever the target; GCC does not warn upon
 x86, where the access would work regardless.

@@ -1,7 +1,7 @@
 /* SPDX-FileCopyrightText: 2026 The Oxys-OS Authors */
 /* SPDX-License-Identifier: LGPL-3.0-or-later */
 /*
- * File: kernel/include/oxys/multiboot2.h
+ * File: kernel/handoff/multiboot2.h
  * Purpose: Declares the raw on-memory layout of the Multiboot2 boot information
  *          structure and of the individual tags that the kernel consumes. These
  *          declarations describe memory written by the boot loader and are
@@ -29,8 +29,8 @@
  *     Supplement, and the ELF specification: the 64-byte ELF64 section header.
  */
 
-#ifndef OXYS_MULTIBOOT2_H
-#define OXYS_MULTIBOOT2_H
+#ifndef OXYS_HANDOFF_MULTIBOOT2_H
+#define OXYS_HANDOFF_MULTIBOOT2_H
 
 #include <oxys/types.h>
 
@@ -259,4 +259,4 @@ _Static_assert(sizeof(Elf64SectionHeader) == 64,
 _Static_assert(sizeof(Multiboot2MemoryMapEntry) == 24,
                "The Multiboot2 memory map entry must be exactly 24 bytes.");
 
-#endif /* OXYS_MULTIBOOT2_H */
+#endif /* OXYS_HANDOFF_MULTIBOOT2_H */

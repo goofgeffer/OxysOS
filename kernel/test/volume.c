@@ -42,7 +42,7 @@
  */
 
 #include <oxys/kernel.h>
-#include <oxys/testvolume.h>
+#include "volume.h"
 #include <oxys/block.h>
 #include <oxys/ext2.h>
 

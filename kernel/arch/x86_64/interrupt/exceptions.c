@@ -1,7 +1,7 @@
 /* SPDX-FileCopyrightText: 2026 The Oxys-OS Authors */
 /* SPDX-License-Identifier: LGPL-3.0-or-later */
 /*
- * File: kernel/cpu/exceptions.c
+ * File: kernel/arch/x86_64/interrupt/exceptions.c
  * Purpose: Implements the handlers for the architecture-defined exceptions,
  *          together with the diagnostic report that each fatal exception emits
  *          before the machine is halted.

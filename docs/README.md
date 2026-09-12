@@ -82,8 +82,8 @@ complementary, and neither replaces the other.
 | [`DISK.md`](storage/DISK.md) | The ATA disk in programmed input/output mode, and what storage the driver cannot reach and how it says so. | `drivers/ata/` |
 | [`AHCI.md`](storage/AHCI.md) | The AHCI disk by first-party direct memory access: the handoff from the firmware, the ports, and the command list. | `drivers/ahci/` |
 | [`SDCARD.md`](storage/SDCARD.md) | The SD card and the embedded MultiMediaCard, and the host controller they are reached through. | `drivers/sdhci/` |
-| [`BLOCK.md`](storage/BLOCK.md) | The generic block-device layer. | `drivers/block/block.c` |
-| [`BUFFER.md`](storage/BUFFER.md) | The buffer cache. | `drivers/block/buffer.c` |
+| [`BLOCK.md`](storage/BLOCK.md) | The generic block-device layer. | `kernel/block/block.c` |
+| [`BUFFER.md`](storage/BUFFER.md) | The buffer cache. | `kernel/block/buffer.c` |
 | [`EXT2.md`](storage/EXT2.md) | The EXT2 volume's structures: its superblock, its group descriptors and its inodes — and, in Section 10, every limitation of this kernel's EXT2 support. |
 | [`EXT2-FILES.md`](storage/EXT2-FILES.md) | What is done with those structures: the directories, the resolution of a path, the reading and writing of a file, and the creation and destruction of names. |
 | [`EXT2-VERIFICATION.md`](storage/EXT2-VERIFICATION.md) | The eleven self-tests of the EXT2 implementation, six of them against a volume this kernel did not compose. | `kernel/fs/ext2/` |

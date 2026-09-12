@@ -20,6 +20,13 @@ conversation with hardware. The pointer drawn for the mouse is there for the sam
 reason: the mouse is a device and is here, while its picture is arithmetic upon
 memory and is not.
 
+The block layer and the buffer cache are **not** here either, for the same
+reason, and are in [`../kernel/block/`](../kernel/block/). A test that excludes
+the framebuffer and admits a hash table is not a test, and admitting them had
+inverted the rule above: they declare the interface the disk drivers here
+register into, rather than implementing one this directory is given. The section
+below where they used to be described records the move.
+
 ## Contents
 
 | Path | Device | Interface | Phase |
@@ -44,8 +51,6 @@ memory and is not.
 | `ata/report.c` | The report, including every controller the bus carries and why each was or was not reached. | — | 4.4 |
 | `ahci/ahci.c` | The AHCI disk, by first-party direct memory access. | `<oxys/ahci.h>` | 4.7 |
 | `sdhci/sdhci.c` | The SD card or embedded MultiMediaCard, through its host controller. | `<oxys/sdhci.h>` | 4.8 |
-| `block/block.c` | The generic block-device layer above the disk drivers. | `<oxys/block.h>` | 4.5 |
-| `block/buffer.c` | The buffer cache above the block layer. | `<oxys/buffer.h>` | 4.6 |
 
 ## Planned contents
 
@@ -207,33 +212,27 @@ against values composed for the purpose.
 Blocks move through the buffer data port a word at a time, one command per block.
 See [`../docs/storage/SDCARD.md`](../docs/storage/SDCARD.md).
 
-### `block/` — the generic block-device layer
+### The block layer is no longer here
 
-Not a driver either, but what the drivers of a medium present themselves through.
-A driver registers a device by supplying a read and a write operation, a context
-that means something to it and nothing to the layer, and a geometry; a caller
-addresses a device by name and block number and knows nothing else about it.
+`block/block.c` and `block/buffer.c` were in this directory until the review that
+moved them to [`../kernel/block/`](../kernel/block/), and the reason is the test
+stated at the top of this document about the framebuffer: nothing programs them.
+The block layer is a registry and four validations; the buffer cache is a hash
+table and a recency list. Neither holds a register, a port address or a timing
+rule, and neither has a specification to cite — which is what every genuine
+driver section here opens by doing.
 
-Every request is judged before a driver is reached: a driver is never called with
-a null buffer, a count of zero, a range outside the device, or a write to a
-read-only device. Those four tests are written here once instead of in each
-driver, which is most of the reason the layer exists. The range is bounded by
-subtraction rather than addition, a 64-bit block number near its greatest value
-making the obvious sum wrap so that a range wholly outside the device would pass.
+The relation was also the wrong way round. This directory's rule is that a driver
+implements an interface `kernel/include/oxys/` declares and exports none of its
+own; `block.c` declares `<oxys/block.h>`, which is the interface the drivers here
+register *into*. `ata/ata.c`, `ahci/ahci.c` and `sdhci/sdhci.c` are its consumers
+and remain here, and the dependency still runs one way: a driver knows the layer
+it presents itself through, and the layer knows nothing of ATA.
 
-The adaptor that presents an ATA disk as a block device lives in `ata/ata.c`, so
-that the dependency runs one way: a driver knows the layer it presents itself
-through, and the layer knows nothing of ATA. See
-[`../docs/storage/BLOCK.md`](../docs/storage/BLOCK.md).
-
-`block/buffer.c` holds the buffer cache above it: sixty-four blocks of 512 bytes
-found through a hash of the device and the block number, discarded in least
-recently used order, and written back rather than through. A buffer a caller is
-holding is passed over by the eviction and never taken away, a request being
-refused instead — handing the same storage to two callers would appear as
-corruption somewhere else entirely. A dirty buffer is written back before its
-storage is reused, since dropping it would lose a write already reported as
-successful. See [`../docs/storage/BUFFER.md`](../docs/storage/BUFFER.md).
+[`../docs/storage/BLOCK.md`](../docs/storage/BLOCK.md) and
+[`../docs/storage/BUFFER.md`](../docs/storage/BUFFER.md) describe them, as they
+did before; [`../docs/design/ARCHITECTURE.md`](../docs/design/ARCHITECTURE.md),
+Section 2.3, records the move.
 
 ### `serial/` — the COM1 diagnostic port
 
@@ -281,7 +280,7 @@ end-of-interrupt protocol on behalf of all of them, for the reasons set out in
 [`../docs/design/INTERRUPTS.md`](../docs/design/INTERRUPTS.md), Section 9.4.
 
 **It holds no handler table and routes nothing.** Sub-task 6.12 moved that to
-`kernel/cpu/irq.c`, because which driver claims IR1 is a property of the machine
+`kernel/arch/x86_64/interrupt/irq.c`, because which driver claims IR1 is a property of the machine
 and not of this device: the same line is delivered by an I/O APIC upon a machine
 where this pair has been retired. A device driver calls `IrqInstallHandler` and
 `IrqUnmaskLine`, names a line number rather than a controller, and does not

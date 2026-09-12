@@ -1,7 +1,7 @@
 ; SPDX-FileCopyrightText: 2026 The Oxys-OS Authors
 ; SPDX-License-Identifier: LGPL-3.0-or-later
 ; ==============================================================================
-; File: kernel/cpu/syscall_entry.asm
+; File: kernel/arch/x86_64/syscall/syscall_entry.asm
 ;
 ; Purpose:
 ;   The entry point of the fast system-call mechanism, installed in IA32_LSTAR.
@@ -79,7 +79,7 @@ extern SyscallObservedFlagsValue
 
 ; The first two fields of the per-processor area of <oxys/percpu.h>, addressed
 ; through GS. Their offsets are asserted against the C structure by a
-; _Static_assert in kernel/cpu/percpu.c; the assembler cannot see the structure
+; _Static_assert in kernel/arch/x86_64/cpu/percpu.c; the assembler cannot see the structure
 ; and would otherwise agree with it only by inspection.
 ;
 ; They were the whole of a structure of their own until sub-task 6.13, which put

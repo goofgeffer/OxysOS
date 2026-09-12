@@ -138,7 +138,7 @@ uint16_t PicRequestRegister(void);
  *
  * A spurious request must not be acknowledged, and this is the only means of
  * recognising one; see the commentary upon the implementation. It is called by
- * the routing layer of kernel/cpu/irq.c before a handler is entered, and by
+ * the routing layer of kernel/arch/x86_64/interrupt/irq.c before a handler is entered, and by
  * nothing else.
  */
 bool PicRequestIsSpurious(uint8_t irq);

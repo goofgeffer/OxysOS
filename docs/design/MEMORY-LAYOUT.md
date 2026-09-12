@@ -916,7 +916,7 @@ protected, so the argument validation of
 [`PRIVILEGE.md`](PRIVILEGE.md), Section 9.8, must resolve a copy-on-write fault
 rather than refuse the address.
 
-The implementation is `kernel/mm/addrspace.c`; the interface is
+The implementation is `kernel/arch/x86_64/mm/addrspace.c`; the interface is
 `kernel/include/oxys/addrspace.h`.
 
 ### 14.1 The two halves

@@ -25,7 +25,7 @@
  *   Sub-task 6.11 adds the four calls by which a program governs another: fork,
  *   execve, exit and wait. They are placed here rather than beside the dispatch
  *   table because none of them is a system call in substance — each is an
- *   operation upon the two tables above, and kernel/cpu/syscall.c does no more
+ *   operation upon the two tables above, and kernel/arch/x86_64/syscall/syscall.c does no more
  *   than validate a caller's arguments and name one of them.
  *
  * A child runs when its parent waits for it.
@@ -136,7 +136,7 @@ static Spinlock ProcessTableLock = SPINLOCK_INITIALISER("process and thread tabl
  *
  * They are indexed by the dense processor index of kernel/include/oxys/percpu.h
  * rather than held inside the PerCpu area itself. The area's first three fields
- * are addressed by displacement from `GS` in kernel/cpu/syscall_entry.asm, and a
+ * are addressed by displacement from `GS` in kernel/arch/x86_64/syscall/syscall_entry.asm, and a
  * pointer added to it would be a fourth thing whose offset the assembly and the
  * C must agree about for no gain — the index is already available in one
  * instruction, and an array subscripted by it is per processor in exactly the
@@ -726,7 +726,7 @@ Thread *ThreadCurrentOn(uint32_t processor)
 /* ------------------------------------------------------- sub-task 6.10 */
 
 /*
- * The assembly of kernel/proc/switch.asm addresses ThreadContext by number and
+ * The assembly of kernel/arch/x86_64/proc/switch.asm addresses ThreadContext by number and
  * cannot see this structure. A field reordered here without the assembly would
  * have a switch restore the stack pointer from a general register — which is a
  * jump to an address that was never an address.
@@ -736,7 +736,7 @@ _Static_assert(offsetof(ThreadContext, rsp) == 48U,
                "The switch saves the stack pointer at offset 48.");
 _Static_assert(sizeof(ThreadContext) == 56U, "A context is seven quadwords.");
 
-/* Defined in kernel/proc/switch.asm. */
+/* Defined in kernel/arch/x86_64/proc/switch.asm. */
 extern void ThreadSwitchContext(ThreadContext *from, ThreadContext *to);
 extern void ThreadEnterUser(uint64_t entry, uint64_t user_stack, uint64_t code_selector,
                             uint64_t stack_selector);
@@ -874,7 +874,7 @@ Thread *ThreadCreateKernel(void (*entry)(void))
  *
  * It exists to close the critical section it inherited. The scheduler switches
  * threads from inside a masked region — it masks interrupts, chooses, and
- * switches — and the counted disable of kernel/cpu/percpu.h belongs to the
+ * switches — and the counted disable of <oxys/percpu.h> belongs to the
  * processor rather than to the thread. A resumed thread carries on inside its
  * own push and executes the matching pop; a thread that has never run has no
  * such pop, and would run with interrupts masked for ever, taking no timer tick

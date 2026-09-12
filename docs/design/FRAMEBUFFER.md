@@ -10,7 +10,7 @@ supplies, and everything that has to be settled before anything is drawn upon it
 **Implemented by**:
 [`../../graphics/framebuffer.c`](../../graphics/framebuffer.c),
 [`../../kernel/include/oxys/framebuffer.h`](../../kernel/include/oxys/framebuffer.h),
-[`../../kernel/multiboot2.c`](../../kernel/multiboot2.c),
+[`../../kernel/handoff/multiboot2.c`](../../kernel/handoff/multiboot2.c),
 [`../../boot/boot.asm`](../../boot/boot.asm),
 [`../../kernel/mm/vmm.c`](../../kernel/mm/vmm.c).
 
@@ -89,7 +89,7 @@ differently — and every one of them will.
 ## 3. Reading what was supplied
 
 The framebuffer information tag of Section 3.6.12 is reduced in
-`kernel/multiboot2.c` to the neutral `BootFramebuffer` of `<oxys/bootinfo.h>`,
+`kernel/handoff/multiboot2.c` to the neutral `BootFramebuffer` of `<oxys/bootinfo.h>`,
 as every other tag is: the kernel proper depends upon a description of the
 machine, not upon the boot protocol that produced it.
 

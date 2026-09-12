@@ -1,7 +1,7 @@
 /* SPDX-FileCopyrightText: 2026 The Oxys-OS Authors */
 /* SPDX-License-Identifier: LGPL-3.0-or-later */
 /*
- * File: kernel/cpu/gdt.c
+ * File: kernel/arch/x86_64/cpu/gdt.c
  * Purpose: Defines the kernel global descriptor table and installs it, replacing
  *          the table established in boot/boot.asm which resided at a low address
  *          no longer mapped.
@@ -98,7 +98,7 @@ static uint64_t GdtTable[GDT_ENTRY_COUNT] __attribute__((aligned(16))) = {
  * values it contained, not the storage itself. */
 static GdtRegister GdtLoadedRegister;
 
-/* Defined in kernel/cpu/gdt.asm. */
+/* Defined in kernel/arch/x86_64/cpu/gdt.asm. */
 extern void GdtLoadAndReloadSegments(const GdtRegister *descriptor,
                                      uint16_t code_selector,
                                      uint16_t data_selector);

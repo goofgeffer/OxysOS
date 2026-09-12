@@ -425,7 +425,7 @@ composed with the same misunderstanding.
 
 Each has already returned something. `grub-file` fails the build outright if the
 header is malformed. `e2fsck` found the defect above. `clang` found, upon its
-first run, that `kernel/cpu/tss.c` named a 32-bit register to an instruction the
+first run, that `kernel/arch/x86_64/cpu/tss.c` named a 32-bit register to an instruction the
 architecture defines upon r/m16 — which GNU `as` had accepted, and assembled
 correctly, for as long as the file existed. The physical machine of [`TESTING.md`](TESTING.md), Section 5.1
 found two, and both changed the design rather than the code.

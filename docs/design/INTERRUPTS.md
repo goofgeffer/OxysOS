@@ -130,7 +130,7 @@ it — Section 7.2 — and the exchange must match the privilege level being ret
 to and not the one that was left.
 
 The offset the stub reads `CS` at is `TRAP_FRAME_CS_OFFSET`, asserted against the
-structure by a `_Static_assert` in `kernel/cpu/interrupts.c`. A field inserted
+structure by a `_Static_assert` in `kernel/arch/x86_64/interrupt/interrupts.c`. A field inserted
 above `cs` without that assertion would leave the stub testing the saved `RIP`,
 whose low two bits are whatever the interrupted instruction's address happened to
 end in. The design is
@@ -158,7 +158,7 @@ code is recorded by the processor in the field of that name; pushing the registe
 would record the handler's own stack pointer instead, and the two would be
 confused.
 
-The structure and `kernel/cpu/interrupt_stubs.asm` are one interface expressed in
+The structure and `kernel/arch/x86_64/interrupt/interrupt_stubs.asm` are one interface expressed in
 two languages. Neither may be changed without the other.
 
 ### 4.1 Stack alignment
@@ -193,9 +193,9 @@ check_exception old: 0xffffffff new 0xe
 `CR2` is `0x101008`: the code descriptor at selector `0x08`, eight bytes into a
 table at `0x101000`.
 
-A minimal kernel table is therefore established in `kernel/cpu/gdt.c`, residing
+A minimal kernel table is therefore established in `kernel/arch/x86_64/cpu/gdt.c`, residing
 in `.data` in the higher half. It reproduces the three descriptors of the boot
-table, and `kernel/cpu/gdt.asm` reloads every segment register including `CS`,
+table, and `kernel/arch/x86_64/cpu/gdt.asm` reloads every segment register including `CS`,
 which cannot be assigned by an ordinary instruction and is changed by a far
 return.
 
@@ -649,7 +649,7 @@ the mask is honoured.
 
 ## 10. The interrupt request layer
 
-Sub-task 6.12 introduced `kernel/cpu/irq.c` and the interface of
+Sub-task 6.12 introduced `kernel/arch/x86_64/interrupt/irq.c` and the interface of
 `kernel/include/oxys/irq.h`. It is the one place a device driver claims a request
 line through, whichever controller is presently delivering it.
 

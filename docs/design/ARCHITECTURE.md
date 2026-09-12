@@ -38,11 +38,14 @@ than as later additions, in accordance with `PROJECT_GUIDELINES.md`, Section 5:
 | Directory | Contents | Introduced |
 | --------- | -------- | ---------- |
 | `boot/` | The Multiboot2 header, the 32-bit entry point, the long-mode transition, and the GRUB configuration. | Phase 1 |
-| `kernel/` | The architecture-independent kernel core: entry, memory management, the privilege apparatus, scheduling, system calls, and the virtual filesystem. | Phase 1 |
+| `kernel/` | The kernel core: entry, memory management, scheduling, the block layer, the virtual filesystem, and the boot-protocol handoff. It was described here as architecture-independent while `kernel/cpu/` sat within it, which it plainly was not; what is architecture-independent is this directory **less** `arch/`, and that is now a statement about the tree rather than about the prose. | Phase 1 |
 | `kernel/include/oxys/` | The kernel's internal header corpus. | Phase 1 |
 | `kernel/abi/oxys/` | A **second include root**: the system-call interface a program is entitled to — the call numbers, the failure results, the register convention and the two limits an argument is judged against — held apart from the corpus above it and licensed permissively so that the `MIT` C library may include it without including the kernel. It holds constants and never a declaration. | Phase 7 (sub-task 7.1) |
+| `kernel/arch/x86_64/` | Everything in the kernel that could not survive a change of processor, in six subdirectories: `cpu/`, `interrupt/`, `syscall/`, `smp/`, `mm/` and `proc/`. The headers of these subsystems are **not** here; they remain in the corpus above. [`kernel/arch/README.md`](../../kernel/arch/README.md) states the test for admitting a file, and Section 2.4 below records the boundary. | Phase 1, gathered here at the sub-task 7.3 review |
 | `kernel/test/` | The boot-time self-tests, one file per subsystem, and the composed volume they are conducted upon. | Phase 2 |
+| `kernel/handoff/` | The boot-protocol handoff layer: the reading of whatever structure the boot loader left, reduced to the neutral `BootInformation` of `<oxys/bootinfo.h>`. It carries its own private header rather than one in the corpus above, because the wire format of a boot protocol is exactly what design premise 3 forbids anything above it to know. Multiboot2 is its one member; the UEFI equivalent joins it in Phase 12. | Phase 1 |
 | `kernel/acpi/` | The reading of the firmware's ACPI description tables. | Phase 6 (sub-task 6.12) |
+| `kernel/block/` | The generic block-device layer and the buffer cache above it: the layer a storage driver registers into, and the cache the filesystems read through. Above `drivers/` and below `kernel/fs/`, and in neither. | Phase 4 (sub-tasks 4.5 and 4.6) |
 | `drivers/` | Device drivers, one subdirectory per device class. | Phase 1 |
 | `libc/` | The minimal C library linked into user programs. `libc/include/` is its header root and `libc/string/` its first material. | Phase 7 (sub-task 7.1) |
 | `userland/` | User programs: the utilities and the shell. | Phase 7 |
@@ -51,6 +54,20 @@ than as later additions, in accordance with `PROJECT_GUIDELINES.md`, Section 5:
 | `net/` | The network protocol stack. | Phase 11 |
 | `uefi/` | The UEFI application entry point and the UEFI handoff path. | Phase 12 |
 | `docs/` | The documentation corpus, grouped by subject into `project/`, `design/`, `devices/` and `storage/` and indexed by [`docs/README.md`](../README.md). | Phase 1 |
+
+### 2.1 The grouping of `docs/`
+
+| Directory | Holds |
+| --------- | ----- |
+| `docs/project/` | How the work is conducted: the plan, the test procedure and record, the toolchain, the coding standards, the bibliography. |
+| `docs/design/` | The kernel itself: this document, the boot sequence, the address space, the interrupts, the privilege transition, and the framebuffer with the drawing above it. |
+| `docs/devices/` | One document per device the kernel drives. |
+| `docs/storage/` | The stack from a medium to a caller: the disk, the block layer, the buffer cache. |
+
+The grouping is by subject and not by phase, since a document is amended in every
+phase that touches its subject. A directory `README.md` describes its directory's
+contents locally; these documents describe the system by subject. The two are
+complementary and neither replaces the other.
 
 ### 2.2 When a subsystem becomes a directory
 
@@ -103,19 +120,129 @@ declarations were file-scope statics before the division and would be statics
 still if C offered any way to share them among a chosen few, and placing the
 header beside the implementation is the whole of what records that limit.
 
-### 2.1 The grouping of `docs/`
+### 2.3 When a subsystem is in the wrong directory
 
-| Directory | Holds |
-| --------- | ----- |
-| `docs/project/` | How the work is conducted: the plan, the test procedure and record, the toolchain, the coding standards, the bibliography. |
-| `docs/design/` | The kernel itself: this document, the boot sequence, the address space, the interrupts, the privilege transition, and the framebuffer with the drawing above it. |
-| `docs/devices/` | One document per device the kernel drives. |
-| `docs/storage/` | The stack from a medium to a caller: the disk, the block layer, the buffer cache. |
+Section 2.2 is about a file that outgrew itself. This one is about a file that
+was never where it belonged, which is a different defect and has a different
+symptom: not a header that stopped describing its file, but a **directory whose
+`README.md` stopped describing its contents**.
 
-The grouping is by subject and not by phase, since a document is amended in every
-phase that touches its subject. A directory `README.md` describes its directory's
-contents locally; these documents describe the system by subject. The two are
-complementary and neither replaces the other.
+Three relocations were made at one review, at the project owner's direction.
+Nothing was rewritten: a move is not a division and a division is not a rewrite,
+so the same check applies — what changed is the path a file is at, and every
+other line of it must survive.
+
+| Was | Is now | The claim it falsified |
+| --- | ------ | ---------------------- |
+| `drivers/block/block.c`, `drivers/block/buffer.c` | `kernel/block/` | `drivers/README.md`: "one subdirectory per device class", and "a driver implements an interface declared in `kernel/include/oxys/`; it does not export declarations of its own" |
+| `kernel/multiboot2.c`, `kernel/include/oxys/multiboot2.h` | `kernel/handoff/` | Section 1, premise 3: nothing above the handoff layer knows which boot protocol it was booted by |
+| `kernel/include/oxys/testvolume.h` | `kernel/test/volume.h` | Section 2.2: what the parts of one subsystem share between themselves does not go in the public corpus |
+
+**The block layer.** `drivers/README.md` already carried the test, and had
+already applied it once: the framebuffer is not a driver, "because nothing
+programs it". Applied to `block.c` and `buffer.c` the same test excludes them
+just as plainly — a registry with four validations, and a hash table with a
+recency list. Neither holds a register, a port address or a timing rule, and
+neither cites a hardware specification, which every genuine driver in that
+directory opens by doing. The relation was inverted besides: a driver implements
+an interface this corpus declares, and `block.c` *declares* `<oxys/block.h>`,
+which `ata/ata.c`, `ahci/ahci.c` and `sdhci/sdhci.c` register into. A directory
+that excludes the framebuffer and admits a hash table is not applying a rule.
+
+**The handoff.** `kernel/include/oxys/multiboot2.h` had exactly one consumer in
+the entire tree — the file beside which it now sits. It holds one boot protocol's
+wire format, and premise 3 of Section 1 is that everything above the handoff
+layer consumes `<oxys/bootinfo.h>` instead and cannot tell which protocol
+supplied it. Leaving the wire format in the public corpus advertised, to every
+future subsystem, a dependency the premise forbids; the corpus is where a
+consumer looks for what it may use. Phase 12 adds the UEFI handoff, and it now
+has a directory to be added to rather than a decision to be made under the
+pressure of adding it.
+
+**The fixture.** `testvolume.h` had ten consumers and every one of them was under
+`kernel/test/`. Its sibling fixture had kept its header locally as
+`kernel/test/program.h` from the day it was written, so two fixtures of identical
+role sat in two different corpora, and the rule of Section 2.2 decided which of
+them was wrong.
+
+The common lesson is that **a directory's `README.md` is a claim about what is in
+it**, and `PROJECT_GUIDELINES.md`, Section 10, is what makes each directory carry
+one. Where a file contradicts that claim, one of the two is wrong, and the cheaper
+repair — amending the prose to admit the exception — is the one that costs
+something later: it spends the rule. Each of these three was found by reading a
+`README.md` against `git ls-files` and asking which of the two to believe.
+
+### 2.4 The architecture boundary
+
+Sections 2.2 and 2.3 are about one file at a time. This one is about a line drawn
+through the whole kernel, at the project owner's direction, and it is the only
+structural change here that was not forced by a document contradicting itself.
+
+`kernel/arch/x86_64/` gathers what could not survive a change of processor.
+[`kernel/arch/README.md`](../../kernel/arch/README.md) states the test and
+applies it file by file; what belongs here is why the line is worth drawing at
+all, and what it does not yet achieve.
+
+| Was | Is now | The subject |
+| --- | ------ | ----------- |
+| `kernel/cpu/gdt.*`, `idt.c`, `tss.c`, `percpu.c`, `spinlock.c` | `kernel/arch/x86_64/cpu/` | What the processor loads, and the state each core keeps |
+| `kernel/cpu/exceptions.c`, `interrupts.c`, `irq.c`, `interrupt_stubs.asm` | `kernel/arch/x86_64/interrupt/` | Delivery and dispatch |
+| `kernel/cpu/syscall.c`, `syscall_entry.asm` | `kernel/arch/x86_64/syscall/` | The privilege boundary |
+| `kernel/cpu/smp.c`, `smp_trampoline.asm`, `ipi.c` | `kernel/arch/x86_64/smp/` | More than one processor |
+| `kernel/mm/paging.c`, `addrspace.c`, `shootdown.c` | `kernel/arch/x86_64/mm/` | The paging hierarchy and what depends upon its shape |
+| `kernel/proc/switch.asm` | `kernel/arch/x86_64/proc/` | The context switch |
+
+**This is not preparation for a port.** `PLAN.md` has thirteen phases and none of
+them is one; Phase 12 changes the boot protocol and not the processor. A
+directory justified by a port that is not planned would be exactly the
+speculative structure Section 8 of `PROJECT_GUIDELINES.md` discourages, and the
+justification is a different one.
+
+It is that **this kernel contains two kinds of claim, and they fail differently.**
+A defect in `mm/pmm.c` is a mistake about an algorithm: the bitmap and the
+reference counts disagree, and the argument that they should not is one you can
+follow on paper. A defect in `arch/x86_64/cpu/tss.c` is a mistake about a
+manual — a field at the wrong offset, a segment one byte short, a register named
+to an instruction not defined upon it. The second kind is not found by reasoning,
+because the reasoning is somebody else's and is in Intel's manual; it is found by
+checking the citation. Section 2 of `PROJECT_GUIDELINES.md` requires every such
+assertion to carry one, and the distinction between a file that owes citations
+and a file that does not was, until this change, held in the head of whoever was
+reading. It is now a path.
+
+The `cpu/` and `smp/` division within it is worth stating because it is not
+obvious: `cpu/` is about **a** processor and `smp/` about **several**. The ticket
+spinlock is in `cpu/` although it exists for contention, because the other half
+of its job — masking interrupts for as long as it is held — is owed on a machine
+with one core, and `CONCURRENCY.md`, Section 3, is about that half.
+
+**Two subsystems are now split across both trees**, which is the cost of the line
+and not a defect in it. `kernel/mm/` keeps the frame allocator, the address-range
+allocator and the heap; `kernel/arch/x86_64/mm/` takes the four-level hierarchy
+and the two files whose correctness depends on its shape. `kernel/proc/` keeps
+the process table and the scheduler; the context switch is six registers and an
+`IRETQ`, and is here. A reader looking for "memory management" now looks in two
+places, and the compensation is that they can tell which of the two they are in.
+
+**What this does not achieve, stated rather than left to be discovered.** The
+headers did not move. `<oxys/paging.h>` describes a four-level hierarchy and
+`<oxys/tss.h>` a 104-byte segment, and both sit in `kernel/include/oxys/` beside
+`<oxys/vfs.h>`, which describes nothing of the sort. That is deliberate — a
+second include root under `arch/` would put an architecture in every consumer's
+`#include` line, which is the dependency the arrangement exists to avoid
+advertising, and `drivers/README.md` already states that rule for a driver — but
+the consequence is real: **the corpus does not tell you, by looking at it, which
+of its headers is portable.** The implementations now say so and the interfaces
+do not. Nothing in this change repairs that, and no phase presently plans to.
+
+`kernel/kernel.c`, `proc/sched.c` and `proc/process.c` each retain a handful of
+instructions that are plainly x86 — `sti; hlt` in the idle loop, `cli; hlt` in
+the termination guard, a `CR3` in a comment about why a switch does what it does.
+They were left where they are because extracting three instructions into an
+architecture shim would cost a layer of indirection to buy a boundary nothing is
+pressing against. They are named here so that the claim this section makes is the
+true one: the line is drawn at the file, and three files sit slightly on the
+wrong side of it.
 
 ## 3. Present composition
 
@@ -128,24 +255,24 @@ either.
 | ---- | ---- |
 | `boot/boot.asm` | The Multiboot2 header; the 32-bit entry point `_start`; CPUID and long-mode feature detection; the construction of the boot-time paging hierarchy; the long-mode transition; the higher-half entry point `KernelEntryHigh`. |
 | `boot/trampoline.asm` | The real-mode trampoline an application processor begins executing on answering a startup inter-processor interrupt: real mode with `CS` normalised, 32-bit protected mode, and 64-bit long mode upon the kernel's own paging hierarchy, with the parameter block the bootstrap processor fills in. Assembled to a flat binary at a fixed origin, not linked. |
-| `kernel/cpu/exceptions.c` | The handlers for the architecture-defined exceptions and the diagnostic report. |
-| `kernel/cpu/interrupt_stubs.asm` | The 256 per-vector entry stubs and the common stub that saves the registers and calls the dispatcher. |
-| `kernel/cpu/interrupts.c` | The installation of the stubs, the dispatch table and the routing of each vector to its registered handler. |
-| `kernel/cpu/irq.c` | The interrupt request layer: the handlers claimed by request line rather than by vector, the routing of a request to the driver that claimed it, the signalling of completion at whichever controller delivered it, and the retirement of the 8259A pair in favour of the APIC. |
-| `kernel/cpu/gdt.c`, `kernel/cpu/gdt.asm` | The kernel global descriptor table and the reloading of the segment registers. |
-| `kernel/cpu/idt.c` | The interrupt descriptor table: its storage, the installation of a gate, the assignment of an interrupt stack table entry to a gate, and the loading of the table. |
-| `kernel/cpu/tss.c` | The task state segment: the stacks the processor loads when it needs one it can trust, its descriptor within the global descriptor table, and the loading of the task register. |
-| `kernel/cpu/syscall.c` | The configuration of the fast system-call mechanism — `IA32_STAR`, `IA32_LSTAR`, `IA32_FMASK`, `IA32_KERNEL_GS_BASE` and the enabling bit of `IA32_EFER` — and, from sub-task 6.7, the dispatch table and the validation of a caller's arguments; the table holds three calls from 6.7 and seven from sub-task 6.11, which adds `fork`, `execve`, `exit` and `wait`. |
-| `kernel/cpu/syscall_entry.asm` | The entry point `IA32_LSTAR` names. Provisional in sub-task 6.1; replaced at sub-task 6.7 by the path that swaps `GS`, loads the kernel stack from the per-processor area, dispatches, and returns by `SYSRET`. |
-| `kernel/cpu/percpu.c` | The per-processor data areas: their static allocation, the establishment of the executing processor's own, the segment base it is reached through and the repair of that base after a segment reload, and the counted interrupt-disable every critical section is built upon. |
-| `kernel/cpu/spinlock.c` | The ticket spinlock: the locked fetch-and-add that issues a ticket, the bounded wait to be served, the release that admits the next arrival, and the two checks that turn the silent misuses of a lock into a report. |
-| `kernel/cpu/ipi.c` | The inter-processor interrupt layer: the composition of a command for each of the three audiences a sender may address, the accounting, and the handler by which a panicking processor stops the others. |
-| `kernel/cpu/smp.c` | The bring-up of the application processors: the proving and mapping of the low page the trampoline requires, the resources each processor is given before it is started, the INIT-startup-startup sequence and the bounded waits around it, and the C entry point a started processor arrives at and parks in. |
-| `kernel/cpu/smp_trampoline.asm` | Carries the assembled trampoline into the kernel image with `incbin`, and gives its two ends the symbols the C takes the size from. |
+| `kernel/arch/x86_64/cpu/gdt.c`, `kernel/arch/x86_64/cpu/gdt.asm` | The kernel global descriptor table and the reloading of the segment registers. |
+| `kernel/arch/x86_64/cpu/idt.c` | The interrupt descriptor table: its storage, the installation of a gate, the assignment of an interrupt stack table entry to a gate, and the loading of the table. |
+| `kernel/arch/x86_64/cpu/tss.c` | The task state segment: the stacks the processor loads when it needs one it can trust, its descriptor within the global descriptor table, and the loading of the task register. |
+| `kernel/arch/x86_64/cpu/percpu.c` | The per-processor data areas: their static allocation, the establishment of the executing processor's own, the segment base it is reached through and the repair of that base after a segment reload, and the counted interrupt-disable every critical section is built upon. |
+| `kernel/arch/x86_64/cpu/spinlock.c` | The ticket spinlock: the locked fetch-and-add that issues a ticket, the bounded wait to be served, the release that admits the next arrival, and the two checks that turn the silent misuses of a lock into a report. |
+| `kernel/arch/x86_64/interrupt/interrupt_stubs.asm` | The 256 per-vector entry stubs and the common stub that saves the registers and calls the dispatcher. |
+| `kernel/arch/x86_64/interrupt/interrupts.c` | The installation of the stubs, the dispatch table and the routing of each vector to its registered handler. |
+| `kernel/arch/x86_64/interrupt/irq.c` | The interrupt request layer: the handlers claimed by request line rather than by vector, the routing of a request to the driver that claimed it, the signalling of completion at whichever controller delivered it, and the retirement of the 8259A pair in favour of the APIC. |
+| `kernel/arch/x86_64/interrupt/exceptions.c` | The handlers for the architecture-defined exceptions and the diagnostic report. |
+| `kernel/arch/x86_64/syscall/syscall.c` | The configuration of the fast system-call mechanism — `IA32_STAR`, `IA32_LSTAR`, `IA32_FMASK`, `IA32_KERNEL_GS_BASE` and the enabling bit of `IA32_EFER` — and, from sub-task 6.7, the dispatch table and the validation of a caller's arguments; the table holds three calls from 6.7 and seven from sub-task 6.11, which adds `fork`, `execve`, `exit` and `wait`. |
+| `kernel/arch/x86_64/syscall/syscall_entry.asm` | The entry point `IA32_LSTAR` names. Provisional in sub-task 6.1; replaced at sub-task 6.7 by the path that swaps `GS`, loads the kernel stack from the per-processor area, dispatches, and returns by `SYSRET`. |
+| `kernel/arch/x86_64/smp/ipi.c` | The inter-processor interrupt layer: the composition of a command for each of the three audiences a sender may address, the accounting, and the handler by which a panicking processor stops the others. |
+| `kernel/arch/x86_64/smp/smp.c` | The bring-up of the application processors: the proving and mapping of the low page the trampoline requires, the resources each processor is given before it is started, the INIT-startup-startup sequence and the bounded waits around it, and the C entry point a started processor arrives at and parks in. |
+| `kernel/arch/x86_64/smp/smp_trampoline.asm` | Carries the assembled trampoline into the kernel image with `incbin`, and gives its two ends the symbols the C takes the size from. |
 | `kernel/acpi/acpi.c` | The firmware's ACPI description tables: the discovery and validation of the Root System Description Pointer, the walk of the RSDT or XSDT, and the parse of the Multiple APIC Description Table. |
 | `kernel/exec/elf.c` | The ELF64 loader for statically linked executables: the decoding of the file and program headers, the fifteen refusals an image must survive whole before a page of it is mapped, and the placing of its segments into an address space through the direct physical map. |
 | `kernel/proc/process.c` | The process control block, the thread and the saved context: the two tables, the address space a process is given, the kernel stack and guard page a thread is given, the writing of `rsp0` when a thread becomes current, the switch, the descent to privilege level 3, the termination that returns from it, and — from sub-task 6.11 — `fork`, `execve`, `exit` and `wait`. |
-| `kernel/proc/switch.asm` | `ThreadSwitchContext`, which exchanges six registers and a stack pointer; `ThreadTrampoline`, where a thread that has never run begins; `ThreadEnterUser`, which clears every register and descends to privilege level 3 by `IRETQ`; and `ThreadResumeUser`, which descends with a whole saved register set restored, as a thread made by `fork` requires. |
+| `kernel/arch/x86_64/proc/switch.asm` | `ThreadSwitchContext`, which exchanges six registers and a stack pointer; `ThreadTrampoline`, where a thread that has never run begins; `ThreadEnterUser`, which clears every register and descends to privilege level 3 by `IRETQ`; and `ThreadResumeUser`, which descends with a whole saved register set restored, as a thread made by `fork` requires. |
 | `graphics/compositor.c` | The compositor: the back buffer that stands in for the framebuffer, the ordered layers composited over it, the damage rectangle that narrows what is carried to the display, and the suspension a fault screen imposes. |
 | `graphics/cursor.c` | The pointer: its two-bitmap shape, and the layer the compositor draws it as. |
 | `graphics/draw.c` | The two-dimensional primitives upon a surface: rectangle arithmetic and clipping, the pixel, the filled and outlined rectangle, the integer line, and the blit. |
@@ -182,9 +309,9 @@ either.
 | `kernel/test/verify_smp.c` | The self-tests of the per-processor area, the spinlock, the inter-processor interrupt and the shootdown — the first two asserting internal state, since upon one processor a lock that does not lock behaves like one that does, and the last two asserting behaviour by an interrupt the processor sends to itself. |
 | `kernel/mm/heap.c` | The kernel heap: a slab allocator of eight size classes over the kernel arena. |
 | `kernel/mm/vmm.c` | The kernel virtual address allocator, issuing ranges of the kernel arena backed by frames. |
-| `kernel/mm/paging.c` | The permanent kernel paging hierarchy: its construction, activation, software translation and copy-on-write fault resolution. |
-| `kernel/mm/shootdown.c` | The translation-lookaside-buffer shootdown: the publication of the address whose translation has become stale, the interrupt that tells the other processors to discard it, the acknowledgement each makes, and the bounded wait for all of them. |
-| `kernel/mm/addrspace.c` | The address space: its creation, its cloning by the copy-on-write discipline, its activation and its destruction. |
+| `kernel/arch/x86_64/mm/paging.c` | The permanent kernel paging hierarchy: its construction, activation, software translation and copy-on-write fault resolution. |
+| `kernel/arch/x86_64/mm/shootdown.c` | The translation-lookaside-buffer shootdown: the publication of the address whose translation has become stale, the interrupt that tells the other processors to discard it, the acknowledgement each makes, and the bounded wait for all of them. |
+| `kernel/arch/x86_64/mm/addrspace.c` | The address space: its creation, its cloning by the copy-on-write discipline, its activation and its destruction. |
 | `kernel/mm/pmm.c` | The physical frame allocator: a bitmap of every 4 KiB frame below the highest usable address. |
 | `kernel/fs/ext2/internal.h` | What the nine translation units below share with one another and with nothing else: the record of the last refusal, the accounting, the decoders and encoders of the volume's byte order, and the block-level transfer. |
 | `kernel/fs/ext2/core.c` | The shared state, the refusals, the decoding and encoding of the stored byte order, the block-level transfer in both directions, and the accounting accessors. |
@@ -204,7 +331,7 @@ either.
 | `kernel/fs/vfs/file.c` | The open file: the descriptor table, the position that advances, and the reading, writing and seeking above it. |
 | `kernel/fs/vfs/namespace.c` | The operations that name a file rather than hold one open: stat, truncate, the creation and removal of names and directories, and the flush. |
 | `kernel/fs/ext2_vfs.c` | The binding of the EXT2 implementation to that layer: the operations vector, the translation between the format's mode and the layer's neutral node type, and the mark a mount leaves upon a volume it has open. |
-| `kernel/multiboot2.c` | The Multiboot2 parser, reducing the boot loader's structure to the neutral `BootInformation` description. |
+| `kernel/handoff/multiboot2.c` | The Multiboot2 parser, reducing the boot loader's structure to the neutral `BootInformation` description. |
 | `kernel/kernel.c` | `KernelMain`, which validates the boot loader handover, initialises every subsystem in the dependency order of Section 4, runs the self-tests, mounts a root volume and enters the echo loop. `KernelPanic`, the unrecoverable-error path. |
 | `drivers/vga/vga.c` | The VGA text-mode display driver: the control characters, the scrolling, the colour attributes, the hardware cursor and the erase limit that bounds a backspace. |
 | `drivers/serial/serial.c` | The interrupt-driven COM1 serial driver used for diagnostics and input. |
@@ -212,8 +339,6 @@ either.
 | `drivers/apic/lapic.c` | The Local APIC: its detection, the mapping of its register page as uncacheable memory, its two enables, the local vector table entries this kernel programmes, and the end-of-interrupt every handler owes it. |
 | `drivers/apic/ioapic.c` | The I/O APIC: the indirect register pair its registers are reached through, and the redirection table entry that decides what vector an interrupt input presents and to which processor. |
 | `drivers/pit/pit.c` | Counter 0 of the 8253 interval timer: the system tick, the elapsed-time conversion and the bounded wait. |
-| `drivers/block/buffer.c` | The buffer cache above the block layer: the hash, the recency list, the reference discipline and the write-back policy. |
-| `drivers/block/block.c` | The generic block-device layer: the registry of devices that transfer fixed-size blocks, and the validated path through which every caller above reaches a driver. |
 | `drivers/ata/internal.h` | What the six units below share: the register and status constants, the table of devices found, the addresses each channel answers at, the accounting, and the register-level discipline. |
 | `drivers/ata/ata.c` | The driver's state, its refusals, the initialisation that finds what is present, the device accessors and the binding to the block layer. |
 | `drivers/ata/port.c` | The register-level discipline of the task file: the settling delay a selection must be followed by, the two waits every command is bracketed by, and the reset of a channel. |
@@ -227,6 +352,8 @@ either.
 | `drivers/mouse/mouse.c` | The PS/2 mouse upon the controller's second port: the framing of a packet stream that has none, the nine-bit movement, the single inversion of the vertical sense, and the position the driver keeps. |
 | `drivers/ahci/ahci.c` | The AHCI adaptor by first-party direct memory access: the handoff from the firmware, the ports it implements, the command list, and the region descriptors that name a caller's pages to the device. |
 | `drivers/sdhci/sdhci.c` | The SD host controller and the card behind it: the card's own command set, the two encodings of its capacity, and the transfer through the buffer data port. |
+| `kernel/block/block.c` | The generic block-device layer: the registry of devices that transfer fixed-size blocks, and the validated path through which every caller above reaches a driver. |
+| `kernel/block/buffer.c` | The buffer cache above the block layer: the hash, the recency list, the reference discipline and the write-back policy. |
 | `linker.ld` | The link script establishing the higher-half image layout. |
 
 ## 4. Subsystem dependency ordering

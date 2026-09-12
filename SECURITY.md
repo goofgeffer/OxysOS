@@ -37,9 +37,9 @@ be worth having.
 
 | Surface | Where | What crossing it would mean |
 | ------- | ----- | --------------------------- |
-| The system-call interface | `kernel/cpu/syscall.c`, `kernel/cpu/syscall_entry.asm` | Seven calls, each of which receives arguments a program chose. Every address a caller supplies is validated against the canonical user limit **and** against the paging hierarchy, so that a mapped kernel page is not read on a caller's behalf merely because it is mapped. A gap here is a program reading kernel memory. |
+| The system-call interface | `kernel/arch/x86_64/syscall/syscall.c`, `kernel/arch/x86_64/syscall/syscall_entry.asm` | Seven calls, each of which receives arguments a program chose. Every address a caller supplies is validated against the canonical user limit **and** against the paging hierarchy, so that a mapped kernel page is not read on a caller's behalf merely because it is mapped. A gap here is a program reading kernel memory. |
 | The ELF64 loader | `kernel/exec/elf.c` | A piece of the kernel that does what an untrusted document tells it to. Its design is the list of things it refuses to be told; [`docs/design/EXECUTABLE.md`](docs/design/EXECUTABLE.md) enumerates them. A gap here is a file placing a segment where it should not go. |
-| The privilege apparatus | `kernel/cpu/tss.c`, `kernel/cpu/gdt.c` | The descriptors, the trusted stacks, and the task state segment whose I/O map base lies beyond the segment limit — which is what denies every I/O port to privilege level 3. A gap here is a program touching hardware directly. |
+| The privilege apparatus | `kernel/arch/x86_64/cpu/tss.c`, `kernel/arch/x86_64/cpu/gdt.c` | The descriptors, the trusted stacks, and the task state segment whose I/O map base lies beyond the segment limit — which is what denies every I/O port to privilege level 3. A gap here is a program touching hardware directly. |
 
 The filesystem is **not** among them. There are no users, no credentials and no
 permission checks; anything with access to the volume has access to all of it.
@@ -52,10 +52,10 @@ can be.
 
 | Protection | Where |
 | ---------- | ----- |
-| Kernel text and read-only data are mapped without write permission | `kernel/mm/paging.c`, `PagingAddressIsReadOnly` |
+| Kernel text and read-only data are mapped without write permission | `kernel/arch/x86_64/mm/paging.c`, `PagingAddressIsReadOnly` |
 | `CR0.WP` is set, without which those mappings would be advisory and the kernel could write straight through them | `PagingInitialise`; [`docs/design/INTERRUPTS.md`](docs/design/INTERRUPTS.md), Section 8.4 |
 | Every thread's kernel stack sits above a guard page, left mapped and read-only so that an overflow faults upon the write that overflows | `kernel/proc/process.c` |
-| The double fault is delivered upon a stack of its own, so a fault taken upon a bad stack is reported rather than escalating to a reset | `kernel/cpu/exceptions.c`; [`docs/design/PRIVILEGE.md`](docs/design/PRIVILEGE.md) |
+| The double fault is delivered upon a stack of its own, so a fault taken upon a bad stack is reported rather than escalating to a reset | `kernel/arch/x86_64/interrupt/exceptions.c`; [`docs/design/PRIVILEGE.md`](docs/design/PRIVILEGE.md) |
 | Every I/O port is denied to privilege level 3 | The I/O map base of the task state segment |
 | A fault raised at privilege level 3 ends that program and not the machine | `ExceptionDispositionOf`; [`docs/design/INTERRUPTS.md`](docs/design/INTERRUPTS.md), Section 8.1 |
 | A machine's own root volume is mounted read-only unless the operator chose the GRUB entry that permits writing | `kernel/kernel.c`, `KernelMountRootVolume` |

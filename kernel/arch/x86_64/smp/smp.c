@@ -1,7 +1,7 @@
 /* SPDX-FileCopyrightText: 2026 The Oxys-OS Authors */
 /* SPDX-License-Identifier: LGPL-3.0-or-later */
 /*
- * File: kernel/cpu/smp.c
+ * File: kernel/arch/x86_64/smp/smp.c
  * Purpose: Implements the bring-up of the application processors: the placement
  *          and mapping of the real-mode trampoline, the preparation each
  *          processor is given before it is started, the INIT-startup-startup
@@ -87,7 +87,7 @@
 #include <oxys/kernel.h>
 
 /* The two ends of the assembled trampoline, embedded by
- * kernel/cpu/smp_trampoline.asm. */
+ * kernel/arch/x86_64/smp/smp_trampoline.asm. */
 extern const uint8_t SmpTrampolineImageStart[];
 extern const uint8_t SmpTrampolineImageEnd[];
 

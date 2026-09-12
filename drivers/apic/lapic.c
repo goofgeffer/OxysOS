@@ -359,7 +359,7 @@ bool LocalApicInitialise(void)
  *
  * The handler registration stays above deliberately. The dispatch table is one
  * table and registering a vector twice would be a second entry for the same
- * vector, which kernel/cpu/interrupts.c treats as a defect rather than as a
+ * vector, which kernel/arch/x86_64/interrupt/interrupts.c treats as a defect rather than as a
  * repetition.
  */
 static void LocalApicProgrammeThisProcessor(void)

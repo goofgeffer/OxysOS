@@ -1,7 +1,7 @@
 /* SPDX-FileCopyrightText: 2026 The Oxys-OS Authors */
 /* SPDX-License-Identifier: LGPL-3.0-or-later */
 /*
- * File: kernel/multiboot2.c
+ * File: kernel/handoff/multiboot2.c
  * Purpose: Parses the Multiboot2 boot information structure supplied by GRUB and
  *          reduces it to the boot-protocol-neutral BootInformation description
  *          upon which the remainder of the kernel depends.
@@ -26,7 +26,7 @@
  */
 
 #include <oxys/bootinfo.h>
-#include <oxys/multiboot2.h>
+#include "multiboot2.h"
 #include <oxys/kernel.h>
 
 /*
@@ -219,7 +219,7 @@ static void Multiboot2ParseMemoryMap(const Multiboot2MemoryMapTag *tag,
  *
  * The tag is addressed as bytes rather than through the structure alone because
  * the colour description that follows the common fields belongs to one kind of
- * framebuffer only; see <oxys/multiboot2.h>.
+ * framebuffer only; see `kernel/handoff/multiboot2.h`.
  */
 static void Multiboot2ParseFramebuffer(const uint8_t *raw, BootInformation *information)
 {

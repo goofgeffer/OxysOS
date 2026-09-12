@@ -26,7 +26,7 @@
 
 #include <oxys/kernel.h>
 #include <oxys/verify.h>
-#include <oxys/testvolume.h>
+#include "volume.h"
 #include <oxys/vfs.h>
 #include <oxys/ext2.h>
 #include <oxys/ext2_vfs.h>

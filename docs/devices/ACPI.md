@@ -115,7 +115,7 @@ would be latent, and would surface upon the first architecture that trapped it.
 
 Every multi-byte field is therefore assembled from its bytes in the little-endian
 order the specification records. The same reasoning governs
-`kernel/include/oxys/multiboot2.h`, which declares the framebuffer tag's fields
+`kernel/handoff/multiboot2.h`, which declares the framebuffer tag's fields
 as offsets for the same reason.
 
 ### 5.2 Nothing retains a pointer into the tables

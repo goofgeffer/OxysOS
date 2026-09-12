@@ -6,7 +6,7 @@
 
 **Authority**: `PROJECT_GUIDELINES.md`, Sections 2, 3 and 6.
 
-**Implementation**: [`../drivers/block/buffer.c`](../../drivers/block/buffer.c),
+**Implementation**: [`../../kernel/block/buffer.c`](../../kernel/block/buffer.c),
 [`../kernel/include/oxys/buffer.h`](../../kernel/include/oxys/buffer.h).
 
 ## 1. What the cache is for

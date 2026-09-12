@@ -86,7 +86,7 @@ between runs.
 
 | Path | Description |
 | ---- | ----------- |
-| `volume.c` | The fixture. Two block devices backed by arrays in `.bss`, and a complete EXT2 volume composed within them byte by byte, so that every storage and filesystem assertion holds upon a machine with no disk. The second volume is a copy of the first with the owner of one file altered, so that an assertion can state which volume a path reached. |
+| `volume.h`, `volume.c` | The fixture. Two block devices backed by arrays in `.bss`, and a complete EXT2 volume composed within them byte by byte, so that every storage and filesystem assertion holds upon a machine with no disk. The second volume is a copy of the first with the owner of one file altered, so that an assertion can state which volume a path reached. |
 | `verify_memory.c` | Phase 2: the physical frame allocator, the paging hierarchy, the virtual address allocator and the heap, per-frame reference counting, the resolution of a copy-on-write fault, and the cloning of an address space. |
 | `verify_interrupts.c` | Phase 3: the descriptor table and its gates, the 256 stubs and the uniform trap frame they construct, the dispatcher's routing, and the exception handlers. |
 | `verify_faultscreen.c` | Phase 6, sub-task 6.4: what is to be done about each exception — resumed, terminating the program that raised it, or fatal to the kernel — asserted for every vector at **both privilege levels**, which was possible six sub-tasks before anything ran at privilege level 3 because the classification is a pure function of a vector and a selector. And the table of fault screens — that every severe fault has one of its own, that **no two share a title or a colour**, that every title fits the narrowest display this kernel has been handed, and that none has been drawn yet, a screen drawn early leaving a real fault later in the boot with nothing to display. It asserts the table and never draws. |
@@ -119,18 +119,31 @@ between runs.
 | `ext2/probe.c` | **Not a self-test.** `KernelReportVolumes`, which examines whatever volume the machine actually carries and asserts nothing. It is a file of its own so that the distinction below cannot be blurred by accident. |
 | `verify_vfs.c` | Sub-task 5.8: the virtual filesystem layer, its mounts and its node identity; and `KernelVfsProbeVolume`, which exercises a real volume through the layer. |
 
-## The two headers
+## The headers, and which corpus each belongs to
 
-[`../include/oxys/verify.h`](../include/oxys/verify.h) declares the entry points
-`KernelMain` calls, together with the two things `kernel.c` supplies to the tests:
-the parsed boot information, and whether the boot loader's command line names a
-given option.
+[`../include/oxys/verify.h`](../include/oxys/verify.h) is the one header here
+that is in the kernel's public corpus, and it is there because `kernel.c` calls
+what it declares: the entry points, in the order they are called, together with
+the two things `kernel.c` supplies to the tests — the parsed boot information,
+and whether the boot loader's command line names a given option.
 
-[`../include/oxys/testvolume.h`](../include/oxys/testvolume.h) declares the
-fixture — the two block devices, the composed volume's geometry, and the routines
-that address a field of it directly. Three of the test files include it: the
-storage tests, which need a device; and the EXT2 and virtual filesystem tests,
-which need a volume.
+[`volume.h`](volume.h) and [`program.h`](program.h) are **not** in that corpus
+and are included from beside their implementations, by the rule
+[`../../docs/design/ARCHITECTURE.md`](../../docs/design/ARCHITECTURE.md),
+Section 2.2, states: the public corpus is what a consumer may depend upon, and
+what the parts of one subsystem share between themselves is not that.
+`volume.h` declares the fixture — the two block devices, the composed volume's
+geometry, and the routines that address a field of it directly — and every file
+that includes it is in this directory: the storage tests, which need a device,
+and the EXT2 and virtual filesystem tests, which need a volume. `program.h`
+declares the composer described above, and has the same three consumers of its
+own.
+
+`volume.h` was `../include/oxys/testvolume.h` until the review that moved it.
+Nothing outside this directory had ever included it, so the fixture's geometry
+was reachable from the kernel proper for no reason but its address; putting it
+beside `volume.c` — where `program.h` had sat beside `program.c` all along —
+makes the two fixtures consistent and puts the limit where it can be seen.
 
 ## The distinction between a test and a probe
 

@@ -8,7 +8,7 @@
 ;   answers a startup inter-processor interrupt. It carries that processor from
 ;   the 16-bit real mode a reset leaves it in, through 32-bit protected mode,
 ;   into 64-bit long mode upon the kernel's own paging hierarchy, and hands it
-;   to the C entry point of kernel/cpu/smp.c.
+;   to the C entry point of kernel/arch/x86_64/smp/smp.c.
 ;
 ; Key routines and data:
 ;   SmpTrampolineStart       - The first instruction the processor executes.
@@ -50,7 +50,7 @@
 ;   be that page's — not the higher-half addresses the kernel is linked at.
 ;   NASM's `org` directive states that origin, and `org` is available only in
 ;   the flat binary format. The image is assembled separately, embedded in the
-;   kernel by kernel/cpu/smp_trampoline.asm, and copied to the page named below
+;   kernel by kernel/arch/x86_64/smp/smp_trampoline.asm, and copied to the page named below
 ;   by SmpPlaceTrampoline before the first processor is started.
 ;
 ;   The origin is a constant rather than an argument because a real-mode near
@@ -58,7 +58,7 @@
 ;   would have to compute every one of them at run time from a base it was
 ;   handed. Fixing the page and asserting that the firmware calls it usable is
 ;   the cheaper of the two, and the assertion is the part that matters: see
-;   SmpTrampolinePageIsUsable in kernel/cpu/smp.c.
+;   SmpTrampolinePageIsUsable in kernel/arch/x86_64/smp/smp.c.
 ;
 ; Why the first instruction is a far jump.
 ;

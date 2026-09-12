@@ -1,7 +1,7 @@
 /* SPDX-FileCopyrightText: 2026 The Oxys-OS Authors */
 /* SPDX-License-Identifier: LGPL-3.0-or-later */
 /*
- * File: kernel/cpu/syscall.c
+ * File: kernel/arch/x86_64/syscall/syscall.c
  * Purpose: Configures the fast system-call mechanism: enables it in IA32_EFER,
  *          writes the selectors into IA32_STAR, the entry point into IA32_LSTAR
  *          and the flag mask into IA32_FMASK, and reads all four back so that
@@ -24,7 +24,7 @@
  * entry path, the dispatch table and the validation of a user's arguments are
  * sub-task 6.7, and the entry point installed here is a placeholder that
  * sub-task 6.7 replaces; the reasons it is shaped as it is are recorded in
- * kernel/cpu/syscall_entry.asm.
+ * kernel/arch/x86_64/syscall/syscall_entry.asm.
  *
  * Concurrency. Every register written here is per-processor. Sub-task 6.14 must
  * repeat this configuration upon each application processor as it is brought up,
@@ -43,7 +43,7 @@
 #include <oxys/tss.h>
 #include <oxys/process.h>
 
-/* Defined in kernel/cpu/syscall_entry.asm. */
+/* Defined in kernel/arch/x86_64/syscall/syscall_entry.asm. */
 extern void SyscallEntry(void);
 
 /*
@@ -99,7 +99,7 @@ static bool SyscallIsSupported(void)
  * which replaced it with the per-processor area <oxys/percpu.h> declares — the
  * same two fields at the same two offsets, and the rest of what a processor owns
  * after them. The offsets the entry path addresses by number are asserted in
- * kernel/cpu/percpu.c, beside the structure they belong to.
+ * kernel/arch/x86_64/cpu/percpu.c, beside the structure they belong to.
  */
 
 bool SyscallInitialise(void)

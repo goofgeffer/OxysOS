@@ -11,10 +11,10 @@ the four calls by which it governs another.
 **Authority**: `PROJECT_GUIDELINES.md`, Sections 2, 3 and 6.
 
 **Implementation**: [`../../kernel/proc/process.c`](../../kernel/proc/process.c),
-[`../../kernel/proc/switch.asm`](../../kernel/proc/switch.asm),
+[`../../kernel/arch/x86_64/proc/switch.asm`](../../kernel/arch/x86_64/proc/switch.asm),
 [`../../kernel/include/oxys/process.h`](../../kernel/include/oxys/process.h).
 The dispatch and the validation of a caller's arguments are
-[`../../kernel/cpu/syscall.c`](../../kernel/cpu/syscall.c), whose design is
+[`../../kernel/arch/x86_64/syscall/syscall.c`](../../kernel/arch/x86_64/syscall/syscall.c), whose design is
 [`PRIVILEGE.md`](PRIVILEGE.md).
 
 ## 1. What this sub-task is, and what it is not

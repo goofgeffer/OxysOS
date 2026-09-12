@@ -10,13 +10,13 @@ this sub-task applies.
 
 **Authority**: `PROJECT_GUIDELINES.md`, Sections 2, 3 and 6.
 
-**Implementation**: [`../../kernel/cpu/smp.c`](../../kernel/cpu/smp.c),
+**Implementation**: [`../../kernel/arch/x86_64/smp/smp.c`](../../kernel/arch/x86_64/smp/smp.c),
 [`../../boot/trampoline.asm`](../../boot/trampoline.asm) and
-[`../../kernel/cpu/smp_trampoline.asm`](../../kernel/cpu/smp_trampoline.asm),
+[`../../kernel/arch/x86_64/smp/smp_trampoline.asm`](../../kernel/arch/x86_64/smp/smp_trampoline.asm),
 with [`../../kernel/include/oxys/smp.h`](../../kernel/include/oxys/smp.h). The
 per-processor task state segments are in
-[`../../kernel/cpu/tss.c`](../../kernel/cpu/tss.c) and their descriptors in
-[`../../kernel/cpu/gdt.c`](../../kernel/cpu/gdt.c); the command register the
+[`../../kernel/arch/x86_64/cpu/tss.c`](../../kernel/arch/x86_64/cpu/tss.c) and their descriptors in
+[`../../kernel/arch/x86_64/cpu/gdt.c`](../../kernel/arch/x86_64/cpu/gdt.c); the command register the
 startup interrupts are sent through is in
 [`../../drivers/apic/lapic.c`](../../drivers/apic/lapic.c); the microsecond wait
 the protocol's delays are measured by is in
@@ -176,7 +176,7 @@ be that page's — not the higher-half addresses the kernel is linked at. NASM's
 `org` directive states that origin, and `org` is available only in the flat
 binary format. So the image cannot be an ordinary member of `ASM_SOURCES`: the
 Makefile assembles it with `-f bin` to `build/trampoline.bin`, and
-[`../../kernel/cpu/smp_trampoline.asm`](../../kernel/cpu/smp_trampoline.asm)
+[`../../kernel/arch/x86_64/smp/smp_trampoline.asm`](../../kernel/arch/x86_64/smp/smp_trampoline.asm)
 embeds the result with `incbin` between two global symbols the C takes the size
 from.
 
@@ -338,7 +338,7 @@ The index is the key, and the index is what the block carries.
 
 The segment holds `RSP0`, the stack a transition to privilege level 0 is made
 upon, and the interrupt stack table. Both are properties of a processor rather
-than of the machine, so the array in `kernel/cpu/tss.c` is now one segment per
+than of the machine, so the array in `kernel/arch/x86_64/cpu/tss.c` is now one segment per
 processor and the global descriptor table holds one sixteen-byte descriptor for
 each.
 

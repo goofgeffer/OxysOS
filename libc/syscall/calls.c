@@ -10,7 +10,7 @@
  *          OxysExit, OxysWait, OxysBrk, OxysSbrk.
  * References:
  *   - kernel/abi/oxys/syscall_abi.h: the call numbers and what each call means.
- *   - kernel/cpu/syscall.c: the kernel's half, which is what these agree with.
+ *   - kernel/arch/x86_64/syscall/syscall.c: the kernel's half, which is what these agree with.
  *   - ISO/IEC 9899:2011, Section 7.5: the errno OxysSyscallResult sets.
  *   - docs/design/LIBC.md, Section 8.3: what each wrapper does with its
  *     arguments, and the two places it does something a reader would not guess.

@@ -1,7 +1,7 @@
 /* SPDX-FileCopyrightText: 2026 The Oxys-OS Authors */
 /* SPDX-License-Identifier: LGPL-3.0-or-later */
 /*
- * File: kernel/cpu/tss.c
+ * File: kernel/arch/x86_64/cpu/tss.c
  * Purpose: Establishes the task state segment: the stacks it names, its
  *          descriptor within the global descriptor table, and the loading of the
  *          task register.

@@ -42,7 +42,7 @@ Sections relied upon:
   height and depth of which zero means no preference. Its presence is what
   obliges the boot loader to emit the framebuffer information tag below.
 - **3.6.7**, the ELF-Symbols tag, type 9. Note the discrepancy recorded in
-  `kernel/include/oxys/multiboot2.h`: the prose of this section and the reference
+  `kernel/handoff/multiboot2.h`: the prose of this section and the reference
   C header in the same document disagree upon the widths of the `num`, `entsize`
   and `shndx` fields.
 - **3.6.8**, the memory map tag, type 6: the `entry_size` and `entry_version`
@@ -67,8 +67,8 @@ Sections relied upon:
   firmware's own memory, which is what makes the tag the only source a UEFI boot
   could supply.
 
-Used by: `boot/boot.asm`, `kernel/multiboot2.c`,
-`kernel/include/oxys/multiboot2.h`, `kernel/kernel.c`, `kernel/acpi/acpi.c`,
+Used by: `boot/boot.asm`, `kernel/handoff/multiboot2.c`,
+`kernel/handoff/multiboot2.h`, `kernel/kernel.c`, `kernel/acpi/acpi.c`,
 `kernel/include/oxys/bootinfo.h`, `linker.ld`, `boot/grub/grub.cfg`.
 
 ### Intel 64 and IA-32 Architectures Software Developer's Manual
@@ -312,10 +312,10 @@ Sections relied upon:
 
 Used by: `boot/boot.asm`, `linker.ld`, `Makefile`, `kernel/include/oxys/io.h`,
 `kernel/kernel.c`, `kernel/include/oxys/pic.h`, `kernel/include/oxys/pit.h`,
-`kernel/include/oxys/lapic.h`, `drivers/apic/lapic.c`, `kernel/cpu/irq.c`,
+`kernel/include/oxys/lapic.h`, `drivers/apic/lapic.c`, `kernel/arch/x86_64/interrupt/irq.c`,
 `docs/devices/APIC.md`,
-`kernel/cpu/gdt.c`, `kernel/cpu/tss.c`, `kernel/cpu/syscall.c`,
-`kernel/cpu/syscall_entry.asm`, `kernel/include/oxys/tss.h`,
+`kernel/arch/x86_64/cpu/gdt.c`, `kernel/arch/x86_64/cpu/tss.c`, `kernel/arch/x86_64/syscall/syscall.c`,
+`kernel/arch/x86_64/syscall/syscall_entry.asm`, `kernel/include/oxys/tss.h`,
 `kernel/include/oxys/syscall.h`, `kernel/include/oxys/msr.h`,
 `graphics/framebuffer.c`, `kernel/include/oxys/framebuffer.h`,
 `graphics/faultscreen.c`, `kernel/include/oxys/faultscreen.h`,
@@ -369,7 +369,7 @@ Sections relied upon:
 - **Section 3.2.3**, parameter passing: the first six integer arguments are
   passed in `RDI`, `RSI`, `RDX`, `RCX`, `R8` and `R9`, in that order, the
   seventh and beyond upon the stack; an integer result returns in `RAX`. The
-  first two are what `kernel/proc/switch.asm` relies upon; all six are what
+  first two are what `kernel/arch/x86_64/proc/switch.asm` relies upon; all six are what
   `libc/syscall/invoke.asm` shifts by one place, the kernel reading a call's
   arguments from `RDI`, `RSI`, `RDX`, `R10`, `R8` and `R9` — `R10` in the fourth
   position because `SYSCALL` destroys `RCX`.
@@ -381,7 +381,7 @@ Sections relied upon:
 - The ELF64 object file format, and the machine identifier 62 by which an
   object states that it is for this architecture.
 
-Used by: `boot/boot.asm`, `linker.ld`, `Makefile`, `kernel/cpu/tss.c`,
+Used by: `boot/boot.asm`, `linker.ld`, `Makefile`, `kernel/arch/x86_64/cpu/tss.c`,
 `kernel/include/oxys/tss.h`, `kernel/include/oxys/syscall.h`,
 `kernel/exec/elf.c`, `libc/syscall/invoke.asm`, `docs/design/PRIVILEGE.md`.
 
@@ -672,7 +672,7 @@ Sections relied upon:
   which supersedes the MADT header's 32-bit field for every local controller.
 - **Section 5.2.12.12 and Table 5.34**, the Processor Local x2APIC structure.
 
-Used by: `kernel/acpi/acpi.c`, `kernel/include/oxys/acpi.h`, `kernel/cpu/irq.c`,
+Used by: `kernel/acpi/acpi.c`, `kernel/include/oxys/acpi.h`, `kernel/arch/x86_64/interrupt/irq.c`,
 `drivers/apic/lapic.c`, `drivers/apic/ioapic.c`, `docs/devices/ACPI.md`,
 `docs/devices/APIC.md`, `docs/design/INTERRUPTS.md`.
 

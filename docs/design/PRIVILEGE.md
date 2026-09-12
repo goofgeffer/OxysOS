@@ -4,12 +4,12 @@
 
 **Corresponding phase**: 6, sub-task 6.1, which opens the phase.
 **Authority**: `PROJECT_GUIDELINES.md`, Sections 2 and 4.
-**Implemented by**: [`../../kernel/cpu/gdt.c`](../../kernel/cpu/gdt.c),
-[`../../kernel/cpu/tss.c`](../../kernel/cpu/tss.c),
-[`../../kernel/cpu/syscall.c`](../../kernel/cpu/syscall.c),
-[`../../kernel/cpu/syscall_entry.asm`](../../kernel/cpu/syscall_entry.asm),
-[`../../kernel/cpu/idt.c`](../../kernel/cpu/idt.c),
-[`../../kernel/cpu/exceptions.c`](../../kernel/cpu/exceptions.c),
+**Implemented by**: [`../../kernel/arch/x86_64/cpu/gdt.c`](../../kernel/arch/x86_64/cpu/gdt.c),
+[`../../kernel/arch/x86_64/cpu/tss.c`](../../kernel/arch/x86_64/cpu/tss.c),
+[`../../kernel/arch/x86_64/syscall/syscall.c`](../../kernel/arch/x86_64/syscall/syscall.c),
+[`../../kernel/arch/x86_64/syscall/syscall_entry.asm`](../../kernel/arch/x86_64/syscall/syscall_entry.asm),
+[`../../kernel/arch/x86_64/cpu/idt.c`](../../kernel/arch/x86_64/cpu/idt.c),
+[`../../kernel/arch/x86_64/interrupt/exceptions.c`](../../kernel/arch/x86_64/interrupt/exceptions.c),
 [`../../kernel/include/oxys/gdt.h`](../../kernel/include/oxys/gdt.h),
 [`../../kernel/include/oxys/tss.h`](../../kernel/include/oxys/tss.h),
 [`../../kernel/include/oxys/syscall.h`](../../kernel/include/oxys/syscall.h),
@@ -301,7 +301,7 @@ answer and lose every one of the reasons above.
 
 *Written at sub-task 6.1 and left standing, the answer following.*
 
-> `SyscallEntry` in `kernel/cpu/syscall_entry.asm` records the selectors and
+> `SyscallEntry` in `kernel/arch/x86_64/syscall/syscall_entry.asm` records the selectors and
 > flags the processor loaded, increments a counter, restores `RFLAGS` from `R11`
 > and jumps to `RCX`. Sub-task 6.7 replaces it entirely. Two of its properties
 > are deliberate and would be defects in the real path: it does not switch

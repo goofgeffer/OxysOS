@@ -25,7 +25,7 @@
 
 #include <oxys/kernel.h>
 #include <oxys/verify.h>
-#include <oxys/testvolume.h>
+#include "../volume.h"
 #include <oxys/ext2.h>
 #include <oxys/block.h>
 #include <oxys/buffer.h>

@@ -1,7 +1,7 @@
 /* SPDX-FileCopyrightText: 2026 The Oxys-OS Authors */
 /* SPDX-License-Identifier: LGPL-3.0-or-later */
 /*
- * File: kernel/cpu/irq.c
+ * File: kernel/arch/x86_64/interrupt/irq.c
  * Purpose: Implements the interrupt request layer: the table of handlers claimed
  *          by line number rather than by vector, the routing of a request to the
  *          driver that claimed it, the signalling of completion at whichever

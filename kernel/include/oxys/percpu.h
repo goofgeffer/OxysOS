@@ -68,9 +68,9 @@
 /*
  * The state one processor owns.
  *
- * The first two fields are addressed by number from kernel/cpu/syscall_entry.asm
+ * The first two fields are addressed by number from kernel/arch/x86_64/syscall/syscall_entry.asm
  * and the third from the inline assembly of PerCpuCurrent below. All three
- * offsets are asserted in kernel/cpu/percpu.c, because a field inserted above
+ * offsets are asserted in kernel/arch/x86_64/cpu/percpu.c, because a field inserted above
  * them would leave the assembly reading the wrong quadword and the very next
  * instruction of the system-call entry path loads RSP from the first of them —
  * which is a kernel executing upon an address privilege level 3 chose.
@@ -189,7 +189,7 @@ bool PerCpuEstablishSegmentBase(void);
  *
  * The offset is written as a number because there is no way to interpolate
  * offsetof into an assembly template without a compiler-specific operand
- * modifier. It is asserted against the structure in kernel/cpu/percpu.c.
+ * modifier. It is asserted against the structure in kernel/arch/x86_64/cpu/percpu.c.
  */
 static inline PerCpu *PerCpuCurrent(void)
 {

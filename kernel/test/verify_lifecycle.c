@@ -57,7 +57,7 @@
 #include <oxys/memory.h>
 #include <oxys/paging.h>
 #include <oxys/syscall.h>
-#include <oxys/testvolume.h>
+#include "volume.h"
 #include <oxys/vfs.h>
 #include <oxys/block.h>
 

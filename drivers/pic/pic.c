@@ -65,7 +65,7 @@
  *   not of this device: from sub-task 6.12 the same line is delivered by an I/O
  *   APIC upon a machine where this pair has been retired, and a table held here
  *   would have to be read out and carried across, or duplicated. It is therefore
- *   held in kernel/cpu/irq.c, which calls into this file for the two operations
+ *   held in kernel/arch/x86_64/interrupt/irq.c, which calls into this file for the two operations
  *   above and for the mask registers.
  *
  * Concurrency. The mask registers are unsynchronised. Until the interrupt flag is

@@ -1,7 +1,7 @@
 /* SPDX-FileCopyrightText: 2026 The Oxys-OS Authors */
 /* SPDX-License-Identifier: LGPL-3.0-or-later */
 /*
- * File: kernel/cpu/interrupts.c
+ * File: kernel/arch/x86_64/interrupt/interrupts.c
  * Purpose: Installs the 256 interrupt stubs into the descriptor table and
  *          receives control from them, recording the frame and reporting it.
  * Key functions: InterruptInitialise, InterruptDispatch,
@@ -37,7 +37,7 @@
 #include <stddef.h>
 
 /*
- * The addresses of the stubs, defined in kernel/cpu/interrupt_stubs.asm.
+ * The addresses of the stubs, defined in kernel/arch/x86_64/interrupt/interrupt_stubs.asm.
  */
 extern const uint64_t InterruptStubTable[IDT_ENTRY_COUNT];
 
@@ -120,7 +120,7 @@ bool InterruptVectorPushesErrorCode(uint64_t vector)
     /*
      * Per Intel SDM, Volume 3A, Table 6-1. Vectors 21, 29 and 30 are included
      * for the reasons set out in the header comment of
-     * kernel/cpu/interrupt_stubs.asm; this function and the assembly must agree,
+     * kernel/arch/x86_64/interrupt/interrupt_stubs.asm; this function and the assembly must agree,
      * and the self-test compares them.
      */
     switch (vector)
