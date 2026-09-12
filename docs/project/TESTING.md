@@ -155,8 +155,26 @@ cp build/oxys.iso /mnt/c/Users/<user>/oxys-vbox/oxys.iso
 "$VB" startvm "Oxys-OS" --type headless
 ```
 
-The ISO must be staged upon the Windows filesystem and named by a Windows path;
-the same applies to any file the machine is asked to write.
+The medium must be named by a path **the Windows binary can resolve**, and the
+same applies to any file the machine is asked to write. That is not the same as
+requiring the file to be on the Windows filesystem, and this document said it was
+until the claim was tested on 2026-09-12. A WSL2 file is reachable from Windows
+by its UNC path, and VirtualBox accepts one:
+
+```sh
+"$VB" storageattach "Oxys-OS" --storagectl "IDE" --port 0 --device 0 \
+    --type dvddrive --medium '\\wsl.localhost\Ubuntu\home\<user>\oxys-os\build\oxys.iso'
+```
+
+So attached, the image booted, reached the banner and reported all 56 assertions
+sound, and [`TESTING-RECORD.md`](TESTING-RECORD.md) holds the run. What is *not*
+accepted is a WSL2 path written as WSL2 writes it — `/home/<user>/...` or
+`/mnt/c/...` — because the binary is a Windows program.
+
+Copying to the Windows filesystem, as above, therefore remains the simpler
+recipe and is what the examples use; it is a convenience and not a requirement.
+`make run-vbox` names `$(CURDIR)`, which is inside WSL2, and is correct as it
+stands — the target fails on the tool check and not on the path.
 
 ### 4.1 The serial channel under VirtualBox
 
