@@ -23,10 +23,20 @@ as well as validating it — and is described beneath the table.
 ## `builds.sh` — the register, and the one script here that writes a record
 
 [`builds.sh`](builds.sh) keeps the build register: `record` appends a build,
-`query` selects from it, `render` regenerates the human view, `check` validates
-all of it, and `sql` gives SQL where `sqlite3` happens to be installed.
-`make build-record` invokes the first, and `make lint` the fourth by way of
-`check-docs.sh`.
+`query` selects from it, `render` regenerates the human view, `archive` keeps the
+image of a build already recorded, `check` validates all of it, and `sql` gives
+SQL where `sqlite3` happens to be installed. `make build-record` invokes the
+first, and `make lint` the fifth by way of `check-docs.sh`.
+
+**The record and the images are separate, and only one of them is in git.** A row
+describes an image and is not the image; `build/` is ignored and `make clean`
+removes it, so six of the first eight builds were unrecoverable within two days
+of being recorded, and nothing said so. `record --archive` and the `archive`
+subcommand keep the ISO, compressed, under `OXYS_BUILD_ARCHIVE` — `~/oxys-builds`
+by default, outside the working tree, and the script **refuses** a root inside
+one rather than merely advising against it, an ISO in git history being a mistake
+that cannot be taken back. `check` then fails when a row claims an image the
+archive does not hold, and `check --deep` re-hashes the bytes.
 
 It is here rather than anywhere else because it belongs to no phase, as
 everything in this directory does, and because it is the same kind of thing: a

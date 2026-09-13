@@ -47,7 +47,7 @@ the same size when there are ten thousand.
 **A schema.** In a table every field is free text. `passed (55 assertions)`,
 `x86_64-elf-gcc 13.2.0` and a comma-separated list of environments are each one
 opaque string: nothing can be counted, filtered or compared, and nothing prevents
-the next row from spelling any of them differently. The record has twelve
+the next row from spelling any of them differently. The record has thirteen
 columns, three of them drawn from fixed vocabularies, and the count of assertions
 is a number rather than a phrase.
 
@@ -100,7 +100,8 @@ arrangement: **the record is the file, and SQLite is a lens.**
 | `result` | One of `passed`, `failed`, `did-not-boot`, `not-run`, `other`. Taken from the serial log by the same two conditions the `verify` target applies — the banner, and the absence of any verdict of `FAILED` — or supplied with `--result` for a run in an environment that leaves no log. |
 | `assertions` | How many self-tests reported `passed` or `sound`, counted exactly as [`../../tools/check-docs.sh`](../../tools/check-docs.sh) counts them, so that two programs cannot report two numbers for one thing. |
 | `environments` | Semicolon-separated tokens, each a name or `name:outcome` — `QEMU;Bochs;OVMF:did-not-boot`. The outcome is there because an image may pass in one environment and fail in another, which a single `result` column cannot say. [`TESTING.md`](TESTING.md) names five environments and a sixth must not require editing a program. |
-| `note` | Why the build was made. The one field a person writes, and the only one that says anything the other eleven cannot. |
+| `sha256` | The hash of the image, where the image was kept, and `-` where it was not. It is the hash of the **uncompressed** ISO and not of the compressed file in the archive, so that it names the artefact rather than this project's storage of it: were the compression ever changed the hash would still identify the same image, and a hash of the container would silently not. |
+| `note` | Why the build was made. The one field a person writes, and the only one that says anything the other twelve cannot. |
 
 ## Using it
 
@@ -114,6 +115,15 @@ tools/builds.sh query --since 2026-09-01 --last 5 --format md
 tools/builds.sh sql "SELECT * FROM builds WHERE kernel > 2000000"
 tools/builds.sh render                        # regenerate this document's view
 tools/builds.sh check                         # what make lint runs
+tools/builds.sh check --deep                  # and re-hash every archived image
+```
+
+To keep the image as well as the row, and to keep one belonging to a build that
+was recorded before anybody thought to:
+
+```sh
+make build-record ARCHIVE=1 NOTE="what this build is"
+tools/builds.sh archive 9 build/oxys.iso
 ```
 
 An image built somewhere other than `build/` is recorded from where it is, the
@@ -135,6 +145,86 @@ there and the serial log the `verify` target leaves, which is what makes it safe
 to call after any target and after a boot a person observed themselves. A script
 that rebuilt in order to record would be recording something other than what was
 run.
+
+## What is kept, and what became of the first eight builds
+
+A row describes an image. **It is not the image**, and for the first ten builds
+nothing kept the image at all: `build/` is ignored by git and `make clean`
+removes it, so an ISO's life was typically the hour between being recorded and
+the next clean rebuild.
+
+The consequence was found by looking, on 2026-09-12, and it is worth stating
+plainly because the register had been reporting it as a success the whole time:
+
+| Builds | State |
+| ------ | ----- |
+| 1, 2, 4, 5, 6, 8 | **Unrecoverable.** Recorded `dirty=yes`, so the tree they were compiled from was never committed, and their images are gone. Nothing can reconstruct them. |
+| 3, 7 | Image gone, but `dirty=no` — rebuildable from the commit, given the same toolchain. |
+| 9, 10 | Archived, and the only images of this project that still exist. |
+
+Six of the first eight builds, lost inside two days. Build 1 is the one worth
+regretting: it is the first image this project ever numbered, it was exercised in
+four environments — more than anything since — and its `assertions` field reads
+55 where every build after it reads 56, so it is not an older copy of something
+that still exists but a different artefact entirely.
+
+### The two ways a build survives, and why both columns are needed
+
+**`dirty`** answers *can this be rebuilt?* A build recorded against a clean tree
+can be reproduced from its commit whether or not anyone kept the ISO.
+
+**`sha256`** answers *does the image still exist?* An image kept is an image that
+needs no toolchain, no commit and no rebuild to boot.
+
+Neither substitutes for the other. A `dirty=yes` build with no archived image is
+gone; a `dirty=yes` build that *was* archived survives as bytes although its
+source state never will; and a clean build with no image survives as a recipe.
+Only the two columns together say which.
+
+**And the recipe does not recover everything.** Measured on 2026-09-13, by
+building the same clean tree twice:
+
+| Artefact | Reproducible? |
+| -------- | ------------- |
+| `build/oxys.elf` | **Yes, byte for byte.** The compile and the link are deterministic, so a clean build's kernel can be recovered exactly from its commit. |
+| `build/oxys.iso` | **No.** `grub-mkrescue` writes a timestamp and a volume identifier of its own, so two runs over identical input produce different bytes. |
+
+So `dirty=no` guarantees the *kernel* can be brought back and never the *image*.
+An ISO that is not archived is gone in the strict sense even when everything
+needed to build an equivalent one survives — and an equivalent one is not the
+artefact that was booted, which is the distinction a build register exists to
+keep. That is the argument for archiving a clean build's image and not only a
+dirty one's.
+
+### Where the images are, and why not here
+
+`OXYS_BUILD_ARCHIVE`, which defaults to `~/oxys-builds/`. Outside the working
+tree, and [`../../tools/builds.sh`](../../tools/builds.sh) refuses an archive
+root inside one rather than merely recommending against it.
+
+The arithmetic is why. An ISO is about 7 MB and compresses to about 2 MB; at one
+to two builds a day that is roughly a gigabyte a year. This repository's entire
+history is 28 MB. Git keeps a full copy of every binary it has ever seen, for
+ever, and history cannot be rewritten once pushed — so the mistake would be
+permanent and would be paid for by everybody who ever clones the project. A
+check is used rather than a convention because a convention is what somebody
+overrides at the moment it matters.
+
+### Archiving is not the default
+
+`make build-record ARCHIVE=1` keeps the image; plain `make build-record` does
+not. Most builds here are made, verified and discarded within the hour, and
+keeping every one would fill a disk with images nobody will ask for. Which builds
+are worth keeping is a judgement, so it is a flag rather than a policy.
+
+**And keeping is the weaker of the two protections.** The pre-release builds of
+other systems that survive today mostly survive because they were *handed out* —
+conference discs, beta programmes, subscriber downloads — and not because anyone
+curated them; the vendors' own archives have holes. Many copies in many hands
+beats one copy in one directory, and one directory is what this is. The builds of
+this project most likely to exist in ten years are therefore the released ones
+named in [`VERSIONING.md`](VERSIONING.md), Section 11.1, because those are the
+ones that will leave this machine.
 
 ## What a row *is*, and the order of the rows
 

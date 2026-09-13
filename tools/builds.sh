@@ -13,10 +13,12 @@
 #   tools/builds.sh record [options] [note...]   append one build
 #   tools/builds.sh query  [options]             select from the record
 #   tools/builds.sh render                       regenerate BUILDS.md's view
-#   tools/builds.sh check                        validate the record and the view
+#   tools/builds.sh archive <n> <iso>            keep the image of a build already recorded
+#   tools/builds.sh check [--deep]               validate the record, the view and the archive
 #   tools/builds.sh sql <statement>              SQL over the record, if sqlite3 is here
 #
-#   `make build-record NOTE="…"` invokes the first of those.
+#   `make build-record NOTE="…"` invokes the first of those, and
+#   `make build-record ARCHIVE=1 NOTE="…"` keeps the image with it.
 #
 # Why the record is a delimited file and not a Markdown table:
 #
@@ -56,6 +58,30 @@
 #   nothing but text. Nothing here requires sqlite3; only that one subcommand
 #   uses it, and it says so plainly when it is absent.
 #
+# The archive, and why the record alone was not enough:
+#
+#   A row describes an image. It is not the image, and for the first ten builds
+#   nothing kept the image at all — `build/` is ignored by git and `make clean`
+#   removes it, so six of the first eight were unrecoverable within a day of
+#   being recorded. The record said they existed and nothing said they were gone.
+#
+#   `record --archive` and the `archive` subcommand keep the ISO, compressed, in
+#   a directory outside the working tree; the `sha256` column then names what was
+#   kept, and `check` fails when a row claims an image the archive does not hold.
+#   A row whose hash is `-` claims nothing, which is the honest state for a build
+#   whose image was thrown away.
+#
+#   OXYS_BUILD_ARCHIVE selects the directory and defaults to ~/oxys-builds. It
+#   must be outside the working tree and this script refuses otherwise: at one to
+#   two builds a day an archived image is about a gigabyte a year, and a
+#   gigabyte of ISOs committed to git cannot be taken out again.
+#
+#   Keeping an image is not the same as being able to reproduce one. A build
+#   recorded with `dirty=no` can be rebuilt from its commit whether or not its
+#   image was kept; one recorded `dirty=yes` was compiled from a tree that was
+#   never committed and is gone the moment its image is. The two columns answer
+#   different questions and neither substitutes for the other.
+#
 # What this script does not do:
 #   It does not build anything and it does not run anything. It reads the
 #   artefacts already in the build directory and the serial log the `verify`
@@ -81,8 +107,52 @@ END_MARK='<!-- END GENERATED -->'
 # `number` and not `#` because a leading `#` is this file type's comment
 # character, which the SPDX tag at the head of the record uses; a header whose
 # first field began with one could not be told from a comment.
-COLUMNS='number	date	commit	dirty	compiler	cc_version	kernel	iso	result	assertions	environments	note'
+COLUMNS='number	date	commit	dirty	compiler	cc_version	kernel	iso	result	assertions	environments	sha256	note'
 RESULTS='passed failed did-not-boot not-run other'
+
+# ------------------------------------------------------------------------------
+# Where the images themselves are kept.
+#
+# The record names an image; this is where the image is. They are separate
+# because they have opposite storage properties: the record is small, textual
+# and belongs in git forever, and an ISO is seven megabytes of binary that git
+# would keep a full copy of for the rest of the repository's life. At one to two
+# builds a day that is about a gigabyte a year appended to a history that cannot
+# be rewritten, against a repository presently 28 MB entire.
+#
+# So the archive is outside the working tree, and this script refuses to put it
+# inside one. That refusal is a check rather than a convention because a default
+# that is merely documented is a default somebody overrides at the moment it
+# matters, and the consequence here — a binary in git history — is the kind that
+# cannot be undone.
+# ------------------------------------------------------------------------------
+
+ARCHIVE_ROOT="${OXYS_BUILD_ARCHIVE:-$HOME/oxys-builds}"
+
+archive_root_is_safe() {
+    local root resolved tree
+    root="$ARCHIVE_ROOT"
+    resolved="$(cd "$(dirname "$root")" 2>/dev/null && pwd)/$(basename "$root")"
+    tree="$(git rev-parse --show-toplevel 2>/dev/null)"
+
+    [ -n "$tree" ] || return 0
+
+    case "$resolved/" in
+    "$tree"/*)
+        fail "the archive root $resolved is inside the working tree $tree."
+        fail 'Set OXYS_BUILD_ARCHIVE to a path outside it; an ISO in git history cannot be removed.'
+        return 1
+        ;;
+    esac
+    return 0
+}
+
+# The name an image is kept under. The build number is what joins it to the
+# record; the commit and the compiler are there so that a directory listing is
+# readable without opening the register beside it.
+archive_path() {
+    printf '%s/oxys-%04d-%s-%s.iso.xz\n' "$ARCHIVE_ROOT" "$1" "$2" "$3"
+}
 
 fail() {
     printf 'ERROR    %s\n' "$1" >&2
@@ -115,7 +185,7 @@ sanitise() {
 
 do_record() {
     local build_dir="${BUILD_DIR:-build}"
-    local environments='' result='' assertions='' note=''
+    local environments='' result='' assertions='' note='' archive=0 sha256='-'
     local kernel iso commit dirty compiler cc_version cc_line number row
 
     while [ "$#" -gt 0 ]; do
@@ -134,6 +204,10 @@ do_record() {
             [ "$#" -ge 2 ] || { fail '--assertions needs a number.'; return 2; }
             assertions="$2"
             shift 2
+            ;;
+        --archive)
+            archive=1
+            shift
             ;;
         --build-dir)
             [ "$#" -ge 2 ] || { fail '--build-dir needs a path.'; return 2; }
@@ -214,7 +288,41 @@ do_record() {
     *) fail "'$result' is not one of: $RESULTS"; return 2 ;;
     esac
 
-    row="$number	$(date -u '+%Y-%m-%dT%H:%MZ')	$commit	$dirty	$compiler	$cc_version	$kernel	$iso	$result	$assertions	$(sanitise "$environments")	$(sanitise "$note")"
+    # The image itself, where it was asked for.
+    #
+    # The hash is of the **uncompressed** ISO and not of the file kept on disk,
+    # because it identifies the artefact rather than this script's storage of it:
+    # were the compression ever changed the hash would still name the same image,
+    # and a hash of the container would silently not.
+    if [ "$archive" -eq 1 ]; then
+        local source destination
+        source="$build_dir/oxys.iso"
+
+        archive_root_is_safe || return 1
+
+        if [ ! -f "$source" ]; then
+            fail "$source does not exist; there is no image to archive."
+            return 1
+        fi
+
+        command -v xz >/dev/null || { fail 'xz is not installed.'; return 1; }
+        command -v sha256sum >/dev/null || { fail 'sha256sum is not installed.'; return 1; }
+
+        sha256="$(sha256sum "$source" | cut -d' ' -f1)"
+        destination="$(archive_path "$number" "$commit" "$compiler")"
+
+        mkdir -p "$ARCHIVE_ROOT" || return 1
+        if ! xz -9 -c "$source" > "$destination"; then
+            fail "could not write $destination."
+            rm -f "$destination"
+            return 1
+        fi
+
+        printf 'Archived %s -> %s (%s bytes compressed).\n' \
+            "$source" "$destination" "$(wc -c < "$destination")"
+    fi
+
+    row="$number	$(date -u '+%Y-%m-%dT%H:%MZ')	$commit	$dirty	$compiler	$cc_version	$kernel	$iso	$result	$assertions	$(sanitise "$environments")	$sha256	$(sanitise "$note")"
 
     printf '%s\n' "$row" >> "$RECORD"
 
@@ -222,6 +330,67 @@ do_record() {
 
     printf 'Recorded build %d.\n' "$number"
     printf '%s\n' "$row" | awk -F'\t' '{ for (i = 1; i <= NF; ++i) printf "  %s\n", $i }'
+}
+
+# =============================================================== archive
+
+# Keep the image of a build that was recorded without one.
+#
+# `record --archive` is the ordinary path and archives at the moment of
+# recording. This is the other one: an image still sitting in a build directory
+# whose row was written before it could be kept, or before this script could
+# keep anything. It exists because the first ten builds were recorded without
+# it, and two of their images were still on disk when it was written.
+#
+# It refuses a row that already carries a hash. Re-archiving would either write
+# the same bytes again or, worse, quietly replace the image a hash was computed
+# from with a different one — and a record that can be made to disagree with
+# itself by running a command twice is not a record.
+do_archive() {
+    local number="${1:-}" source="${2:-}"
+    local commit compiler recorded destination hash temporary
+
+    case "$number" in
+    ''|*[!0-9]*) fail 'archive needs a build number: tools/builds.sh archive 9 build/oxys.iso'; return 2 ;;
+    esac
+    [ -n "$source" ] || { fail 'archive needs the path of the image.'; return 2; }
+    [ -f "$source" ] || { fail "$source does not exist."; return 1; }
+
+    archive_root_is_safe || return 1
+    command -v xz >/dev/null || { fail 'xz is not installed.'; return 1; }
+    command -v sha256sum >/dev/null || { fail 'sha256sum is not installed.'; return 1; }
+
+    commit="$(rows | awk -F'\t' -v n="$number" '$1 == n { print $3 }')"
+    compiler="$(rows | awk -F'\t' -v n="$number" '$1 == n { print $5 }')"
+    recorded="$(rows | awk -F'\t' -v n="$number" '$1 == n { print $12 }')"
+
+    [ -n "$commit" ] || { fail "the record has no build $number."; return 1; }
+
+    if [ "$recorded" != '-' ]; then
+        fail "build $number already records an archived image ($recorded)."
+        return 1
+    fi
+
+    hash="$(sha256sum "$source" | cut -d' ' -f1)"
+    destination="$(archive_path "$number" "$commit" "$compiler")"
+
+    mkdir -p "$ARCHIVE_ROOT" || return 1
+    if ! xz -9 -c "$source" > "$destination"; then
+        fail "could not write $destination."
+        rm -f "$destination"
+        return 1
+    fi
+
+    temporary="$(mktemp)" || return 1
+    awk -F'\t' -v OFS='\t' -v n="$number" -v h="$hash" \
+        '!/^#/ && $1 == n { $12 = h } { print }' "$RECORD" > "$temporary"
+    mv "$temporary" "$RECORD"
+
+    do_render || return 1
+
+    printf 'Archived build %s: %s -> %s\n' "$number" "$source" "$destination"
+    printf '  sha256 %s\n  %s bytes compressed from %s\n' \
+        "$hash" "$(wc -c < "$destination")" "$(wc -c < "$source")"
 }
 
 # =============================================================== query
@@ -282,7 +451,7 @@ do_query() {
                    $1, $2, $3, ($4 == "yes" ? " *(modified)*" : ""),
                    $5, $6, $7, $8, $9,
                    ($10 == "-" ? "" : " (" $10 " assertions)"),
-                   $11, $12
+                   $11, $13
         }' || true
         ;;
     table)
@@ -369,7 +538,8 @@ do_render() {
 # =============================================================== check
 
 do_check() {
-    local errors=0 temporary
+    local errors=0 temporary deep=0
+    [ "${1:-}" = "--deep" ] && deep=1
 
     if [ ! -f "$RECORD" ]; then
         fail "$RECORD does not exist."
@@ -389,8 +559,8 @@ do_check() {
     # view, and a view generated from an unreadable record is silently wrong.
     local report
     report="$(rows | awk -F'\t' -v results=" $RESULTS " '
-        NF != 12 {
-            printf "row %s: %d fields where the schema has 12.\n", $1, NF; bad = 1; next
+        NF != 13 {
+            printf "row %s: %d fields where the schema has 13.\n", $1, NF; bad = 1; next
         }
         {
             if ($1 + 0 != expected && expected != 0) {
@@ -442,6 +612,44 @@ do_check() {
 
     rm -f "$temporary"
 
+
+    # And that every image the record claims to have kept is still there.
+    #
+    # This is what turns the register from an account of what happened into an
+    # account of what still exists. A row whose sha256 is "-" claims nothing and
+    # is not checked; a row carrying a hash claims the image was archived, and a
+    # claim nothing verifies is how six of the first eight builds came to be
+    # unrecoverable without anyone noticing until they were looked for.
+    #
+    # Presence is checked here and the hash is not, deliberately. Verifying a
+    # hash means decompressing every archived image on every `make lint`, which
+    # is tenths of a second today and half a minute at five hundred builds — and
+    # a check slow enough to be skipped is a check nobody runs, which is the
+    # rule the whole of tools/ is built on. `check --deep` verifies the bytes;
+    # run it when bit rot rather than an accidental delete is the worry.
+    if [ -n "$(rows | awk -F'\t' '$12 != "-"')" ]; then
+        while IFS=$'\t' read -r number _ commit _ compiler _; do
+            [ -n "$number" ] || continue
+            local kept
+            kept="$(archive_path "$number" "$commit" "$compiler")"
+
+            if [ ! -f "$kept" ]; then
+                fail "build $number records an archived image, but $kept is not there."
+                errors=$(( errors + 1 ))
+                continue
+            fi
+
+            if [ "$deep" -eq 1 ]; then
+                local recorded actual
+                recorded="$(rows | awk -F'\t' -v n="$number" '$1 == n { print $12 }')"
+                actual="$(xz -dc "$kept" 2>/dev/null | sha256sum | cut -d' ' -f1)"
+                if [ "$recorded" != "$actual" ]; then
+                    fail "build $number: $kept hashes to $actual, and the record says $recorded."
+                    errors=$(( errors + 1 ))
+                fi
+            fi
+        done < <(rows | awk -F'\t' -v OFS='\t' '$12 != "-" { print $1, $2, $3, $4, $5, $6 }')
+    fi
     [ "$errors" -eq 0 ]
 }
 
@@ -472,7 +680,7 @@ do_sql() {
     rows | sqlite3 "$database" \
         'CREATE TABLE builds (number INTEGER, date TEXT, "commit" TEXT, dirty TEXT,
            compiler TEXT, cc_version TEXT, kernel INTEGER, iso INTEGER,
-           result TEXT, assertions TEXT, environments TEXT, note TEXT);
+           result TEXT, assertions TEXT, environments TEXT, sha256 TEXT, note TEXT);
          .mode tabs
          .import /dev/stdin builds' 2>/dev/null
 
@@ -489,7 +697,8 @@ case "${1:-}" in
 record) shift; do_record "$@" ;;
 query)  shift; do_query "$@" ;;
 render) shift; do_render && printf 'Rendered %s from %s.\n' "$VIEW" "$RECORD" ;;
-check)  shift; do_check ;;
+archive) shift; do_archive "$@" ;;
+check)  shift; do_check "$@" ;;
 sql)    shift; do_sql "$@" ;;
 ''|-h|--help|help) usage ;;
 *)      fail "unknown subcommand '$1'"; usage >&2; exit 2 ;;

@@ -487,6 +487,14 @@ lint: spdx-check docs-check
 # build was made. ENVIRONMENT, RESULT and ASSERTIONS are for a run this project
 # cannot observe from the repository — under VirtualBox, or upon real hardware.
 #
+# ARCHIVE=1 keeps the image as well as the row. It is not the default, and the
+# reason is that `clean` exists: most builds here are made, verified and thrown
+# away within the hour, and archiving every one of them would fill a disk with
+# images nobody will ever ask for. The images worth keeping are the ones that
+# left the machine or that somebody made an observation about — which is a
+# judgement, so it is a flag. docs/project/BUILDS.md, Section *What is kept*,
+# records what happened when nothing was kept at all.
+#
 #   make build-record NOTE="sub-task 7.2, first image with the wrappers"
 #   make build-record ENVIRONMENT=Bochs NOTE="the same image under Bochs"
 #   BUILD_DIR=build-clang make build-record ENVIRONMENT=QEMU NOTE="by the second compiler"
@@ -501,12 +509,14 @@ NOTE        :=
 ENVIRONMENT :=
 RESULT      :=
 ASSERTIONS  :=
+ARCHIVE     :=
 
 build-record:
 	@BUILD_DIR=$(BUILD_DIR) tools/builds.sh record \
 		$(if $(ENVIRONMENT),--environment "$(ENVIRONMENT)") \
 		$(if $(RESULT),--result "$(RESULT)") \
 		$(if $(ASSERTIONS),--assertions "$(ASSERTIONS)") \
+		$(if $(ARCHIVE),--archive) \
 		$(if $(NOTE),"$(NOTE)")
 
 # ------------------------------------------------------------------------------
