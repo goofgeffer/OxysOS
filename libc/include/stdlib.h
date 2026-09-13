@@ -5,7 +5,8 @@
  * Purpose: Declares the memory management functions of ISO/IEC 9899:2011,
  *          Section 7.22.3, as this library implements them — and states, at its
  *          head, which of that subsection is absent and what it is waiting for.
- * Key definitions: malloc, calloc, realloc, free.
+ * Key definitions: malloc, calloc, realloc, free, atexit, exit, _Exit, abort,
+ *          EXIT_SUCCESS, EXIT_FAILURE.
  * References:
  *   - ISO/IEC 9899:2011, Section 7.22.3: the memory management functions, their
  *     alignment guarantee, and the rule that the order and contiguity of
@@ -23,12 +24,21 @@
  * This header is not <stdlib.h> as a hosted implementation provides it. ISO/IEC
  * 9899:2011, Section 4, paragraph 6, does not require a freestanding
  * implementation to provide the header at all, and this library provides the
- * part of it sub-task 7.3 is: the four memory management functions of Section
- * 7.22.3 and nothing else. Absent are the string conversions of 7.22.1, the
- * pseudo-random sequence of 7.22.2, the communication with the environment of
- * 7.22.4, the searching and sorting of 7.22.5, the integer arithmetic of 7.22.6
+ * part of it two sub-tasks have needed: the four memory management functions of
+ * Section 7.22.3, which are sub-task 7.3, and four of the six termination
+ * functions of Section 7.22.4, which sub-task 7.5's startup object required.
+ *
+ * Absent are the string conversions of 7.22.1, the pseudo-random sequence of
+ * 7.22.2, the searching and sorting of 7.22.5, the integer arithmetic of 7.22.6
  * and the multibyte conversions of 7.22.7 and 7.22.8. Each arrives with the
- * sub-task that needs it, and none of them is needed by a heap.
+ * sub-task that needs it.
+ *
+ * **getenv and system are the two of 7.22.4 that are not here**, and neither is
+ * an oversight. `getenv` searches an environment, and this kernel's `execve`
+ * refuses an environment vector — there being no convention yet fixed for where
+ * a program finds its strings upon the stack — so a `getenv` here could only
+ * ever return a null pointer, which is a function that can only fail. `system`
+ * runs a command interpreter, and Phase 8 is where one is built.
  *
  * The types <stdlib.h> is required to define — size_t, wchar_t, div_t, ldiv_t,
  * lldiv_t — are likewise not all here. size_t is obtained from <stddef.h>, which
@@ -119,5 +129,76 @@ void *realloc(void *pointer, size_t size);
  * corrupts itself silently is the most expensive failure a C program has.
  */
 void free(void *pointer);
+
+/* -------------------------------------------------------------------------
+ * 7.22.4: communication with the environment, as sub-task 7.5 needs it.
+ * ------------------------------------------------------------------------- */
+
+/*
+ * 7.22.4.4, paragraph 5, and 7.22.4.5: the two values that may be passed to
+ * `exit` with an implementation-defined meaning of successful and unsuccessful
+ * termination.
+ *
+ * Zero and EXIT_SUCCESS both mean success, which paragraph 5 requires. This
+ * kernel has no convention of its own about what a status means — `wait` hands
+ * the parent whatever the child passed — so the meaning here is the standard's
+ * and nothing is lost in translation.
+ */
+#define EXIT_SUCCESS 0
+#define EXIT_FAILURE 1
+
+/*
+ * 7.22.4.2: registers a function to be called at normal program termination.
+ *
+ * The standard requires at least 32 registrations to succeed, and this
+ * implementation provides exactly that: they are an array in `.bss`, there being
+ * no allocator a program is obliged to have. Returns zero upon success and a
+ * non-zero value where the registration could not be made.
+ *
+ * The functions are called in the reverse of the order they were registered,
+ * which paragraph 3 requires and which is the only order that lets a later
+ * registration depend upon an earlier one — the thing registered second is torn
+ * down first, exactly as a stack unwinds.
+ */
+int atexit(void (*function)(void));
+
+/*
+ * 7.22.4.4: causes normal program termination.
+ *
+ * The functions registered by `atexit` are called, in reverse order; then every
+ * stream with unwritten data is flushed; then the program ends with `status`.
+ * **The order is the standard's and it matters**: a registered function that
+ * writes a diagnostic must have its output flushed, so the flush comes after
+ * the calls and not before.
+ *
+ * It does not return, and a second call from within a registered function has
+ * undefined behaviour under paragraph 2. This implementation defines it: the
+ * second call ends the program immediately without calling anything further,
+ * because the alternative is a registered function that calls `exit` and is
+ * called again, which is a loop with no way out and no report.
+ */
+_Noreturn void exit(int status);
+
+/*
+ * 7.22.4.5: causes normal program termination without calling any function
+ * registered by `atexit`, and without — in this implementation — flushing any
+ * stream.
+ *
+ * Paragraph 2 leaves it implementation-defined whether streams are flushed. They
+ * are not, and that is the point of the function: it is what `exit` ends with,
+ * and it is what a program calls when it has reason to believe the library's own
+ * state is no longer trustworthy.
+ */
+_Noreturn void _Exit(int status);
+
+/*
+ * 7.22.4.1: causes abnormal program termination.
+ *
+ * ISO C makes this raise `SIGABRT`; this system has no signals, so it ends the
+ * program with EXIT_FAILURE and does so without flushing anything, which
+ * paragraph 2 leaves implementation-defined. Nothing registered by `atexit` is
+ * called, which paragraph 2 requires.
+ */
+_Noreturn void abort(void);
 
 #endif /* OXYS_LIBC_STDLIB_H */

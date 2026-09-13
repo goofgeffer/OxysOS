@@ -162,6 +162,15 @@ The composing writes little-endian bytes with its own routines rather than
 sharing the loader's. If the two shared a helper with the byte order wrong they
 would compose and decode consistently and assert nothing at all.
 
+**Since sub-task 7.5 a real executable is loaded as well**, and it is the
+complement of the paragraph above rather than a replacement for it. The composed
+images assert every refusal, because only a composed image can be malformed on
+purpose; the linked program of `userland/startup-check/` asserts the opposite
+property — that an image a toolchain actually produces is one this loader accepts,
+with the segment table, the page-aligned `PT_LOAD` triple and the `.bss` a real
+link emits. Neither could stand in for the other:
+[`LIBC.md`](LIBC.md), Section 11.5, holds the assertions made upon it.
+
 | Property asserted | The silent failure it would catch |
 | ----------------- | --------------------------------- |
 | Each of the eleven refusals of Section 4, **by name** | A loader that refused everything would satisfy a test that only checked *that* it refused. Naming the result asserts that the kernel can tell "not for this machine" from "not a file", which is the difference between two quite different things to tell whoever is reading |
@@ -236,11 +245,16 @@ the loader did, it would have passed and established nothing.
    and not applied: it needs `IA32_EFER.NXE`, which arrives with SMEP and SMAP at
    sub-task 13.3. Until then every mapped page is executable, so a data segment
    is executable too.
-5. **No arguments, no environment.** The loader places the image and reports
-   where to begin. The stack is now the process's, `ProcessCreateUserStack`
-   having arrived at sub-task 6.9; what a program is *told* when it starts —
-   its arguments and its environment — is written onto that stack by whatever
-   starts it, which is sub-task 6.11's `execve`.
+5. **No arguments, no environment — and since sub-task 7.5 the frame they would
+   stand in.** The loader places the image and reports where to begin; the stack
+   is the process's, `ProcessCreateUserStack` having arrived at sub-task 6.9. That
+   function now leaves the six eightbytes the System V ABI, Section 3.4.1,
+   requires at the stack pointer — the argument count, both vector terminators
+   and the auxiliary vector's — so a conforming `_start` reads them rather than
+   faulting. Every one of them is zero, because this kernel's `execve` accepts
+   neither vector; what is still absent is any convention for where the *strings*
+   go, which is what would make the count something other than zero. See
+   [`PROCESS.md`](PROCESS.md), Section 10.2.
 6. **A partly loaded address space is not cleaned up.** Failure returns and the
    space is the caller's to destroy, because destroying it here would mean a
    loader that frees an address space it did not create.
@@ -249,7 +263,7 @@ the loader did, it would have passed and established nothing.
    composed, wrapped in an ELF image, loaded by this loader into an address space
    of its own, and entered at privilege level 3, where it writes a string through
    a system call and then faults on purpose. See
-   [`PROCESS.md`](PROCESS.md), Section 10.2. What has not happened is a program
+   [`PROCESS.md`](PROCESS.md), Section 10. What has not happened is a program
    loaded **from a volume** — `ElfLoadFile` exists and the self-test composes its
    image in memory, there being no executable upon any volume this kernel mounts
    until the userland of Phase 7.

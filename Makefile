@@ -46,6 +46,10 @@
 CROSS_PREFIX := x86_64-elf-
 CC           := $(CROSS_PREFIX)gcc
 LD           := $(CROSS_PREFIX)ld
+# The archiver, added at sub-task 7.5: the C library is collected into an archive
+# that user programs link against, which is the first thing this project has
+# built that is neither an object nor an image.
+AR           := $(CROSS_PREFIX)ar
 OBJCOPY      := $(CROSS_PREFIX)objcopy
 NASM         := nasm
 GRUB_MKRESCUE := grub-mkrescue
@@ -148,7 +152,8 @@ LIBC_SOURCES := libc/string/copying.c \
                 libc/stdlib/system.c \
                 libc/stdio/stream.c \
                 libc/stdio/format.c \
-                libc/stdio/system.c
+                libc/stdio/system.c \
+                libc/stdlib/exit.c
 
 # The C library's one assembly translation unit, which is the system-call
 # instruction itself.
@@ -200,6 +205,7 @@ C_SOURCES := kernel/kernel.c \
              kernel/test/libc/wrappers.c \
              kernel/test/libc/heap.c \
              kernel/test/libc/stdio.c \
+             kernel/test/libc/startup.c \
              kernel/mm/pmm.c \
              kernel/mm/vmm.c \
              kernel/mm/heap.c \
@@ -272,6 +278,7 @@ ASM_SOURCES := boot/boot.asm \
                kernel/arch/x86_64/smp/smp_trampoline.asm \
                kernel/arch/x86_64/syscall/syscall_entry.asm \
                kernel/arch/x86_64/proc/switch.asm \
+               kernel/test/libc/startup_image.asm \
                $(LIBC_ASM_SOURCES)
 
 OBJECTS := $(patsubst %.c,$(BUILD_DIR)/%.c.o,$(C_SOURCES)) \
@@ -341,6 +348,148 @@ $(BUILD_DIR)/kernel/test/libc/%.c.o: kernel/test/libc/%.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) $(LIBC_INCLUDE_DIRS) -MMD -MP -MF $(patsubst %.o,%.d,$@) -c $< -o $@
 
+# ------------------------------------------------------------------------------
+# The user-mode build of sub-task 7.5.
+#
+# The same C library sources are compiled a second time, with the flags a program
+# requires rather than the kernel's, and collected into an archive a program links
+# against. docs/design/LIBC.md, Section 7, foresaw this: it is why LIBC_SOURCES is
+# a list of its own rather than merged into C_SOURCES.
+#
+# **The flag that had to change is -mcmodel=kernel**, and the reason is not the
+# one first written here. That note said an object compiled with it "carries
+# relocations that cannot be satisfied, and the linker says so"; the negative
+# test that put the flag back found otherwise — the program links, boots and
+# passes every assertion. The measurement is this: the model emits R_X86_64_32S
+# relocations, which hold a signed 32-bit address, and a program linked at four
+# mebibytes has every address well inside that range. The relocations are
+# satisfiable by arithmetic accident.
+#
+# It is still wrong, and what it asserts is what matters. -mcmodel=kernel tells
+# the compiler that every symbol lies in the topmost two gibibytes of the address
+# space; that statement is false of a program at four mebibytes, and a compiler
+# entitled to rely upon a false statement is a compiler entitled to any code
+# generation it likes. Nothing here has yet depended upon it, and the day
+# something does — a program linked above two gibibytes, a large static object,
+# an optimiser that folds an address comparison — the failure arrives with
+# nothing to connect it to a build flag.
+#
+# So the user model is the default `small`, which is a true statement about an
+# image at a fixed low address. -mno-red-zone is kept, and for a different reason
+# than the kernel's: the kernel forbids the red zone because an interrupt may
+# arrive upon any stack at any instruction, and a program could safely use it
+# here, this system having no signals. It costs a hundred and twenty-eight bytes
+# of stack per frame and removes a difference between the two compilations that
+# nothing needs.
+#
+# There is no target of its own for any of this, and that is deliberate rather
+# than an omission. The programs are embedded in the kernel image — the self-test
+# of sub-task 7.5 reads one from a volume it composes — so they are a dependency
+# of the image exactly as build/trampoline.bin is, and are built by `make all`
+# without anybody having to remember a second command. A phony target would also
+# have had to be added to PROJECT_GUIDELINES.md, Section 3, which Section 7 of
+# that document permits only by explicit decision of the project owner.
+# ------------------------------------------------------------------------------
+
+USER_DIR := $(BUILD_DIR)/user
+
+# The kernel's regime, less the code model, plus the C library's include root.
+# Every diagnostic flag is kept: a program built here is held to the standard the
+# kernel is held to, and the first program this project compiled would otherwise
+# be the first one nobody checked.
+USER_CFLAGS := -std=c11 -pedantic \
+               -ffreestanding -fno-builtin -fno-stack-protector -fno-pic -fno-pie \
+               -mno-red-zone -mno-mmx -mno-sse -mno-sse2 -mno-80387 \
+               -Wall -Wextra -Werror \
+               -Wshadow -Wpointer-arith -Wcast-align -Wstrict-prototypes \
+               -Wmissing-prototypes -Wredundant-decls -Wwrite-strings \
+               -O2 -g \
+               $(INCLUDE_DIRS) $(LIBC_INCLUDE_DIRS)
+
+# `-n` is what keeps the image small, and the measurement is recorded here
+# because the first version of this line got the attribution wrong.
+#
+# It tells the linker not to page-align the sections within the *file*. Without
+# it this program's ELF is 26,056 bytes stripped; with it, 17,832 — the
+# difference being padding between segments that exists so that a demand-paged
+# loader can map a file offset straight to a page, which this kernel does not do:
+# kernel/exec/elf.c copies bytes into frames it allocates itself.
+#
+# **`-z max-page-size=0x1000` was here too and has been removed.** It was written
+# on the belief that it prevents the linker aligning segments to two mebibytes,
+# and the four combinations were measured: with `-T libc/user.ld` the flag
+# changes the output by not one byte, because the explicit `ALIGN(4K)` in that
+# script has already fixed every segment's virtual address. It would matter to a
+# link that did not use this script, and this build has no such link. A flag that
+# does nothing is a flag somebody will one day reason from.
+USER_LDFLAGS := -n -T libc/user.ld
+
+USER_LIBC_OBJECTS := $(patsubst %.c,$(USER_DIR)/%.c.o,$(LIBC_SOURCES)) \
+                     $(patsubst %.asm,$(USER_DIR)/%.asm.o,$(LIBC_ASM_SOURCES))
+
+USER_LIBC_ARCHIVE := $(USER_DIR)/liboxys.a
+USER_CRT0         := $(USER_DIR)/crt0.o
+
+$(USER_DIR)/%.c.o: %.c
+	@mkdir -p $(dir $@)
+	$(CC) $(USER_CFLAGS) -MMD -MP -MF $(patsubst %.o,%.d,$@) -c $< -o $@
+
+$(USER_DIR)/%.asm.o: %.asm
+	@mkdir -p $(dir $@)
+	$(NASM) $(ASFLAGS) $< -o $@
+
+# `rcs` rather than `rc`: the index is what lets the linker pull a member in to
+# satisfy a reference, and an archive without one links only if every member
+# happens to be named before the reference to it.
+$(USER_LIBC_ARCHIVE): $(USER_LIBC_OBJECTS)
+	@mkdir -p $(dir $@)
+	$(AR) rcs $@ $(USER_LIBC_OBJECTS)
+
+$(USER_CRT0): libc/crt/crt0.asm
+	@mkdir -p $(dir $@)
+	$(NASM) $(ASFLAGS) $< -o $@
+
+# One rule per program, because a program is a directory of sources and not a
+# file. There is one program at sub-task 7.5; sub-task 7.6 adds five, and the
+# shape they will take is this one repeated.
+#
+# The archive is named *after* the program's objects, which is not a style
+# choice: a linker resolves an archive's members against the references it has
+# already seen, so an archive named first contributes nothing.
+USER_STARTUP_CHECK_SOURCES := userland/startup-check/main.c
+USER_STARTUP_CHECK_OBJECTS := $(patsubst %.c,$(USER_DIR)/%.c.o,$(USER_STARTUP_CHECK_SOURCES))
+USER_STARTUP_CHECK         := $(USER_DIR)/startup-check.elf
+
+$(USER_STARTUP_CHECK): $(USER_CRT0) $(USER_STARTUP_CHECK_OBJECTS) \
+                       $(USER_LIBC_ARCHIVE) libc/user.ld
+	@mkdir -p $(dir $@)
+	$(LD) $(USER_LDFLAGS) -o $@ $(USER_CRT0) $(USER_STARTUP_CHECK_OBJECTS) \
+		$(USER_LIBC_ARCHIVE)
+	@echo "Linked the user program $@."
+
+
+# The copy that is embedded in the kernel image, with every symbol and every line
+# of debugging information removed.
+#
+# `build/user/startup-check.elf` keeps its DWARF, because that is the file a
+# debugger is pointed at. The kernel image carries this one instead, and the
+# difference is most of the file: the loader reads the program header table and
+# the loadable segments, and a section table describing where a local variable
+# lived is eighty kibibytes it will never look at. Sub-task 7.6 adds five more
+# programs, so the difference is the whole of that, six times over.
+#
+# --strip-all rather than --strip-debug: a symbol table is for a linker and for a
+# debugger, and this copy is read by neither.
+$(USER_DIR)/%.embed.elf: $(USER_DIR)/%.elf
+	@mkdir -p $(dir $@)
+	$(OBJCOPY) --strip-all $< $@
+USER_DEPENDENCIES := $(patsubst %.c,$(USER_DIR)/%.c.d,$(LIBC_SOURCES)) \
+                     $(patsubst %.c,$(USER_DIR)/%.c.d,$(USER_STARTUP_CHECK_SOURCES))
+
+# The self-test of sub-task 7.5 embeds the linked program with `incbin`, exactly
+# as kernel/arch/x86_64/smp/smp_trampoline.asm embeds the real-mode trampoline, so
+# the image must exist before that translation unit is assembled.
+$(BUILD_DIR)/kernel/test/libc/startup_image.asm.o: $(USER_DIR)/startup-check.embed.elf
 $(BUILD_DIR)/%.asm.o: %.asm
 	@mkdir -p $(dir $@)
 	$(NASM) $(ASFLAGS) $< -o $@
@@ -528,7 +677,7 @@ build-record:
 # ------------------------------------------------------------------------------
 
 toolcheck:
-	@for tool in $(CC) $(LD) $(NASM) $(GRUB_MKRESCUE) $(QEMU) xorriso; do \
+	@for tool in $(CC) $(LD) $(AR) $(NASM) $(GRUB_MKRESCUE) $(QEMU) xorriso; do \
 		if command -v $$tool >/dev/null; then \
 			echo "PRESENT: $$tool"; \
 		else \
@@ -590,16 +739,30 @@ CLANG_TARGET := x86_64-elf
 #   it here would mean maintaining two lists of which files are which.
 CLANG_FLAGS  := --target=$(CLANG_TARGET) $(CFLAGS) $(LIBC_INCLUDE_DIRS) \
                 -Wno-cast-align
+#   The user programs of sub-task 7.5 are compiled too, and with a second flag
+#   set rather than the one above: they are not built with -mcmodel=kernel, and
+#   compiling them as though they were would be checking a translation unit this
+#   project never produces. It is the same argument the target itself rests upon
+#   — a compiler that shares none of the first one's assumptions refuses
+#   different things — applied to the one part of the source that has two
+#   compilations.
+CLANG_USER_FLAGS := --target=$(CLANG_TARGET) $(USER_CFLAGS)
+
+USER_SOURCES := $(USER_STARTUP_CHECK_SOURCES)
 
 clang-check:
 	@command -v $(CLANG) >/dev/null \
 		|| (echo "ERROR: $(CLANG) was not found upon the PATH, and this target requires it." \
 		    && echo "It is optional: nothing else in this Makefile uses it." && false)
 	@echo "Second compiler: $$($(CLANG) --version | head -1)"
-	@echo "Compiling $(words $(C_SOURCES)) translation units for their diagnostics."
+	@echo "Compiling $(words $(C_SOURCES)) kernel and library translation units, and $(words $(USER_SOURCES)) user one(s), for their diagnostics."
 	@for source in $(C_SOURCES); do \
 		$(CLANG) $(CLANG_FLAGS) -c $$source -o /dev/null || exit 1; \
+	done
+	@for source in $(USER_SOURCES); do \
+		$(CLANG) $(CLANG_USER_FLAGS) -c $$source -o /dev/null || exit 1; \
 	done
 	@echo "CLANG CHECK SUCCEEDED: every translation unit compiles without diagnostics."
 
 -include $(DEPENDENCIES)
+-include $(USER_DEPENDENCIES)

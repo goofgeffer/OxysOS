@@ -2,7 +2,7 @@
 <!-- SPDX-License-Identifier: CC0-1.0 -->
 # The C Library
 
-**Phase**: 7, sub-tasks 7.1, 7.2, 7.3 and 7.4, of [`../project/PLAN.md`](../project/PLAN.md).
+**Phase**: 7, sub-tasks 7.1 to 7.5, of [`../project/PLAN.md`](../project/PLAN.md).
 
 **Sub-task 7.1** is Sections 2 to 7. Section 2 is the division of the system-call
 header, which is not part of 7.1 but was required to happen before 7.2 and is
@@ -30,6 +30,15 @@ the verification, including the sixty-six conversions checked against an
 implementation this project did not write, and Section 10.8 the twenty negative
 tests, of which four found gaps in the assertions and two found something no
 assertion here can defend.
+
+**Sub-task 7.5** is Section 11: the runtime startup object, the termination
+functions it ends through, the link procedure, and the kernel's half of the
+process-entry contract. Section 11 opens with the table of four limitations
+earlier sub-tasks recorded and this one closes. Section 11.5 is the verification
+— which is in two places, the program asserting what only a program can reach and
+the kernel asserting the status it ended with — and Section 11.7 the fifteen
+negative tests, of which four found something and three of those were answered by
+correcting a claim rather than the code.
 
 **Authority**: `PROJECT_GUIDELINES.md`, Sections 2, 3, 4 and 6; and
 [`../../LICENSING.md`](../../LICENSING.md), Section 2.1, which named the division
@@ -60,6 +69,16 @@ half in `SyscallDoBrk` and `ProcessSetBreak`. The assertions are
 [`../../kernel/test/libc/heap.c`](../../kernel/test/libc/heap.c), the last
 two composing their programs with
 [`../../kernel/test/program.c`](../../kernel/test/program.c).
+The runtime and the link of Section 11 are
+[`../../libc/crt/crt0.asm`](../../libc/crt/crt0.asm),
+[`../../libc/user.ld`](../../libc/user.ld),
+[`../../libc/stdlib/exit.c`](../../libc/stdlib/exit.c) and the user-mode build
+in the [`../../Makefile`](../../Makefile), with the kernel's half in
+`ProcessCreateUserStack`. The program they produce is
+[`../../userland/startup-check/main.c`](../../userland/startup-check/main.c),
+carried in the image by
+[`../../kernel/test/libc/startup_image.asm`](../../kernel/test/libc/startup_image.asm)
+and run by [`../../kernel/test/libc/startup.c`](../../kernel/test/libc/startup.c).
 The streams of Section 10 are
 [`../../libc/include/stdio.h`](../../libc/include/stdio.h),
 [`../../libc/include/stream.h`](../../libc/include/stream.h),
@@ -72,12 +91,15 @@ no composed program, every stream it opens having a region of memory for a
 device.
 
 **Specifications**: ISO/IEC 9899:2011, Section 7.24 (string handling), Section
-7.5 (`<errno.h>`), Section 7.21 (input and output), Section 7.16 (variable
+7.5 (`<errno.h>`), Section 7.21 (input and output), Section 7.22.4 (termination),
+Section 7.16 (variable
 arguments), Section 7.22.3 (the memory management functions), Section
 6.2.8 (fundamental alignment) and Section 4, paragraph 6 (what a freestanding
 implementation must provide); System V Application Binary Interface, AMD64
-supplement, Section 3.1.2 (the LP64 model) and Section 3.2.3 (the argument
-registers Section 2 departs from in one place); Intel 64 and IA-32 Architectures
+supplement, Section 3.1.2 (the LP64 model), Section 3.2.2 (the stack frame and
+its sixteen-byte alignment), Section 3.2.3 (the argument registers Section 2
+departs from in one place) and Section 3.4.1 (the initial process stack and the
+register state at process entry); Intel 64 and IA-32 Architectures
 Software Developer's Manual, Volume 2B, "SYSCALL".
 
 ## 1. What this sub-task is, and what it is not
@@ -340,11 +362,14 @@ in the Makefile or anywhere else.
 3. **`strtok` is not re-entrant and cannot be made so.** Section 3.3. A
    `strtok_r` belongs beside it and is not added in this sub-task for the same
    reason as limitation 2.
-4. **Nothing here is asserted upon a machine other than QEMU**, and nothing here
-   has ever run at privilege level 3. Both follow from Section 7: the only
-   executor is the kernel's boot-time self-test. The first run of this code in a
-   user program is sub-task 7.5, and it is a genuine second verification rather
-   than a formality — the compilation flags differ.
+4. ~~**Nothing here is asserted upon a machine other than QEMU**, and nothing
+   here has ever run at privilege level 3.~~ **Both resolved.** The first is
+   resolved by the three-environment runs recorded in
+   [`../project/STATUS.md`](../project/STATUS.md) — every image since build 1 has
+   been booted under VirtualBox and Bochs as well. The second is resolved at
+   sub-task 7.5, which builds a program, links it against these functions and
+   runs it at privilege level 3; it is a genuine second verification rather than
+   a formality, the compilation flags differing. Section 11.
 5. **There is no `<string.h>` guarantee that these are the only definitions.**
    The kernel is compiled without `libc/include` in reach precisely so that it
    cannot come to depend upon them, but nothing mechanically prevents a future
@@ -390,12 +415,21 @@ Three things make it honest rather than expedient:
    permissively licensed file is linked into the kernel image without being the
    kernel's.
 
-**Sub-task 7.5 is where this stops being the only path.** The same sources are
-then compiled a second time, with the flags a user program requires — which are
-not the kernel's: `-mcmodel=kernel` places every symbol in the topmost two
-gibibytes of the address space, and a program does not live there. Until then,
-`LIBC_SOURCES` in the `Makefile` is the list that second compilation will name,
-which is why it is a list of its own rather than merged into `C_SOURCES`.
+**Sub-task 7.5 stopped this being the only path.** The same sources are now
+compiled a second time, with the flags a user program requires rather than the
+kernel's, and collected into `build/user/liboxys.a`, which a program links
+against. `LIBC_SOURCES` in the `Makefile` is the list that second compilation
+names, which is why it is a list of its own rather than merged into `C_SOURCES`.
+Section 11.4 records the procedure, including what measurement showed about the
+code model — `-mcmodel=kernel` states that every symbol lies in the topmost two
+gibibytes, which is false of a program at four mebibytes, though the relocations
+it emits happen to be satisfiable there.
+
+**The first path is not superseded.** The library is still compiled into the
+kernel image and still asserted by boot-time self-tests: those tests reach the
+policy of a heap and the buffering of a stream in ways a program cannot, by
+supplying a region or a memory stream directly. The two compilations assert
+different things and both are wanted.
 
 ---
 
@@ -610,23 +644,25 @@ must not modify it.
    `_Thread_local` object to live in. The function form is what makes this a
    change to one file when threads arrive; until then this library is conforming
    only for a program with one thread, which is every program there is.
-2. **The typed wrappers are not asserted, only the layers above and below
-   them.** `OxysSyscallResult` is asserted by calling it and `invoke.asm` by
-   running its own bytes at privilege level 3 — but `OxysWrite` passing its
-   `length` where the kernel reads a length is checked by nothing. It cannot be
-   until a program is linked against this library, because the wrappers are
-   compiled `-mcmodel=kernel` and hold a reference to `errno` at a kernel
-   address, which is exactly the property that makes the invocation copyable and
-   them not. **Sub-task 7.5 closes this**, and it is the largest single thing
-   outstanding about this sub-task.
+2. ~~**The typed wrappers are not asserted, only the layers above and below
+   them.**~~ **Resolved at sub-task 7.5.** `OxysSyscallResult` was asserted by
+   calling it and `invoke.asm` by running its own bytes at privilege level 3, but
+   `OxysWrite` passing its `length` where the kernel reads a length was checked
+   by nothing — and could not be until a program was linked against this library,
+   the wrappers being compiled `-mcmodel=kernel` and holding a reference to
+   `errno` at a kernel address. The program of sub-task 7.5 calls `OxysVersion`
+   and `OxysWrite` directly, checks what each returns, and checks that a refused
+   write leaves `EBADF` in `errno` — the whole path, through `SYSCALL` rather
+   than around it. Section 11.5.
 3. **There is no invocation of four, five or six arguments**, and therefore no
    assertion upon `R10` — the one register where this kernel's convention departs
    from the C one. Section 8.1.
-4. **Nothing here has run in a user program**, in the sense of having been linked
-   into one: the bytes of `invoke.asm` have executed at privilege level 3, but as
-   a block copied by a self-test, driven by a hand-assembled caller. The first
-   genuine link is sub-task 7.5, and limitation 4 of Section 6 applies to this
-   sub-task word for word.
+4. ~~**Nothing here has run in a user program**, in the sense of having been
+   linked into one.~~ **Resolved at sub-task 7.5.** The bytes of `invoke.asm`
+   had executed at privilege level 3, but as a block copied by a self-test and
+   driven by a hand-assembled caller; they are now linked into a program from an
+   archive and called by compiled C, and `OxysVersion`, `OxysWrite` and the
+   `errno` a refused call sets are asserted from within it. Section 11.5.
 5. **`errno` is never set by anything but a system call.** That is true today and
    is a property of what exists rather than a decision: there is no allocator, no
    formatted conversion and no mathematical library to set it. The three numbers
@@ -1008,17 +1044,16 @@ was refused.
    same fact Section 8.6, limitation 1, records of `errno` — and a lock taken
    against nothing is a lock nothing asserts. Every entry point of the allocator
    needs one the day threads exist.
-8. **The typed wrappers `OxysBrk` and `OxysSbrk` are not asserted**, and neither
-   is `OxysHeapExtend`. They are compiled into this image and cannot be called
-   from it, exactly as limitation 2 of Section 8.6 records of the seven wrappers
-   before them. **Sub-task 7.5 closes this**, and it is the largest single thing
-   outstanding about this sub-task: it is where the two halves above are joined
-   and run together for the first time.
-9. **The whole of `<stdlib.h>` but Section 7.22.3 is absent** — the string
-   conversions, the pseudo-random sequence, the communication with the
-   environment, the searching and sorting, the integer arithmetic and the
-   multibyte conversions. Each arrives with the sub-task that needs it, and none
-   of them is needed by a heap.
+8. ~~**The typed wrappers `OxysBrk` and `OxysSbrk` are not asserted**, and
+   neither is `OxysHeapExtend`.~~ **Resolved at sub-task 7.5**, which is where
+   the two halves above are joined and run together for the first time: the
+   program calls `malloc`, the allocator finds its free list empty, asks
+   `OxysHeapExtend` for a region, and gets one from the break. Section 11.5.
+9. **The whole of `<stdlib.h>` but Sections 7.22.3 and 7.22.4 is absent** — the
+   string conversions, the pseudo-random sequence, `getenv` and `system`, the
+   searching and sorting, the integer arithmetic and the multibyte conversions.
+   Each arrives with the sub-task that needs it; the termination functions
+   arrived with 7.5, and none of the rest is needed by a heap.
 
 ### 9.7 The negative tests, and the two that found something
 
@@ -1347,9 +1382,11 @@ know: it asked for a write, and the write did not happen.
    has four more ways to be wrong — the buffer boundary, the pushback, the
    line-buffering decision and the partial transfer — and there is no workload
    here to measure the difference against. A ported compiler is that workload.
-2. **Nothing here is asserted upon a machine other than QEMU**, and — until
-   sub-task 7.5 — nothing here has run at privilege level 3. Section 6,
-   limitation 4, unchanged.
+2. ~~**Nothing here is asserted upon a machine other than QEMU**, and nothing
+   here has run at privilege level 3.~~ **Resolved at sub-task 7.5**, which
+   builds a program, links it against these streams and runs it at privilege
+   level 3, and whose image was booted under VirtualBox and Bochs as well.
+   Section 11.5.
 3. **The magnitude of the most negative representable value cannot be asserted
    wrong.** `FormatMagnitude` avoids forming `-value`, which is undefined
    behaviour for `INTMAX_MIN` and is the single input every hand-written
@@ -1423,3 +1460,273 @@ Twenty defects were introduced deliberately, one at a time, each built and run.
 The fifth and the ninth are limitations 4 and 3, and are the ordinary yield of
 this discipline: an assertion that does not exist cannot be made to fail, and the
 only way to find out which ones those are is to try.
+
+---
+
+## 11. Sub-task 7.5: the runtime startup object, and the link
+
+**Phase**: 7, sub-task 7.5, of [`../project/PLAN.md`](../project/PLAN.md).
+
+**What it adds**: the first instructions of every program this system runs; the
+termination functions those instructions end through; the linker script and the
+archive a program is built against; the kernel's half of the process-entry
+contract the System V ABI fixes; and the first program in this project produced
+by a compiler rather than by an array of bytes.
+
+**What it closes.** Four things had been written and could not be fully asserted,
+and each of them is now:
+
+| Recorded as | The limitation | Closed by |
+| ----------- | -------------- | --------- |
+| Section 6, limitation 4 | Nothing in this library had ever run at privilege level 3, and the compilation flags differ. | The program compiles the whole library a second time with a program's flags and runs it. |
+| Section 7 | `make verify` is the only thing that can execute anything, and a userland library is in the kernel image for want of anywhere else. | It is still in the kernel image — but it is now *also* compiled into an archive, and the archive is what the program links. |
+| Section 9.1 | The heap's policy was asserted against a region the kernel supplied, and `brk` by a program composed by hand. The join between them — an allocator obtaining memory from the break — was asserted by neither. | The program calls `malloc`. |
+| Section 10.5.2 | The transfer beneath a stream executes `SYSCALL` and this kernel cannot. | The program calls `printf`, and the line arrives upon the serial channel. |
+
+### 11.1 The kernel's half: what stands upon a stack before the first instruction
+
+The System V ABI, AMD64 supplement, Section 3.4.1, "Stack State", fixes what
+`_start` finds. Its figure places the **argument count at `%rsp`**, the argument
+pointers at `8+%rsp`, the null pointer ending them at `8+8*argc+%rsp`, the
+environment pointers after that, a null pointer ending those, and the auxiliary
+vector ending with a null entry; and it states that `%rsp` "is guaranteed to be
+16-byte aligned at process entry".
+
+**Before this sub-task the stack pointer was `PROCESS_USER_STACK_TOP`**, which is
+one byte past the last mapped byte. Every program this project had run was
+composed by hand and never read it, so nothing had noticed. The first conforming
+`_start` reads its argument count through it and faults.
+
+This kernel's `execve` accepts neither vector, so every eightbyte the ABI names
+is zero, and **the whole of the kernel's half is a subtraction**: the stack
+pages are already zeroed — they have been since Phase 6, so that a program is not
+handed the kernel's leavings — so the frame's contents are already standing, and
+what was missing was room for it. `ProcessCreateUserStack` returns
+`PROCESS_USER_STACK_TOP - PROCESS_USER_STACK_FRAME_BYTES`.
+
+The frame is forty-eight bytes and not forty. Five eightbytes is what the ABI
+names; a page-aligned top less forty is not sixteen-byte aligned, and a sixth
+eightbyte of padding makes it so. A program entered upon a misaligned stack
+faults at the first instruction that uses an aligned move, which is inside a
+function the program did not write and which nothing about the fault names.
+
+**The frame is built for every program and not only for a compiled one**, because
+a contract that depends upon what the kernel guessed about its caller is not one.
+
+**An earlier version wrote the six zeroes explicitly**, and kept the topmost
+frame's physical address in order to reach them. Deleting that write changed
+nothing any assertion could see — and could not, the pages being zeroed
+unconditionally for a reason that has nothing to do with this. It was a
+restatement of an invariant established a few lines above, and it was deleted
+rather than kept for appearances, which is the judgement Section 9.7 records
+about the second size check in `OxysHeapAdopt`.
+
+### 11.2 The startup object
+
+[`../../libc/crt/crt0.asm`](../../libc/crt/crt0.asm), twenty-four bytes of
+instructions. It marks the deepest frame with a null `%rbp` — Section 3.4.1 asks
+user code to, so that a debugger walking the saved frame pointers has something
+to stop at — takes `argc`, `argv` and `envp` from the stack into the first three
+argument registers of Section 3.2.3, aligns the stack pointer, calls `main`, and
+passes what `main` returned to `exit`, which Section 3.4.1 requires.
+
+**It is assembly because a C function cannot read its own stack pointer**, and
+because it is entered with no return address: a compiler's epilogue would execute
+a `RET` against the argument count.
+
+Three things it deliberately does not do, each recorded in the file:
+
+1. **No constructors are called.** There is no `.init_array` walk, because
+   nothing in this library has a constructor: the three standard streams are
+   initialised statically, the heap initialises itself upon its first request,
+   and `errno` is an object in `.bss`. Machinery that walked a section nothing
+   fills is machinery whose correctness nothing can demonstrate.
+2. **The function pointer the ABI leaves in `%rdx` is not registered.** Section
+   3.4.1 says an application "should" register it with `atexit`; it is there for
+   a dynamic loader to finalise a shared object, this system has neither, and
+   this kernel enters a program with every register zero — so the pointer is
+   null, and `atexit` refuses a null pointer.
+3. **The stack pointer is aligned again anyway.** The ABI guarantees it and the
+   kernel's frame is a multiple of sixteen, so the `AND` is a no-operation. It
+   costs nothing and the failure it forecloses is expensive to diagnose.
+
+### 11.3 Termination: `exit`, `_Exit`, `atexit` and `abort`
+
+[`../../libc/stdlib/exit.c`](../../libc/stdlib/exit.c). Thirty-two registrations,
+in an array in `.bss` — a program is not obliged to have a heap, and a library
+that allocated here would make `atexit` fail for want of memory in exactly the
+circumstance a program most wants it to work.
+
+**The order of the two things `exit` does is not free.** ISO/IEC 9899:2011,
+Section 7.22.4.4, paragraph 2, has it call the registered functions and *then*
+flush the streams, and the reason is that a registered function which writes a
+diagnostic writes it into a buffer. A library that flushed first would lose every
+one of those, silently, at the moment a program is ending.
+
+The registrations are called in the reverse of the order they were made, which is
+the only order that lets a later one depend upon an earlier one. The count is
+re-read each time round rather than copied, so a function registered *by* a
+registration is not called — which is what paragraph 2 says of it.
+
+A second `exit` from within a registered function is undefined under paragraph 2
+and is **defined here** as proceeding directly to `_Exit`. The alternative is a
+loop with no way out and nothing to report it.
+
+`_Exit` flushes nothing, which paragraph 2 of 7.22.4.5 leaves to the
+implementation: it is what a program calls when it has reason to believe the
+library's own state is not to be trusted, in which case walking a list of stream
+buffers is the last thing it should do. `abort` ends through `_Exit` for the same
+reason, this system having no signals to raise.
+
+**The status is not masked to eight bits.** This kernel hands the parent whatever
+the child passed, so a status of 256 arrives as 256 rather than as zero.
+
+### 11.4 The link procedure
+
+Four things, and none of them is a new `make` target.
+
+**The archive.** The same `LIBC_SOURCES` compiled a second time with
+`USER_CFLAGS`, collected by `ar rcs` into `build/user/liboxys.a`. Section 7
+foresaw this: it is why that list is separate from `C_SOURCES`.
+
+**The flags.** The kernel's regime less its code model, plus the C library's
+include root, with every diagnostic flag kept — a program built here is held to
+the standard the kernel is held to, and the first program this project compiled
+would otherwise be the first one nobody checked. `-mcmodel=kernel` is the one
+that had to go, and the Makefile records what measurement showed about *why*: an
+object compiled with it does link and does run at four mebibytes, the
+`R_X86_64_32S` relocations it emits being satisfiable there by arithmetic
+accident. What is wrong with it is the statement it makes — that every symbol
+lies in the topmost two gibibytes — which is false, and a compiler entitled to
+rely upon a false statement is entitled to any code generation it likes.
+
+**The linker script**, [`../../libc/user.ld`](../../libc/user.ld). A load address
+of four mebibytes, which leaves the first page unmapped so that a null pointer
+faults and which is where every toolchain upon this architecture puts a
+non-relocatable executable; three `PT_LOAD` segments declared explicitly, one per
+permission, so that a program's text being writable is not something to arrive at
+by default; and `ALIGN(4K)` between them, so that no two segments share a page
+and get one permission arbitrarily.
+
+**`-n`, and not `-z max-page-size=0x1000`.** Both were passed at first and the
+four combinations were measured: `-n` takes the stripped image from 26,056 bytes
+to 17,832 by not padding the file between segments for a demand-paged loader this
+kernel is not; `-z max-page-size=0x1000` changes the output **by not one byte**,
+the script's own `ALIGN(4K)` having already fixed every virtual address. It was
+removed. A flag that does nothing is a flag somebody will one day reason from.
+
+**No `make` target was added**, and that is a decision rather than an omission.
+The program is embedded in the kernel image, so it is a dependency of the image
+exactly as `build/trampoline.bin` is, and `make all` builds it. A phony target
+would also have had to be added to `PROJECT_GUIDELINES.md`, Section 3 — the
+corpus check enforces that the two lists agree — which Section 7 of that document
+permits only by explicit decision of the project owner.
+
+**The embedded copy is stripped.** `build/user/startup-check.elf` keeps its
+DWARF, because that is the file a debugger is pointed at; the kernel image
+carries `startup-check.embed.elf`, which is 17,832 bytes against 96,688. The
+loader reads the program header table and the loadable segments and nothing else.
+Sub-task 7.6 adds five more programs, so the difference is that, six times over.
+
+### 11.5 Verification
+
+**The program asserts what only a program can reach.** Its argument count and the
+two vector terminators; that `envp` is `argc+1` eightbytes above `argv`; the
+string functions, running at privilege level 3 for the first time; a wrapper's
+failure path, `errno` arriving through `SYSCALL` rather than from a direct call;
+`malloc` obtaining memory from the break, two allocations proved disjoint by
+writing rather than by comparing addresses, `realloc` preserving contents, and
+`calloc` refusing a product that wraps; `snprintf` composing and `printf`
+reporting what it transmitted; and `stdin` reporting an *end* rather than an
+error.
+
+**Two of its assertions are made after `main` has returned**, and they are the
+reason the program is shaped as it is. One registered function records that it
+ran; the other — registered first, so called second — asserts that it did, which
+is the reverse order paragraph 2 requires and which no single registration can
+demonstrate. The same function then asserts that **a partial line `main` left in
+the buffer is still there**, which is only true if `exit` has not flushed yet: it
+is the only moment at which the order of the two things `exit` does is visible
+from inside the program. Where either fails it ends the program itself, by
+`_Exit`, with a non-zero status — the status `main` returned having already been
+handed to `exit`.
+
+**The kernel asserts what only the kernel can see**
+([`../../kernel/test/libc/startup.c`](../../kernel/test/libc/startup.c)):
+
+| Property asserted | The silent failure it exists to catch |
+| ----------------- | ------------------------------------- |
+| The image carries a program at all | A build in which the embedding produced nothing, reported as a program that does nothing. |
+| The loader accepts the image | A linker script whose segments overlap, descend, or reach below the first page — which would otherwise be reported as "the program did not load" rather than as what is wrong with the script. |
+| The image is no larger than sixty-four kibibytes | A link that pads or carries what the loader never reads. Both defects produce a program that behaves perfectly; nothing else here would have said a word. |
+| The entry point is the image's lowest address | `main` placed ahead of `_start`. This is not hypothetical: the script said `*(.text.startup)` first, and GCC puts `main` in that section at `-O2`. |
+| The program was entered, ended, and **ended with a status of zero** | The one the whole test rests upon. The program's own reporting depends upon the machinery under test, so a program whose `printf` did not work would print nothing — and a test whose only evidence was output would read silence as success. |
+| It made at least five system calls | A program that faulted upon its first call. It is a floor and not an exact count, unlike every other program-running test here, because this program is compiled: how many `write` calls its buffered output becomes depends upon how the buffer filled, which depends upon the length of a diagnostic somebody may reword. |
+
+### 11.6 Limitations
+
+1. **The three segments' permissions are not asserted.** The linker script gives
+   text, read-only data and writable data a page boundary and a `PT_LOAD` each so
+   that no two share a page and one permission; nothing checks that the kernel
+   then mapped them differently. It would have to interrogate an address space
+   about what it maps, and an address space cannot answer — limitation 2 of
+   [`MEMORY-LAYOUT.md`](MEMORY-LAYOUT.md), recorded long before this. The
+   negative test that deleted the alignment reported nothing.
+2. **The width of the status `main` returns cannot be asserted wrong.** `_start`
+   moves `%eax` and not `%rax`, because `main` returns an `int` and the upper
+   half is not its value. The negative test that changed it to `%rax` reported
+   nothing: this compiler computes the return value in `%eax` and leaves the
+   upper half zero, so the two are the same instruction in effect. The narrow
+   move stays, because the ABI promises nothing about the upper half and a
+   different compiler need not agree.
+3. **There is one program, and it is a self-test.** The procedure is demonstrated
+   by exactly one link. Sub-task 7.6 is the first time it is used for something
+   that is not about itself, and it is where a second program would find whatever
+   this one's shape happens to depend upon.
+4. **`getenv` and `system` are absent from `<stdlib.h>`**, and a program has no
+   environment to search. Both wait upon the same thing: a convention for where a
+   program finds its strings, which `execve` refusing both vectors is the
+   placeholder for.
+5. **Nothing links dynamically, and nothing will for some time.** There is no
+   loader, no `PLT`, no `.dynamic`, and the startup object ignores the finaliser
+   the ABI offers it. A ported toolchain is what will first want any of that.
+
+### 11.7 The negative tests, and the four that found something
+
+Fifteen defects were introduced deliberately, one at a time, each built and run.
+
+| The defect introduced | What was reported |
+| --------------------- | ----------------- |
+| The kernel leaving the stack pointer at the top of the stack | The process self-test, and the program's status — it faulted before printing anything. |
+| `_start` passing the whole of `%rax` to `exit` rather than `%eax` | **Nothing was reported.** Limitation 2. |
+| The environment vector computed without the argument terminator | `the environment vector does not follow the argument vector FAILED.`, and the status. |
+| `*(.text.entry)` removed, so the entry point becomes `main` | `the program is not entered at its first instruction FAILED.` |
+| `exit` flushing the streams before calling what `atexit` registered | **Nothing was reported** — until the program was given a partial line to leave behind. See below. |
+| `atexit` calling its registrations in the order they were made | **Nothing was reported** — same cause, same remedy. |
+| The stack pointer left at the top, after the simplification | Both of the above, again. |
+| The heap's seam refusing every request | Five of the program's own assertions, and the status. |
+| The writable segment given the read-only permission | The program's status: it faulted writing its own `.data`. |
+| The archive built without an index | **Nothing was reported.** GNU `ar` writes the index for `rc` as well; the mutation is not one this toolchain distinguishes. |
+| The `ALIGN(4K)` between segments removed | **Nothing was reported.** Limitation 1. |
+| `-z max-page-size=0x1000` removed | **Nothing was reported**, and the flag was removed for good. See Section 11.4. |
+| The embedded copy not stripped | `the linked program is far larger than the code within it FAILED.` |
+| `_start` passing a constant to `exit` rather than main's value | The status assertion. |
+| The user objects compiled with `-mcmodel=kernel` | **Nothing was reported**, and the note claiming it could not link was corrected. Section 11.4. |
+
+**Four of the six silent ones were answered rather than recorded.**
+
+- **The two `exit` mutations** were invisible because the only evidence was a line
+  in a log that a person reads, and `make verify`'s grep cannot see a line that is
+  missing. The program now leaves a *partial* line in the buffer before `main`
+  returns and a registered function asserts it is still there — which turns both
+  properties into a status the kernel checks.
+- **`-z max-page-size=0x1000`** was silent because it does nothing. Four
+  combinations were measured; the flag was deleted and the two comments that
+  attributed the image's size to it were corrected to name `-n`, which does the
+  work.
+- **`-mcmodel=kernel`** was silent because it links and runs at this load address.
+  The Makefile's claim that the linker would refuse it was false and is now the
+  measurement, together with the reason the flag is wrong anyway.
+
+The remaining two are limitations 1 and 2, and the sixteenth — the archive index —
+is not a defect this toolchain has.

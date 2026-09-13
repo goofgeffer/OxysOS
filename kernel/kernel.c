@@ -1381,6 +1381,19 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
      */
     KernelVerifyStdio();
 
+    /*
+     * Sub-task 7.5, which runs last because it depends upon every one of the
+     * four above and upon the loader, the address spaces and the descent
+     * besides.
+     *
+     * It is the first assertion in this project made by a program that was
+     * **built** rather than composed byte by byte, and it is what closes the
+     * half of sub-task 7.4 this kernel could not assert: the line the program
+     * prints reaches this log through the C library's own printf, its own
+     * buffering and its own write.
+     */
+    KernelVerifyStartup();
+
     KernelMountRootVolume();
 
     IrqReport();

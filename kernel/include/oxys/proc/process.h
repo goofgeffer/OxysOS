@@ -92,6 +92,45 @@
 #define PROCESS_USER_STACK_TOP   UINT64_C(0x0000700000000000)
 
 /*
+ * What stands upon a user stack before the program's first instruction, of
+ * sub-task 7.5.
+ *
+ * The System V Application Binary Interface, AMD64 supplement, Section 3.4.1,
+ * "Stack State", fixes what `_start` finds: the argument count at `%rsp`, the
+ * argument pointers at `8+%rsp`, a null pointer terminating them, the
+ * environment pointers, a null pointer terminating those, and the auxiliary
+ * vector ending with a null entry. `%rsp` "is guaranteed to be 16-byte aligned
+ * at process entry".
+ *
+ * This kernel's `execve` accepts neither vector — there being no convention yet
+ * fixed for where the strings go — so every one of those is empty, and the frame
+ * is six eightbytes:
+ *
+ *   +40  padding, so that the frame is a multiple of sixteen
+ *   +32  the auxiliary vector's terminating entry, value
+ *   +24  the auxiliary vector's terminating entry, AT_NULL
+ *   +16  the null pointer ending the environment vector
+ *   +8   the null pointer ending the argument vector, argc being zero
+ *   +0   the argument count
+ *
+ * **It is built for every program and not only for a compiled one.** A stack
+ * whose first eightbyte is unmapped is a stack upon which the ABI's own first
+ * instruction faults, and the programs this project composes by hand do not read
+ * it — so a kernel that built the frame only when it thought a program wanted it
+ * would be a kernel whose contract depended upon what it guessed. The five
+ * eightbytes cost nothing and the contract is then one sentence.
+ *
+ * The padding is what keeps the alignment. Five eightbytes is forty bytes, and a
+ * stack top that is page-aligned less forty is not sixteen-byte aligned; the
+ * sixth makes the frame forty-eight, which is. A program entered upon a
+ * misaligned stack faults at the first instruction that uses an aligned move,
+ * which upon this architecture is somewhere inside a function the program did
+ * not write.
+ */
+#define PROCESS_USER_STACK_FRAME_BYTES 48U
+#define PROCESS_USER_STACK_FRAME_WORDS 6U
+
+/*
  * The heap, and where it begins, of sub-task 7.3.
  *
  * A process's *break* is the address one past the last byte of the region it may

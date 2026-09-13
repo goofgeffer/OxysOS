@@ -58,6 +58,37 @@ calls them yet, the buffers being static because a stream must be usable before 
 heap has been grown; and nothing can *read* a stream, this kernel having no
 system call that reads, so `stdin` is permanently at its end.
 
+**Sub-task 7.5 stands at the top of the phase, and it is where the library stops
+being something only the kernel can run.** A program is now built rather than
+composed: `libc/crt/crt0.asm` takes the argument count, the argument vector and
+the environment vector from the stack the kernel prepared, calls `main` with
+them, and passes what `main` returned to `exit`; `libc/user.ld` places a program
+at four mebibytes with one page-aligned segment per permission; and the same C
+library sources are compiled a second time — with a program's flags rather than
+the kernel's — into an archive a program links against.
+
+**The kernel gained the half of the process-entry contract it had never had.**
+The System V ABI, Section 3.4.1, puts the argument count at the stack pointer,
+and this kernel had left that pointer one byte past the last mapped byte of the
+stack. Every program composed by hand ignored it; the first conforming `_start`
+faults upon it. The frame is six eightbytes, every one of them zero, and since a
+stack's pages are already zeroed the whole of the change is where the stack
+pointer begins.
+
+**Four limitations closed at once.** The C library has now run at privilege level
+3, which nothing in it had; the heap has obtained memory from the break through
+`malloc`, which joins two halves that had only been asserted apart; a stream has
+reached a descriptor through `printf`, which is the half of sub-task 7.4 the
+kernel could not assert at all; and every translation unit has been compiled a
+second time, under a second code model, which is a genuine second verification
+rather than a formality.
+
+**`exit` calls what `atexit` registered and then flushes**, in that order and not
+the other, because a registered function that writes a diagnostic writes it into
+a buffer. The program asserts the order from inside itself: it leaves a partial
+line in the buffer as `main` returns, and a registered function checks that the
+line is still there.
+
 ## 2. By phase
 
 **Phase 1 — bootstrapping.** The kernel builds without diagnostics under the full
@@ -307,12 +338,41 @@ upon. The buffering above it is real, is exercised against streams whose device
 is a region of memory, and is correct on the day a call that reads exists; what
 changes then is one function of six lines.
 
-**Nothing can yet be linked against any of it.** There is no `crt0`, no
-static-linking procedure and no user-mode compilation until sub-task 7.5, so the
-translation units are compiled into the kernel image and asserted by boot-time
-self-tests — `make verify` being the only thing in this project that can execute
-anything at all. The kernel does not call them and is compiled without the C
-library's include root in reach, so that it cannot begin to.
+**Sub-task 7.5 stands above all of it, and it is what ends the arrangement every
+sub-task before it worked under.** There is now a `crt0`, a linker script, an
+archive and a user-mode compilation: `libc/crt/crt0.asm` takes the argument count,
+the argument vector and the environment vector from the stack the System V ABI,
+Section 3.4.1, describes, calls `main`, and passes what `main` returned to
+`exit`; `libc/user.ld` places a program at four mebibytes with one page-aligned
+segment per permission; and the C library's own sources are compiled a second
+time, without the kernel's code model, into `build/user/liboxys.a`.
+
+**The kernel's half was missing and nothing had noticed.** The ABI puts the
+argument count at the stack pointer, and this kernel left that pointer one byte
+past the last mapped byte of a stack — which every program composed by hand
+ignored, and upon which the first conforming `_start` faults. A stack now begins
+six eightbytes lower, and since its pages are already zeroed those eightbytes are
+already the frame the ABI names.
+
+**The first program built by this procedure is the thing that asserts it.** It
+runs at privilege level 3, prints through the library's own `printf`, makes its
+own assertions about what stands upon its stack, about the string functions and
+the wrappers, about `malloc` obtaining memory from the break, and about `exit`
+calling what `atexit` registered before it flushes — and ends with the number of
+them that failed, which the kernel checks independently of anything printed.
+
+**`getenv` is absent and a program has no environment**, this kernel's `execve`
+accepting neither vector; there is no dynamic linking of any kind; and the three
+segments' permissions are given by the linker script and asserted by nothing,
+because an address space still cannot be asked what it maps.
+
+**The library is compiled twice, and that is what sub-task 7.5 changed.** It is
+still compiled into the kernel image, where the boot-time self-tests assert it —
+`make verify` remaining the only thing in this project that can execute anything
+at all — and it is now also compiled into an archive that a program links
+against, with a program's flags rather than the kernel's. The kernel does not
+call any of it and is compiled without the C library's include root in reach, so
+that it cannot begin to.
 
 **The system-call header was divided in the same sub-task**, which is a licensing
 obligation rather than a tidying: the interface a program is entitled to is now
@@ -348,6 +408,7 @@ The physical machine is one machine — the HP Laptop 14-dq0052dx specified in
 | 7.2 The system-call wrappers | Yes | **Yes** | **Yes** | — | **Not yet run** |
 | 7.3 The heap and `brk` | Yes | **Yes** | **Yes** | — | **Not yet run** |
 | 7.4 The buffered streams | Yes | **Yes** | **Yes** | — | **Not yet run** |
+| 7.5 The runtime startup object | Yes | **Yes** | **Yes** | — | **Not yet run** |
 
 **The rows marked "— 7.2" were all established by two boots of one image**, build
 1 of [`BUILDS.md`](BUILDS.md), because a boot runs every self-test in the corpus
@@ -366,6 +427,22 @@ verdict of `FAILED` in any. The Bochs installed upon this machine was the defaul
 build again, reporting no processor above `atom_n270`, exactly as
 [`TESTING.md`](TESTING.md), Section 4A, says it will be; it was rebuilt from
 source with the configuration recorded there.
+
+**Sub-task 7.5's image was run in all three environments likewise.** Build 12
+booted under QEMU, under VirtualBox 7.2.0 and under Bochs 3.1, with fifty-nine
+assertions passed or sound and no verdict of `FAILED` in any — and in each of the
+three the log carries lines written **by a program**, through the C library's own
+`printf`, at privilege level 3. The Bochs binary had reverted to a default build
+for the third sub-task running and was rebuilt again;
+[`TESTING.md`](TESTING.md), Section 4A.
+
+**Four of Bochs's self-tests failed on the first attempt and none of them was
+the kernel's.** The `bochsrc` named the system BIOS where it should have named
+the VGA BIOS, so the machine had no VBE for GRUB to honour the framebuffer
+request through; the display, framebuffer and compositing tests were asserting
+against hardware that was not there. Corrected, the run is clean.
+[`TESTING.md`](TESTING.md), Section 4A, records the symptom set, because it is a
+failure that looks exactly like a regression.
 
 **The VirtualBox run carried its whole boot log over the serial adapter**, 6,927
 bytes by interrupt, so the automated assertion is available there and not only
@@ -477,7 +554,7 @@ functional. [`TESTING.md`](TESTING.md), Section 3.
 There is no test harness and there will be none before Phase 7, there being no
 userland to run one in. The kernel therefore asserts its own properties at boot,
 in the order the subsystems are initialised, and `make verify` fails if any of
-them reports a failure. Fifty-seven assertions presently report passed or sound.
+them reports a failure. Fifty-nine assertions presently report passed or sound.
 
 Those tests are in [`../../kernel/test/`](../../kernel/test/), one file per
 subsystem. Each subsystem's design document carries a table pairing every

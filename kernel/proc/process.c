@@ -1241,6 +1241,13 @@ uint64_t ProcessCreateUserStack(Process *process)
          * arrives holding whatever its last owner left in it, and a stack is the
          * first thing a program reads. Handing it the kernel's leavings is a
          * disclosure with nothing to report it.
+         *
+         * Since sub-task 7.5 this also **is** the initial process stack frame.
+         * Every eightbyte the System V ABI names there is zero — the argument
+         * count, the two vector terminators, the auxiliary vector's terminating
+         * entry and the padding — so the zeroing that was already required for
+         * the disclosure supplies the frame's contents as well, and nothing is
+         * written a second time. See below.
          */
         contents = (uint8_t *)(uintptr_t)PhysicalToDirect(frame);
 
@@ -1263,7 +1270,34 @@ uint64_t ProcessCreateUserStack(Process *process)
     process->user_stack_top = top;
     process->user_stack_pages = PROCESS_USER_STACK_PAGES;
 
-    return top;
+    /*
+     * The initial process stack of the System V ABI, AMD64 supplement, Section
+     * 3.4.1 — which upon this system is a subtraction and nothing else.
+     *
+     * The ABI requires the argument count at the stack pointer, the argument
+     * pointers above it, a null pointer ending them, the environment pointers, a
+     * null pointer ending those, and the auxiliary vector ending with a null
+     * entry. This kernel's `execve` accepts neither vector, so every one of those
+     * eightbytes is zero — and the pages were zeroed above, so the frame is
+     * already standing. What was missing was **room for it**: a stack pointer
+     * left at `top` points one byte past the last mapped byte, and the first
+     * instruction of every conforming `_start` reads the argument count through
+     * it.
+     *
+     * So the whole of this is the address returned. An earlier version wrote six
+     * zeroes into the topmost frame and kept a copy of that frame's physical
+     * address in order to reach them; deleting the write changed nothing any
+     * assertion could see, because the pages are zeroed unconditionally and for
+     * a reason that has nothing to do with this. The write was a restatement of
+     * an invariant established a few lines above, and the negative test that
+     * removed it reported nothing — which is the same judgement sub-task 7.3
+     * made about the second size check in `OxysHeapAdopt`.
+     *
+     * The address is sixteen-byte aligned, `top` being page-aligned and the
+     * frame a multiple of sixteen, which is what Section 3.4.1 guarantees a
+     * program at its entry point.
+     */
+    return top - PROCESS_USER_STACK_FRAME_BYTES;
 }
 
 /* ------------------------------------------------------- sub-task 6.11 */

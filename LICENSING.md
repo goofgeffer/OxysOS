@@ -41,22 +41,30 @@ everybody: this kernel, the C library of `libc/`, a program whose author has
 never seen this repository, and a C library that is not this one. Section 2.1
 records why the division was made and what it cost to leave undone.
 
-**And one file crosses the boundary in the other direction, deliberately.** The
-four translation units of `libc/string/` are `MIT` and are compiled into the
-kernel image, because `make verify` is the only thing in this project that can
-execute anything and the boot-time self-test is how they are asserted. MIT
-permits that combination provided its notice is retained, which the per-file SPDX
-tags do; the resulting image is distributed under `LGPL-3.0-or-later` with those
-notices intact. The kernel does not call them, and is compiled without
+**And the C library crosses the boundary in the other direction, deliberately.**
+Every translation unit of `libc/` is `MIT` and is compiled into the kernel image,
+because `make verify` is the only thing in this project that can execute anything
+and the boot-time self-tests are how they are asserted. MIT permits that
+combination provided its notice is retained, which the per-file SPDX tags do; the
+resulting image is distributed under `LGPL-3.0-or-later` with those notices
+intact. The kernel does not call any of it, and is compiled without
 `libc/include` in reach so that it cannot begin to.
-[`docs/design/LIBC.md`](docs/design/LIBC.md), Section 7, is the whole of the
-arrangement and what sub-task 7.5 changes about it.
 
-`userland/`, `crypto/`, `net/` and `uefi/` are empty at the time of writing; they
-acquire material in Phases 7, 10, 11 and 12. Their licences are declared in
-advance so that the first file placed in each is placed under a licence already
-decided, rather than one settled afterwards when there is code to argue about.
-`libc/` was among them until sub-task 7.1.
+**Since sub-task 7.5 the same sources are also compiled a second time**, into
+`build/user/liboxys.a`, which programs under `userland/` link against. That
+archive is not combined with the kernel's image and raises no question at all:
+it is `MIT` code linked into `MIT` programs. What the kernel image carries of a
+program is the linked ELF file itself, embedded so that a self-test can load it,
+and that file is `MIT` throughout.
+[`docs/design/LIBC.md`](docs/design/LIBC.md), Sections 7 and 11, are the whole of
+the arrangement.
+
+`crypto/`, `net/` and `uefi/` are empty at the time of writing; they acquire
+material in Phases 10, 11 and 12. Their licences are declared in advance so that
+the first file placed in each is placed under a licence already decided, rather
+than one settled afterwards when there is code to argue about. `libc/` was among
+them until sub-task 7.1 and `userland/` until sub-task 7.5, which placed the
+first program there.
 
 **A port carries its own licence and does not acquire this project's.** The row
 above is not a licence this repository grants; it is a record that the licence of

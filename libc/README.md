@@ -5,10 +5,11 @@
 **Phase**: 7 of [`../docs/project/PLAN.md`](../docs/project/PLAN.md). Sub-task
 7.1 placed the first material here, sub-task 7.2 the system-call wrappers,
 sub-task 7.3 the heap and sub-task 7.4 the buffered streams and the formatted
-conversion; sub-task 7.5 adds the runtime startup object and the link.
+conversion, and sub-task 7.5 the runtime startup object, the termination
+functions and the link a program is built by.
 **Detailed design**: [`../docs/design/LIBC.md`](../docs/design/LIBC.md), Sections
 2 to 7 for sub-task 7.1, Section 8 for sub-task 7.2, Section 9 for sub-task 7.3
-and Section 10 for sub-task 7.4.
+Section 10 for sub-task 7.4 and Section 11 for sub-task 7.5.
 
 ## Purpose
 
@@ -51,6 +52,9 @@ self-test is presently the only thing that runs any of this, and what sub-task
 | [`stdio/format.c`](stdio/format.c) | The conversion: one engine that reads a format string and produces characters, and the eight standard names above it, which differ only in where the characters go. A conversion it does not implement is refused and the refusal is reported. |
 | [`stdio/internal.h`](stdio/internal.h) | The two counters the conversion keeps in the census the stream owns. It is in `stdio/` and not `include/` so that the include root a program is compiled against does not carry it. |
 | [`stdio/system.c`](stdio/system.c) | Where a stream's bytes go: eleven lines above `OxysWrite`, and a source that reports end-of-file because this kernel has no call that reads. A translation unit of its own so that the policy may be asserted without it. |
+| [`crt/crt0.asm`](crt/crt0.asm) | The first instructions of every program this system runs: the argument count, the two vectors, the call of `main` and the `exit` that takes what it returned. Assembly because a C function cannot read its own stack pointer and because there is nowhere to return to. |
+| [`stdlib/exit.c`](stdlib/exit.c) | ISO/IEC 9899:2011, Section 7.22.4: `atexit`, `exit`, `_Exit` and `abort`. Thirty-two registrations in `.bss`, called in reverse, and the streams flushed **after** them — which is the order the standard fixes and the reason it fixes it. |
+| [`user.ld`](user.ld) | The linker script every program is linked with: four mebibytes, three page-separated segments one per permission, and the discard list that keeps a fourth segment from appearing for a build identifier nothing reads. |
 
 The five `string/` units divide Section 7.24 as the standard divides it, rather
 than by size or by taste, so that a reader looking for the whole of that section

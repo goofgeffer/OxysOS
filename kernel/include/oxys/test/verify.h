@@ -17,7 +17,7 @@
  *          KernelVerifyPerCpu, KernelVerifySpinlock, KernelVerifyIpi,
  *          KernelVerifyShootdown, KernelVerifyApplicationProcessors,
  *          KernelVerifyScheduler, KernelVerifyString, KernelVerifyWrappers,
- *          KernelVerifyHeap, KernelVerifyStdio,
+ *          KernelVerifyHeap, KernelVerifyStdio, KernelVerifyStartup,
  *          KernelVerifyPit, KernelVerifyKeyboard, KernelVerifySerial,
  *          KernelVerifyVga, KernelVerifyPci, KernelVerifyAta, KernelVerifyBlock,
  *          KernelVerifyBuffer, KernelVerifyExt2, KernelVerifyVfs,
@@ -265,6 +265,28 @@ void KernelVerifyHeap(void);
  * should meet the library in the order it was built.
  */
 void KernelVerifyStdio(void);
+
+/*
+ * Sub-task 7.5: the C runtime startup object, and the link that produces a
+ * program.
+ *
+ * It is the first self-test here whose subject was **built** rather than
+ * composed byte by byte, and that is the whole of its value: it asserts the
+ * toolchain, the linker script, the startup object, the archive, and every
+ * translation unit of the C library compiled with a program's flags rather than
+ * the kernel's — which are not the same flags, `-mcmodel=kernel` being wrong for
+ * an image at four mebibytes.
+ *
+ * The program makes its own assertions, prints them through this library's own
+ * printf, and ends with the number that failed; this kernel asserts that it
+ * loaded, was entered, ended, and ended with zero. Both halves are needed: the
+ * program can reach what only a program can reach, and the kernel can see a
+ * program that printed nothing at all.
+ *
+ * It runs last, after every other test of the library, because it depends upon
+ * all of them.
+ */
+void KernelVerifyStartup(void);
 
 /* Phases 3 and 4: the remaining devices. */
 void KernelVerifyPit(void);

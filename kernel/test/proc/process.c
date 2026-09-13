@@ -200,15 +200,41 @@ void KernelVerifyProcess(void)
                              "rsp0 did not follow the thread that became current");
     }
 
-    /* --- A user stack, at the far end of the address space. --- */
+    /* --- A user stack, at the far end of the address space, with the frame the
+     * System V ABI requires standing upon it. --- */
 
     {
-        const uint64_t top = ProcessCreateUserStack(first);
+        const uint64_t entry = ProcessCreateUserStack(first);
 
-        KernelProcessRequire(top == PROCESS_USER_STACK_TOP,
+        KernelProcessRequire(entry == (PROCESS_USER_STACK_TOP -
+                                       PROCESS_USER_STACK_FRAME_BYTES),
                              "a user stack was not placed where it belongs");
+        KernelProcessRequire(first->user_stack_top == PROCESS_USER_STACK_TOP,
+                             "a user stack does not end where it claims");
         KernelProcessRequire(first->user_stack_pages == PROCESS_USER_STACK_PAGES,
                              "a user stack is not the size it claims");
+
+        /*
+         * The stack pointer a program begins with is sixteen-byte aligned, which
+         * the System V ABI, AMD64 supplement, Section 3.4.1, guarantees it. A
+         * program entered upon a misaligned stack faults at the first
+         * instruction that uses an aligned move — which is inside a function the
+         * program did not write, and nothing about the fault names the stack.
+         */
+        KernelProcessRequire((entry % 16U) == 0U,
+                             "the stack pointer a program begins with is not "
+                             "sixteen-byte aligned");
+
+        /*
+         * And it is below the top by exactly the frame, so the eightbytes the
+         * ABI names are within the mapped region rather than one past it. A
+         * stack pointer left at the top is the defect this frame exists to
+         * prevent, and it is invisible until a program reads its argument count.
+         */
+        KernelProcessRequire((PROCESS_USER_STACK_TOP - entry) ==
+                                 PROCESS_USER_STACK_FRAME_BYTES,
+                             "the initial frame is not between the stack pointer "
+                             "and the top of the stack");
 
         /*
          * Asked for twice, given once. A second stack would map pages over the

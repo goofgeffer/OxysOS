@@ -84,10 +84,21 @@ that said it would was wrong: a stream must be usable before a heap has been
 grown, so its buffers are static. [`../design/LIBC.md`](../design/LIBC.md),
 Section 10.
 
-**Next: sub-task 7.5** — the C runtime startup object and the static-linking
-procedure. It is the first sub-task in this project to produce a program built
-from source rather than composed byte by byte, and it is what closes the half of
-7.4 the kernel cannot assert.
+**Sub-task 7.5 is complete**: `_start`, the termination functions it ends
+through, the linker script and archive a program is built against, and — beneath
+all of it — the six eightbytes the System V ABI requires upon a stack before a
+program's first instruction, which this kernel had never left room for. **It is
+the first thing here asserted by a program that was built rather than composed
+byte by byte**, and it closes four limitations at once: the C library has now run
+at privilege level 3, the heap has obtained memory from the break through
+`malloc`, a stream has reached a descriptor through `printf`, and every
+translation unit has been compiled a second time with a program's flags rather
+than the kernel's. [`../design/LIBC.md`](../design/LIBC.md), Section 11.
+
+**Next: sub-task 7.6** — the utilities `ls`, `cat`, `echo`, `mkdir` and `rm`.
+They are the first programs built by this procedure that are not about the
+procedure, and the first thing that will find whatever the one program of 7.5
+happens to depend upon.
 
 **Three releases are planned, and each is fixed to a sub-task below rather than
 to a date**: `Oxys 1 Alpha` at **8.7**, `Oxys 1 Beta` at **9.7**, and `Oxys 1` at
@@ -440,7 +451,7 @@ changes about it.
 | 7.2 | Implement system-call wrappers for the complete kernel interface. | Implemented | `libc/wrappers.c` — see note (b) |
 | 7.3 | Implement a user-space heap allocator (`malloc`, `free`, `realloc`) above `brk`/`mmap`. | Implemented | `libc/heap.c` — see note (c) |
 | 7.4 | Implement buffered input and output (`<stdio.h>`) and formatted conversion. | Implemented | `libc/stdio/` — see note (d) |
-| 7.5 | Author the C runtime startup object (`crt0`) and the static-linking procedure for user programs. | Planned | — |
+| 7.5 | Author the C runtime startup object (`crt0`) and the static-linking procedure for user programs. | Implemented | `userland/startup-check/` — see note (e) |
 | 7.6 | Implement the utilities `ls`, `cat`, `echo`, `mkdir` and `rm`. | Planned | — |
 | 7.7 | Construct an initial ramdisk containing the utilities and mount it as the early root. | Planned | — |
 
@@ -535,6 +546,46 @@ limitations rather than papered over. Section 10.8.
 **Nothing in 7.4 required a system call, and the count of them is still eight.**
 The only thing a stream asks of the kernel is `write`, which has existed since
 sub-task 6.7.
+
+**(e)** Sub-task 7.5 is the first thing in this project asserted by a program
+that was **built** rather than composed byte by byte, and it closes four
+limitations that earlier sub-tasks had recorded and could not close: nothing in
+the C library had ever run at privilege level 3 (Section 6, limitation 4); the
+heap's policy and its `brk` were asserted apart and never joined (Section 9.1);
+the transfer beneath a stream could not be reached from inside the kernel
+(Section 10.5.2); and the whole library had only ever been compiled one way.
+[`../design/LIBC.md`](../design/LIBC.md), Section 11.
+
+**The kernel gained a half of the process-entry contract it had never had.** The
+System V ABI, Section 3.4.1, puts the argument count at the stack pointer, and
+this kernel left that pointer one byte past the last mapped byte of the stack —
+which every program composed by hand ignored and the first conforming `_start`
+faults upon. The frame is six eightbytes of zero, and since the stack pages are
+already zeroed the whole of the change is a subtraction.
+
+**No `make` target was added**, deliberately: the program is embedded in the
+kernel image and is therefore a dependency of it, exactly as the real-mode
+trampoline is. A new target would have obliged an amendment to
+`PROJECT_GUIDELINES.md`, Section 3, which Section 7 of that document reserves to
+the project owner.
+
+**Three of the fifteen negative tests of 7.5 found a false claim rather than a
+defect**, and in each case the documentation was corrected against a measurement
+rather than the code being changed: `-z max-page-size=0x1000` was passed on the
+belief that it kept the image small and was measured to change the output by not
+one byte (it was removed; `-n` does that work); `-mcmodel=kernel` was said to
+produce relocations the linker would refuse, and in fact links and runs at four
+mebibytes; and the `ar` index was said to matter, which GNU `ar` writes either
+way. Two more found things no assertion here can defend and are limitations.
+Section 11.7.
+
+**The sub-task also deleted code it had just written.** The kernel's frame was at
+first written out explicitly, with the topmost frame's physical address kept in
+order to reach it; the negative test that removed the write reported nothing,
+because the pages are zeroed unconditionally a few lines above. It was deleted
+rather than kept, which is what 7.3 did with the second size check in
+`OxysHeapAdopt`.
+
 ---
 
 ## Phase 8 — Shell

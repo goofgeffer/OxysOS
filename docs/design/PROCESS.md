@@ -6,9 +6,18 @@
 [`../project/PLAN.md`](../project/PLAN.md). Sections 1 to 8 are 6.9, which
 defines the structures; Sections 9 and 10 are 6.10, which switches to them and
 descends to privilege level 3; Sections 11 to 16 are 6.11, which gives a program
-the four calls by which it governs another.
+the four calls by which it governs another. **Section 10.2 is sub-task 7.5**, and
+is here rather than in [`LIBC.md`](LIBC.md) because it is the kernel's half of a
+contract that document holds the other half of: what stands upon a stack before a
+program's first instruction.
 
 **Authority**: `PROJECT_GUIDELINES.md`, Sections 2, 3 and 6.
+
+**Specifications**: Intel 64 and IA-32 Architectures Software Developer's Manual,
+Volume 3A, "IRETQ" and Section 6.12 (the return to an outer privilege level);
+System V Application Binary Interface, AMD64 supplement, Section 3.4.1 (the
+initial process stack and the register state at process entry), which Section
+10.2 implements the kernel's half of.
 
 **Implementation**: [`../../kernel/proc/process.c`](../../kernel/proc/process.c),
 [`../../kernel/arch/x86_64/proc/switch.asm`](../../kernel/arch/x86_64/proc/switch.asm),
@@ -286,7 +295,7 @@ Five quadwords, pushed in the reverse of the order the instruction pops them:
 | Pushed | Value | Why |
 | ------ | ----- | --- |
 | `SS` | The user data selector, **RPL 3** | The requested privilege level is what makes this a return to an outer level; without it the return is same-privilege and the program runs in the kernel |
-| `RSP` | The top of the process's user stack | |
+| `RSP` | What `ProcessCreateUserStack` returned: forty-eight bytes below the top of the stack, where the initial process frame of the System V ABI stands. Section 10.2 |
 | `RFLAGS` | `0x202` | The interrupt flag, because a program that could not be interrupted could not be pre-empted and would own the machine. Bit 1 is written because the architecture reserves it as one — though the processor forces it whether or not it is written, which was established by clearing it and observing that nothing changed. It is there for the reader |
 | `CS` | The user code selector, **RPL 3** | As `SS` |
 | `RIP` | The image's entry point | |
@@ -295,6 +304,39 @@ Five quadwords, pushed in the reverse of the order the instruction pops them:
 a kernel address as often as not, and handing one to a program that then prints
 it is a disclosure no fault would report.
 
+
+### 10.2 What stands upon the stack, of sub-task 7.5
+
+The table above says `RSP` is "the top of the process's user stack", and until
+sub-task 7.5 it was — which is one byte past the last mapped byte.
+
+Every program before that sub-task was composed instruction by instruction by
+`kernel/test/program.c` and never read its own stack, so nothing noticed. The
+System V Application Binary Interface, AMD64 supplement, Section 3.4.1, "Stack
+State", puts **the argument count at the stack pointer**, the argument pointers
+at `8+%rsp`, the null pointer ending them at `8+8*argc+%rsp`, the environment
+pointers after those, a null pointer ending them, and the auxiliary vector ending
+with a null entry; and it guarantees that `%rsp` "is 16-byte aligned at process
+entry". The first conforming `_start` reads the argument count and faults.
+
+`ProcessCreateUserStack` therefore returns forty-eight bytes below the top, and
+that subtraction is the whole of the change. This kernel's `execve` accepts
+neither vector, so every eightbyte the ABI names is zero — and a stack's pages
+are already zeroed, for the disclosure reason above — so the frame is already
+standing and only the room for it was missing.
+
+Forty-eight and not forty, which is what five eightbytes would be: a page-aligned
+top less forty is not sixteen-byte aligned, and the sixth eightbyte of padding
+makes it so. A program entered upon a misaligned stack faults at the first
+instruction using an aligned move, inside a function the program did not write.
+
+**The frame is built for every program**, including the ones composed by hand
+that will never read it. A contract that depended upon what the kernel guessed
+about its caller would not be one.
+
+[`LIBC.md`](LIBC.md), Section 11.1, records the rest, including an earlier
+version of this that wrote the six zeroes explicitly and was deleted when a
+negative test showed the write could not be observed.
 ### 10.1 How the kernel gets back
 
 Three ways, and this sub-task implements two of them.

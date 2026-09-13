@@ -100,6 +100,28 @@ asserts exists.
 `kernel/test/README.md` records the arrangement, the distinction between a
 self-test and a diagnostic probe, and the limitations of both.
 
+### 1.2 One assertion is known to be intermittent
+
+**`an admitted thread does not record its queue`**, in
+`kernel/test/proc/sched.c`, failed once in about twenty runs of the same image
+during sub-task 7.5 and has not been reproduced since — nine consecutive runs of
+that image and four of build 11 were clean.
+
+It is recorded here rather than investigated, because the diagnosis is plain from
+the code and the fix belongs to whoever next works upon Phase 6. The assertion is
+made **after** `SchedulerAdmit` has returned and reads `thread->queued`; the
+machine has two processors, and the other one may take the thread off the queue
+and run it to completion in that window. The race is in the test and not in the
+scheduler: a thread that was admitted and then promptly run is a scheduler
+working correctly, and the assertion cannot tell that from a thread that was
+never queued.
+
+**A test that reports a failure which is not one is worse than no test**, so this
+is a real defect and not a curiosity. It is left as it stands here because
+altering a Phase 6 assertion was outside what sub-task 7.5 was asked to do, and
+because a change made without being able to reproduce the failure cannot be shown
+to have fixed it.
+
 ## 2. Interactive execution under QEMU
 
 ```sh
@@ -302,6 +324,34 @@ A boot takes some minutes and the captured file is then read exactly as
 The `BXVGA` messages about an unsupported guest pixel format are the display
 stub declining to render a 32-bit framebuffer upon a display library that has
 none, and are not the kernel's.
+
+**A `bochsrc` whose `vgaromimage` is wrong produces four failures that look like
+kernel regressions**, and it cost half an hour at sub-task 7.5. The symptom is
+exactly this set and no other:
+
+```
+Display self-test FAILED.
+Framebuffer self-test FAILED.        (preceded by "the boot loader described no display")
+Compositing self-test FAILED.
+Serial self-test FAILED.             ("A sequence did not return unaltered through the loopback")
+```
+
+The same image under QEMU and VirtualBox passes every one of them. The cause is
+that the VGA BIOS is what implements the VBE calls GRUB uses to honour the
+Multiboot2 framebuffer request, so a machine without one presents a text-mode
+adapter and no linear framebuffer — and the display, framebuffer and compositing
+tests are then asserting against hardware that is not there. The serial failure
+is the same configuration error rather than a related one: a `bochsrc` with a
+mistaken ROM line usually has more than one.
+
+**The mistake that produced it is worth naming**, because it is easy to repeat: a
+`sed` expression written to replace the `romimage:` line also matches
+`vgaromimage:`, that string containing the other. Anchor it — `s|^romimage:|…|`.
+
+**The rule to take from it**: a failure that appears under Bochs and under
+neither of the other two is a failure to suspect the `bochsrc` for first. This
+project's self-tests are hardware-dependent by design, and Bochs is the
+environment where the hardware is described by a file a person wrote.
 
 ## 5. Testing upon physical hardware
 
