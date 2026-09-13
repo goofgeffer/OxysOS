@@ -105,7 +105,7 @@ self-test and a diagnostic probe, and the limitations of both.
 **`an admitted thread does not record its queue`**, in
 `kernel/test/proc/sched.c`, failed once in about twenty runs of the same image
 during sub-task 7.5 and has not been reproduced since — nine consecutive runs of
-that image and four of build 11 were clean.
+that image and four of the sub-task 7.4 image were clean.
 
 It is recorded here rather than investigated, because the diagnosis is plain from
 the code and the fix belongs to whoever next works upon Phase 6. The assertion is
@@ -217,7 +217,9 @@ Serial adapter: transmitted 6927, received 0, interrupts 55, queued 0, waits 0, 
 
 294 lines of boot log, 55 assertions reporting passed or sound, no verdict of
 `FAILED`, and the adapter driven by interrupt throughout.
-[`BUILDS.md`](BUILDS.md), build 1, is the image it came from.
+The image it came from was the first this project numbered;
+[`TESTING-RECORD.md`](TESTING-RECORD.md) holds the run, and the register no
+longer holds the row — see [`BUILDS.md`](BUILDS.md).
 
 **This document asserted the opposite until that run**, having said since Phase 4
 that VirtualBox had no serial channel at all; [`HISTORY.md`](HISTORY.md) records
@@ -261,18 +263,33 @@ carry.
 
 ## 4A. Execution under Bochs
 
-Bochs is a fifth environment, added at sub-task 7.2. It is not a `make` target:
-it requires a configuration file naming absolute paths and a build of the
-emulator this project does not produce, and a target that assumed either would be
-a target that failed upon somebody else's machine.
+Bochs is a fifth environment, added at sub-task 7.2. The machine it presents is
+[`../../tools/bochsrc.cfg`](../../tools/bochsrc.cfg), which is run from the
+repository root:
 
 ```sh
-bochs -q -f bochsrc
+bochs -q -f tools/bochsrc.cfg
 ```
 
-with a `bochsrc` naming the ISO as an ATA CD-ROM, `boot: cdrom`, and
-`com1: enabled=1, mode=file, dev=<path>` — after which the captured file is read
-exactly as `build/serial.log` is.
+It writes the boot log to `build/bochs-serial.log`, which is then read exactly as
+`build/serial.log` is, and Bochs's own log to `build/bochs.log`. Both are in
+`build/`, so they are ignored by git and removed by `make clean`.
+
+**Until sub-task 7.5 there was no such file**, and this section said there could
+not be one: a configuration naming absolute paths and a build of the emulator
+this project does not produce would be a file that failed upon somebody else's
+machine. Half of that was solved rather than endured. The two ROM lines name
+`$BXSHARE`, which is the variable Bochs itself uses to find its BIOS images —
+and which resolves to the configure-time default when it is not set in the
+environment, so an ordinary installation needs nothing done to it — and the
+medium and the two logs are relative to the repository root. Nothing in the file
+belongs to one machine.
+
+**The other half stands, and it is why this is still not a `make` target.** The
+emulator must be built with the options below, and a target would run whatever
+`bochs` is upon the `PATH` — which upon this machine has three times been a build
+that cannot execute long mode at all. A target that silently ran the wrong
+emulator would be worse than no target.
 
 **What Bochs is good for that the others are not.** It is an interpreter and not
 a virtualiser: every instruction is decoded and checked against the architecture,
@@ -301,20 +318,11 @@ configuration that works:
             --enable-pci --enable-cdrom --enable-long-phy-address --with-nogui
 ```
 
-The `bochsrc` that boots it, with the CPU model named explicitly because a
-default-built Bochs and a 64-bit one do not agree upon what the default is:
-
-```
-megs: 512
-cpu: count=2, ips=100000000, model=corei7_sandy_bridge_2600k
-romimage: file=/usr/local/share/bochs/BIOS-bochs-latest
-vgaromimage: file=/usr/local/share/bochs/VGABIOS-lgpl-latest.bin
-ata0: enabled=1, ioaddr1=0x1f0, ioaddr2=0x3f0, irq=14
-ata0-master: type=cdrom, path=<absolute path to build/oxys.iso>, status=inserted
-boot: cdrom
-com1: enabled=1, mode=file, dev=<absolute path for the captured log>
-display_library: nogui
-```
+The `bochsrc` that boots it is [`../../tools/bochsrc.cfg`](../../tools/bochsrc.cfg),
+which is in the repository and carries the reasoning for each value beside it.
+The CPU model is named explicitly there because it must be: a default-built Bochs
+and a 64-bit one do not agree upon what the default is, and the symptom of
+leaving it out is a kernel that halts where it enables long mode.
 
 `display_library: nogui` requires `--with-nogui`; a build without it reports
 `display library 'nogui' not available` and there is no headless run to be had.
@@ -351,7 +359,10 @@ mistaken ROM line usually has more than one.
 **The rule to take from it**: a failure that appears under Bochs and under
 neither of the other two is a failure to suspect the `bochsrc` for first. This
 project's self-tests are hardware-dependent by design, and Bochs is the
-environment where the hardware is described by a file a person wrote.
+environment where the hardware is described by a file a person wrote. Since
+sub-task 7.5 that file is [`../../tools/bochsrc.cfg`](../../tools/bochsrc.cfg)
+and is in the repository, which is the other reason it is worth having: a
+configuration nobody retypes is a configuration nobody mistypes.
 
 ## 5. Testing upon physical hardware
 

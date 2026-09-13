@@ -365,11 +365,12 @@ in the Makefile or anywhere else.
 4. ~~**Nothing here is asserted upon a machine other than QEMU**, and nothing
    here has ever run at privilege level 3.~~ **Both resolved.** The first is
    resolved by the three-environment runs recorded in
-   [`../project/STATUS.md`](../project/STATUS.md) — every image since build 1 has
-   been booted under VirtualBox and Bochs as well. The second is resolved at
-   sub-task 7.5, which builds a program, links it against these functions and
-   runs it at privilege level 3; it is a genuine second verification rather than
-   a formality, the compilation flags differing. Section 11.
+   [`../project/STATUS.md`](../project/STATUS.md) — every image this project has
+   numbered has been booted under VirtualBox and Bochs as well. The second is
+   resolved at sub-task 7.5, which builds a program, links it against these
+   functions and runs it at privilege level 3; it is a genuine second
+   verification rather than a formality, the compilation flags differing.
+   Section 11.
 5. **There is no `<string.h>` guarantee that these are the only definitions.**
    The kernel is compiled without `libc/include` in reach precisely so that it
    cannot come to depend upon them, but nothing mechanically prevents a future

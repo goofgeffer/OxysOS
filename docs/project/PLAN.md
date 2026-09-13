@@ -109,6 +109,14 @@ Each is marked in the table of its phase, and
 can do that the one before it could not, and — for `Oxys 1` — what it will not
 have, Phases 12 and 13 falling after it.
 
+**The build register is suspended until the alpha.** At the project owner's
+direction on 2026-09-13 every row of [`BUILDS.md`](BUILDS.md) was removed and
+every archived image deleted, and no build is recorded again until `Oxys 1 Alpha`
+is cut at sub-task 8.7. The machinery is untouched — `make build-record` works,
+and would append row 13 — and the numbers already issued are retired rather than
+freed, so nothing that cites one comes to mean something else. That document
+holds the reasoning.
+
 **The alpha and the beta are the first release's and are not expected to recur.**
 Every release after `Oxys 1` is preceded by internal debug builds, which are
 images rather than releases: they are numbered in [`BUILDS.md`](BUILDS.md), carry

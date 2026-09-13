@@ -14,7 +14,9 @@ gone stale.
 [`STATUS.md`](STATUS.md) says what the system does today;
 [`HISTORY.md`](HISTORY.md) says how it came to be that way;
 [`TESTING-RECORD.md`](TESTING-RECORD.md) says what was tested and what happened.
-This says **which image**, and it is the only one of the five that answers that.
+This says **which image**, and it is the only one of the five that answers that —
+though it presently answers it about nothing, recording having been suspended
+until `Oxys 1 Alpha`.
 
 **Phase**: none. It belongs to no phase, as
 [`../../tools/README.md`](../../tools/README.md) records of everything in that
@@ -148,6 +150,10 @@ run.
 
 ## What is kept, and what became of the first eight builds
 
+*Written before the register was cleared, and left as it stands: the section below
+is about what happens to images that are not archived, which is a property of the
+arrangement and not of any row. See "The register was cleared" below.*
+
 A row describes an image. **It is not the image**, and for the first ten builds
 nothing kept the image at all: `build/` is ignored by git and `make clean`
 removes it, so an ISO's life was typically the hour between being recorded and
@@ -160,7 +166,7 @@ plainly because the register had been reporting it as a success the whole time:
 | ------ | ----- |
 | 1, 2, 4, 5, 6, 8 | **Unrecoverable.** Recorded `dirty=yes`, so the tree they were compiled from was never committed, and their images are gone. Nothing can reconstruct them. |
 | 3, 7 | Image gone, but `dirty=no` — rebuildable from the commit, given the same toolchain. |
-| 9, 10 | Archived, and the only images of this project that still exist. |
+| 9, 10 | Archived — the only images that survived that far. They were deleted with the rest on 2026-09-13; see below. |
 
 Six of the first eight builds, lost inside two days. Build 1 is the one worth
 regretting: it is the first image this project ever numbered, it was exercised in
@@ -226,6 +232,54 @@ this project most likely to exist in ten years are therefore the released ones
 named in [`VERSIONING.md`](VERSIONING.md), Section 11.1, because those are the
 ones that will leave this machine.
 
+
+## The register was cleared, and no build is recorded until the alpha
+
+**On 2026-09-13 the project owner directed that every row be removed and every
+archived image deleted.** Twelve rows and three ISOs went; `~/oxys-builds/` is
+empty, and [`builds.tsv`](builds.tsv) holds its licence tag, its schema and
+nothing else. **Recording does not resume until `Oxys 1 Alpha`**, which
+[`PLAN.md`](PLAN.md) fixes at sub-task 8.7.
+
+**The machinery is untouched, and that was the point.** `make build-record` works
+exactly as it did; [`../../tools/builds.sh`](../../tools/builds.sh) gained one
+function and lost none. A register that could not be emptied without dismantling
+the thing that keeps it would be a register whose tooling had become the record,
+and the whole argument of this document is that the two are separate: the record
+is a file, the tooling reads and writes it, and removing every line from the file
+should leave the tooling exactly as it was.
+
+**Numbers 1 to 12 are retired and will never be reissued.** A build number is a
+name. [`TESTING-RECORD.md`](TESTING-RECORD.md) says what was observed about
+builds 1, 5, 6 and 9 at length, and that document is an account of things that
+happened rather than a thing edited afterwards; if a future row were numbered 1,
+those accounts would describe an image that is not the one they were written
+about. The record therefore carries a directive —
+
+```
+# retired-through: 12
+```
+
+— which `record` allocates above and `check` expects the first row to follow, so
+the next build recorded is 13. It is the same rule the system-call numbers obey
+in [`../../kernel/abi/oxys/syscall_abi.h`](../../kernel/abi/oxys/syscall_abi.h),
+and for the same reason: **a number already handed out is a number that must not
+come to mean something else.**
+
+**What is lost is what the section above predicted would be lost.** Of the twelve
+images, three still existed; the other nine had gone to `make clean` within hours
+of being recorded, which that section records as the defect archiving exists to
+answer. The three that survived are now gone too, by decision rather than by
+neglect — and the rows describing them are gone with them, so the register no
+longer claims anything it cannot show. That is the one property this clearing
+strictly improves: there is no longer a row in this file describing an image
+nobody can produce.
+
+**What is kept is the writing.** Everything above and below this section — why a
+register exists, why it is tab-separated, why archiving is not the default, and
+what became of the first eight builds — stands unchanged, because none of it was
+a fact about a particular row. The account of the six unrecoverable builds is
+still the reason `ARCHIVE=1` exists, and it is still true that it happened.
 ## What a row *is*, and the order of the rows
 
 **One image, recorded once**, with the environments it had been run in by the
@@ -242,7 +296,9 @@ row already written, and no row here may be disturbed.
 
 ## The record itself
 
-Every build is in [`builds.tsv`](builds.tsv). What follows is generated from it.
+Every build is in [`builds.tsv`](builds.tsv). What follows is generated from it —
+and it is presently empty, the register having been cleared; the summary's
+*Numbers retired* row is the only thing in it with anything to say.
 
 <!-- BEGIN GENERATED: tools/builds.sh render -->
 
@@ -254,28 +310,17 @@ regenerates it and fails if what is here differs.*
 
 | | |
 | --- | --- |
-| Builds recorded | 12 |
-| Verified | 12 passed, 0 not |
-| Compilers | clang, gcc |
-| Environments | Bochs, OVMF, QEMU, VirtualBox |
-| First | 2026-09-11T21:39Z |
-| Latest | 2026-09-13T21:48Z |
+| Builds recorded | 0 |
+| Verified | 0 passed, 0 not |
+| Compilers | - |
+| Environments | - |
+| First | - |
+| Latest | - |
+| Numbers retired | 1 to 12, never to be reissued |
 
 ## The builds
 
 | # | Date (UTC) | Commit | Compiler | Kernel | ISO | Result | Environments | Note |
 | - | ---------- | ------ | -------- | ------ | --- | ------ | ------------ | ---- |
-| 1 | 2026-09-11T21:39Z | `0439d05` *(modified)* | gcc 13.2.0 | 1934352 | 7063552 | passed (55 assertions) | QEMU;Bochs;VirtualBox;OVMF:did-not-boot | Sub-task 7.2: the first image carrying the C library's system-call wrappers. OVMF fails as TESTING.md Section 3 says it must until Phase 12. |
-| 2 | 2026-09-11T21:39Z | `0439d05` *(modified)* | clang 18.1.3 | 1616936 | 6746112 | passed (55 assertions) | QEMU | The same source built by the second compiler, to establish that the wrappers' assembly and static assertions compile and run under both. |
-| 3 | 2026-09-11T22:28Z | `3bb9b20` | gcc 13.2.0 | 1934352 | 7063552 | passed (55 assertions) | QEMU | Sub-task 7.2 as committed at 3c0490b, rebuilt clean from the committed tree. |
-| 4 | 2026-09-11T22:42Z | `f5f8e6f` *(modified)* | gcc 13.2.0 | 1934352 | 7063552 | passed (55 assertions) | QEMU | The build register turned into a record with a schema: docs/project/builds.tsv, queried and rendered by tools/builds.sh. |
-| 5 | 2026-09-12T03:09Z | `b7d6cf8` *(modified)* | gcc 13.2.0 | 2025624 | 7155712 | passed (56 assertions) | QEMU;Bochs;VirtualBox | Sub-task 7.3: the first image carrying the C library's heap and the kernel's brk, the eighth system call and the first added since Phase 6. Run in all three environments upon the same image. |
-| 6 | 2026-09-12T03:10Z | `b7d6cf8` *(modified)* | clang 18.1.3 | 1688080 | 6817792 | passed (56 assertions) | QEMU | The same source built by the second compiler, to establish that the allocator's static assertions and its address arithmetic compile and behave identically under both. |
-| 7 | 2026-09-12T16:03Z | `7a87df0` | gcc 13.2.0 | 2026216 | 7155712 | passed (56 assertions) | QEMU | the arch/x86_64 boundary and the three relocations; structure only, no code changed |
-| 8 | 2026-09-12T16:05Z | `7a87df0` *(modified)* | clang 18.1.3 | 1688792 | 6817792 | passed (56 assertions) | QEMU | the same tree by the second compiler |
-| 9 | 2026-09-12T16:49Z | `f605407` | gcc 13.2.0 | 2024792 | 7151616 | passed (56 assertions) | QEMU;Bochs;VirtualBox | the header corpus and self-tests grouped; the two fault-screen entries withdrawn |
-| 10 | 2026-09-12T16:49Z | `f605407` *(modified)* | clang 18.1.3 | 1688328 | 6815744 | passed (56 assertions) | QEMU | the same tree by the second compiler |
-| 11 | 2026-09-13T16:54Z | `7faf6c7` *(modified)* | gcc 13.2.0 | 2140872 | 7268352 | passed (57 assertions) | QEMU;Bochs;VirtualBox | Sub-task 7.4: the first image carrying the C library's buffered streams and formatted conversion. |
-| 12 | 2026-09-13T21:48Z | `6397915` *(modified)* | gcc 13.2.0 | 2173720 | 7301120 | passed (59 assertions) | QEMU;Bochs;VirtualBox | Sub-task 7.5: the first image carrying a program built from source — the runtime startup object, the link procedure and the initial process stack the System V ABI requires. |
 
 <!-- END GENERATED -->

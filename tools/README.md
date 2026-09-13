@@ -13,7 +13,9 @@ part of it — [`../LICENSING.md`](../LICENSING.md), Section 1.
 Every check here was written after a real defect that a person had missed. None
 of them is a style rule, and none enforces a preference.
 [`builds.sh`](builds.sh) is the one that is more than a check — it keeps a record
-as well as validating it — and is described beneath the table.
+as well as validating it — and is described beneath the table, and
+[`bochsrc.cfg`](bochsrc.cfg) is neither a check nor a record but a machine
+description, described beneath that.
 
 | Script | What it checks | The defect that motivated it |
 | ------ | -------------- | ---------------------------- |
@@ -37,6 +39,16 @@ by default, outside the working tree, and the script **refuses** a root inside
 one rather than merely advising against it, an ISO in git history being a mistake
 that cannot be taken back. `check` then fails when a row claims an image the
 archive does not hold, and `check --deep` re-hashes the bytes.
+
+**The register was emptied on 2026-09-13** at the project owner's direction —
+every row, and every archived image with them — and nothing is recorded again
+until `Oxys 1 Alpha`. The script is unchanged but for one addition: it reads a
+`# retired-through: N` directive from the record, allocates above it and expects
+the first row to follow it, so numbers already cited in
+[`../docs/project/TESTING-RECORD.md`](../docs/project/TESTING-RECORD.md) are
+never handed to a second image. That a register could be emptied without
+dismantling the thing that keeps it is the property this arrangement was supposed
+to have, and clearing it is the first time anything tested that.
 
 It is here rather than anywhere else because it belongs to no phase, as
 everything in this directory does, and because it is the same kind of thing: a
@@ -62,6 +74,32 @@ there, which is what makes it safe to call after any target and after a boot a
 person observed themselves in an environment that leaves no log.
 `BUILD_DIR` selects where it reads from, as it does for the `Makefile`.
 
+## `bochsrc.cfg` — the one thing here that is neither a check nor a record
+
+[`bochsrc.cfg`](bochsrc.cfg) is the Bochs machine this project is tested upon:
+the processor, the memory, the medium the ISO is presented as, and the serial
+channel the boot log is captured through. It is run from the repository root —
+`bochs -q -f tools/bochsrc.cfg` — and writes both logs into `build/`, which git
+ignores and `make clean` removes.
+
+It is here because it belongs to no phase, as everything in this directory does,
+and because it is the same kind of thing in the sense that matters: **a
+discipline that was somebody's memory.** For three sub-tasks
+[`../docs/project/TESTING.md`](../docs/project/TESTING.md), Section 4A, printed a
+configuration for a person to retype, and at sub-task 7.5 somebody retyped it
+wrongly — a `vgaromimage` pointed at the system BIOS — and four self-tests failed
+in a way that looked exactly like a kernel regression. A configuration nobody
+retypes is a configuration nobody mistypes.
+
+**It names no path belonging to any one machine.** The ROM images are found
+through `$BXSHARE`, which is the variable Bochs itself uses and which resolves to
+the configure-time default when it is unset; the medium and the logs are relative
+to the repository root. What it still depends upon is a Bochs built with
+`--enable-x86-64`, `--enable-smp` and `--with-nogui`, and that is why there is no
+`make` target for it: a target would run whatever `bochs` is upon the `PATH`,
+which upon this machine has three times been a build that cannot execute long
+mode. Section 4A records the options and the symptom.
+
 ## Running them
 
 ```sh
@@ -69,10 +107,13 @@ make lint          # both checks, and what CI runs
 make spdx-check    # tags only, changes nothing
 make spdx-apply    # add the tag to files that lack one
 make docs-check    # the corpus, the build register included
-make build-record NOTE="…"   # not a check: one row in the register
+make build-record NOTE="…"   # not a check: one row in the register — suspended
+                             # until Oxys 1 Alpha; see BUILDS.md
 
 tools/builds.sh query --compiler clang --result failed
 tools/builds.sh sql "SELECT compiler, COUNT(*) FROM builds GROUP BY compiler"
+
+bochs -q -f tools/bochsrc.cfg # not a check either: the Bochs machine, run from here
 ```
 
 Each of the checks exits non-zero on failure, so it reads like a compiler

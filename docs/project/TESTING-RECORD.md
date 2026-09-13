@@ -22,6 +22,20 @@ one where a defect is inserted deliberately, the run observed to catch it, and
 the edit reverted — is recorded as its own row, because a test that has never
 been seen to fail is a test nothing has established the value of.
 
+**The build numbers in the rows below name a register that no longer holds
+them.** On 2026-09-13 the project owner directed that every row of
+[`BUILDS.md`](BUILDS.md) be removed and every archived image deleted. The rows
+here are not edited to match: this is an account of runs that happened, and
+"build 1 reported fifty-five assertions" was true when it was written and stays
+true. **Numbers 1 to 12 are retired and will not be reissued**, so a reference
+here can never come to name a different image; the register's own directive is
+what enforces that, and [`BUILDS.md`](BUILDS.md) records the reasoning.
+
+What the references have lost is the ability to be followed. A row saying *build
+5, the heap image* named something a reader could look up, and now names
+something a reader can only read about here. That is the cost of the decision and
+it is stated rather than glossed.
+
 ---
 
 ## 1. The record

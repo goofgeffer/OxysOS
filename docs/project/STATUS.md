@@ -410,17 +410,18 @@ The physical machine is one machine — the HP Laptop 14-dq0052dx specified in
 | 7.4 The buffered streams | Yes | **Yes** | **Yes** | — | **Not yet run** |
 | 7.5 The runtime startup object | Yes | **Yes** | **Yes** | — | **Not yet run** |
 
-**The rows marked "— 7.2" were all established by two boots of one image**, build
-1 of [`BUILDS.md`](BUILDS.md), because a boot runs every self-test in the corpus
-and a clean one is therefore evidence about every phase at once. Both reported
-55 assertions passed or sound and no verdict of `FAILED`: VirtualBox 7.2.0 with
-two processors, and Bochs 3.1 likewise. **The same is true of sub-task 7.3's
-row**, established by builds 5 to 8: every row above it was re-confirmed by those
-boots and none is restated here, a clean boot being evidence about the whole
-corpus and not about the sub-task that prompted it.
+**The rows marked "— 7.2" were all established by two boots of one image**,
+because a boot runs every self-test in the corpus and a clean one is therefore
+evidence about every phase at once. Both reported 55 assertions passed or sound
+and no verdict of `FAILED`: VirtualBox 7.2.0 with two processors, and Bochs 3.1
+likewise. **The same is true of sub-task 7.3's row**, established by the boots of
+the heap image: every row above it was re-confirmed by those boots and none is
+restated here, a clean boot being evidence about the whole corpus and not about
+the sub-task that prompted it. [`TESTING-RECORD.md`](TESTING-RECORD.md) holds
+what each run reported.
 
-**Sub-task 7.4's image was run in all three environments.** Build 11 of
-[`BUILDS.md`](BUILDS.md) booted under QEMU, under VirtualBox 7.2.0 configured as
+**Sub-task 7.4's image was run in all three environments.** It
+booted under QEMU, under VirtualBox 7.2.0 configured as
 `make run-vbox` configures it, and under Bochs 3.1 built with `--enable-x86-64`
 and `--enable-smp` — fifty-seven assertions passed or sound in each, and no
 verdict of `FAILED` in any. The Bochs installed upon this machine was the default
@@ -428,7 +429,7 @@ build again, reporting no processor above `atom_n270`, exactly as
 [`TESTING.md`](TESTING.md), Section 4A, says it will be; it was rebuilt from
 source with the configuration recorded there.
 
-**Sub-task 7.5's image was run in all three environments likewise.** Build 12
+**Sub-task 7.5's image was run in all three environments likewise.** It
 booted under QEMU, under VirtualBox 7.2.0 and under Bochs 3.1, with fifty-nine
 assertions passed or sound and no verdict of `FAILED` in any — and in each of the
 three the log carries lines written **by a program**, through the C library's own
@@ -443,6 +444,15 @@ request through; the display, framebuffer and compositing tests were asserting
 against hardware that was not there. Corrected, the run is clean.
 [`TESTING.md`](TESTING.md), Section 4A, records the symptom set, because it is a
 failure that looks exactly like a regression.
+
+**The build register was cleared on 2026-09-13**, at the project owner's
+direction: every row removed, every archived image deleted, and no build recorded
+again until `Oxys 1 Alpha` at sub-task 8.7. The runs described above happened and
+their results stand — [`TESTING-RECORD.md`](TESTING-RECORD.md) holds what each
+reported — but there is no longer a numbered image to point at, which is why none
+of the paragraphs above names one. Numbers 1 to 12 are retired rather than freed,
+so the references in `TESTING-RECORD.md` can never come to mean something else.
+[`BUILDS.md`](BUILDS.md) records the decision.
 
 **The VirtualBox run carried its whole boot log over the serial adapter**, 6,927
 bytes by interrupt, so the automated assertion is available there and not only

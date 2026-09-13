@@ -28,7 +28,8 @@ sub-task 8.7, `Oxys 1 Beta` at 9.7, and `Oxys 1` at around 11.10. Each is fixed 
 a sub-task of [`PLAN.md`](PLAN.md) and not to a date. The alpha and the beta
 belong to the first release alone; everything after it is preceded by internal
 debug builds, which Section 5.5 distinguishes from releases and which are
-numbered in [`BUILDS.md`](BUILDS.md) rather than named here.
+numbered in [`BUILDS.md`](BUILDS.md) rather than named here — once that register
+resumes at the alpha, recording having been suspended by the owner on 2026-09-13.
 
 ## 1. The premise
 
@@ -213,7 +214,7 @@ nobody but whoever built it.
 
 | It has | It has not |
 | ------ | ---------- |
-| A number, in [`BUILDS.md`](BUILDS.md) — every image this project produces gets one, which is what that register is for | An ordinal, a point, a pre-release qualifier or an edition |
+| A number, in [`BUILDS.md`](BUILDS.md), once recording resumes at `Oxys 1 Alpha` — it is suspended at the owner's direction and the register presently holds no rows | An ordinal, a point, a pre-release qualifier or an edition |
 | A commit, a compiler, a size and a verification result, recorded by `make build-record` | A tag. Nothing under Section 9.1 is cut for it |
 | A note saying why it was built | Release notes under Section 9.4 |
 | `OXYS_VERSION_STRING` reading `unreleased`, which is what that value is for | A row in the release record of Section 11 |
@@ -222,6 +223,15 @@ nobody but whoever built it.
 The register answers *which image*; this document answers *what a released thing
 is called*. An internal build needs the first and has no use for the second, and
 before the register there was nowhere for such an image to be recorded at all.
+
+**Recording is suspended until the alpha**, by the project owner's direction on
+2026-09-13, and the two rows above describing a number and a `build-record` entry
+describe what an internal build will have rather than what one has today. The
+register was emptied and every archived image deleted in the same decision.
+Nothing in this section changes because of it: an internal build is still not a
+release, and the reason the register exists is still that it answers *which
+image*. What changed is when it starts answering.
+[`BUILDS.md`](BUILDS.md) holds the decision and the numbers it retired.
 
 **The moment an image is handed to somebody else it stops being internal**, and
 at that moment it is a release and every condition of Section 10 applies to it.

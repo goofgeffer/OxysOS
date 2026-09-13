@@ -1,15 +1,19 @@
 # SPDX-FileCopyrightText: 2026 The Oxys-OS Authors
 # SPDX-License-Identifier: CC0-1.0
+#
+# The build register. One row per image produced; the schema and the reasoning
+# are docs/project/BUILDS.md, and tools/builds.sh is what writes and validates
+# it.
+#
+# It holds no rows. Every one of the twelve it held was removed at the project
+# owner's direction on 2026-09-13, together with every archived image, and
+# nothing is recorded here again until `Oxys 1 Alpha` — which docs/project/PLAN.md
+# fixes at sub-task 8.7. The machinery is untouched: `make build-record` still
+# works and would append row 13 the moment it is run.
+#
+# The directive below is why it would be 13 and not 1. A build number is a name,
+# and docs/project/TESTING-RECORD.md is an account of what was observed about
+# builds 1, 5, 6 and 9 that is not edited after the fact. Reissuing those numbers
+# would make those accounts describe something else.
+# retired-through: 12
 number	date	commit	dirty	compiler	cc_version	kernel	iso	result	assertions	environments	sha256	note
-1	2026-09-11T21:39Z	0439d05	yes	gcc	13.2.0	1934352	7063552	passed	55	QEMU;Bochs;VirtualBox;OVMF:did-not-boot	-	Sub-task 7.2: the first image carrying the C library's system-call wrappers. OVMF fails as TESTING.md Section 3 says it must until Phase 12.
-2	2026-09-11T21:39Z	0439d05	yes	clang	18.1.3	1616936	6746112	passed	55	QEMU	-	The same source built by the second compiler, to establish that the wrappers' assembly and static assertions compile and run under both.
-3	2026-09-11T22:28Z	3bb9b20	no	gcc	13.2.0	1934352	7063552	passed	55	QEMU	-	Sub-task 7.2 as committed at 3c0490b, rebuilt clean from the committed tree.
-4	2026-09-11T22:42Z	f5f8e6f	yes	gcc	13.2.0	1934352	7063552	passed	55	QEMU	-	The build register turned into a record with a schema: docs/project/builds.tsv, queried and rendered by tools/builds.sh.
-5	2026-09-12T03:09Z	b7d6cf8	yes	gcc	13.2.0	2025624	7155712	passed	56	QEMU;Bochs;VirtualBox	-	Sub-task 7.3: the first image carrying the C library's heap and the kernel's brk, the eighth system call and the first added since Phase 6. Run in all three environments upon the same image.
-6	2026-09-12T03:10Z	b7d6cf8	yes	clang	18.1.3	1688080	6817792	passed	56	QEMU	-	The same source built by the second compiler, to establish that the allocator's static assertions and its address arithmetic compile and behave identically under both.
-7	2026-09-12T16:03Z	7a87df0	no	gcc	13.2.0	2026216	7155712	passed	56	QEMU	-	the arch/x86_64 boundary and the three relocations; structure only, no code changed
-8	2026-09-12T16:05Z	7a87df0	yes	clang	18.1.3	1688792	6817792	passed	56	QEMU	-	the same tree by the second compiler
-9	2026-09-12T16:49Z	f605407	no	gcc	13.2.0	2024792	7151616	passed	56	QEMU;Bochs;VirtualBox	-	the header corpus and self-tests grouped; the two fault-screen entries withdrawn
-10	2026-09-12T16:49Z	f605407	yes	clang	18.1.3	1688328	6815744	passed	56	QEMU	dc5477acf3b194b748aca46accfc40faff3524885b383920f41c651ea374e218	the same tree by the second compiler
-11	2026-09-13T16:54Z	7faf6c7	yes	gcc	13.2.0	2140872	7268352	passed	57	QEMU;Bochs;VirtualBox	8664e9809390f24925cf8788a5e4cb1a58c041164efb4c47e509b194af0e4b3c	Sub-task 7.4: the first image carrying the C library's buffered streams and formatted conversion.
-12	2026-09-13T21:48Z	6397915	yes	gcc	13.2.0	2173720	7301120	passed	59	QEMU;Bochs;VirtualBox	88def375d9620650c2c4a963eae5e19ac953259fe15025444c578ddd341bdf07	Sub-task 7.5: the first image carrying a program built from source — the runtime startup object, the link procedure and the initial process stack the System V ABI requires.
