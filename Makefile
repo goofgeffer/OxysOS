@@ -145,7 +145,10 @@ LIBC_SOURCES := libc/string/copying.c \
                 libc/syscall/result.c \
                 libc/syscall/calls.c \
                 libc/stdlib/heap.c \
-                libc/stdlib/system.c
+                libc/stdlib/system.c \
+                libc/stdio/stream.c \
+                libc/stdio/format.c \
+                libc/stdio/system.c
 
 # The C library's one assembly translation unit, which is the system-call
 # instruction itself.
@@ -196,6 +199,7 @@ C_SOURCES := kernel/kernel.c \
              kernel/test/libc/string.c \
              kernel/test/libc/wrappers.c \
              kernel/test/libc/heap.c \
+             kernel/test/libc/stdio.c \
              kernel/mm/pmm.c \
              kernel/mm/vmm.c \
              kernel/mm/heap.c \

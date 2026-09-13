@@ -2,7 +2,7 @@
 <!-- SPDX-License-Identifier: CC0-1.0 -->
 # The C Library
 
-**Phase**: 7, sub-tasks 7.1, 7.2 and 7.3, of [`../project/PLAN.md`](../project/PLAN.md).
+**Phase**: 7, sub-tasks 7.1, 7.2, 7.3 and 7.4, of [`../project/PLAN.md`](../project/PLAN.md).
 
 **Sub-task 7.1** is Sections 2 to 7. Section 2 is the division of the system-call
 header, which is not part of 7.1 but was required to happen before 7.2 and is
@@ -21,6 +21,15 @@ the division between the two — Section 9.1 — that is what makes either of th
 assertable. Section 9.4 holds the two tables of assertions and Section 9.7 the
 fourteen negative tests, of which one found a limitation and one found code that
 did nothing.
+
+**Sub-task 7.4** is Section 10: the buffered stream, the three standard streams,
+and the formatted conversion above them. Section 10.2 is the division — the same
+one 7.3 made, applied a second time — and Section 10.2.1 is the counter that had
+to be split before the self-test could assert anything at all. Section 10.5 is
+the verification, including the sixty-six conversions checked against an
+implementation this project did not write, and Section 10.8 the twenty negative
+tests, of which four found gaps in the assertions and two found something no
+assertion here can defend.
 
 **Authority**: `PROJECT_GUIDELINES.md`, Sections 2, 3, 4 and 6; and
 [`../../LICENSING.md`](../../LICENSING.md), Section 2.1, which named the division
@@ -51,9 +60,20 @@ half in `SyscallDoBrk` and `ProcessSetBreak`. The assertions are
 [`../../kernel/test/libc/heap.c`](../../kernel/test/libc/heap.c), the last
 two composing their programs with
 [`../../kernel/test/program.c`](../../kernel/test/program.c).
+The streams of Section 10 are
+[`../../libc/include/stdio.h`](../../libc/include/stdio.h),
+[`../../libc/include/stream.h`](../../libc/include/stream.h),
+[`../../libc/stdio/internal.h`](../../libc/stdio/internal.h),
+[`../../libc/stdio/stream.c`](../../libc/stdio/stream.c),
+[`../../libc/stdio/format.c`](../../libc/stdio/format.c) and
+[`../../libc/stdio/system.c`](../../libc/stdio/system.c), asserted by
+[`../../kernel/test/libc/stdio.c`](../../kernel/test/libc/stdio.c) — which needs
+no composed program, every stream it opens having a region of memory for a
+device.
 
 **Specifications**: ISO/IEC 9899:2011, Section 7.24 (string handling), Section
-7.5 (`<errno.h>`), Section 7.22.3 (the memory management functions), Section
+7.5 (`<errno.h>`), Section 7.21 (input and output), Section 7.16 (variable
+arguments), Section 7.22.3 (the memory management functions), Section
 6.2.8 (fundamental alignment) and Section 4, paragraph 6 (what a freestanding
 implementation must provide); System V Application Binary Interface, AMD64
 supplement, Section 3.1.2 (the LP64 model) and Section 3.2.3 (the argument
@@ -1040,3 +1060,366 @@ after the adjustment**, and the comment there now says why.
 The thirteenth is limitation 5 above, and is the ordinary yield of this
 discipline: an assertion that does not exist cannot be made to fail, and the only
 way to find out which ones those are is to try.
+
+---
+
+## 10. Sub-task 7.4: the buffered stream, and the conversion above it
+
+**Phase**: 7, sub-task 7.4, of [`../project/PLAN.md`](../project/PLAN.md).
+
+**What it adds**: the `FILE` of ISO/IEC 9899:2011, Section 7.21, and the three
+standard streams; the buffering that decides when a stream's bytes leave it and
+when more arrive; the byte and block transfers of Sections 7.21.7 and 7.21.8; the
+indicators of Section 7.21.10; and the formatted output of Section 7.21.6 — one
+conversion engine beneath eight standard names.
+
+**What it does not add**: any way for a program to be built, for the last time.
+That is sub-task 7.5, which follows immediately and for a reason recorded in
+Section 10.5.2: this is the first sub-task whose shipped code the kernel is
+*unable* to assert even in part, and the program 7.5 builds is what closes it.
+
+### 10.1 What of Section 7.21 is here, and what is not
+
+The head of [`../../libc/include/stdio.h`](../../libc/include/stdio.h) states
+each absence beside the thing it is waiting for, and this section does not
+restate the list. The shape of it is worth stating: **everything absent is absent
+because this kernel has eight system calls and not one of them opens, closes,
+positions or reads a file.**
+
+| Absent | Waiting for |
+| ------ | ----------- |
+| `fopen`, `freopen`, `fclose`, `remove`, `rename`, `tmpfile`, `tmpnam` | A system call that opens a file by name. Phase 8, the shell being the first thing that needs one. |
+| `fseek`, `ftell`, `fgetpos`, `fsetpos`, `rewind`, `fpos_t`, `SEEK_*` | The same. Nothing that exists here is positionable. |
+| The `scanf` family | A source of characters; see Section 10.3.4. |
+| Every floating conversion, in both directions | Nothing. `PROJECT_GUIDELINES.md`, Section 8, prohibits floating-point arithmetic without a justification, and this library is compiled `-mno-sse` and `-mno-80387` besides. Section 10.4.2. |
+| The wide-character conversions | A locale and a multibyte encoding, which this system has not got — the same reason `strcoll` and `strxfrm` are absent from `<string.h>`. |
+| `%n` | Nothing. It is refused deliberately; Section 10.4.3. |
+
+**A function that can only fail is worse than one that does not exist.** That is
+the rule this table is an application of, and it is the same judgement Section 4
+records about `strdup`: a `fopen` here would compile, link, and tell a program at
+run time that the library had lied about what it offers.
+
+### 10.2 The division, and why this sub-task has one too
+
+The division is the one sub-task 7.3 made and
+[`../../libc/include/heap.h`](../../libc/include/heap.h) argued for, applied a
+second time, and [`../../libc/include/stream.h`](../../libc/include/stream.h) is
+where it is stated.
+
+**The policy** — when a buffer is emptied, what a partial transfer means, how a
+pushback interacts with an end-of-file indicator, what a conversion specification
+produces — is ordinary C. It runs anywhere and it is wrong in ways a test can
+see.
+
+**The transfers** are `OxysStreamWrite` and `OxysStreamFill`, and one of them is
+a system call. This kernel cannot execute one: the `SYSRET` that ends its
+handling of a `SYSCALL` returns to privilege level 3 unconditionally, so a kernel
+that flushed a stream would leave its own entry path as a user program upon a
+stack that is not a user program's. Section 8.4 records the same obstacle for the
+wrappers and Section 9.1 for the break.
+
+So the seam is a pair of named functions in a translation unit of its own —
+[`../../libc/stdio/system.c`](../../libc/stdio/system.c), which is eleven lines
+of code — and the policy above it is
+[`../../libc/stdio/stream.c`](../../libc/stdio/stream.c) and
+[`../../libc/stdio/format.c`](../../libc/stdio/format.c), which touch a device
+only through it.
+
+**The memory stream is what lets the policy be exercised.** `OxysStreamOpenMemoryWrite`
+and `OxysStreamOpenMemoryRead` give a stream a region of memory for a device, so
+the kernel's own self-test runs the whole of the buffering and the whole of the
+conversion against **the code this library ships** rather than a reconstruction
+of it. Neither is a test hook, for the reason `OxysHeapAdopt` is not one: a
+program composing a string by the formatted conversion has the same need and no
+other way to meet it — it is what a hosted implementation spells `fmemopen` — and
+the self-test is merely its first caller.
+
+#### 10.2.1 The two seams are counted apart, and the first version did not
+
+`OxysStreamCensus` counts calls to `OxysStreamWrite` and calls to
+`OxysStreamFill` in two fields. The first version of that structure had one field
+for both, named `transfers`, and the self-test asserted it was zero — which is
+the assertion that keeps the test from resetting the machine.
+
+**It failed on the first run, and the failure was the assertion's and not the
+code's.** Only one of the two seams executes `SYSCALL`. `OxysStreamWrite` does;
+`OxysStreamFill` does not, there being no call that reads for it to make, so it
+is ordinary C that returns zero. The self-test reads the standard input — because
+asserting that `stdin` reports an *end* rather than an *error* is worth doing and
+is safe — and the single counter therefore recorded a transfer that had reached
+nothing. The choice was to loosen the assertion or to split the counter, and a
+loosened assertion would have stopped reporting the thing it exists for.
+
+### 10.3 The stream
+
+#### 10.3.1 What each of the three standard streams is, and why
+
+| Stream | Descriptor | Buffering | Why |
+| ------ | ---------- | --------- | --- |
+| `stdin` | 0 | Fully buffered | Nothing reads it. Its policy is real and asserted; its source reports end-of-file. |
+| `stdout` | 1 | **Line** buffered | Section 7.21.3, paragraph 7, permits full buffering only where the stream does not refer to an interactive device, and the thing at the far end here is a person reading a console. A fully buffered `stdout` loses the last partial line whenever a program faults, and the last partial line before a fault is the one worth having. |
+| `stderr` | 2 | **Un**buffered | Paragraph 7 requires it not to be fully buffered. A diagnostic still in a buffer when the program dies is a diagnostic that was not issued. |
+
+They are initialised statically and not by anything called before `main`. This
+library has no constructor mechanism and sub-task 7.5's startup object
+deliberately does not acquire one for this: a stream that is correct because the
+loader zeroed `.bss` and the initialisers filled in the rest is a stream that
+works in a program whose first statement is `puts`.
+
+#### 10.3.2 `FILE` is an incomplete type
+
+Section 7.21.1, paragraph 2, requires it to be an object type, and every
+operation in Section 7.21 takes a `FILE *`. Leaving it incomplete is what makes
+"a program never depends upon the members" a guarantee rather than an
+expectation, and the consequence — that a program cannot declare a `FILE` of its
+own — is one no conforming program minds.
+
+#### 10.3.3 The three decisions the buffering makes
+
+1. **A buffer is emptied when it is already full, not after the byte that fills
+   it.** Written the other way round the buffer is emptied one byte late, and the
+   difference is invisible until a caller gives a stream a buffer of one byte —
+   whereupon the append writes past its end. `setvbuf` accepts a size of one, so
+   that is a reachable state and not a hypothetical one. Section 10.8, negative
+   test 2, is the record of this being got wrong deliberately and of the
+   assertion that could not see it.
+2. **A short transfer is the system's normal behaviour and not a failure**, so
+   the loop that calls again from where the last one stopped belongs to the
+   policy and not to the seam. The kernel bounds a single write; a library that
+   treated the first short result as the whole answer would truncate every
+   message longer than that bound, silently, because the count `fwrite` returned
+   would be the truncated one and almost nothing checks it.
+3. **A stream at its end does not ask its source again.** The end-of-file
+   indicator is consulted before the source is. A stream that asked again would
+   make one system call per call after the end — for a program looping upon
+   `fgetc`, one per iteration for ever — and nothing about the characters it
+   delivered would differ. Negative test 17 is the record of that, and of the
+   assertion it caused to be written.
+
+#### 10.3.4 Why there is an input side at all
+
+The sub-task is buffered input *and* output, and **the buffering is the part
+worth getting right**: the pushback, the two indicators that stick until they are
+cleared, a partial read that is not an error, a byte read back after being pushed
+back, a partial line at end-of-file that must not be discarded. All of that is
+policy above a source, exactly as the heap is policy above a source, and it is
+asserted the same way — against a memory stream, which supplies characters
+without a system call.
+
+What is absent is only the shipped source. `OxysStreamFill` reports end-of-file,
+and `stdin` is therefore a stream permanently at it. **It reports an end and not
+an error**, and the distinction is the whole of why it is written as a function
+that returns zero rather than as a function that does not exist: an error would
+make every program reading `stdin` report a fault that did not occur. The day
+this kernel acquires a call that reads, the change is the body of one function of
+six lines and nothing else in the library.
+
+### 10.4 The conversion
+
+#### 10.4.1 One engine, eight names
+
+Every function in [`../../libc/stdio/format.c`](../../libc/stdio/format.c) is the
+same engine with a different destination, which is one function pointer and one
+context. The alternative — a conversion loop for streams and a second one for
+arrays — is how a library comes to format `%#o` correctly in `printf` and
+incorrectly in `snprintf`, and the defect is invisible because nobody tests both.
+
+**The engine counts what it produced and not what was stored.** That is
+`snprintf`'s return value under Section 7.21.6.5, paragraph 2, and it is also
+`fprintf`'s, a stream storing everything it is given or failing. Counting stored
+characters would make `snprintf` return the truncated length, and a caller sizing
+an array by calling with a size of zero would be told it needs nothing.
+
+What is implemented is the flags `-`, `+`, space, `#` and `0` of paragraph 6; the
+field width and precision of paragraphs 4 and 5, each as a digit string or as an
+asterisk; the length modifiers `hh`, `h`, `l`, `ll`, `z`, `j` and `t` of
+paragraph 7; and the conversions `d`, `i`, `o`, `u`, `x`, `X`, `c`, `s`, `p` and
+`%%` of paragraph 8.
+
+Two details are worth stating because they are the ones a hand-written formatter
+gets wrong:
+
+- **The three paddings are three different things and their order is fixed.** The
+  precision pads with zeroes inside the sign and the prefix; the `0` flag pads
+  with zeroes inside them too, but only to the field width, only when the result
+  is not left-justified and only when no precision was given; and the field pads
+  with spaces outside everything. A formatter that conflates the second and the
+  third prints `0-042` for `%05d` of −42.
+- **A narrow length modifier is a conversion back from `int` and not a different
+  `va_arg` type.** The default argument promotions have already widened a `char`
+  or a `short`, so `hh` reads an `int` and converts; a formatter that reads
+  `va_arg(arguments, char)` has undefined behaviour and happens to work.
+
+#### 10.4.2 No floating-point conversion, and none possible
+
+`PROJECT_GUIDELINES.md`, Section 8, prohibits floating-point arithmetic that has
+not been justified, and this library is compiled `-mno-sse`, `-mno-sse2`,
+`-mno-mmx` and `-mno-80387`. A conversion that formed a `double` would not
+assemble. The eight floating conversions are therefore refused where they are
+recognised.
+
+#### 10.4.3 `%n` is refused deliberately
+
+It is the one conversion that writes through a pointer taken from the argument
+list under the direction of the format string, which is the mechanism by which a
+format string a program did not compose becomes a write to an address somebody
+else chose. Section 7.21.6.1, paragraph 8, requires it and this library refuses
+it.
+
+What that costs is that a conforming program using `%n` does not work here. What
+it buys is that a program which passes a string it received to `printf` cannot be
+made to write memory by it — and a program that passes a received string to
+`printf` is a defect this library cannot prevent and can decline to arm.
+
+### 10.5 Verification
+
+#### 10.5.1 What the kernel asserts
+
+[`../../kernel/test/libc/stdio.c`](../../kernel/test/libc/stdio.c), run as
+`KernelVerifyStdio` from `KernelMain`. Every stream it opens has a region of
+memory for a device, so the whole of it runs inside this kernel.
+
+| Property asserted | The silent failure it exists to catch |
+| ----------------- | ------------------------------------- |
+| A fully buffered stream delivers nothing before it is flushed, and a newline changes nothing | Line buffering applied where full buffering was asked for: every write reaches the device, which is correct output and the wrong cost. |
+| A line buffered stream delivers upon the newline and not before it | The newline case forgotten: a program's diagnostics arrive in blocks and the last partial line is lost at a fault. |
+| An unbuffered stream delivers each byte as it is written | `stderr` buffered: a diagnostic still in a buffer when the program dies. |
+| A buffer of one byte delivers each byte as the next arrives, **and the byte beyond the buffer is untouched** | The buffer emptied after the append rather than before it, which writes one byte past a caller's array. The bytes delivered are the same bytes in the same order; the sentinel is the only trace. |
+| `setvbuf` is refused after the stream has been used, and for a mode that is not one of the three | A buffer replaced while it holds data, which discards that data with no report. |
+| `fwrite` returns whole elements, and an element whose bytes went out only in part is not one | Section 7.21.8.2, paragraph 2, got wrong in the direction that tells a caller its data went out. |
+| `fwrite` of a zero size or a zero count writes nothing | A loop written without the guard, which writes one element. |
+| A stream counts as delivered only what its device took | A partial delivery reported as a whole one, which makes `OxysStreamDelivered` — the thing a caller measures a region by — read past what was written. |
+| The error indicator is sticky and only `clearerr` clears it | A program that checks once after a sequence of writes told everything was well because the last write happened to succeed. |
+| `fgetc` delivers every byte in order, then end-of-file, and sets the indicator | An off-by-one at either end of the buffer. |
+| A stream at its end does not ask its source again | One system call per call after the end, invisible in the characters delivered. |
+| `ungetc` accepts one pushback, refuses a second, delivers it next, clears end-of-file, and refuses `EOF` | Section 7.21.7.10, paragraph 2, forgotten: a caller that pushes a character back after reading `EOF` cannot read it. |
+| `fgets` keeps the newline, terminates, stops at the bound, and returns a partial line at end-of-file | The last line of every source that does not end with a newline, discarded. |
+| `fgets` with a count of one terminates the array and writes nothing past it | The bound a loop written with `<=` writes past — and the array returned, no end having been met. |
+| `fread` returns whole elements and sets end-of-file | The mirror of the `fwrite` case. |
+| A source of no bytes is a stream immediately at its end | The case every loop over a stream gets wrong first. |
+| Twenty-one conversions produce exactly the expected characters **and report exactly their length** | A formatter that produces the right characters and returns the wrong count, which is wrong in exactly the way `snprintf`'s measuring idiom depends upon. |
+| `snprintf` truncates within the size given, terminates, and returns what it would have needed | A caller sizing an array by a call with a size of zero, told it needs nothing. |
+| An unimplemented conversion is refused and reported | Section 10.4.3. |
+| The three standard streams have descriptors 0, 1 and 2, may not be closed, and `stdin` reports an end rather than an error | A library that let `stdout` be closed would have to answer what `printf` does afterwards. |
+| The pool is back to three streams, and **no byte reached the system** | The second is what keeps this test from resetting the machine, and it is an assertion rather than a comment. |
+
+**The conversions were also checked against a second implementation.** The two
+translation units were compiled by the host's compiler, against the host's
+`snprintf`, and sixty-six conversion specifications were formatted by both and
+compared byte for byte. Sixty-five agreed exactly, including the truncation and
+the size-of-zero cases; the one that differed is `%p` of a null pointer, where
+this library prints `0x0` deliberately and the reference prints `(nil)`. That is
+the same kind of corroboration the `mke2fs` comparison of
+[`../project/TESTING.md`](../project/TESTING.md) is, and it is worth as much: it
+is the only judge in this project that does not share this project's
+understanding of the standard.
+
+#### 10.5.2 What the kernel cannot assert, and what closes it
+
+`OxysStreamWrite` is a system call and is not asserted here. It is asserted by
+the program sub-task 7.5 builds and runs at privilege level 3, whose output
+arrives upon the serial channel by way of `printf` — so the gap between the two
+halves of this sub-task is **one sub-task wide and not one phase wide**, which is
+why 7.5 follows immediately rather than 7.6.
+
+### 10.6 Why an unimplemented conversion is a reported failure
+
+Section 7.21.6.1, paragraph 9, makes an undefined conversion specification
+undefined behaviour, so any answer conforms. There are two available answers.
+
+The first is to produce something and carry on, which is what a hosted
+implementation does with a conversion it does not know. The count returned is
+then wrong, and it is wrong in a way nothing checks — the return value of
+`printf` being the least-examined result in C.
+
+The second is to refuse and say so, which is what this library does. A caller
+that checks the result is told; a caller that does not is no worse off than
+under the first answer. And for `%n` in particular the caller is entitled to
+know: it asked for a write, and the write did not happen.
+
+### 10.7 Limitations
+
+1. **Every transfer above the buffer is byte-at-a-time.** `fread`, `fwrite`,
+   `fgets` and `fputs` are each a loop over the single-character operation rather
+   than a block copy into the buffer. It is the same judgement Section 6,
+   limitation 1, records about the string functions: a block copy is faster and
+   has four more ways to be wrong — the buffer boundary, the pushback, the
+   line-buffering decision and the partial transfer — and there is no workload
+   here to measure the difference against. A ported compiler is that workload.
+2. **Nothing here is asserted upon a machine other than QEMU**, and — until
+   sub-task 7.5 — nothing here has run at privilege level 3. Section 6,
+   limitation 4, unchanged.
+3. **The magnitude of the most negative representable value cannot be asserted
+   wrong.** `FormatMagnitude` avoids forming `-value`, which is undefined
+   behaviour for `INTMAX_MIN` and is the single input every hand-written
+   formatter gets wrong. Negative test 9 replaced it with the unsafe form and
+   **nothing was reported**: upon this architecture the negation produces the
+   same bits, so the output is identical. The guard stays, because the standard
+   promises nothing and a different compiler or optimisation level need not
+   agree; but no assertion in this project can defend it.
+4. **The error indicator's stickiness is asserted only across further failures.**
+   A write stream here fails by exhausting its region, and a region once
+   exhausted admits no successful write — so "the indicator survives a later
+   *successful* write" has no reachable case. Negative test 19 set the indicator
+   false at the head of `fputc` and nothing was reported. It becomes reachable
+   when a device exists that can refuse one transfer and accept the next, which
+   is a real file.
+5. **A stream has no lock, and every one of them is shared state.** There are no
+   userland threads, so nothing is wrong today. The day a program has two, every
+   stream needs one and the census needs atomic access; the paragraph at the head
+   of `stream.c` is where that change begins.
+6. **The buffers are static and cost eight kibibytes of a program's `.bss`.**
+   `FOPEN_MAX` entries of `BUFSIZ` each, whether or not a stream is ever opened.
+   The alternative is to obtain a buffer from the heap, which cannot be done: a
+   stream must be usable before a heap has been grown, and the first thing a
+   program does with a heap that failed is try to report it.
+
+### 10.8 The negative tests, and the four that found something
+
+Twenty defects were introduced deliberately, one at a time, each built and run.
+
+| The defect introduced | What was reported |
+| --------------------- | ----------------- |
+| The line-buffering flush upon a newline removed | `a line buffered stream did not deliver upon the newline FAILED.` |
+| The buffer emptied *after* the byte that fills it | **Nothing was reported.** See below. |
+| A memory stream that fills not reporting the bytes it could not take | Five assertions, across three phases of the test. |
+| `fwrite` counting an element whose bytes went out only in part | `fwrite counted an element whose bytes went out only in part FAILED.` |
+| `ungetc` not clearing the end-of-file indicator | `ungetc did not clear the end-of-file indicator FAILED.` |
+| `ungetc` accepting a second pushback | That, and `the character pushed back was not the next one read FAILED.` |
+| `fgets` discarding the newline it must keep | `fgets did not stop after the newline, or discarded it FAILED.` |
+| `fgets` returning a null pointer whenever nothing was read | The two assertions upon a count of one — which is the case that condition is about. |
+| `FormatMagnitude` forming `-value` | **Nothing was reported.** Limitation 3. |
+| A zero value with a precision of zero still producing a digit | `a precision was applied wrongly to an integer FAILED.` |
+| The `0` flag not ignored where a precision was given | `the zero flag was not ignored where a precision was given FAILED.` |
+| The alternative form prefixing a zero hexadecimal value | `the hexadecimal conversion or its prefix is wrong FAILED.` |
+| `snprintf` reporting what it stored | Both of the assertions that exist for that. |
+| `setvbuf` accepting a call made after the stream had been used | `setvbuf accepted a call made after the stream had been used FAILED.` |
+| A standard stream that may be closed | Six assertions, including the census's. |
+| An unimplemented conversion produced rather than refused | All three refusal assertions. |
+| The end-of-file indicator consulted after the source rather than before | **Nothing was reported.** See below. |
+| The sign flags allowed through an unsigned conversion | **Nothing was reported.** See below. |
+| The error indicator cleared by a later successful write | **Nothing was reported.** Limitation 4. |
+| A partial delivery counted as a whole one | **Nothing was reported.** See below. |
+
+**Four of the five silent ones were gaps in the assertions and were closed.**
+
+- **The buffer emptied after the append** delivers the same bytes in the same
+  order and overruns the caller's array by one. The one-byte-buffer assertion was
+  upon what arrived at the device and could not see it. The buffer given to
+  `setvbuf` is now an array of two bytes with a sentinel in the second, and the
+  assertion is upon the sentinel.
+- **The end-of-file indicator consulted late** changes nothing a caller can
+  observe except how often the source is asked. The test now records the census
+  before and after three reads past the end and asserts the source was not asked.
+- **The sign flags let through an unsigned conversion** was not covered at all:
+  every assertion upon `+` and space used a signed conversion. There is now one
+  upon `%+u`, `% u` and `%+x`.
+- **A partial delivery counted as a whole one** leaves `OxysStreamDelivered`
+  reporting more than the region holds, which is what a caller measures a region
+  by. There is now an assertion upon that count after a delivery the device
+  refused.
+
+The fifth and the ninth are limitations 4 and 3, and are the ordinary yield of
+this discipline: an assertion that does not exist cannot be made to fail, and the
+only way to find out which ones those are is to try.

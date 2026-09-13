@@ -11,3 +11,4 @@ number	date	commit	dirty	compiler	cc_version	kernel	iso	result	assertions	enviro
 8	2026-09-12T16:05Z	7a87df0	yes	clang	18.1.3	1688792	6817792	passed	56	QEMU	-	the same tree by the second compiler
 9	2026-09-12T16:49Z	f605407	no	gcc	13.2.0	2024792	7151616	passed	56	QEMU;Bochs;VirtualBox	-	the header corpus and self-tests grouped; the two fault-screen entries withdrawn
 10	2026-09-12T16:49Z	f605407	yes	clang	18.1.3	1688328	6815744	passed	56	QEMU	dc5477acf3b194b748aca46accfc40faff3524885b383920f41c651ea374e218	the same tree by the second compiler
+11	2026-09-13T16:54Z	7faf6c7	yes	gcc	13.2.0	2140872	7268352	passed	57	QEMU;Bochs;VirtualBox	8664e9809390f24925cf8788a5e4cb1a58c041164efb4c47e509b194af0e4b3c	Sub-task 7.4: the first image carrying the C library's buffered streams and formatted conversion.

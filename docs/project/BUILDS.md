@@ -254,12 +254,12 @@ regenerates it and fails if what is here differs.*
 
 | | |
 | --- | --- |
-| Builds recorded | 10 |
-| Verified | 10 passed, 0 not |
+| Builds recorded | 11 |
+| Verified | 11 passed, 0 not |
 | Compilers | clang, gcc |
 | Environments | Bochs, OVMF, QEMU, VirtualBox |
 | First | 2026-09-11T21:39Z |
-| Latest | 2026-09-12T16:49Z |
+| Latest | 2026-09-13T16:54Z |
 
 ## The builds
 
@@ -275,5 +275,6 @@ regenerates it and fails if what is here differs.*
 | 8 | 2026-09-12T16:05Z | `7a87df0` *(modified)* | clang 18.1.3 | 1688792 | 6817792 | passed (56 assertions) | QEMU | the same tree by the second compiler |
 | 9 | 2026-09-12T16:49Z | `f605407` | gcc 13.2.0 | 2024792 | 7151616 | passed (56 assertions) | QEMU;Bochs;VirtualBox | the header corpus and self-tests grouped; the two fault-screen entries withdrawn |
 | 10 | 2026-09-12T16:49Z | `f605407` *(modified)* | clang 18.1.3 | 1688328 | 6815744 | passed (56 assertions) | QEMU | the same tree by the second compiler |
+| 11 | 2026-09-13T16:54Z | `7faf6c7` *(modified)* | gcc 13.2.0 | 2140872 | 7268352 | passed (57 assertions) | QEMU;Bochs;VirtualBox | Sub-task 7.4: the first image carrying the C library's buffered streams and formatted conversion. |
 
 <!-- END GENERATED -->

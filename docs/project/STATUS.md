@@ -49,6 +49,15 @@ given back — and the C library carries `malloc`, `calloc`, `realloc` and `free
 above it. Nothing in this system allocates yet; the heap exists for the things
 that will.
 
+**A program may now write to a stream.** Since sub-task 7.4 the C library carries
+the buffered input and output of ISO/IEC 9899:2011, Section 7.21 — `stdin`,
+`stdout` and `stderr`, the three buffering modes, the transfers of Sections
+7.21.7 and 7.21.8, and one conversion engine beneath `printf`, `fprintf`,
+`snprintf` and the five other formatted-output names. Nothing in this system
+calls them yet, the buffers being static because a stream must be usable before a
+heap has been grown; and nothing can *read* a stream, this kernel having no
+system call that reads, so `stdin` is permanently at its end.
+
 ## 2. By phase
 
 **Phase 1 — bootstrapping.** The kernel builds without diagnostics under the full
@@ -262,8 +271,41 @@ gives it; the call beneath it cannot be executed by this kernel, and is asserted
 by a program at privilege level 3 which asks for its break, is refused when it
 reads there, grows the heap by a page, has the kernel write the system's name
 into that page, reads it back into the log, gives the page up, and is refused
-again. Nothing in this system allocates yet; sub-task 7.4 is the first thing that
-will.
+again. Nothing in this system allocates yet — sub-task 7.4 buffers into static
+storage, a stream having to be usable before a heap has been grown.
+
+**Sub-task 7.4 stands above that**: the buffered stream of ISO/IEC 9899:2011,
+Section 7.21, and the formatted conversion above it. A `FILE` is an incomplete
+type, so no program can depend upon what is inside one; `stdin`, `stdout` and
+`stderr` exist from the first statement of a program, initialised statically
+rather than by anything that has to run first. `stdout` is **line** buffered and
+`stderr` **un**buffered, which paragraph 7 of Section 7.21.3 requires of the
+second and permits of the first — a fully buffered `stdout` loses the last
+partial line whenever a program faults, and that is the line worth having. A
+buffer is emptied when it is already full rather than after the byte that fills
+it, one character of pushback is guaranteed and clears the end-of-file indicator,
+a partial line at end-of-file is returned rather than discarded, and a stream
+that has reported its end does not ask its source again.
+
+**One conversion engine stands beneath eight standard names.** `printf`,
+`fprintf`, `snprintf` and the rest differ only in where a character goes, so a
+conversion cannot be right in one of them and wrong in another. It performs the
+five flags, the field width and the precision — each as a digit string or as an
+asterisk — the seven length modifiers, and `d`, `i`, `o`, `u`, `x`, `X`, `c`,
+`s`, `p` and `%%`. It counts what it produced and not what it stored, which is
+what makes `snprintf` with a size of zero a way to measure a result. **A
+conversion it does not implement is refused and the refusal is reported**: every
+floating conversion, which this system cannot perform at all, and `%n`, which is
+refused deliberately — it is the only conversion that writes through a pointer
+the format string selects, and a program that hands a received string to `printf`
+is a defect this library can decline to arm.
+
+**What can read a stream is nothing.** This kernel has eight system calls and not
+one of them reads, so the source beneath `stdin` reports end-of-file — an *end*
+and not an *error*, which is the distinction every program reading it depends
+upon. The buffering above it is real, is exercised against streams whose device
+is a region of memory, and is correct on the day a call that reads exists; what
+changes then is one function of six lines.
 
 **Nothing can yet be linked against any of it.** There is no `crt0`, no
 static-linking procedure and no user-mode compilation until sub-task 7.5, so the
@@ -305,6 +347,7 @@ The physical machine is one machine — the HP Laptop 14-dq0052dx specified in
 | 7.1 The C library's string functions | Yes | **Yes — 7.2** | Yes — 7.2 | — | **Not yet run** |
 | 7.2 The system-call wrappers | Yes | **Yes** | **Yes** | — | **Not yet run** |
 | 7.3 The heap and `brk` | Yes | **Yes** | **Yes** | — | **Not yet run** |
+| 7.4 The buffered streams | Yes | **Yes** | **Yes** | — | **Not yet run** |
 
 **The rows marked "— 7.2" were all established by two boots of one image**, build
 1 of [`BUILDS.md`](BUILDS.md), because a boot runs every self-test in the corpus
@@ -314,6 +357,15 @@ two processors, and Bochs 3.1 likewise. **The same is true of sub-task 7.3's
 row**, established by builds 5 to 8: every row above it was re-confirmed by those
 boots and none is restated here, a clean boot being evidence about the whole
 corpus and not about the sub-task that prompted it.
+
+**Sub-task 7.4's image was run in all three environments.** Build 11 of
+[`BUILDS.md`](BUILDS.md) booted under QEMU, under VirtualBox 7.2.0 configured as
+`make run-vbox` configures it, and under Bochs 3.1 built with `--enable-x86-64`
+and `--enable-smp` — fifty-seven assertions passed or sound in each, and no
+verdict of `FAILED` in any. The Bochs installed upon this machine was the default
+build again, reporting no processor above `atom_n270`, exactly as
+[`TESTING.md`](TESTING.md), Section 4A, says it will be; it was rebuilt from
+source with the configuration recorded there.
 
 **The VirtualBox run carried its whole boot log over the serial adapter**, 6,927
 bytes by interrupt, so the automated assertion is available there and not only
@@ -425,7 +477,7 @@ functional. [`TESTING.md`](TESTING.md), Section 3.
 There is no test harness and there will be none before Phase 7, there being no
 userland to run one in. The kernel therefore asserts its own properties at boot,
 in the order the subsystems are initialised, and `make verify` fails if any of
-them reports a failure. Fifty-six assertions presently report passed or sound.
+them reports a failure. Fifty-seven assertions presently report passed or sound.
 
 Those tests are in [`../../kernel/test/`](../../kernel/test/), one file per
 subsystem. Each subsystem's design document carries a table pairing every

@@ -266,8 +266,9 @@ kernel at all.** A Bochs configured without `--enable-x86-64` reports a CPU whos
 protected mode upon it; one configured without `--enable-smp` refuses
 `cpu: count=2`. Both were the case at sub-task 7.2 and both were a property of
 the local build rather than of Bochs. **Both were the case again at sub-task
-7.3**, the installed binary having reverted to a default build: the symptom to
-look for is `bochs --help cpu` listing nothing above `atom_n270`, every model in
+7.3** and **again at sub-task 7.4**, the installed binary having reverted to a
+default build each time: the symptom to look for is `bochs --help cpu` listing
+nothing above `atom_n270`, every model in
 that list being 32-bit, and the run then failing at
 `>>PANIC<< numerical parameter 'n_processors' was set to 2` or — with one
 processor — silently, the kernel halting where it tries to enter long mode. The

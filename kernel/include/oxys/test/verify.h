@@ -17,6 +17,7 @@
  *          KernelVerifyPerCpu, KernelVerifySpinlock, KernelVerifyIpi,
  *          KernelVerifyShootdown, KernelVerifyApplicationProcessors,
  *          KernelVerifyScheduler, KernelVerifyString, KernelVerifyWrappers,
+ *          KernelVerifyHeap, KernelVerifyStdio,
  *          KernelVerifyPit, KernelVerifyKeyboard, KernelVerifySerial,
  *          KernelVerifyVga, KernelVerifyPci, KernelVerifyAta, KernelVerifyBlock,
  *          KernelVerifyBuffer, KernelVerifyExt2, KernelVerifyVfs,
@@ -247,6 +248,23 @@ void KernelVerifyWrappers(void);
  * depends upon and upon the wrappers besides.
  */
 void KernelVerifyHeap(void);
+
+/*
+ * Sub-task 7.4: the C library's buffered streams and its formatted conversion.
+ *
+ * Two halves once more, and this time the second half is not here. The
+ * buffering policy — when a buffer is emptied, what a partial transfer means,
+ * how a pushback interacts with an end-of-file indicator — and the whole of the
+ * conversion of a format string are ordinary C, and are asserted by giving the
+ * library streams whose device is memory rather than a descriptor. The two
+ * transfers beneath them execute SYSCALL and this kernel cannot, so they are
+ * asserted by the program sub-task 7.5 builds, whose output arrives upon the
+ * serial channel by way of printf.
+ *
+ * It runs after the heap because the two are independent and a reader of the log
+ * should meet the library in the order it was built.
+ */
+void KernelVerifyStdio(void);
 
 /* Phases 3 and 4: the remaining devices. */
 void KernelVerifyPit(void);

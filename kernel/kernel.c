@@ -1369,6 +1369,18 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
      */
     KernelVerifyHeap();
 
+    /*
+     * Sub-task 7.4, which is the same subject one storey higher again.
+     *
+     * It depends upon nothing the heap test depends upon — the streams it
+     * exercises are given regions of memory and reach no device — so it could
+     * stand anywhere after the string test. It is placed here because the order
+     * of these five is the order the library was built in, and a reader of the
+     * log should meet the buffered output after the heap that a program's
+     * buffers will one day come from rather than before it.
+     */
+    KernelVerifyStdio();
+
     KernelMountRootVolume();
 
     IrqReport();

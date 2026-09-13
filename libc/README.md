@@ -3,11 +3,12 @@
 # `libc/` — The C Library
 
 **Phase**: 7 of [`../docs/project/PLAN.md`](../docs/project/PLAN.md). Sub-task
-7.1 placed the first material here, sub-task 7.2 the system-call wrappers and
-sub-task 7.3 the heap; sub-tasks 7.4 and 7.5 add the buffered input and output
-and the runtime startup object.
+7.1 placed the first material here, sub-task 7.2 the system-call wrappers,
+sub-task 7.3 the heap and sub-task 7.4 the buffered streams and the formatted
+conversion; sub-task 7.5 adds the runtime startup object and the link.
 **Detailed design**: [`../docs/design/LIBC.md`](../docs/design/LIBC.md), Sections
-2 to 7 for sub-task 7.1, Section 8 for sub-task 7.2 and Section 9 for sub-task 7.3.
+2 to 7 for sub-task 7.1, Section 8 for sub-task 7.2, Section 9 for sub-task 7.3
+and Section 10 for sub-task 7.4.
 
 ## Purpose
 
@@ -44,6 +45,12 @@ self-test is presently the only thing that runs any of this, and what sub-task
 | [`include/heap.h`](include/heap.h) | The seam: `OxysHeapExtend`, which is the whole of what the allocator knows about the machine beneath it, `OxysHeapAdopt`, by which a caller gives the heap a region it obtained itself, and the census a caller may take. |
 | [`stdlib/heap.c`](stdlib/heap.c) | The allocator: first fit over an address-ordered free list of boundary-marked blocks, splitting and joining. The policy, and nothing about where memory comes from. |
 | [`stdlib/system.c`](stdlib/system.c) | Where memory comes from: `OxysHeapExtend`, six lines, above `OxysSbrk`. It is a translation unit of its own so that the policy may be asserted without it. |
+| [`include/stdio.h`](include/stdio.h) | ISO/IEC 9899:2011, Section 7.21, as this library implements it — and, at its head, which of that section is absent and what each absence is waiting for. `FILE` is an incomplete type, so no program can depend upon what is inside one. |
+| [`include/stream.h`](include/stream.h) | The seam: `OxysStreamWrite` and `OxysStreamFill`, which are the whole of what a stream knows about the machine beneath it; the memory stream, by which the buffering is exercised without one; and the census, whose two transfer counters are apart because only one of the seams executes `SYSCALL`. |
+| [`stdio/stream.c`](stdio/stream.c) | The policy: the `FILE` object, the three standard streams, the decision of when a buffer is emptied or filled, and every transfer of Sections 7.21.7 and 7.21.8 above it. Nothing here knows where a byte goes. |
+| [`stdio/format.c`](stdio/format.c) | The conversion: one engine that reads a format string and produces characters, and the eight standard names above it, which differ only in where the characters go. A conversion it does not implement is refused and the refusal is reported. |
+| [`stdio/internal.h`](stdio/internal.h) | The two counters the conversion keeps in the census the stream owns. It is in `stdio/` and not `include/` so that the include root a program is compiled against does not carry it. |
+| [`stdio/system.c`](stdio/system.c) | Where a stream's bytes go: eleven lines above `OxysWrite`, and a source that reports end-of-file because this kernel has no call that reads. A translation unit of its own so that the policy may be asserted without it. |
 
 The five `string/` units divide Section 7.24 as the standard divides it, rather
 than by size or by taste, so that a reader looking for the whole of that section

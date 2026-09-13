@@ -72,8 +72,22 @@ at privilege level 3 which grows its heap, has the kernel write into the page it
 gained, reads it back, and gives the page up.
 [`../design/LIBC.md`](../design/LIBC.md), Section 9.
 
-**Next: sub-task 7.4** — buffered input and output, and formatted conversion.
-It is the first thing in this project that will allocate.
+**Sub-task 7.4 is complete**: the buffered stream of ISO/IEC 9899:2011, Section
+7.21, the three standard streams, and one conversion engine beneath the eight
+formatted-output names — so that a conversion cannot be right in `printf` and
+wrong in `snprintf`. The division is the one 7.3 made, applied a third time, and
+this time the kernel cannot make the second half at all: the buffering and the
+conversion are asserted against streams whose device is a region of memory, and
+the transfer beneath them executes `SYSCALL`, so it is asserted by the program of
+7.5 and by nothing before it. **It does not allocate**, and the forward reference
+that said it would was wrong: a stream must be usable before a heap has been
+grown, so its buffers are static. [`../design/LIBC.md`](../design/LIBC.md),
+Section 10.
+
+**Next: sub-task 7.5** — the C runtime startup object and the static-linking
+procedure. It is the first sub-task in this project to produce a program built
+from source rather than composed byte by byte, and it is what closes the half of
+7.4 the kernel cannot assert.
 
 **Three releases are planned, and each is fixed to a sub-task below rather than
 to a date**: `Oxys 1 Alpha` at **8.7**, `Oxys 1 Beta` at **9.7**, and `Oxys 1` at
@@ -425,7 +439,7 @@ changes about it.
 | 7.1 | Implement the freestanding string and memory functions (`<string.h>`). | Implemented | `libc/string.c` — see note (a) |
 | 7.2 | Implement system-call wrappers for the complete kernel interface. | Implemented | `libc/wrappers.c` — see note (b) |
 | 7.3 | Implement a user-space heap allocator (`malloc`, `free`, `realloc`) above `brk`/`mmap`. | Implemented | `libc/heap.c` — see note (c) |
-| 7.4 | Implement buffered input and output (`<stdio.h>`) and formatted conversion. | Planned | — |
+| 7.4 | Implement buffered input and output (`<stdio.h>`) and formatted conversion. | Implemented | `libc/stdio/` — see note (d) |
 | 7.5 | Author the C runtime startup object (`crt0`) and the static-linking procedure for user programs. | Planned | — |
 | 7.6 | Implement the utilities `ls`, `cat`, `echo`, `mkdir` and `rm`. | Planned | — |
 | 7.7 | Construct an initial ramdisk containing the utilities and mount it as the early root. | Planned | — |
@@ -483,6 +497,44 @@ every assertion passed, because a second check made later rejects strictly more 
 so the first was deleted rather than kept for appearances.
 [`../design/LIBC.md`](../design/LIBC.md), Section 9.7.
 
+
+**(d)** Sub-task 7.4's assertion is in two halves for the third time, and this
+time **the kernel cannot make the second half at all**. The buffering policy and
+the whole of the formatted conversion are ordinary C and are asserted by giving
+the library streams whose device is a region of memory — `OxysStreamOpenMemoryWrite`
+and `OxysStreamOpenMemoryRead`, which are a documented interface and not a test
+hook, being what a hosted implementation spells `fmemopen`. The transfer beneath
+them executes `SYSCALL`, so it is asserted by the program of sub-task 7.5 and by
+nothing before it. [`../design/LIBC.md`](../design/LIBC.md), Section 10.2.
+
+**The first run of 7.4's self-test failed, and the assertion was at fault rather
+than the code.** The census had one counter for both seams, and the test asserted
+it was zero — that being what keeps a test inside this kernel from executing a
+system call. But only one of the two seams executes one: there is no call that
+reads, so the source of a stream is ordinary C that reports end-of-file, and the
+test reads `stdin` deliberately in order to assert that it reports an *end* and
+not an *error*. The counter is now two counters. Section 10.2.1.
+
+**The conversions were checked against an implementation this project did not
+write.** Sixty-six conversion specifications were formatted by this library and
+by the host's `snprintf` and compared byte for byte; sixty-five agreed exactly,
+and the one that differed is `%p` of a null pointer, which this library prints as
+`0x0` deliberately. It is the same kind of corroboration the `mke2fs` comparison
+of [`TESTING.md`](TESTING.md) is, and it is the only judge in this phase that
+does not share this project's reading of the standard.
+
+**Four of the twenty negative tests of 7.4 found gaps in the assertions**, each
+of which is now closed: a buffer emptied one byte late, which overruns a caller's
+array while delivering exactly the right bytes; an end-of-file indicator
+consulted after the source rather than before, which costs a system call per call
+and changes nothing observable; the sign flags let through an unsigned
+conversion, which no assertion covered; and a partial delivery counted as a whole
+one. **Two found things no assertion here can defend** and are recorded as
+limitations rather than papered over. Section 10.8.
+
+**Nothing in 7.4 required a system call, and the count of them is still eight.**
+The only thing a stream asks of the kernel is `write`, which has existed since
+sub-task 6.7.
 ---
 
 ## Phase 8 — Shell
