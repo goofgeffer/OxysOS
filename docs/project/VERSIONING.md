@@ -231,7 +231,9 @@ register was emptied and every archived image deleted in the same decision.
 Nothing in this section changes because of it: an internal build is still not a
 release, and the reason the register exists is still that it answers *which
 image*. What changed is when it starts answering.
-[`BUILDS.md`](BUILDS.md) holds the decision and the numbers it retired.
+[`BUILDS.md`](BUILDS.md) holds the decision, and records that numbering restarts
+at 1 — so a build number identifies an image within a register and not across
+this project's life.
 
 **The moment an image is handed to somebody else it stops being internal**, and
 at that moment it is a release and every condition of Section 10 applies to it.

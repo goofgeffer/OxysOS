@@ -450,9 +450,10 @@ direction: every row removed, every archived image deleted, and no build recorde
 again until `Oxys 1 Alpha` at sub-task 8.7. The runs described above happened and
 their results stand — [`TESTING-RECORD.md`](TESTING-RECORD.md) holds what each
 reported — but there is no longer a numbered image to point at, which is why none
-of the paragraphs above names one. Numbers 1 to 12 are retired rather than freed,
-so the references in `TESTING-RECORD.md` can never come to mean something else.
-[`BUILDS.md`](BUILDS.md) records the decision.
+of the paragraphs above names one. **Numbering restarts at 1**, so the numbers
+`TESTING-RECORD.md` cites will one day name different images and the date in each
+row is what tells them apart. [`BUILDS.md`](BUILDS.md) records the decision and
+what the restart costs.
 
 **The VirtualBox run carried its whole boot log over the serial adapter**, 6,927
 bytes by interrupt, so the automated assertion is available there and not only

@@ -111,47 +111,6 @@ COLUMNS='number	date	commit	dirty	compiler	cc_version	kernel	iso	result	assertio
 RESULTS='passed failed did-not-boot not-run other'
 
 # ------------------------------------------------------------------------------
-# The numbers that have been issued and withdrawn.
-#
-# A build number is a name. `TESTING-RECORD.md` says what was observed about
-# build 1 and `HISTORY.md` cites others; those documents are accounts of things
-# that happened and are not edited afterwards. So when the register is cleared —
-# which the project owner directed at sub-task 7.5, every row and every archived
-# image being removed together — the numbers those rows held must not be handed
-# out a second time, or a reader of either document would find a row describing
-# something else entirely.
-#
-# The record therefore carries a directive naming the highest number ever issued:
-#
-#     # retired-through: 12
-#
-# `record` allocates above it and `check` expects the first row to follow it, so
-# an emptied register resumes where it left off rather than at one. It is a
-# comment line, so every other reader of the file — `rows`, the view, `query` —
-# steps over it as it always did.
-#
-# Nothing else in this script changed when the register was cleared. That was the
-# point of the exercise: the tooling is not the record, and removing every row
-# from a record should leave the thing that keeps it exactly as it was.
-# ------------------------------------------------------------------------------
-
-RETIRED_DIRECTIVE='# retired-through:'
-
-retired_through() {
-    local value=''
-
-    if [ -f "$RECORD" ]; then
-        value="$(awk -v mark="$RETIRED_DIRECTIVE" '
-            index($0, mark) == 1 { print $3; exit }' "$RECORD")"
-    fi
-
-    case "$value" in
-        ''|*[!0-9]*) echo 0 ;;
-        *)           echo "$value" ;;
-    esac
-}
-
-# ------------------------------------------------------------------------------
 # Where the images themselves are kept.
 #
 # The record names an image; this is where the image is. They are separate
@@ -267,12 +226,7 @@ do_record() {
     # The number: one more than the greatest already recorded, read from the
     # record rather than from a counter of its own. A counter is a second thing
     # that can disagree with the record, and the record is the record.
-    #
-    # The retirement directive is the floor beneath it, so a register that has
-    # been cleared resumes above the numbers it used to hold rather than reissuing
-    # them. See retired_through above for why a number may not mean two things.
-    number=$(( $( { rows | awk -F'\t' '{ print $1 }'; retired_through; } \
-                   | sort -n | tail -1 ) + 1 ))
+    number=$(( $(rows | awk -F'\t' '{ print $1 }' | sort -n | tail -1 || echo 0) + 1 ))
 
     commit="$(git rev-parse --short HEAD 2>/dev/null || echo 'none')"
 
@@ -548,13 +502,6 @@ generated_view() {
     printf '| Environments | %s |\n' "${environments:--}"
     printf '| First | %s |\n' "${first:--}"
     printf '| Latest | %s |\n' "${latest:--}"
-
-    # The numbers that were issued and withdrawn, shown only where there are any.
-    # A register that has never been cleared says nothing about retirement, and a
-    # summary row reading "0" would be a fact about nothing.
-    if [ "$(retired_through)" -gt 0 ]; then
-        printf '| Numbers retired | 1 to %s, never to be reissued |\n' "$(retired_through)"
-    fi
     printf '\n'
 
     if [ "${total:-0}" -gt "$VIEW_ROWS" ]; then
@@ -606,15 +553,12 @@ do_check() {
         errors=$(( errors + 1 ))
     fi
 
-    # Every row: the right number of fields, a number one greater than the last —
-    # or, for the first row after the register was cleared, one greater than the
-    # highest number ever issued —
+    # Every row: the right number of fields, a number one greater than the last,
     # and the constrained fields drawn from their vocabularies. Each of these is
     # a way the record can become unreadable by the thing that generates the
     # view, and a view generated from an unreadable record is silently wrong.
     local report
-    report="$(rows | awk -F'\t' -v results=" $RESULTS " \
-                          -v retired="$(retired_through)" '
+    report="$(rows | awk -F'\t' -v results=" $RESULTS " '
         NF != 13 {
             printf "row %s: %d fields where the schema has 13.\n", $1, NF; bad = 1; next
         }
@@ -639,7 +583,7 @@ do_check() {
                 bad = 1
             }
         }
-        BEGIN { expected = retired + 1 }
+        BEGIN { expected = 1 }
     ')"
 
     if [ -n "$report" ]; then

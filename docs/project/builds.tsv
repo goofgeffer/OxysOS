@@ -9,11 +9,12 @@
 # owner's direction on 2026-09-13, together with every archived image, and
 # nothing is recorded here again until `Oxys 1 Alpha` — which docs/project/PLAN.md
 # fixes at sub-task 8.7. The machinery is untouched: `make build-record` still
-# works and would append row 13 the moment it is run.
+# works and would append row 1 the moment it is run.
 #
-# The directive below is why it would be 13 and not 1. A build number is a name,
-# and docs/project/TESTING-RECORD.md is an account of what was observed about
-# builds 1, 5, 6 and 9 that is not edited after the fact. Reissuing those numbers
-# would make those accounts describe something else.
-# retired-through: 12
+# **Numbering restarts at 1**, by the owner's decision. A number issued before
+# the clearing and a number issued after it are therefore different images, and
+# what tells them apart is the date in the row — not the number. Every document
+# that cited a number as a way of pointing at an image has stopped doing so;
+# docs/project/TESTING-RECORD.md, which is an account of runs and is not edited
+# after the fact, says so at its head.
 number	date	commit	dirty	compiler	cc_version	kernel	iso	result	assertions	environments	sha256	note

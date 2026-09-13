@@ -113,9 +113,10 @@ have, Phases 12 and 13 falling after it.
 direction on 2026-09-13 every row of [`BUILDS.md`](BUILDS.md) was removed and
 every archived image deleted, and no build is recorded again until `Oxys 1 Alpha`
 is cut at sub-task 8.7. The machinery is untouched — `make build-record` works,
-and would append row 13 — and the numbers already issued are retired rather than
-freed, so nothing that cites one comes to mean something else. That document
-holds the reasoning.
+and `tools/builds.sh` is byte for byte the script it was — and **numbering
+restarts at 1**, so a build number is unique within a register and not across
+this project's life. That document holds the reasoning and what the restart
+costs.
 
 **The alpha and the beta are the first release's and are not expected to recur.**
 Every release after `Oxys 1` is preceded by internal debug builds, which are

@@ -24,12 +24,17 @@ been seen to fail is a test nothing has established the value of.
 
 **The build numbers in the rows below name a register that no longer holds
 them.** On 2026-09-13 the project owner directed that every row of
-[`BUILDS.md`](BUILDS.md) be removed and every archived image deleted. The rows
+[`BUILDS.md`](BUILDS.md) be removed and every archived image deleted, and that
+**numbering restart at 1** when recording resumes at `Oxys 1 Alpha`. The rows
 here are not edited to match: this is an account of runs that happened, and
 "build 1 reported fifty-five assertions" was true when it was written and stays
-true. **Numbers 1 to 12 are retired and will not be reissued**, so a reference
-here can never come to name a different image; the register's own directive is
-what enforces that, and [`BUILDS.md`](BUILDS.md) records the reasoning.
+true.
+
+**So a build number is not an identity across this document and that register.**
+When recording resumes there will be a build 1 again, and it will be a different
+image entirely. **What tells them apart is the date** — every row here carries
+one and every row there will — and nothing else does. A reader who takes a number
+alone as naming an image will be wrong.
 
 What the references have lost is the ability to be followed. A row saying *build
 5, the heap image* named something a reader could look up, and now names

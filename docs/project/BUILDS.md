@@ -242,29 +242,37 @@ nothing else. **Recording does not resume until `Oxys 1 Alpha`**, which
 [`PLAN.md`](PLAN.md) fixes at sub-task 8.7.
 
 **The machinery is untouched, and that was the point.** `make build-record` works
-exactly as it did; [`../../tools/builds.sh`](../../tools/builds.sh) gained one
-function and lost none. A register that could not be emptied without dismantling
-the thing that keeps it would be a register whose tooling had become the record,
-and the whole argument of this document is that the two are separate: the record
-is a file, the tooling reads and writes it, and removing every line from the file
-should leave the tooling exactly as it was.
+exactly as it did and
+[`../../tools/builds.sh`](../../tools/builds.sh) is byte for byte the script it
+was. A register that could not be emptied without dismantling the thing that
+keeps it would be a register whose tooling had become the record, and the whole
+argument of this document is that the two are separate: the record is a file, the
+tooling reads and writes it, and removing every line from the file should leave
+the tooling exactly as it was. Clearing it is the first thing that ever tested
+that claim, and the claim held.
 
-**Numbers 1 to 12 are retired and will never be reissued.** A build number is a
-name. [`TESTING-RECORD.md`](TESTING-RECORD.md) says what was observed about
-builds 1, 5, 6 and 9 at length, and that document is an account of things that
-happened rather than a thing edited afterwards; if a future row were numbered 1,
-those accounts would describe an image that is not the one they were written
-about. The record therefore carries a directive —
+### Numbering restarts at 1, and what that costs
 
-```
-# retired-through: 12
-```
+**The next build recorded is 1**, by the owner's decision. A build number is
+therefore unique within a register and **not** across this project's life.
 
-— which `record` allocates above and `check` expects the first row to follow, so
-the next build recorded is 13. It is the same rule the system-call numbers obey
-in [`../../kernel/abi/oxys/syscall_abi.h`](../../kernel/abi/oxys/syscall_abi.h),
-and for the same reason: **a number already handed out is a number that must not
-come to mean something else.**
+That is a real cost and it is worth stating rather than glossing.
+[`TESTING-RECORD.md`](TESTING-RECORD.md) gives accounts of builds 1, 5, 6 and 9
+at length, and those accounts are not edited after the fact; when recording
+resumes, a row numbered 1 will exist again and will describe a different image
+entirely. **What tells the two apart is the date**, which every row carries and
+every account in that document carries, and nothing else does. A reader who takes
+a number alone as an identity will be wrong, and that document says so at its
+head.
+
+The alternative was considered and rejected by the owner: a directive naming the
+highest number ever issued, which `record` would allocate above and `check` would
+expect the first row to follow, so that a number never meant two things. It was
+written, tested both ways, and removed again — because it made the register carry
+a fact about a register that no longer exists, and because a number that is only
+unique within a register is a defensible thing for a number to be. **What is not
+defensible is leaving machinery in place that nothing uses**, which is why the
+directive went rather than being kept dormant against a second clearing.
 
 **What is lost is what the section above predicted would be lost.** Of the twelve
 images, three still existed; the other nine had gone to `make clean` within hours
@@ -297,8 +305,8 @@ row already written, and no row here may be disturbed.
 ## The record itself
 
 Every build is in [`builds.tsv`](builds.tsv). What follows is generated from it —
-and it is presently empty, the register having been cleared; the summary's
-*Numbers retired* row is the only thing in it with anything to say.
+and it is presently empty, the register having been cleared; the summary has
+nothing to report but zeroes.
 
 <!-- BEGIN GENERATED: tools/builds.sh render -->
 
@@ -316,7 +324,6 @@ regenerates it and fails if what is here differs.*
 | Environments | - |
 | First | - |
 | Latest | - |
-| Numbers retired | 1 to 12, never to be reissued |
 
 ## The builds
 

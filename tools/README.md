@@ -42,13 +42,12 @@ archive does not hold, and `check --deep` re-hashes the bytes.
 
 **The register was emptied on 2026-09-13** at the project owner's direction —
 every row, and every archived image with them — and nothing is recorded again
-until `Oxys 1 Alpha`. The script is unchanged but for one addition: it reads a
-`# retired-through: N` directive from the record, allocates above it and expects
-the first row to follow it, so numbers already cited in
-[`../docs/project/TESTING-RECORD.md`](../docs/project/TESTING-RECORD.md) are
-never handed to a second image. That a register could be emptied without
-dismantling the thing that keeps it is the property this arrangement was supposed
-to have, and clearing it is the first time anything tested that.
+until `Oxys 1 Alpha`. **This script did not change at all**, which is the part
+worth recording: a register that could not be emptied without dismantling the
+thing that keeps it would be a register whose tooling had become the record, and
+clearing it is the first thing that ever tested that. Numbering restarts at 1 by
+the same decision, so the next build recorded is 1 and a number identifies an
+image within a register rather than across the project's life.
 
 It is here rather than anywhere else because it belongs to no phase, as
 everything in this directory does, and because it is the same kind of thing: a
