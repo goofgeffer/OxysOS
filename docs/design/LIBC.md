@@ -2,7 +2,7 @@
 <!-- SPDX-License-Identifier: CC0-1.0 -->
 # The C Library
 
-**Phase**: 7, sub-tasks 7.1 to 7.5, of [`../project/PLAN.md`](../project/PLAN.md).
+**Phase**: 7, sub-tasks 7.1 to 7.6, of [`../project/PLAN.md`](../project/PLAN.md).
 
 **Sub-task 7.1** is Sections 2 to 7. Section 2 is the division of the system-call
 header, which is not part of 7.1 but was required to happen before 7.2 and is
@@ -39,6 +39,15 @@ earlier sub-tasks recorded and this one closes. Section 11.5 is the verification
 the kernel asserting the status it ended with — and Section 11.7 the fifteen
 negative tests, of which four found something and three of those were answered by
 correcting a claim rather than the code.
+
+**Sub-task 7.6** is Section 12: the six filesystem system calls, the argument
+vector `execve` had refused since Phase 6, the descriptor table each process
+now holds, and the eight programs built above them. Section 12 opens with the
+table of two limitations it closes. Section 12.2.2 is a defect that had stood
+since sub-task 6.11 and was found by one of this sub-task's own programs; Section
+12.5 is the verification, in four groups; and Section 12.6 the thirteen negative
+tests, of which three were silent and two of those were answered by writing the
+program that catches them.
 
 **Authority**: `PROJECT_GUIDELINES.md`, Sections 2, 3, 4 and 6; and
 [`../../LICENSING.md`](../../LICENSING.md), Section 2.1, which named the division
@@ -79,6 +88,18 @@ in the [`../../Makefile`](../../Makefile), with the kernel's half in
 carried in the image by
 [`../../kernel/test/libc/startup_image.asm`](../../kernel/test/libc/startup_image.asm)
 and run by [`../../kernel/test/libc/startup.c`](../../kernel/test/libc/startup.c).
+The six calls of Section 12 are in
+[`../../kernel/arch/x86_64/syscall/syscall.c`](../../kernel/arch/x86_64/syscall/syscall.c)
+with their interface in
+[`../../kernel/abi/oxys/syscall_abi.h`](../../kernel/abi/oxys/syscall_abi.h),
+their descriptor table and argument layout in
+[`../../kernel/proc/process.c`](../../kernel/proc/process.c), and their wrappers
+beside the others in [`../../libc/syscall/calls.c`](../../libc/syscall/calls.c).
+The eight programs are the directories of [`../../userland/`](../../userland/),
+carried in the image by
+[`../../kernel/test/libc/utilities_image.asm`](../../kernel/test/libc/utilities_image.asm)
+and run by
+[`../../kernel/test/libc/utilities.c`](../../kernel/test/libc/utilities.c).
 The streams of Section 10 are
 [`../../libc/include/stdio.h`](../../libc/include/stdio.h),
 [`../../libc/include/stream.h`](../../libc/include/stream.h),
@@ -99,8 +120,12 @@ implementation must provide); System V Application Binary Interface, AMD64
 supplement, Section 3.1.2 (the LP64 model), Section 3.2.2 (the stack frame and
 its sixteen-byte alignment), Section 3.2.3 (the argument registers Section 2
 departs from in one place) and Section 3.4.1 (the initial process stack and the
-register state at process entry); Intel 64 and IA-32 Architectures
-Software Developer's Manual, Volume 2B, "SYSCALL".
+register state at process entry) and Section 3.1.2; ISO/IEC 9899:2011, Section
+5.1.2.2.1 (the two forms of `main`, and that `argv[argc]` is a null pointer);
+IEEE Std 1003.1-2017 (POSIX.1-2017), the `echo`, `cat`, `ls`, `mkdir` and `rm`
+utilities and the Utility Syntax Guidelines, and `open()`, `read()`, `close()`,
+`mkdir()` and `unlink()`; Intel 64 and IA-32 Architectures Software Developer's
+Manual, Volume 2B, "SYSCALL".
 
 ## 1. What this sub-task is, and what it is not
 
@@ -1119,8 +1144,11 @@ Section 10.5.2: this is the first sub-task whose shipped code the kernel is
 The head of [`../../libc/include/stdio.h`](../../libc/include/stdio.h) states
 each absence beside the thing it is waiting for, and this section does not
 restate the list. The shape of it is worth stating: **everything absent is absent
-because this kernel has eight system calls and not one of them opens, closes,
-positions or reads a file.**
+because nothing in this kernel opens a file **by the stream interface**. Sub-task
+7.6 added `open`, `close` and `read`, and they are reached through
+`<syscall.h>` and a descriptor rather than through a `FILE *`; what is still
+missing beneath `fopen` is the decision about where a file stream is buffered
+from, and beneath `fseek` a call that positions. Section 12.7, limitation 7.**
 
 | Absent | Waiting for |
 | ------ | ----------- |
@@ -1731,3 +1759,411 @@ Fifteen defects were introduced deliberately, one at a time, each built and run.
 
 The remaining two are limitations 1 and 2, and the sixteenth — the archive index —
 is not a defect this toolchain has.
+
+---
+
+## 12. Sub-task 7.6: the filesystem calls, the argument vector, and the utilities
+
+**Phase**: 7, sub-task 7.6, of [`../project/PLAN.md`](../project/PLAN.md).
+
+**What it adds**: six system calls by which a program reaches the filesystem;
+the argument and environment vectors `execve` had refused since Phase 6; a
+descriptor table for each process; the wrappers above all of that; and eight
+programs — the five utilities the sub-task is named for, and three that assert
+what the five cannot.
+
+**What it closes.** Two limitations recorded elsewhere, and each of them has
+been open since Phase 6:
+
+| Recorded as | The limitation | Closed by |
+| ----------- | -------------- | --------- |
+| [`PROCESS.md`](PROCESS.md), limitation 10 | `execve` takes no arguments and no environment. Both vectors are refused rather than ignored, for want of a convention about where a program finds them. | The convention is the System V ABI's own, Section 12.2. `execve` copies both vectors out of the caller's memory before it destroys the space they stand in, and `ProcessCreateUserStack` lays them upon the new stack. |
+| Section 7, and `userland/README.md` | "There is no file to open, and nothing to read." The file operations were absent from `<stdio.h>` because the kernel had no call beneath them. | Six calls, Section 12.1. `<stdio.h>` is *still* without them — see limitation 7 — but a program now reaches a file through `<syscall.h>`, which is what the five utilities do. |
+
+### 12.1 The six calls
+
+They are numbered ninth to fourteenth in
+[`../../kernel/abi/oxys/syscall_abi.h`](../../kernel/abi/oxys/syscall_abi.h),
+after the eight that existed, by the rule that sub-task 6.11 set and 7.3 kept: a
+number already handed to a program is a number that must not change.
+
+| Call | Arguments | Result |
+| ---- | --------- | ------ |
+| `open` | path, flags | A descriptor of the calling process, or a refusal. |
+| `close` | descriptor | Zero, or `EBADF`. |
+| `read` | descriptor, buffer, length | The bytes transferred, zero at the end of the file, or a refusal. |
+| `readdir` | descriptor, entry | **1** where an entry was placed, **0** at the end of the directory, or a refusal. |
+| `mkdir` | path, permissions | Zero, or a refusal. |
+| `unlink` | path | Zero, or a refusal. |
+
+Each is a validation of the caller's arguments and then a call of the filesystem
+layer of [`../storage/VFS.md`](../storage/VFS.md). None of them reimplements
+anything: `VfsOpen`, `VfsClose`, `VfsRead`, `VfsReadDirectory`,
+`VfsCreateDirectory` and `VfsUnlink` have existed since Phase 5 and are what
+these reach.
+
+**`readdir` returns three results and not two.** Zero is the end of a directory
+and −1 is a failure, and a program that treated them alike would stop listing
+upon a medium failure and report that it had finished. It is the one call here
+whose non-negative result is not a count, which is why the wrapper's name says
+`ReadDirectory` and the file records the trap beside it.
+
+**`read` refuses a length of zero.** Zero is what the end of a file returns, and
+a call that answered zero for "you asked for nothing" would be indistinguishable
+from one that answered zero for "there is nothing left".
+
+**There is no call that writes a file, and `open` accepts two flags.** See
+limitation 2.
+
+#### 12.1.1 The refusals, and why there are thirteen new ones
+
+`VfsError` distinguishes fifteen causes. Every one of them is carried out to a
+program under a name of its own, by `SyscallFromVfsError`, and the thirteen that
+had no name acquired one — `EEXIST`, `ENOTDIR`, `EISDIR`, `ENOTEMPTY`, `EROFS`,
+`ENAMETOOLONG`, `ELOOP`, `ENOSPC`, `EMFILE`, `EBUSY`, `EXDEV`, `ENOTSUP` and
+`EIO`.
+
+**They are not collapsed into `ENOENT` and `EINVAL`**, and the reason is that a
+program acts upon `errno` and not upon the sign of a result. `ls` prints an
+operand that reports `ENOTDIR` and fails upon anything else; `rm -f` treats
+`ENOENT` as success; `mkdir -p` treats `EEXIST` as success. A kernel that
+returned the right sign and the wrong name makes all three do the wrong thing,
+and each still exits with a plausible status — which is precisely what the
+negative test in Section 12.6 confirmed.
+
+The translation is one function with **no `default` label**. `VfsError` is an
+enumeration and the switch must answer for every one of its values; a default
+would answer for the ones nobody had thought about and would go on answering as
+the enumeration grew. Without one, `-Wall -Wextra -Werror` makes an unhandled
+value a failure to build, which is the only notice of that omission that cannot
+be missed.
+
+The names are derived in [`../../libc/include/errno.h`](../../libc/include/errno.h)
+by the same arithmetic the seven of sub-task 7.2 are — each is the negation of
+the kernel's result, asserted at compile time — so adding a result is one edit
+in each file and a `_Static_assert` that fails if either is forgotten.
+
+#### 12.1.2 The descriptor table
+
+A process holds `PROCESS_DESCRIPTOR_CAPACITY` entries, each naming a descriptor
+of the filesystem layer or `PROCESS_DESCRIPTOR_FREE`.
+
+**The indirection is not bookkeeping.** The filesystem layer has one table of
+`VFS_FILE_CAPACITY` entries for the whole machine; without this, descriptor 4
+would mean the same open file to every program in the system, and a program
+could reach another's file by naming a number. The table is also what bounds one
+program's share: sixteen entries against the layer's thirty-two, so a program
+that opens in a loop cannot leave the machine unable to open anything.
+
+**The free value is not zero**, and that is the one detail worth stating. Zero is
+a valid descriptor of the filesystem layer, so a table cleared with `memset`
+would appear to hold *that* file open in every slot, and the first `close` a
+fresh process made would close a file belonging to somebody else. Nothing a
+program can do distinguishes that from a correct table until the machine has two
+processes with files open, at which point it is a corruption and not a
+diagnostic. It is asserted directly, from within the kernel, for exactly that
+reason — Section 12.5.
+
+Three events empty the table:
+
+- **Creation.** Every slot is set to the free value explicitly. A child of `fork`
+  reaches this line too and therefore **inherits nothing**, which POSIX would
+  not have: inheriting a descriptor means two processes sharing one open file and
+  one file position, and the filesystem layer has no reference count upon an open
+  file to make that safe. Limitation 8.
+- **`execve`.** What the replaced program held is *closed* and not forgotten. A
+  forgotten entry is a descriptor of the machine's that nothing will ever close.
+  POSIX would have descriptors survive an `execve` unless marked close-on-exec;
+  this kernel has no such mark and does the safe half of the rule.
+- **Destruction.** Whatever the process still held. A program that ended badly
+  must not cost the machine a descriptor permanently.
+
+### 12.2 The argument vector: the convention, and where it is built
+
+The System V Application Binary Interface, AMD64 supplement, Section 3.4.1,
+"Initial Stack and Register State", fixes the layout, and sub-task 7.5 already
+built the empty case of it. What 7.6 adds is the contents:
+
+```
+    the information block    the argument and environment strings, terminated
+    (alignment padding)
+    the auxiliary vector     one null entry, being two eightbytes of zero
+    null                     ending the environment vector
+    envp[0..n)               pointers into the information block
+    null                     ending the argument vector
+    argv[0..argc)            pointers into the information block
+    argc                     at the stack pointer
+```
+
+`ProcessLayOutArguments` builds it downward from the top of the stack, which is
+the order it must be built in: the strings stand highest, because the pointers
+below them have to name addresses that are already fixed.
+
+**The stack pointer is aligned to sixteen after the frame is sized and not
+before.** The information block ends wherever the last string ended, so the
+padding is computed rather than assumed. Section 3.4.1 guarantees a program a
+sixteen-byte-aligned stack pointer at its entry; a program entered upon a
+misaligned one faults at the first instruction using an aligned move, inside a
+function it did not write.
+
+**The frames are kept rather than translated for.** The paging layer offers no
+walk of an address space that is not the active one, and the space a stack is
+being filled for very often is not — `ProcessCreateUserStack` is called from the
+boot sequence with the kernel's space active. So the mapping loop keeps the
+sixteen physical addresses it already held, and the writes go through the direct
+map. It is the same technique the ELF loader uses to write a segment it has not
+mapped yet, and it needs nothing new.
+
+**An eightbyte is written byte by byte.** It may straddle two pages of the stack,
+and two pages of a stack need not be two consecutive frames.
+
+#### 12.2.1 Why the strings are copied before anything is destroyed
+
+`execve` replaces an address space. The vectors a program passes stand *in that
+space*, so a kernel that read `argv[1]` after the replacement would read whatever
+the new program has at that address — which is a fault if it is lucky and the new
+program's own data if it is not, and the second is a program started with
+arguments nobody wrote.
+
+`SyscallCopyUserVector` therefore copies every string into `ProcessArguments`,
+which is a kernel stack frame, **before** `ProcessExecute` is called. Both bounds
+— `SYSCALL_ARGUMENT_COUNT_MAXIMUM` strings per vector and
+`SYSCALL_ARGUMENT_BYTES_MAXIMUM` bytes for the two together — are published in
+the interface header, because a program that will be refused is entitled to know
+what it will be refused against. Both refusals happen before the point of no
+return, so a program refused here keeps running, which is what an `execve` that
+fails must do.
+
+The copy is bounded by what is left of the block rather than by a per-string
+bound, so that sixteen short arguments and one long one are both accommodated by
+the same two kibibytes.
+
+**The displacements are displacements and not pointers.** A pointer would name an
+address within a structure that has been copied nowhere by the time the strings
+are written to a user stack; a displacement survives and an address does not.
+
+#### 12.2.2 The path copier, and the defect a program found
+
+`SyscallCopyUserString` returns one `false` for two causes — memory the caller may
+not read, and a string longer than the room given — and **every call that used it
+reported `EFAULT` for both**. That was wrong, it had been wrong since sub-task
+6.11, and nothing had noticed because nothing had ever asked to be refused for
+the second reason.
+
+`file-check` asked. It composed a path of three hundred characters entirely
+within its own memory, and was told that the address was one it may not use. A
+person reading that diagnostic looks for a pointer defect, and there is none.
+
+`SyscallCopyUserPath` now distinguishes them, by asking whether the first byte was
+readable — which it was, if the refusal was about length. It costs one extra page
+walk upon a path that has already failed, and it buys the difference between
+"this address is not yours" and "this path is too long", which are the only two
+things the caller can do anything about. Every path-taking call uses it, `execve`
+included, so the correction reaches the call that had the defect first.
+
+### 12.3 The five utilities
+
+Each is a directory under [`../../userland/`](../../userland/) holding `main.c`,
+built by the procedure of Section 11 and linked against the same archive.
+
+| Program | What it does | What it deliberately does not |
+| ------- | ------------ | ----------------------------- |
+| [`echo`](../../userland/echo/main.c) | Writes its operands separated by one space and followed by one newline. | `-n` is an operand and a backslash is an ordinary character. Both are implementation-defined in IEEE Std 1003.1-2017, and both alternatives make `echo` unable to print something. |
+| [`cat`](../../userland/cat/main.c) | Copies each operand to the standard output. | No operand is a diagnostic rather than a copy of the standard input, there being no call that reads one; `-` is a path; `-u` is not recognised. |
+| [`ls`](../../userland/ls/main.c) | Lists each directory operand, one entry to a line, with `-a`. | It does not sort and does not use columns. Limitations 4 and 5. |
+| [`mkdir`](../../userland/mkdir/main.c) | Creates each operand, with `-p`. | `-m` is not implemented and no file mode creation mask is applied. Limitation 6. |
+| [`rm`](../../userland/rm/main.c) | Removes each operand, with `-f`. | `-i` cannot be implemented and `-r` is not, there being no call that removes a directory. Limitation 3. |
+
+Four things are common to all five and are decisions rather than coincidences.
+
+**Every operand is attempted even after one has failed.** IEEE Std 1003.1-2017
+requires it of `rm` explicitly, and a run over ten files that stopped at the
+second would leave eight unreported — the person would have to run it again to
+find out about them one at a time.
+
+**Diagnostics go to the standard error and contents to the standard output**,
+although both presently reach the same serial channel. The system call
+distinguishes them and the shell of Phase 8 will redirect them separately; a
+program that wrote its complaints to the standard output would put them in the
+middle of the bytes it was copying, and the defect would appear the first time
+somebody redirected the output to a file.
+
+**An option scan stops at the first operand and at `--`**, which are POSIX's
+Utility Syntax Guidelines 9 and 10. A scan that continued would treat a file
+named `-a` as an option, and there would be no way to name it.
+
+**An option that is not implemented is refused and never ignored.** A flag
+accepted and having no effect is a claim the program does not meet, and the
+person discovers it by the work not having been done.
+
+`cat` writes its operand through `fputs` and `fwrite` and never as a `printf`
+format. It is the one program of the set whose whole input is somebody else's
+text, and a percent sign in a filename would otherwise be read as a conversion
+specification.
+
+### 12.4 The three programs that assert what the five cannot
+
+| Program | What it asserts |
+| ------- | --------------- |
+| [`arg-check`](../../userland/arg-check/main.c) | That the vector a program finds upon its stack is the vector it was given: the count, each string including an empty one, the terminator ISO/IEC 9899:2011, Section 5.1.2.2.1, requires at `argv[argc]`, an environment vector that exists and is empty, and strings that are modifiable. |
+| [`exec-check`](../../userland/exec-check/main.c) | That a vector survives `execve`. It becomes `arg-check` with a vector standing in its own address space, and that space is destroyed before the new program's stack is built. Its status *is* `arg-check`'s. |
+| [`file-check`](../../userland/file-check/main.c) | The six calls, by comparison rather than by printing: a file of known contents read byte for byte, a directory of known entries listed, the end of both reported and stable, and twenty refusals asserted **by the name of the failure** rather than by its sign. |
+
+**They exist because nothing in this kernel can read what a program printed.**
+`ls` given a directory prints names, and a kernel watching it cannot tell the
+names it printed from the names it should have printed. These three compare, and
+end with the number of comparisons that failed — which the kernel reads directly,
+exactly as sub-task 7.5's program is read.
+
+**`file-check` exists because a negative test proved it had to.** The copy at the
+end of the `read` system call was removed, so that the call reported a count and
+delivered no bytes, and `make verify` reported nothing at all: `cat` opened its
+files, was told how many bytes it had, wrote a buffer it had never been given,
+and exited with a status of zero. Section 12.6.
+
+### 12.5 The verification
+
+[`../../kernel/test/libc/utilities.c`](../../kernel/test/libc/utilities.c), run
+after `KernelVerifyStartup` because every program it runs is built by the
+procedure that one asserts. It composes the EXT2 volume of
+[`../../kernel/test/volume.h`](../../kernel/test/volume.h) in memory, mounts it
+as the root, writes `arg-check` to `/bin/arg-check`, builds a small tree through
+the filesystem layer, and then runs eight programs at privilege level 3.
+
+**The fixture is built through the filesystem layer and not by a utility**, so
+that a program which fails is not also the thing that was supposed to have
+prepared the ground.
+
+**Only one program is written to the volume.** The composed volume is a hundred
+and twenty-eight blocks of a kibibyte, of which ninety-two are free — enough for
+one program and not for eight. The other seven are loaded straight out of the
+kernel image with `ElfLoad`, exactly as sub-task 7.5's is. Nothing is lost: a
+program loaded from memory and one loaded from a volume take the same path
+through the loader, and what differs is the route to the bytes, which is what
+`execve` exercises.
+
+The assertions fall into four groups.
+
+1. **The descriptor table, from within the kernel.** The division sub-tasks 7.3
+   and 7.4 made, for the third time: the policy is ordinary code and is called
+   directly. Two of its properties cannot be reached by a program at all — that
+   the table is emptied and not zeroed, and that a process ending while holding a
+   descriptor gives it back. No program of this sub-task ends holding one, so the
+   count being unchanged after each run would pass whether or not
+   `ProcessDestroy` released anything; here a descriptor is deliberately left open
+   and the count reports it.
+2. **The vector, by both routes to it.** `arg-check` run directly, and
+   `exec-check` becoming `arg-check` through `execve`.
+3. **The six calls, by `file-check`**, which is the only thing here that compares
+   bytes and error names rather than statuses.
+4. **The five utilities, by status and by what the volume holds afterwards.**
+   That `mkdir` left a directory where there was none and refuses one that is
+   there; that `mkdir -p` created every intermediate component; that `rm` removed
+   a name, left its neighbours alone, refuses a name that is gone, accepts it
+   under `-f`, and refuses a directory.
+
+**Every positive case is paired with a negative one.** A status of zero is the
+weakest evidence a program can offer — a utility that did nothing at all produces
+one — so each program is also given something it must refuse, and the pair
+together says that the program can tell the two apart.
+
+**What none of it asserts is what a program printed**, which is limitation 1.
+
+### 12.6 The negative tests
+
+Thirteen defects were introduced deliberately, one at a time, each built and run.
+
+| The defect introduced | What was reported |
+| --------------------- | ----------------- |
+| The argument count written as zero | `the argument count is not the number of strings that were passed`, two more of `arg-check`'s assertions, and the status. |
+| An empty argument skipped when the information block is built | `a pointer within the argument vector is null`, and both programs faulted — the status being the negated page-fault vector. |
+| `execve` passing null to `ProcessExecute` rather than the vectors it copied | `a vector did not survive execve, or the program it names was not reached`. |
+| The stack pointer not aligned to sixteen | `the stack a program is entered upon is not sixteen-byte aligned`, once per program. |
+| `ProcessCloseDescriptors` doing nothing | `a destroyed process left its open files behind it`, and `the filesystem layer holds descriptors nothing closed`. |
+| The descriptor table cleared to zero | `a fresh process holds a descriptor, so the table was cleared rather than emptied`, and `cat` then failed for want of a descriptor. |
+| A descriptor given out below `SYSCALL_DESCRIPTOR_FIRST` | `a descriptor below the standard three was given out`. |
+| `mkdir` refused nothing | `mkdir created a directory that was already there`. |
+| `unlink` reporting success without removing anything | `rm reported success and the file is still there`, and two more. |
+| Every filesystem refusal reported as `EINVAL` | `ls treated a regular-file operand as a failure`, `mkdir -p could not create a path of missing components`, and two more — the three utilities that act upon `errno`. |
+| `read` reporting a count and copying no bytes | **Nothing was reported.** See below. |
+| `open` accepting any flag it is given | **Nothing was reported.** See below. |
+| `readdir` not terminating the name it copies out | **Nothing was reported.** See below. |
+
+**The first two silent ones were answered rather than recorded**, and the answer
+is `file-check`. Both are now caught by name: the first as `a read reported bytes
+it did not deliver, or delivered the wrong ones`, and the second as `an open
+asking to write was not refused`.
+
+**The third is a restatement of an invariant established elsewhere**, and it is
+kept. The filesystem layer terminates every name it returns, so the kernel's own
+termination can never be the thing that makes a name safe — which is the same
+shape as the six stack-frame zeroes sub-task 7.5 deleted and the second size
+check sub-task 7.3 deleted. It is kept all the same, and the difference is where
+the invariant lives: those two were restatements of a line a few lines above in
+the same function, and this one is a statement made at the boundary between the
+kernel and privilege level 3 about a structure crossing it. A name without a
+terminator is a program reading past the end of its own buffer on the kernel's
+authority, and the boundary is where that must be foreclosed rather than
+inherited.
+
+### 12.7 Limitations
+
+1. **Nothing asserts what a program printed.** `cat` copying the wrong file, or
+   `ls` listing the wrong directory, would satisfy every assertion in Section
+   12.5. `file-check` closes the part of this that is about the *calls* — the
+   bytes `read` delivers and the entries `readdir` returns are compared — but the
+   part that is about the *programs* stands open: what reaches the serial channel
+   is read by a person. Closing it needs a way for the kernel to capture the
+   diagnostic path, or a shell that can redirect a program's output into a file
+   the test then reads. The second arrives at sub-task 8.5.
+2. **No program may create or write a file.** `open` accepts `SYSCALL_OPEN_READ`
+   and `SYSCALL_OPEN_DIRECTORY` and refuses every other bit, and `write` still
+   reaches the two diagnostic descriptors alone. The filesystem layer has offered
+   creation, truncation and appending since Phase 5; they are not exposed because
+   nothing here would call them, and a call whose only caller is a future one is
+   a call nothing asserts. The shell's output redirection at sub-task 8.5 is the
+   first thing that needs them.
+3. **There is no call that removes a directory**, so `rm` has no `-r` and no
+   `-d`. `VfsRemoveDirectory` exists and is not exposed, for the reason above; a
+   recursive removal built upon `unlink` alone could empty a directory and then
+   be unable to remove it, which is worse than not offering the option. A
+   directory made by `mkdir` here can be removed by nothing in this system.
+4. **`ls` does not sort.** POSIX sorts by the collating sequence of the locale;
+   this system has no locale, and sorting needs every name held at once — a heap
+   sized by a directory the program has not finished reading. The entries appear
+   in the order the filesystem returns them, which for EXT2 is the order they
+   stand in the directory's blocks.
+5. **There is no working directory.** No call sets or reports one, so `ls` with
+   no operand lists the root rather than `.`, and every path a program names is
+   absolute in effect. A relative path resolves against the root. This is the
+   shell's first requirement after a prompt, and is sub-task 8.3's `cd`.
+6. **A directory `mkdir` creates is world-writable.** The mode is 0777, which is
+   what POSIX names as the default, and it is not reduced because this system has
+   no file mode creation mask — and no credentials for one to belong to. Nothing
+   in this system checks a permission bit before an operation either, so the bits
+   are recorded and not enforced.
+7. **`<stdio.h>` still has no `fopen`.** A program reaches a file through
+   `<syscall.h>` and a descriptor, which is the layer beneath the one ISO/IEC
+   9899:2011, Section 7.21.5, describes. The stream layer of sub-task 7.4 is
+   ready for it — a stream's device is already an indirection — and what is
+   missing is the decision about buffering a file's stream from a heap that may
+   not exist yet. It is deliberately not invented here: the first thing that
+   needs `fopen` is a ported tool, and a port is what will say what it needs.
+8. **A child of `fork` inherits no descriptor**, and `execve` closes every one.
+   POSIX has both inherited. Inheriting means two processes sharing one open file
+   and one file position, which needs a reference count upon an open file that
+   the filesystem layer does not have. The shell of Phase 8 needs this — a
+   redirection is established in the child between the `fork` and the `execve` —
+   so it is sub-task 8.5's to fix and not a permanent shape.
+9. **The two bounds upon a vector are small**: sixteen strings and two
+   kibibytes. They are what a kernel stack frame can hold, `ProcessArguments`
+   being a local of the system call. A shell expanding a pattern over a large
+   directory would exceed both. Making them larger means the block coming from
+   somewhere other than a stack, which is a change to where it lives and not to
+   what it does.
+10. **None of this is synchronised.** The descriptor table is a field of the
+    process control block and is guarded by nothing, as the break of sub-task 7.3
+    is; the filesystem layer beneath it was written for one thread of control.
+    A user thread's affinity names the bootstrap processor alone, so the case
+    cannot arise, and [`CONCURRENCY.md`](CONCURRENCY.md), Section 10, limitation
+    1, is where it is counted with the rest.

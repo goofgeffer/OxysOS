@@ -18,6 +18,7 @@
  *          KernelVerifyShootdown, KernelVerifyApplicationProcessors,
  *          KernelVerifyScheduler, KernelVerifyString, KernelVerifyWrappers,
  *          KernelVerifyHeap, KernelVerifyStdio, KernelVerifyStartup,
+ *          KernelVerifyUtilities,
  *          KernelVerifyPit, KernelVerifyKeyboard, KernelVerifySerial,
  *          KernelVerifyVga, KernelVerifyPci, KernelVerifyAta, KernelVerifyBlock,
  *          KernelVerifyBuffer, KernelVerifyExt2, KernelVerifyVfs,
@@ -287,6 +288,29 @@ void KernelVerifyStdio(void);
  * all of them.
  */
 void KernelVerifyStartup(void);
+
+/*
+ * Sub-task 7.6: the six filesystem system calls, the argument vector `execve`
+ * now carries, and the five utilities built above them.
+ *
+ * It composes an EXT2 volume in memory, mounts it as the root, writes one
+ * program onto it and builds a small tree of files and directories, and then
+ * runs each of seven programs at privilege level 3 — asserting the status each
+ * ended with, and, where a utility changes the volume, what the volume holds
+ * afterwards.
+ *
+ * **It asserts what a program did and not what it printed.** Nothing in this
+ * kernel captures the diagnostic path, so a `cat` that copied the wrong file
+ * would satisfy every assertion here. The evidence for what was printed is the
+ * serial log and a person reading it; the evidence for what was *done* is here.
+ * Two of the seven programs — `arg-check` and `exec-check` — exist precisely to
+ * turn the one thing that would otherwise be printed-only, the argument vector,
+ * into a status a machine can read.
+ *
+ * It runs after KernelVerifyStartup, because every program it runs depends upon
+ * what that one asserts.
+ */
+void KernelVerifyUtilities(void);
 
 /* Phases 3 and 4: the remaining devices. */
 void KernelVerifyPit(void);

@@ -204,7 +204,7 @@ void KernelVerifyProcess(void)
      * System V ABI requires standing upon it. --- */
 
     {
-        const uint64_t entry = ProcessCreateUserStack(first);
+        const uint64_t entry = ProcessCreateUserStack(first, NULL);
 
         KernelProcessRequire(entry == (PROCESS_USER_STACK_TOP -
                                        PROCESS_USER_STACK_FRAME_BYTES),
@@ -240,7 +240,7 @@ void KernelVerifyProcess(void)
          * Asked for twice, given once. A second stack would map pages over the
          * first and the process would lose whatever it had pushed.
          */
-        KernelProcessRequire(ProcessCreateUserStack(first) == 0U,
+        KernelProcessRequire(ProcessCreateUserStack(first, NULL) == 0U,
                              "a second user stack was given to one process");
 
         /* The extent record MEMORY-LAYOUT.md asked for: an address space cannot

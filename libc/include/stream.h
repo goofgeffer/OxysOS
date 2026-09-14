@@ -91,9 +91,10 @@ int64_t OxysStreamWrite(int descriptor, const void *buffer, size_t length);
  * and returns how many were obtained, zero at end-of-file, or -1.
  *
  * **The shipped implementation returns zero and always will until this kernel
- * acquires a call that reads.** It has eight system calls and not one of them
- * does; a stream whose source is this function is therefore permanently at
- * end-of-file, which is what stdin is. That is a limitation of the system and
+ * acquires a call that reads a console.** Sub-task 7.6 added a `read`, and it
+ * reads a file through a descriptor `open` gave out; no call reads the thing
+ * `stdin` is connected to. A stream whose source is this function is therefore
+ * permanently at end-of-file, which is what stdin is. That is a limitation of the system and
  * not of the buffering above it, and it is written as a function that reports
  * end-of-file rather than as an absent function so that every program above it
  * is already correct on the day the call exists.

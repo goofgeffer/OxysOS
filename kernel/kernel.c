@@ -1394,6 +1394,19 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
      */
     KernelVerifyStartup();
 
+    /*
+     * Sub-task 7.6, which runs after it because every program it runs is built
+     * by the procedure that one asserts.
+     *
+     * It is the first test here that asserts a program by **what it did** rather
+     * than by what it reported. Seven programs run at privilege level 3 upon a
+     * volume this kernel composed, and the assertions are made afterwards
+     * against the volume: that `mkdir` left a directory where there was none,
+     * that `rm` removed a name and left its neighbours alone, and that no
+     * program ended holding a descriptor of the machine's.
+     */
+    KernelVerifyUtilities();
+
     KernelMountRootVolume();
 
     IrqReport();

@@ -523,7 +523,7 @@ void KernelVerifyFork(void)
     }
 
     ProcessRecordImage(parent, &image);
-    stack = ProcessCreateUserStack(parent);
+    stack = ProcessCreateUserStack(parent, NULL);
     KernelLifecycleRequire(stack != 0U, "the process to fork was given no stack");
 
     /*
@@ -748,7 +748,7 @@ void KernelVerifyLifecycle(void)
     }
 
     ProcessRecordImage(process, &image);
-    stack = ProcessCreateUserStack(process);
+    stack = ProcessCreateUserStack(process, NULL);
     boot = ThreadAdoptCurrent("boot");
     thread = ThreadCreate(process, image.entry, stack);
 

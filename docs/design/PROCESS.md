@@ -6,10 +6,13 @@
 [`../project/PLAN.md`](../project/PLAN.md). Sections 1 to 8 are 6.9, which
 defines the structures; Sections 9 and 10 are 6.10, which switches to them and
 descends to privilege level 3; Sections 11 to 16 are 6.11, which gives a program
-the four calls by which it governs another. **Section 10.2 is sub-task 7.5**, and
-is here rather than in [`LIBC.md`](LIBC.md) because it is the kernel's half of a
+the four calls by which it governs another. **Section 10.2 is sub-task 7.5 and
+Section 10.2.1 is sub-task 7.6**, and they are
+here rather than in [`LIBC.md`](LIBC.md) because it is the kernel's half of a
 contract that document holds the other half of: what stands upon a stack before a
-program's first instruction.
+program's first instruction. **Section 14 is amended by sub-task 7.6**, which is
+where `execve` stopped refusing the two vectors and began closing the
+descriptors a replaced program held.
 
 **Authority**: `PROJECT_GUIDELINES.md`, Sections 2, 3 and 6.
 
@@ -337,6 +340,29 @@ about its caller would not be one.
 [`LIBC.md`](LIBC.md), Section 11.1, records the rest, including an earlier
 version of this that wrote the six zeroes explicitly and was deleted when a
 negative test showed the write could not be observed.
+
+### 10.2.1 What stands upon it since sub-task 7.6
+
+The frame above is what a program with no arguments finds, and it is still what
+such a program finds — a process the kernel creates for its own purposes has no
+vectors, and the composed programs of Phase 6 never read one.
+
+Where there *are* arguments, `ProcessLayOutArguments` writes them: the strings at
+the top of the stack, the two vectors of pointers below them in the order Section
+3.4.1 fixes, the auxiliary vector's single null entry, and the argument count at
+the address the program is entered upon. The layout is built downward, because
+the pointers must name addresses the strings already occupy; the stack pointer is
+aligned to sixteen after the frame is sized and not before, the information
+block ending wherever the last string ended; and the writes go through the direct
+map of the frames the mapping loop above already held, because the paging layer
+offers no walk of an address space that is not the active one and the space being
+filled very often is not. [`LIBC.md`](LIBC.md), Section 12.2, holds the whole of
+it and the reasoning for each part.
+
+**This is also where a process acquires its descriptor table**, which is emptied
+at creation and is a field of the process control block rather than of the
+address space: a descriptor outlives an `execve` in every system that has one,
+and in this one it does not — Section 14. [`LIBC.md`](LIBC.md), Section 12.1.2.
 ### 10.1 How the kernel gets back
 
 Three ways, and this sub-task implements two of them.
@@ -577,11 +603,27 @@ Upon success the call does not return. The kernel stack it arrived upon is
 abandoned where it stands, which costs nothing: the next entry from privilege
 level 3 begins at the top of that stack again.
 
-**Arguments and environment are refused, not ignored.** There is no C library and
-no convention yet fixed for where a program finds them upon its stack, so
-accepting them would mean discarding them silently — and a program that passed
-arguments and found none would have no way to tell that the kernel had thrown
-them away. A non-null vector is `SYSCALL_EINVAL`. See limitation 10.
+**Arguments and environment were refused until sub-task 7.6, and are now
+carried.** They were refused for want of a convention about where a program
+finds them upon its stack; the convention is the System V ABI's own and
+[`LIBC.md`](LIBC.md), Section 12.2, holds it. What this kernel does about it is
+in two halves. `SyscallCopyUserVector` copies every string out of the caller's
+memory into a `ProcessArguments` upon the kernel stack **before**
+`ProcessExecute` is called — because the address space those strings stand in is
+about to be destroyed, and a kernel that read `argv[1]` afterwards would read
+whatever the new program has at that address. `ProcessLayOutArguments` then
+writes them onto the new stack. Both bounds are published in
+`<oxys/syscall_abi.h>` and both refusals happen before the point of no return,
+so a program that exceeds one keeps running.
+
+**The descriptors the old program held are closed, of sub-task 7.6.** They are
+the machine's and not the process's — the filesystem layer has one table for all
+of them — so forgetting the table here would leak every entry the replaced
+program had open, and a machine that had executed enough programs would be one
+where nothing could open anything. IEEE Std 1003.1-2017 would have a descriptor
+survive an `execve` unless it is marked close-on-exec; this kernel has no such
+mark and does the safe half of the rule. [`LIBC.md`](LIBC.md), Section 12.1.2,
+and limitation 10 below.
 
 ## 15. `exit` and `wait`
 
@@ -793,10 +835,18 @@ part of the kernel wrote.
    before waiting leaves its child in the table with a parent identifier naming
    nobody. There is no `init` to reparent an orphan to and no scheduler to run
    one; both arrive at sub-task 6.15 and Phase 9 respectively.
-10. **`execve` takes no arguments and no environment.** Both vectors are refused
-    rather than ignored, for the reason Section 14 gives. Passing them needs a
-    convention for where a program finds them upon its stack, which is Phase 7's
-    to fix and the C library's to read.
+10. ~~**`execve` takes no arguments and no environment.**~~ **Closed at sub-task
+    7.6.** The convention it was waiting for is the System V ABI's own, and
+    [`LIBC.md`](LIBC.md), Section 12.2, holds it: the strings at the top of the
+    new stack, the pointers below them, the argument count at the stack pointer.
+    Both vectors are accepted, bounded by
+    `SYSCALL_ARGUMENT_COUNT_MAXIMUM` and `SYSCALL_ARGUMENT_BYTES_MAXIMUM`, and
+    both bounds are published so that a program can know what it will be refused
+    against. **What replaces it is narrower**: a child of `fork` inherits no
+    descriptor and `execve` closes every one, because sharing an open file
+    between two processes needs a reference count upon it that the filesystem
+    layer does not have. That is `LIBC.md`, Section 12.7, limitation 8, and the
+    shell's redirection at sub-task 8.5 is what will need it.
 11. **A status is a quadword and nothing more.** `wait` reports what the program
     passed to `exit`, or the negated vector where a fault ended it, and there is
     no encoding distinguishing the two beyond the sign. A program cannot ask

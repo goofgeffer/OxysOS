@@ -206,6 +206,7 @@ C_SOURCES := kernel/kernel.c \
              kernel/test/libc/heap.c \
              kernel/test/libc/stdio.c \
              kernel/test/libc/startup.c \
+             kernel/test/libc/utilities.c \
              kernel/mm/pmm.c \
              kernel/mm/vmm.c \
              kernel/mm/heap.c \
@@ -279,6 +280,7 @@ ASM_SOURCES := boot/boot.asm \
                kernel/arch/x86_64/syscall/syscall_entry.asm \
                kernel/arch/x86_64/proc/switch.asm \
                kernel/test/libc/startup_image.asm \
+               kernel/test/libc/utilities_image.asm \
                $(LIBC_ASM_SOURCES)
 
 OBJECTS := $(patsubst %.c,$(BUILD_DIR)/%.c.o,$(C_SOURCES)) \
@@ -449,23 +451,40 @@ $(USER_CRT0): libc/crt/crt0.asm
 	@mkdir -p $(dir $@)
 	$(NASM) $(ASFLAGS) $< -o $@
 
-# One rule per program, because a program is a directory of sources and not a
-# file. There is one program at sub-task 7.5; sub-task 7.6 adds five, and the
-# shape they will take is this one repeated.
+# The programs, and the one rule that links every one of them.
 #
-# The archive is named *after* the program's objects, which is not a style
-# choice: a linker resolves an archive's members against the references it has
-# already seen, so an archive named first contributes nothing.
-USER_STARTUP_CHECK_SOURCES := userland/startup-check/main.c
-USER_STARTUP_CHECK_OBJECTS := $(patsubst %.c,$(USER_DIR)/%.c.o,$(USER_STARTUP_CHECK_SOURCES))
-USER_STARTUP_CHECK         := $(USER_DIR)/startup-check.elf
+# There was one program at sub-task 7.5 and one rule written out for it, with a
+# note saying that sub-task 7.6 would repeat the shape five times. It is not
+# repeated: seven copies of a link command is seven places for a flag to be
+# forgotten, and the way that fails is that one program is linked without the
+# archive and the defect appears as an undefined symbol in whichever program was
+# edited last. The rule is generated instead, once per name in USER_PROGRAMS.
+#
+# A program is a *directory* under userland/ holding main.c, and the directory's
+# name is the program's. So adding one is adding a name to the list below and a
+# directory beside the others, and nothing else in this file.
+#
+# Within the generated rule, the archive is named *after* the program's objects,
+# which is not a style choice: a linker resolves an archive's members against the
+# references it has already seen, so an archive named first contributes nothing.
+USER_PROGRAMS := startup-check arg-check exec-check file-check echo cat ls mkdir rm
 
-$(USER_STARTUP_CHECK): $(USER_CRT0) $(USER_STARTUP_CHECK_OBJECTS) \
-                       $(USER_LIBC_ARCHIVE) libc/user.ld
-	@mkdir -p $(dir $@)
-	$(LD) $(USER_LDFLAGS) -o $@ $(USER_CRT0) $(USER_STARTUP_CHECK_OBJECTS) \
-		$(USER_LIBC_ARCHIVE)
-	@echo "Linked the user program $@."
+USER_PROGRAM_SOURCES := $(foreach program,$(USER_PROGRAMS),userland/$(program)/main.c)
+USER_PROGRAM_IMAGES  := $(foreach program,$(USER_PROGRAMS),$(USER_DIR)/$(program).elf)
+USER_PROGRAM_EMBEDS  := $(foreach program,$(USER_PROGRAMS),$(USER_DIR)/$(program).embed.elf)
+
+# $(1) is the program's name. The double dollar signs survive the first expansion
+# `eval` performs and reach `make` as ordinary automatic variables.
+define USER_PROGRAM_RULE
+$$(USER_DIR)/$(1).elf: $$(USER_CRT0) $$(USER_DIR)/userland/$(1)/main.c.o \
+                       $$(USER_LIBC_ARCHIVE) libc/user.ld
+	@mkdir -p $$(dir $$@)
+	$$(LD) $$(USER_LDFLAGS) -o $$@ $$(USER_CRT0) $$(USER_DIR)/userland/$(1)/main.c.o \
+		$$(USER_LIBC_ARCHIVE)
+	@echo "Linked the user program $$@."
+endef
+
+$(foreach program,$(USER_PROGRAMS),$(eval $(call USER_PROGRAM_RULE,$(program))))
 
 
 # The copy that is embedded in the kernel image, with every symbol and every line
@@ -475,8 +494,8 @@ $(USER_STARTUP_CHECK): $(USER_CRT0) $(USER_STARTUP_CHECK_OBJECTS) \
 # debugger is pointed at. The kernel image carries this one instead, and the
 # difference is most of the file: the loader reads the program header table and
 # the loadable segments, and a section table describing where a local variable
-# lived is eighty kibibytes it will never look at. Sub-task 7.6 adds five more
-# programs, so the difference is the whole of that, six times over.
+# lived is eighty kibibytes it will never look at. There are eight programs since
+# sub-task 7.6, so the difference is the whole of that, eight times over.
 #
 # --strip-all rather than --strip-debug: a symbol table is for a linker and for a
 # debugger, and this copy is read by neither.
@@ -484,12 +503,18 @@ $(USER_DIR)/%.embed.elf: $(USER_DIR)/%.elf
 	@mkdir -p $(dir $@)
 	$(OBJCOPY) --strip-all $< $@
 USER_DEPENDENCIES := $(patsubst %.c,$(USER_DIR)/%.c.d,$(LIBC_SOURCES)) \
-                     $(patsubst %.c,$(USER_DIR)/%.c.d,$(USER_STARTUP_CHECK_SOURCES))
+                     $(patsubst %.c,$(USER_DIR)/%.c.d,$(USER_PROGRAM_SOURCES))
 
 # The self-test of sub-task 7.5 embeds the linked program with `incbin`, exactly
 # as kernel/arch/x86_64/smp/smp_trampoline.asm embeds the real-mode trampoline, so
 # the image must exist before that translation unit is assembled.
+#
+# The self-test of sub-task 7.6 embeds seven more by the same means, and its
+# translation unit is therefore made to depend upon every one of them — written
+# as a list derived from USER_PROGRAMS rather than spelled out, so that a program
+# added to that list cannot be embedded stale.
 $(BUILD_DIR)/kernel/test/libc/startup_image.asm.o: $(USER_DIR)/startup-check.embed.elf
+$(BUILD_DIR)/kernel/test/libc/utilities_image.asm.o: $(USER_PROGRAM_EMBEDS)
 $(BUILD_DIR)/%.asm.o: %.asm
 	@mkdir -p $(dir $@)
 	$(NASM) $(ASFLAGS) $< -o $@
@@ -748,7 +773,7 @@ CLANG_FLAGS  := --target=$(CLANG_TARGET) $(CFLAGS) $(LIBC_INCLUDE_DIRS) \
 #   compilations.
 CLANG_USER_FLAGS := --target=$(CLANG_TARGET) $(USER_CFLAGS)
 
-USER_SOURCES := $(USER_STARTUP_CHECK_SOURCES)
+USER_SOURCES := $(USER_PROGRAM_SOURCES)
 
 clang-check:
 	@command -v $(CLANG) >/dev/null \

@@ -2,11 +2,13 @@
 /* SPDX-License-Identifier: MIT */
 /*
  * File: libc/syscall/calls.c
- * Purpose: The eight system-call wrappers, one for each call
+ * Purpose: The fourteen system-call wrappers, one for each call
  *          <oxys/syscall_abi.h> numbers: the arguments named rather than
  *          numbered, and the result translated into the convention a C program
  *          expects.
  * Key functions: OxysWrite, OxysTicks, OxysVersion, OxysFork, OxysExecve,
+ *          OxysOpen, OxysClose, OxysRead, OxysReadDirectory,
+ *          OxysMakeDirectory, OxysUnlink,
  *          OxysExit, OxysWait, OxysBrk, OxysSbrk.
  * References:
  *   - kernel/abi/oxys/syscall_abi.h: the call numbers and what each call means.
@@ -67,15 +69,15 @@ int64_t OxysFork(void)
 }
 
 /*
- * The two vectors are passed on rather than dropped, and this is the first of
- * the two places a reader would guess wrong.
+ * The two vectors are passed on rather than dropped, which they have been since
+ * this wrapper was written and which now means something.
  *
- * The kernel refuses any vector that is not null, and this wrapper could
- * therefore have taken a path alone and passed two zeroes. It does not, because
- * the refusal is the kernel's to make and not the library's to conceal: a
- * program that passes arguments must be told that they were not accepted, and a
- * wrapper that quietly passed null in their place would turn a refusal into a
- * program running with no arguments and no way to discover why.
+ * Until sub-task 7.6 the kernel refused any vector that was not null, and this
+ * wrapper could therefore have taken a path alone and passed two zeroes. It did
+ * not, on the ground that a refusal is the kernel's to make and not the
+ * library's to conceal. The kernel accepts them now, and the wrapper did not
+ * have to change — which is the whole return upon having declined to narrow the
+ * interface to what the kernel of the day happened to implement.
  */
 int64_t OxysExecve(const char *path, char *const argument_vector[],
                    char *const environment_vector[])
@@ -202,4 +204,54 @@ void *OxysSbrk(intptr_t increment)
     }
 
     return (void *)(uintptr_t)established;
+}
+
+/* ---------------------------------------------------------- sub-task 7.6 */
+
+int64_t OxysOpen(const char *path, uint64_t flags)
+{
+    return OxysSyscallResult(OxysSyscallInvoke2(SYSCALL_OPEN,
+                                                (uint64_t)(uintptr_t)path, flags));
+}
+
+int64_t OxysClose(int descriptor)
+{
+    return OxysSyscallResult(OxysSyscallInvoke1(SYSCALL_CLOSE,
+                                                (uint64_t)descriptor));
+}
+
+int64_t OxysRead(int descriptor, void *buffer, size_t length)
+{
+    return OxysSyscallResult(OxysSyscallInvoke3(SYSCALL_READ, (uint64_t)descriptor,
+                                                (uint64_t)(uintptr_t)buffer,
+                                                (uint64_t)length));
+}
+
+/*
+ * The third place a reader would guess wrong, and it is about the result rather
+ * than the arguments.
+ *
+ * This returns 1, 0 or -1 and not a count of bytes, so the translation below
+ * does exactly what it does everywhere else and the meaning of a non-negative
+ * result is this call's own. It is written out here because "read" in the name
+ * invites the assumption that the number is a length.
+ */
+int64_t OxysReadDirectory(int descriptor, SyscallDirectoryEntry *entry)
+{
+    return OxysSyscallResult(OxysSyscallInvoke2(SYSCALL_READDIR,
+                                                (uint64_t)descriptor,
+                                                (uint64_t)(uintptr_t)entry));
+}
+
+int64_t OxysMakeDirectory(const char *path, uint16_t permissions)
+{
+    return OxysSyscallResult(OxysSyscallInvoke2(SYSCALL_MKDIR,
+                                                (uint64_t)(uintptr_t)path,
+                                                (uint64_t)permissions));
+}
+
+int64_t OxysUnlink(const char *path)
+{
+    return OxysSyscallResult(OxysSyscallInvoke1(SYSCALL_UNLINK,
+                                                (uint64_t)(uintptr_t)path));
 }

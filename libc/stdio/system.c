@@ -10,8 +10,8 @@
  *   - libc/include/stream.h: the seam this implements, and why a stream's
  *     transfers are named functions rather than calls inside the buffering.
  *   - libc/include/syscall.h: OxysWrite, and what it returns.
- *   - kernel/abi/oxys/syscall_abi.h: the eight calls this kernel has, none of
- *     which reads.
+ *   - kernel/abi/oxys/syscall_abi.h: the fourteen calls this kernel has, none of
+ *     which reads what stdin is connected to.
  *   - docs/design/LIBC.md, Section 10.2: the division of the sub-task into a
  *     policy that runs anywhere and a pair of transfers that run only at
  *     privilege level 3.

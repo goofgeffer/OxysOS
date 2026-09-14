@@ -173,7 +173,7 @@ void KernelVerifyStartup(void)
                          "the program is not entered at its first instruction, so the "
                          "startup object is not what runs first");
 
-    stack = ProcessCreateUserStack(process);
+    stack = ProcessCreateUserStack(process, NULL);
     VerifyStartupRequire(stack != 0U, "the program was given no stack");
 
     boot = ThreadAdoptCurrent("boot");

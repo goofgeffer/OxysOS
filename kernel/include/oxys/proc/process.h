@@ -10,7 +10,9 @@
  *          ThreadDestroy, ThreadSetCurrent, ThreadCurrent, ProcessRecordImage,
  *          ProcessCreateUserStack, ProcessReport, ProcessFork, ProcessExecute,
  *          ProcessExit, ProcessWait, ProcessCurrent, ProcessEstablishBreak,
- *          ProcessSetBreak, ProcessBreak.
+ *          ProcessSetBreak, ProcessBreak, ProcessArguments,
+ *          ProcessCloseDescriptors, ProcessAdoptDescriptor,
+ *          ProcessDescriptorFile, ProcessReleaseDescriptor.
  * References:
  *   - docs/design/PROCESS.md: the design of these structures and the reasons for
  *     their shape.
@@ -129,6 +131,66 @@
  */
 #define PROCESS_USER_STACK_FRAME_BYTES 48U
 #define PROCESS_USER_STACK_FRAME_WORDS 6U
+
+/*
+ * The vectors upon that frame, of sub-task 7.6.
+ *
+ * Sub-task 7.5 left room for the frame and every eightbyte within it was zero,
+ * because this kernel's `execve` refused both vectors. It refused them for want
+ * of a convention, and this is the convention: the strings are copied to the top
+ * of the new stack, the pointers to them stand below in the order the ABI fixes,
+ * and the argument count stands at the stack pointer.
+ *
+ * `ProcessArguments` is the copy, and it exists because the strings must be
+ * taken out of the caller's address space *before* that space is destroyed.
+ * `execve` replaces an address space; a kernel that read `argv[0]` after the
+ * replacement would read whatever the new program has at that address, which is
+ * a fault if it is lucky and the new program's own data if it is not.
+ *
+ * The bounds are <oxys/syscall_abi.h>'s, restated as sizes here, and they are
+ * what makes this structure something a kernel stack can hold: sixteen strings
+ * and two kibibytes of them is about two and a half kibibytes in total, against
+ * a kernel stack of THREAD_KERNEL_STACK_PAGES pages.
+ */
+#define PROCESS_ARGUMENT_COUNT_MAXIMUM SYSCALL_ARGUMENT_COUNT_MAXIMUM
+#define PROCESS_ARGUMENT_BYTES_MAXIMUM SYSCALL_ARGUMENT_BYTES_MAXIMUM
+
+typedef struct ProcessArguments
+{
+    /*
+     * Where each string begins within `storage`, as a displacement and not as a
+     * pointer. A pointer would name an address in this structure, and this
+     * structure is a kernel stack frame that has been copied nowhere by the time
+     * the strings are written to a user stack: a displacement survives the copy
+     * and an address does not.
+     */
+    uint32_t argument[PROCESS_ARGUMENT_COUNT_MAXIMUM];
+    uint32_t environment[PROCESS_ARGUMENT_COUNT_MAXIMUM];
+    uint32_t argument_count;
+    uint32_t environment_count;
+
+    /* The strings themselves, each terminated, laid end to end. */
+    char storage[PROCESS_ARGUMENT_BYTES_MAXIMUM];
+    uint32_t storage_used;
+} ProcessArguments;
+
+/*
+ * How many descriptors a process may hold open at once, of sub-task 7.6.
+ *
+ * The first three are the standard ones of <oxys/syscall_abi.h> and are never
+ * given out by `open`; they name the diagnostic path and are not entries in the
+ * filesystem layer's own table. So a process may hold this many less three open
+ * files, and the bound is small on purpose: the filesystem layer has
+ * VFS_FILE_CAPACITY descriptors for the whole machine, and a process permitted
+ * to take more than a share of them could starve every other process of the
+ * ability to open anything at all.
+ */
+#define PROCESS_DESCRIPTOR_CAPACITY 16U
+
+/* What a descriptor slot holds when nothing is open upon it. It is not zero:
+ * zero is a valid descriptor of the filesystem layer, and a table cleared to
+ * zero would appear to hold that one open in every slot. */
+#define PROCESS_DESCRIPTOR_FREE (-1)
 
 /*
  * The heap, and where it begins, of sub-task 7.3.
@@ -347,6 +409,24 @@ struct Process
     uint64_t break_start;
     uint64_t break_current;
 
+    /*
+     * The descriptors the program holds open, of sub-task 7.6: each entry is a
+     * descriptor of the filesystem layer, or PROCESS_DESCRIPTOR_FREE.
+     *
+     * The table is indexed by the number the program was given, so that the
+     * numbers a program sees are its own and small — and, more to the point, so
+     * that a program cannot name a descriptor belonging to another process by
+     * guessing a number. The filesystem layer's table is one table for the whole
+     * machine; without this indirection, descriptor 4 would mean the same open
+     * file to every program in the system.
+     *
+     * The first SYSCALL_DESCRIPTOR_FIRST entries are never used. They are the
+     * standard three, which reach the diagnostic path and not a file, and they
+     * are left free rather than filled with a sentinel so that exactly one rule
+     * governs the table: an entry is a filesystem descriptor or it is nothing.
+     */
+    int descriptors[PROCESS_DESCRIPTOR_CAPACITY];
+
     Thread *threads[PROCESS_THREAD_MAXIMUM];
     size_t thread_count;
 
@@ -421,8 +501,55 @@ void ProcessRecordImage(Process *process, const ElfImage *image);
  * Returns the address the stack pointer should begin at, or zero. The address is
  * the top and not the base: a stack grows downward, and the first push writes
  * below it.
+ *
+ * `arguments` is the two vectors the new program is to find upon that stack, and
+ * may be null — which is what every caller before sub-task 7.6 passed in effect,
+ * and produces the frame of six zeroes that sub-task described. Where it is
+ * given, the strings are copied to the top of the stack and the pointers to them
+ * laid out below in the order the System V ABI, AMD64 supplement, Section 3.4.1,
+ * fixes. The returned address is sixteen-byte aligned either way.
  */
-uint64_t ProcessCreateUserStack(Process *process);
+uint64_t ProcessCreateUserStack(Process *process, const ProcessArguments *arguments);
+
+/* -------------------------------------------- the descriptors of sub-task 7.6 */
+
+/*
+ * Empties a process's descriptor table.
+ *
+ * It is called when a process is created and again when `execve` replaces the
+ * program within it, and in the second case it *closes* what was open rather
+ * than forgetting it: the filesystem layer's table is the machine's, and an
+ * entry forgotten here is a descriptor nothing will ever close.
+ */
+void ProcessCloseDescriptors(Process *process);
+
+/*
+ * Gives a process's descriptor table an entry naming an open file of the
+ * filesystem layer, and returns the number the program is to use.
+ *
+ * Returns SYSCALL_EMFILE where the table is full, which is a refusal the caller
+ * must act upon by closing the filesystem descriptor: this function takes no
+ * ownership of one it did not record.
+ */
+int64_t ProcessAdoptDescriptor(Process *process, int file);
+
+/*
+ * Translates a number a program named into a descriptor of the filesystem layer,
+ * or VFS_NO_DESCRIPTOR where the number names nothing this process holds.
+ *
+ * Every bound is checked here and nowhere else, which is the point of the
+ * function: a negative number, one beyond the table and one naming a free slot
+ * are three ways of saying the same thing to a caller, and three places for one
+ * of them to be forgotten if each call site did its own checking.
+ */
+int ProcessDescriptorFile(const Process *process, int64_t descriptor);
+
+/*
+ * Releases a number a program named, closing the file beneath it.
+ *
+ * Returns false where the number names nothing this process holds.
+ */
+bool ProcessReleaseDescriptor(Process *process, int64_t descriptor);
 
 /* The tables, for a report and a self-test. */
 Process *ProcessById(uint64_t id);
@@ -569,8 +696,14 @@ Process *ProcessFork(Process *parent, const SyscallFrame *frame);
  * Beyond the point of no return a failure is fatal to the process rather than to
  * the call, because a process whose address space has been released has no
  * program left to return to.
+ *
+ * `arguments` is the two vectors the new program is to find upon its stack,
+ * already copied out of the caller's memory by whoever validated them — which
+ * must happen before this is called, for the reason `ProcessArguments` records.
+ * A null pointer is a program entered with an empty argument vector.
  */
-int64_t ProcessExecute(Process *process, const char *path);
+int64_t ProcessExecute(Process *process, const char *path,
+                       const ProcessArguments *arguments);
 
 /*
  * Ends the process the running thread belongs to, with a status, and returns to

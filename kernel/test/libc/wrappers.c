@@ -573,7 +573,7 @@ void KernelVerifyWrappers(void)
     }
 
     ProcessRecordImage(process, &image);
-    stack = ProcessCreateUserStack(process);
+    stack = ProcessCreateUserStack(process, NULL);
     VerifyWrappersRequire(stack != 0U, "the program was given no stack");
 
     boot = ThreadAdoptCurrent("boot");

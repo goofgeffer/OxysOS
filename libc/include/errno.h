@@ -7,7 +7,9 @@
  *          it to — for a system whose only present source of failure is a system
  *          call.
  * Key definitions: errno, OxysErrnoAddress, ENOSYS, EFAULT, EINVAL, EBADF,
- *          ECHILD, ENOENT, ENOMEM, EDOM, EILSEQ, ERANGE,
+ *          ECHILD, ENOENT, ENOMEM, EEXIST, ENOTDIR, EISDIR, ENOTEMPTY, EROFS,
+ *          ENAMETOOLONG, ELOOP, ENOSPC, EMFILE, EBUSY, EXDEV, ENOTSUP, EIO,
+ *          EDOM, EILSEQ, ERANGE,
  *          OXYS_ERRNO_SYSCALL_LIMIT.
  * References:
  *   - ISO/IEC 9899:2011, Section 7.5, paragraph 2: <errno.h> defines EDOM,
@@ -23,7 +25,7 @@
  *     startup and is never set to zero by any library function.
  *   - ISO/IEC 9899:2011, Section 7.5, paragraph 4: an implementation may define
  *     further macros beginning with E and an uppercase letter, which is what
- *     permits the seven below that ISO C does not name.
+ *     permits the twenty below that ISO C does not name.
  *   - kernel/abi/oxys/syscall_abi.h: the failure results these numbers are the
  *     names of, included below so that the correspondence is checked by the
  *     compiler rather than by a reader.
@@ -87,7 +89,7 @@ int *OxysErrnoAddress(void);
  * results.
  *
  * Nothing in this system produces a value near it. It is thirty-one so that the
- * reservation is plainly a range rather than a coincidence of the seven results
+ * reservation is plainly a range rather than a coincidence of the twenty results
  * that exist today, and so that the translation has a bound to refuse beyond —
  * a kernel that returned a failure this library has no name for must not be
  * allowed to put an arbitrary integer into a program's errno.
@@ -110,6 +112,23 @@ int *OxysErrnoAddress(void);
 #define ECHILD 5 /* The caller has no children to wait for. */
 #define ENOENT 6 /* No such file, or one that will not load. */
 #define ENOMEM 7 /* A frame, a table or a slot could not be had. */
+
+/* The thirteen of sub-task 7.6, which are the filesystem layer's refusals
+ * carried out to a program. They are derived exactly as the seven above are, and
+ * are asserted below by the same means. */
+#define EEXIST       8  /* A file of that name already. */
+#define ENOTDIR      9  /* A component of the path is not a directory. */
+#define EISDIR       10 /* A directory where a file was required. */
+#define ENOTEMPTY    11 /* A directory holding more than "." and "..". */
+#define EROFS        12 /* The mount, or the volume, may not be written. */
+#define ENAMETOOLONG 13 /* A path or a component beyond the bounds. */
+#define ELOOP        14 /* Symbolic links followed beyond the depth bound. */
+#define ENOSPC       15 /* The volume has no room. */
+#define EMFILE       16 /* Every descriptor is in use. */
+#define EBUSY        17 /* Something held that the operation would destroy. */
+#define EXDEV        18 /* An operation confined to one volume was not. */
+#define ENOTSUP      19 /* The filesystem does not offer the operation. */
+#define EIO          20 /* The volume or the device beneath it failed. */
 
 /* The three ISO/IEC 9899:2011, Section 7.5, paragraph 2, requires, above the
  * reserved range for the reason given at the head of this file. Nothing in this
@@ -136,10 +155,25 @@ _Static_assert(EBADF == -SYSCALL_EBADF, "EBADF does not name SYSCALL_EBADF.");
 _Static_assert(ECHILD == -SYSCALL_ECHILD, "ECHILD does not name SYSCALL_ECHILD.");
 _Static_assert(ENOENT == -SYSCALL_ENOENT, "ENOENT does not name SYSCALL_ENOENT.");
 _Static_assert(ENOMEM == -SYSCALL_ENOMEM, "ENOMEM does not name SYSCALL_ENOMEM.");
+_Static_assert(EEXIST == -SYSCALL_EEXIST, "EEXIST does not name SYSCALL_EEXIST.");
+_Static_assert(ENOTDIR == -SYSCALL_ENOTDIR, "ENOTDIR does not name SYSCALL_ENOTDIR.");
+_Static_assert(EISDIR == -SYSCALL_EISDIR, "EISDIR does not name SYSCALL_EISDIR.");
+_Static_assert(ENOTEMPTY == -SYSCALL_ENOTEMPTY,
+               "ENOTEMPTY does not name SYSCALL_ENOTEMPTY.");
+_Static_assert(EROFS == -SYSCALL_EROFS, "EROFS does not name SYSCALL_EROFS.");
+_Static_assert(ENAMETOOLONG == -SYSCALL_ENAMETOOLONG,
+               "ENAMETOOLONG does not name SYSCALL_ENAMETOOLONG.");
+_Static_assert(ELOOP == -SYSCALL_ELOOP, "ELOOP does not name SYSCALL_ELOOP.");
+_Static_assert(ENOSPC == -SYSCALL_ENOSPC, "ENOSPC does not name SYSCALL_ENOSPC.");
+_Static_assert(EMFILE == -SYSCALL_EMFILE, "EMFILE does not name SYSCALL_EMFILE.");
+_Static_assert(EBUSY == -SYSCALL_EBUSY, "EBUSY does not name SYSCALL_EBUSY.");
+_Static_assert(EXDEV == -SYSCALL_EXDEV, "EXDEV does not name SYSCALL_EXDEV.");
+_Static_assert(ENOTSUP == -SYSCALL_ENOTSUP, "ENOTSUP does not name SYSCALL_ENOTSUP.");
+_Static_assert(EIO == -SYSCALL_EIO, "EIO does not name SYSCALL_EIO.");
 
 /* And that the reservation still holds. A failure result more negative than the
  * limit would be translated to ENOSYS rather than to its own name, silently. */
-_Static_assert(-SYSCALL_ENOMEM <= OXYS_ERRNO_SYSCALL_LIMIT,
+_Static_assert(-SYSCALL_EIO <= OXYS_ERRNO_SYSCALL_LIMIT,
                "A failure result lies beyond the range reserved for one.");
 _Static_assert(EDOM > OXYS_ERRNO_SYSCALL_LIMIT,
                "The numbers ISO C requires overlap the kernel's failure results.");

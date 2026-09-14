@@ -54,6 +54,15 @@ the one that turns a format into a filesystem, and it is where Phase 6 begins:
 the system calls of sub-task 6.7 are these operations with a user's arguments
 copied in.
 
+**Since sub-task 7.6 six of those operations are reachable from a program.**
+`open`, `close`, `read`, `readdir`, `mkdir` and `unlink` are system calls, and
+each is a validation of a caller's arguments and then a call of the corresponding
+routine here — nothing of this layer is reimplemented above it. The whole of what
+the boundary adds is the validation, the copy of a caller's bytes into the
+kernel's own buffer in both directions, the per-process descriptor table of
+limitation 2 below, and the translation of `VfsError` into a result a program can
+act upon. [`../design/LIBC.md`](../design/LIBC.md), Section 12.1.
+
 ## 2. The shape
 
 ```
@@ -534,14 +543,24 @@ the mount count, so the field is now written as well.
    the process control block carries no filesystem state at all. A relative
    *symbolic link target* is resolved, against the directory holding the link,
    that directory being known.
-2. **The open file table is global.** Sub-task 6.9 was expected to make it
-   per-process and did not: a process there is an address space and its threads,
-   with **no file descriptors** — see
-   [`../design/PROCESS.md`](../design/PROCESS.md), limitation 6. Joining the two
-   is Phase 7's, where `fork` must decide what a child inherits and a descriptor
-   becomes an index into a process's own table naming a description that may be
-   shared. Nothing here assumes otherwise; the table is simply global while there
-   is one thread of control.
+2. **The open file table is global, and a process now has a table of its own
+   above it.** Sub-task 6.9 was expected to make it per-process and did not: a
+   process there is an address space and its threads, with **no file
+   descriptors** — see [`../design/PROCESS.md`](../design/PROCESS.md),
+   limitation 6.
+
+   **Sub-task 7.6 joined the two, in the half that could be joined.** A process
+   holds `PROCESS_DESCRIPTOR_CAPACITY` entries, each naming a descriptor of this
+   layer, so the numbers a program sees are its own and it cannot reach another
+   process's open file by guessing one — and one program's share of this layer's
+   thirty-two descriptors is bounded. What that does **not** do is make an open
+   file a description that may be *shared*: this layer has no reference count
+   upon one, so a child of `fork` inherits nothing and `execve` closes
+   everything. Two processes sharing one open file and one file position is what
+   the shell's redirection at sub-task 8.5 will need, and it is a reference count
+   here rather than anything in the process control block.
+   [`../design/LIBC.md`](../design/LIBC.md), Sections 12.1.2 and 12.7,
+   limitation 8.
 3. **Nothing is cached between one use and the next.** A node whose last
    reference goes is released, so opening the same file twice reads its inode
    twice. See Section 6.1: it is the right trade for a kernel with no

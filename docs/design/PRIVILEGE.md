@@ -661,7 +661,7 @@ needing no validation performs none.
 is a promise the kernel does not keep. The process control block they act upon
 arrived at sub-task 6.9, and at 6.11 the four of them arrived in fact rather than
 as numbers — see [`PROCESS.md`](PROCESS.md), Sections 11 to 16, for what each
-does and why. The table now holds eight, and the four were **numbered 3 to 6
+does and why. The table holds fourteen since sub-task 7.6, and the four were **numbered 3 to 6
 after the three above rather than interleaved among them**: a number handed to a
 program is a number that must not change, and `write` is call zero in machine
 code that was written before they existed.
@@ -675,9 +675,37 @@ validation of its own: the argument is an address the kernel is asked to *make*
 valid rather than one it is asked to read, and what bounds it is the process's
 own heap extent.
 
+**The ninth to the fourteenth are the filesystem calls of sub-task 7.6** —
+`open`, `close`, `read`, `readdir`, `mkdir` and `unlink` — numbered after the
+eight for the third application of the same rule. They are the first calls here
+whose subject is neither the processor's state nor the process's own memory but a
+**volume**, and each is a validation of the caller's arguments and then a call of
+the filesystem layer of [`../storage/VFS.md`](../storage/VFS.md); their design is
+[`LIBC.md`](LIBC.md), Section 12.1.
+
+Three things they add to the validation this section describes:
+
+- **Each carries a caller's bytes in the kernel's own buffer, in both
+  directions.** `write` has copied inward since sub-task 6.7, for the
+  time-of-check reason Section 9.4 gives; `read` copies outward for a second
+  reason, which is that nothing below the system call validates an address and a
+  filesystem handed one would fault with a volume's locks held.
+- **A path that is too long is no longer a fault.** `SyscallCopyUserString`
+  returns one refusal for two causes, and every caller of it reported `EFAULT`
+  for both — since sub-task 6.11, and unnoticed because nothing had ever asked to
+  be refused for being too long. `SyscallCopyUserPath` distinguishes them.
+  [`LIBC.md`](LIBC.md), Section 12.2.2.
+- **A descriptor a program names is its own and not the machine's.** Every call
+  taking one translates it through the process's table before anything else, so a
+  program cannot reach another's open file by guessing a number.
+  [`LIBC.md`](LIBC.md), Section 12.1.2.
+
 The numbers and the error values are this kernel's own. Inventing agreement with
 a library that does not exist would be inventing a compatibility nobody had
-tested.
+tested — **and the error values have grown from seven to twenty at sub-task
+7.6**, because `VfsError` distinguishes fifteen causes and a kernel that
+collapsed them would tell a program the wrong thing about a failure it must act
+upon. [`LIBC.md`](LIBC.md), Section 12.1.1.
 
 ### 9.7 Two records of one kernel stack, of sub-task 6.11
 

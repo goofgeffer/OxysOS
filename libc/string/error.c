@@ -33,7 +33,7 @@
  * The standard declares strerror as returning char *, and this project compiles
  * with -Wwrite-strings, under which a string literal has type const char[] and
  * returning one as char * is a diagnostic. The choice is therefore between
- * casting away the qualifier at every return — which would be a lie told eleven
+ * casting away the qualifier at every return — which would be a lie told twenty
  * times — and giving each message an array of its own, which is what the
  * standard's wording contemplates in any case: it speaks of "the array pointed
  * to" and of a program that must not modify it.
@@ -53,7 +53,7 @@
  * be compared without the reader having to decide whether two phrasings are the
  * same thing.
  */
-static char OxysErrorSyscallMessages[ENOMEM + 1][48] = {
+static char OxysErrorSyscallMessages[EIO + 1][48] = {
     "No error",                          /* 0 */
     "No such system call",               /* ENOSYS */
     "An address the program may not use", /* EFAULT */
@@ -61,13 +61,26 @@ static char OxysErrorSyscallMessages[ENOMEM + 1][48] = {
     "No such descriptor",                /* EBADF */
     "No child to collect",               /* ECHILD */
     "No such file, or one that will not load", /* ENOENT */
-    "Out of memory"                      /* ENOMEM */
+    "Out of memory",                     /* ENOMEM */
+    "A file of that name already",       /* EEXIST */
+    "Not a directory",                   /* ENOTDIR */
+    "Is a directory",                    /* EISDIR */
+    "The directory is not empty",        /* ENOTEMPTY */
+    "The volume may not be written",     /* EROFS */
+    "The path or a component is too long", /* ENAMETOOLONG */
+    "Too many symbolic links",           /* ELOOP */
+    "The volume has no room",            /* ENOSPC */
+    "Every descriptor is in use",        /* EMFILE */
+    "Something is held that this would destroy", /* EBUSY */
+    "The operation would cross a volume", /* EXDEV */
+    "The filesystem does not offer this", /* ENOTSUP */
+    "The volume or its device failed"     /* EIO */
 };
 
 /*
  * The three ISO/IEC 9899:2011, Section 7.5, requires, which stand above the
  * range reserved to the kernel's results and are therefore a table of their own
- * rather than a gap of twenty-four entries in the one above.
+ * rather than a gap of eleven entries in the one above.
  *
  * Nothing in this system sets any of them yet. They are described all the same,
  * because strerror must map any int and a program that received one of these
@@ -92,7 +105,7 @@ static char OxysErrorUnknownMessage[] = "Unknown error";
 
 char *strerror(int errnum)
 {
-    if ((errnum >= 0) && (errnum <= ENOMEM))
+    if ((errnum >= 0) && (errnum <= EIO))
     {
         return OxysErrorSyscallMessages[errnum];
     }

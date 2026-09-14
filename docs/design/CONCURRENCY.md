@@ -587,6 +587,17 @@ kept, this section describing what the kernel does now.
    screen (`graphics/faultscreen.c`), and the keyboard and mouse buffers
    (`drivers/keyboard/keyboard.c`, `drivers/mouse/mouse.c`).
 
+   **Sub-task 7.6 added one more to that list**: each process's descriptor table,
+   a field of the process control block in `kernel/proc/process.c`, guarded by
+   nothing as the break of sub-task 7.3 is. Two threads of one process opening at
+   once would each find the same free slot and each write its own file into it,
+   and the loser's open file would be an entry of the filesystem layer's that
+   nothing holds a number for and nothing will ever close. The case cannot arise
+   — there are no userland threads, and a user thread's affinity names the
+   bootstrap processor alone — and it is counted here with the rest rather than
+   left to be discovered. It needs the same lock the rest of the process control
+   block will take. [`LIBC.md`](LIBC.md), Section 12.7, limitation 10.
+
    **None of that is unsafe today, and the reason has changed twice.** It used to
    be that there was one flow of control. Then sub-task 6.14 started the other
    processors, and the reason became that a started processor had nothing to run.

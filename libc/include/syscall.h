@@ -3,11 +3,13 @@
 /*
  * File: libc/include/syscall.h
  * Purpose: Declares the C library's system-call wrappers — one for each of the
- *          eight calls <oxys/syscall_abi.h> numbers — together with the raw
+ *          fourteen calls <oxys/syscall_abi.h> numbers — together with the raw
  *          invocation they are built upon and the translation that turns a
  *          kernel result into a library result and an errno.
  * Key definitions: OxysSyscallInvoke0, OxysSyscallInvoke1, OxysSyscallInvoke2,
- *          OxysSyscallInvoke3, OxysSyscallResult, OxysWrite, OxysTicks,
+ *          OxysSyscallInvoke3, OxysSyscallResult, OxysOpen, OxysClose,
+ *          OxysRead, OxysReadDirectory, OxysMakeDirectory, OxysUnlink,
+ *          OxysWrite, OxysTicks,
  *          OxysVersion, OxysFork, OxysExecve, OxysExit, OxysWait, OxysBrk,
  *          OxysSbrk.
  * References:
@@ -28,11 +30,13 @@
  *
  * Why the names are this project's and not POSIX's.
  *
- * Five of the first seven calls have a POSIX name that means very nearly this — write,
- * fork, execve, _exit, wait — and none of the five means exactly it. This
- * execve refuses an argument vector because there is no convention yet fixed for
- * where a program finds one; this wait takes no process identifier and no option
- * flags; this write reaches two diagnostic descriptors and no file. A function
+ * Most of these calls have a POSIX name that means very nearly this — write,
+ * fork, execve, _exit, wait, open, close, read, mkdir, unlink — and not one of
+ * them means exactly it. This wait takes no process identifier and no option
+ * flags; this write reaches two diagnostic descriptors and no file; this open
+ * cannot create a file; this mkdir applies no file mode creation mask; this
+ * readdir is not `readdir()` at all, taking a descriptor rather than a `DIR *`
+ * and returning three results rather than a pointer. A function
  * bearing a standard name and behaving otherwise is worse than either the
  * standard function or a differently named one, which is the same judgement
  * docs/design/LIBC.md, Section 4, records about strlcpy and strdup. The POSIX
@@ -117,8 +121,9 @@ int64_t OxysSyscallResult(int64_t result);
  * call again from where this one stopped.
  *
  * Returns -1 with errno set to EBADF for any other descriptor, and to EFAULT
- * for a range this program may not read. There are no files yet, which is why
- * there is no descriptor to open one with.
+ * for a range this program may not read. **A descriptor this program opened is
+ * refused too**, since sub-task 7.6 as before it: `OxysOpen` opens for reading
+ * alone, so there is no descriptor a write could sensibly reach.
  */
 int64_t OxysWrite(int descriptor, const void *buffer, size_t length);
 
@@ -148,12 +153,17 @@ int64_t OxysFork(void);
  * Replaces the calling program with one read from a volume. Upon success it does
  * not return, the caller already executing the new program.
  *
- * The two vectors must both be null. The kernel refuses anything else with
- * EINVAL rather than discarding it, because there is no convention yet fixed for
- * where a program finds its arguments upon its stack and a program that passed
- * some and found none would have no way to tell that they had been thrown away.
- * They are parameters of this wrapper all the same, so that the day the
- * convention exists the interface does not change under every caller.
+ * **Since sub-task 7.6 both vectors are accepted.** They were refused until then
+ * for want of a convention about where a program finds them; the convention is
+ * now the System V ABI's own — the strings at the top of the new stack, the
+ * pointers below them, the argument count at the stack pointer — and `_start`
+ * reads it. Either may be null, which is an empty vector.
+ *
+ * The kernel copies every string out of this program's memory before it destroys
+ * the address space they stand in, and refuses with EINVAL where either vector
+ * holds more than SYSCALL_ARGUMENT_COUNT_MAXIMUM strings or the two together
+ * more than SYSCALL_ARGUMENT_BYTES_MAXIMUM bytes. Both refusals arrive before
+ * anything is destroyed, so a program refused here carries on running.
  */
 int64_t OxysExecve(const char *path, char *const argument_vector[],
                    char *const environment_vector[]);
@@ -208,5 +218,101 @@ int64_t OxysBrk(void *address);
  * can be the greatest representable address.
  */
 void *OxysSbrk(intptr_t increment);
+
+/* -------------------------------------------------------------------------
+ * The six calls of sub-task 7.6, by which a program reaches the filesystem.
+ * ------------------------------------------------------------------------- */
+
+/*
+ * Opens a file for reading and returns a descriptor of this program's own.
+ *
+ * `flags` must include SYSCALL_OPEN_READ and may include SYSCALL_OPEN_DIRECTORY,
+ * which refuses anything that is not one. No other bit is accepted: there is no
+ * way through this interface to create a file or to open one for writing, and a
+ * program that asks for either is refused with EINVAL rather than quietly given
+ * a file it may only read.
+ *
+ * **A directory is opened by this and read by OxysReadDirectory, not by
+ * OxysRead.** A read of a descriptor naming a directory fails with EISDIR, which
+ * is what lets `cat` report the right thing about one.
+ *
+ * Returns -1 with errno set to ENOENT for a path that leads nowhere, ENOTDIR
+ * where a component of it is not a directory or where DIRECTORY was asked and
+ * the path names something else, EMFILE where this program or the machine has no
+ * descriptor left, ENAMETOOLONG beyond SYSCALL_PATH_MAXIMUM, and EFAULT for a
+ * path this program may not read.
+ */
+int64_t OxysOpen(const char *path, uint64_t flags);
+
+/*
+ * Releases a descriptor and the open file beneath it.
+ *
+ * Returns -1 with errno set to EBADF where the descriptor names nothing this
+ * program holds — which includes a descriptor already closed. That is not
+ * pedantry: a program that closes twice has lost track of what it holds, and the
+ * number may since have been given to a different file.
+ */
+int64_t OxysClose(int descriptor);
+
+/*
+ * Reads up to `length` bytes from a descriptor and returns how many were read,
+ * which is zero at the end of the file.
+ *
+ * Fewer bytes than were asked for is not a failure and is the ordinary case: the
+ * kernel bounds a single transfer, so a program that means to read a whole file
+ * must call again until this returns zero.
+ *
+ * A length of zero is refused with EINVAL rather than answered with zero,
+ * because zero is what the end of a file returns and the two must be
+ * distinguishable.
+ *
+ * Returns -1 with errno set to EBADF for a descriptor this program does not
+ * hold, EISDIR for one naming a directory, and EFAULT for a buffer this program
+ * may not write.
+ */
+int64_t OxysRead(int descriptor, void *buffer, size_t length);
+
+/*
+ * Reads one entry of an open directory.
+ *
+ * Returns 1 where an entry was placed in `entry`, 0 at the end of the directory,
+ * and -1 with errno set otherwise — ENOTDIR for a descriptor that does not name
+ * a directory, EBADF for one this program does not hold, EFAULT for an entry
+ * this program may not write.
+ *
+ * Three results and not two, because "no more entries" and "something went
+ * wrong" are different things and a program that treated them alike would stop
+ * listing a directory upon a medium failure and report that it had finished.
+ *
+ * Every entry is returned, including "." and "..". Filtering is the caller's:
+ * IEEE Std 1003.1-2017 has `ls` hide names beginning with a period unless -a is
+ * given, and a kernel that hid them could not be asked for them.
+ */
+int64_t OxysReadDirectory(int descriptor, SyscallDirectoryEntry *entry);
+
+/*
+ * Creates a directory with the given permission bits.
+ *
+ * No file mode creation mask is applied, this system having none: the bits asked
+ * for are the bits the directory gets. IEEE Std 1003.1-2017 has `mkdir()` reduce
+ * the mode by the process's mask, and the mask belongs with credentials this
+ * kernel does not yet have.
+ *
+ * Returns -1 with errno set to EEXIST where something of that name is already
+ * there, ENOENT where the parent is not, ENOTDIR where a component of the path
+ * is not a directory, EROFS for a volume that may not be written, and ENOSPC
+ * where it has no room.
+ */
+int64_t OxysMakeDirectory(const char *path, uint16_t permissions);
+
+/*
+ * Removes a name.
+ *
+ * Returns -1 with errno set to EISDIR where the path names a directory: there is
+ * no call in this interface that removes one, and a directory is refused rather
+ * than removed by some other means. ENOENT where there is nothing of that name,
+ * EROFS for a volume that may not be written.
+ */
+int64_t OxysUnlink(const char *path);
 
 #endif /* OXYS_LIBC_SYSCALL_H */

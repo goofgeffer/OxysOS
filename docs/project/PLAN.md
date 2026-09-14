@@ -95,10 +95,27 @@ at privilege level 3, the heap has obtained memory from the break through
 translation unit has been compiled a second time with a program's flags rather
 than the kernel's. [`../design/LIBC.md`](../design/LIBC.md), Section 11.
 
-**Next: sub-task 7.6** — the utilities `ls`, `cat`, `echo`, `mkdir` and `rm`.
-They are the first programs built by this procedure that are not about the
-procedure, and the first thing that will find whatever the one program of 7.5
-happens to depend upon.
+**Sub-task 7.6 is complete**: the utilities `ls`, `cat`, `echo`, `mkdir` and
+`rm`, the **six system calls** by which a program reaches the filesystem, and the
+**argument vector** this kernel's `execve` had refused since Phase 6. It took
+more than its line names and had to: `echo` without a vector prints a blank line
+for ever. So the count of calls is fourteen, the count of failure results is
+twenty — three of the five utilities act upon `errno` and not upon the sign of a
+result — and each process now holds a descriptor table of its own, so that a
+program cannot reach another's open file by guessing a number.
+
+**Three of the eight programs exist because nothing here can read what a program
+printed**, and one of them was written because a negative test proved it had to:
+the `read` system call was altered to report a count and deliver no bytes, and
+`make verify` passed — `cat` wrote a buffer it had never been given and exited
+with zero. That program then found a defect that had stood since sub-task 6.11,
+in which a path too long to copy was reported as an address the program may not
+use. [`../design/LIBC.md`](../design/LIBC.md), Section 12.
+
+**Next: sub-task 7.7** — the initial ramdisk carrying the utilities, mounted as
+the early root. It is what makes the eight programs of 7.6 reachable upon a
+machine the kernel did not compose a volume for, and the last thing Phase 7
+owes the shell.
 
 **Three releases are planned, and each is fixed to a sub-task below rather than
 to a date**: `Oxys 1 Alpha` at **8.7**, `Oxys 1 Beta` at **9.7**, and `Oxys 1` at
@@ -461,7 +478,7 @@ changes about it.
 | 7.3 | Implement a user-space heap allocator (`malloc`, `free`, `realloc`) above `brk`/`mmap`. | Implemented | `libc/heap.c` — see note (c) |
 | 7.4 | Implement buffered input and output (`<stdio.h>`) and formatted conversion. | Implemented | `libc/stdio/` — see note (d) |
 | 7.5 | Author the C runtime startup object (`crt0`) and the static-linking procedure for user programs. | Implemented | `userland/startup-check/` — see note (e) |
-| 7.6 | Implement the utilities `ls`, `cat`, `echo`, `mkdir` and `rm`. | Planned | — |
+| 7.6 | Implement the utilities `ls`, `cat`, `echo`, `mkdir` and `rm`. | Implemented | `userland/` — see note (f) |
 | 7.7 | Construct an initial ramdisk containing the utilities and mount it as the early root. | Planned | — |
 
 **(a)** Sub-task 7.1 implements nineteen of the twenty-two functions of ISO/IEC
@@ -594,6 +611,64 @@ order to reach it; the negative test that removed the write reported nothing,
 because the pages are zeroed unconditionally a few lines above. It was deleted
 rather than kept, which is what 7.3 did with the second size check in
 `OxysHeapAdopt`.
+
+**(f)** Sub-task 7.6 is the first thing in this project whose subject is a
+**program a person would recognise**, and it is asserted in four groups rather
+than in two, because there are four different things in it that can be wrong.
+[`../design/LIBC.md`](../design/LIBC.md), Section 12.
+
+**It took more than the five utilities its line names, and had to.** `echo`
+without an argument vector prints a blank line for ever, and this kernel's
+`execve` had refused both vectors since Phase 6 — for want of a convention about
+where a program finds them, which [`../design/PROCESS.md`](../design/PROCESS.md),
+limitation 10, recorded as Phase 7's to fix. So the sub-task is three things at
+once: **six system calls** by which a program reaches the filesystem, **the
+vectors** and the descriptor table that come with them, and **the five
+utilities** above both. Each of the three is asserted separately, because a
+utility that works proves nothing about a call it happens not to make.
+
+**The count of system calls is fourteen**, the six being numbered ninth to
+fourteenth by the rule that has held since 6.11: a number already handed to a
+program is a number that must not change. **The count of failure results is
+twenty**, having been seven: `VfsError` distinguishes fifteen causes, and three
+of the five utilities act upon `errno` rather than upon the sign of a result —
+`ls` prints an operand that reports `ENOTDIR`, `rm -f` treats `ENOENT` as
+success, `mkdir -p` treats `EEXIST` as success — so a kernel that collapsed the
+causes would make all three do the wrong thing and each would still exit with a
+plausible status.
+
+**Three of the eight programs exist because nothing here can read what a program
+printed.** `ls` given a directory prints names, and a kernel watching it cannot
+tell the names it printed from the names it should have printed. `arg-check`
+compares the vector it was given against the vector it expects; `exec-check`
+becomes `arg-check` through `execve`, so that a vector crosses an address space
+that is destroyed; and `file-check` reads a file of known contents byte for byte
+and asserts twenty refusals **by the name of the failure** rather than by its
+sign. Each ends with the number of comparisons that failed, which the kernel
+reads exactly as it reads sub-task 7.5's program.
+
+**`file-check` exists because a negative test proved it had to.** The copy at the
+end of the `read` system call was removed — so that the call reported a count and
+delivered no bytes — and `make verify` reported nothing at all: `cat` opened its
+files, was told how many bytes it had, wrote a buffer it had never been given,
+and exited with a status of zero. Two of the thirteen negative tests were silent
+and both are now caught by that program. Section 12.6.
+
+**One of the sub-task's own programs found a defect that had stood since 6.11.**
+`SyscallCopyUserString` returns one refusal for two causes — memory the caller may
+not read, and a string too long for the room given — and every caller reported
+`EFAULT` for both. Nothing had noticed because nothing had ever asked to be
+refused for being too long. `file-check` asked, with a path of three hundred
+characters standing entirely within its own memory, and was told the address was
+one it may not use. The cause was corrected rather than the assertion. Section
+12.2.2.
+
+**Ten limitations are recorded and two of them are Phase 8's.** No program may
+create or write a file, and no child inherits a descriptor; both are what the
+shell's output redirection at sub-task 8.5 will need, and neither is invented
+before something calls it. There is also **no working directory**, which is
+8.3's `cd`, and the reason `ls` with no operand lists the root rather than `.`.
+Section 12.7.
 
 ---
 

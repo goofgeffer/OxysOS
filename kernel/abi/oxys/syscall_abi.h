@@ -8,10 +8,20 @@
  *          judged against — and nothing of the kernel's implementation of it.
  * Key definitions: SYSCALL_ARGUMENT_MAXIMUM, SYSCALL_WRITE, SYSCALL_TICKS,
  *          SYSCALL_VERSION, SYSCALL_FORK, SYSCALL_EXECVE, SYSCALL_EXIT,
- *          SYSCALL_WAIT, SYSCALL_BRK, SYSCALL_COUNT, SYSCALL_OK,
- *          SYSCALL_ENOSYS, SYSCALL_EFAULT, SYSCALL_EINVAL, SYSCALL_EBADF,
- *          SYSCALL_ECHILD, SYSCALL_ENOENT, SYSCALL_ENOMEM,
- *          SYSCALL_PATH_MAXIMUM, SYSCALL_USER_LIMIT, SYSCALL_BREAK_QUERY.
+ *          SYSCALL_WAIT, SYSCALL_BRK, SYSCALL_OPEN, SYSCALL_CLOSE,
+ *          SYSCALL_READ, SYSCALL_READDIR, SYSCALL_MKDIR, SYSCALL_UNLINK,
+ *          SYSCALL_COUNT, SYSCALL_OK, SYSCALL_ENOSYS, SYSCALL_EFAULT,
+ *          SYSCALL_EINVAL, SYSCALL_EBADF, SYSCALL_ECHILD, SYSCALL_ENOENT,
+ *          SYSCALL_ENOMEM, SYSCALL_EEXIST, SYSCALL_ENOTDIR, SYSCALL_EISDIR,
+ *          SYSCALL_ENOTEMPTY, SYSCALL_EROFS, SYSCALL_ENAMETOOLONG,
+ *          SYSCALL_ELOOP, SYSCALL_ENOSPC, SYSCALL_EMFILE, SYSCALL_EBUSY,
+ *          SYSCALL_EXDEV, SYSCALL_ENOTSUP, SYSCALL_EIO, SYSCALL_PATH_MAXIMUM,
+ *          SYSCALL_USER_LIMIT, SYSCALL_BREAK_QUERY, SYSCALL_OPEN_READ,
+ *          SYSCALL_OPEN_DIRECTORY, SYSCALL_NAME_MAXIMUM, SyscallEntryType,
+ *          SyscallDirectoryEntry, SYSCALL_DESCRIPTOR_INPUT,
+ *          SYSCALL_DESCRIPTOR_OUTPUT, SYSCALL_DESCRIPTOR_ERROR,
+ *          SYSCALL_DESCRIPTOR_FIRST, SYSCALL_ARGUMENT_COUNT_MAXIMUM,
+ *          SYSCALL_ARGUMENT_BYTES_MAXIMUM.
  * References:
  *   - Intel 64 and IA-32 Architectures Software Developer's Manual, Volume 2B,
  *     "SYSCALL" and "SYSRET": the instruction places the address of the
@@ -126,7 +136,28 @@
  * as a negative result, and this one does too.
  */
 #define SYSCALL_BRK     7U
-#define SYSCALL_COUNT   8U
+
+/*
+ * The six calls of sub-task 7.6, by which a program reaches the filesystem.
+ *
+ * They are numbered ninth to fourteenth, after the eight that existed, for the
+ * reason recorded above: a number already handed to a program is a number that
+ * must not change.
+ *
+ * **There is no call here that creates or writes a file.** `open` accepts the
+ * read flags below and nothing else, and `write` still reaches the two
+ * diagnostic descriptors alone. The utilities of this sub-task read, list and
+ * remove; the first thing that needs to write to a file is the shell's output
+ * redirection at sub-task 8.5, and a call whose only caller is a future one is
+ * a call nothing asserts. docs/design/LIBC.md, Section 12.7, limitation 2.
+ */
+#define SYSCALL_OPEN    8U
+#define SYSCALL_CLOSE   9U
+#define SYSCALL_READ    10U
+#define SYSCALL_READDIR 11U
+#define SYSCALL_MKDIR   12U
+#define SYSCALL_UNLINK  13U
+#define SYSCALL_COUNT   14U
 
 /*
  * The argument that asks where the break stands rather than moving it.
@@ -155,6 +186,137 @@
 #define SYSCALL_ECHILD         INT64_C(-5)  /* The caller has no children to wait for. */
 #define SYSCALL_ENOENT         INT64_C(-6)  /* No such file, or one that will not load. */
 #define SYSCALL_ENOMEM         INT64_C(-7)  /* A frame, a table or a slot could not be had. */
+
+/*
+ * The thirteen of sub-task 7.6, which are the refusals the filesystem layer
+ * makes, carried out to a program one for one.
+ *
+ * They are not reduced to the seven above, and that is the whole reason there
+ * are thirteen of them. `VfsError` distinguishes fifteen causes; a kernel that
+ * collapsed them into `ENOENT` and `EINVAL` would tell a program that a
+ * directory it could not remove was not there, and a person reading that
+ * diagnostic would look for the file rather than for the entries still within
+ * it. The correspondence is one to one and is written in one place —
+ * `SyscallFromVfsError` in kernel/arch/x86_64/syscall/syscall.c — so that a
+ * cause added to that enumeration has exactly one place to be forgotten, and
+ * the switch there has no default.
+ */
+#define SYSCALL_EEXIST         INT64_C(-8)  /* A file of that name already. */
+#define SYSCALL_ENOTDIR        INT64_C(-9)  /* A component of the path is not a directory. */
+#define SYSCALL_EISDIR         INT64_C(-10) /* A directory where a file was required. */
+#define SYSCALL_ENOTEMPTY      INT64_C(-11) /* A directory holding more than "." and "..". */
+#define SYSCALL_EROFS          INT64_C(-12) /* The mount, or the volume, may not be written. */
+#define SYSCALL_ENAMETOOLONG   INT64_C(-13) /* A path or a component beyond the bounds. */
+#define SYSCALL_ELOOP          INT64_C(-14) /* Symbolic links followed beyond the depth bound. */
+#define SYSCALL_ENOSPC         INT64_C(-15) /* The volume has no room. */
+#define SYSCALL_EMFILE         INT64_C(-16) /* Every descriptor is in use. */
+#define SYSCALL_EBUSY          INT64_C(-17) /* Something held that the operation would destroy. */
+#define SYSCALL_EXDEV          INT64_C(-18) /* An operation confined to one volume was not. */
+#define SYSCALL_ENOTSUP        INT64_C(-19) /* The filesystem does not offer the operation. */
+#define SYSCALL_EIO            INT64_C(-20) /* The volume or the device beneath it failed. */
+
+/*
+ * How a program opens a file, which is two flags and not the eight the
+ * filesystem layer offers.
+ *
+ * The kernel refuses any bit outside this pair rather than masking it away. A
+ * program that asked to create a file and was given one opened for reading
+ * would discover the difference at its first write, in a call that reports a
+ * bad descriptor for a reason having nothing to do with the descriptor.
+ *
+ * READ must be given: an open that asked for neither reading nor writing could
+ * do nothing, and this interface offers no way to ask for writing.
+ */
+#define SYSCALL_OPEN_READ      UINT64_C(0x0001)
+#define SYSCALL_OPEN_DIRECTORY UINT64_C(0x0040) /* Refuse anything but a directory. */
+
+/*
+ * The three descriptors every program begins with, and the first one an open
+ * may be given.
+ *
+ * They are the numbers every system of this shape uses, and they are fixed here
+ * rather than left to the C library because the kernel refuses a `write` to
+ * anything else: the two halves must agree, and this file is where they do.
+ *
+ * **Nothing reads descriptor 0.** It is reserved and named so that the first
+ * call that reads a stream does not have to renumber the other two.
+ */
+#define SYSCALL_DESCRIPTOR_INPUT  0
+#define SYSCALL_DESCRIPTOR_OUTPUT 1
+#define SYSCALL_DESCRIPTOR_ERROR  2
+#define SYSCALL_DESCRIPTOR_FIRST  3
+
+/*
+ * The greatest length of one name within a directory, excluding its terminator.
+ *
+ * It is the filesystem layer's own bound, restated here because the structure
+ * below carries a name and a program must be able to declare one of the right
+ * size. The two are asserted to agree in kernel/arch/x86_64/syscall/syscall.c,
+ * where both headers are visible; this file must not include the kernel's.
+ */
+#define SYSCALL_NAME_MAXIMUM 255U
+
+/*
+ * What kind of file a directory entry names.
+ *
+ * These are the filesystem layer's `VfsNodeType` values, renumbered onto nothing
+ * — they are the same numbers — but restated here because a program may not
+ * include the kernel's headers, and asserted equal to them where both are
+ * visible. UNKNOWN is not an absence of information the caller may ignore: a
+ * filesystem is entitled to declare no type in its directory entries, and a
+ * program that needs the type of such a name must ask the file itself.
+ */
+typedef enum SyscallEntryType
+{
+    SYSCALL_TYPE_UNKNOWN = 0,
+    SYSCALL_TYPE_REGULAR = 1,
+    SYSCALL_TYPE_DIRECTORY = 2,
+    SYSCALL_TYPE_SYMBOLIC_LINK = 3,
+    SYSCALL_TYPE_CHARACTER_DEVICE = 4,
+    SYSCALL_TYPE_BLOCK_DEVICE = 5,
+    SYSCALL_TYPE_FIFO = 6,
+    SYSCALL_TYPE_SOCKET = 7
+} SyscallEntryType;
+
+/*
+ * One entry of a directory, as `readdir` hands it to a program.
+ *
+ * This is the one structure the kernel and a program must agree upon byte for
+ * byte, and it is therefore here rather than in either's own headers — which is
+ * exactly the reason this file exists. The note at the head of this file
+ * forbids a *declaration*, because a declaration commits both sides to a symbol;
+ * a definition of a shared layout commits them to nothing but the agreement
+ * itself, which is what an interface header is for.
+ *
+ * The name is terminated here, which it is not upon an EXT2 volume. The `type`
+ * field holds a `SyscallEntryType` and is a fixed-width integer rather than the
+ * enumeration, because the width of an enumeration is the implementation's
+ * choice and this structure crosses a privilege boundary between two
+ * compilations.
+ */
+typedef struct SyscallDirectoryEntry
+{
+    uint64_t number; /* The filesystem's identifier for the file. */
+    uint32_t type;   /* A SyscallEntryType. */
+    uint32_t reserved; /* Zero. Present so the name begins at a fixed offset. */
+    char name[SYSCALL_NAME_MAXIMUM + 1U];
+} SyscallDirectoryEntry;
+
+/*
+ * What `execve` will accept of the two vectors the System V ABI puts upon a new
+ * program's stack: how many strings, and how many bytes of them in total.
+ *
+ * Both bounds are the program's to know before it calls, for the reason
+ * SYSCALL_PATH_MAXIMUM is. The kernel copies every string out of the caller's
+ * memory *before* it destroys the address space they stand in, so the copy needs
+ * a bound and the bound is the kernel's stack.
+ *
+ * The count bounds each vector separately and the byte count bounds the two
+ * together, terminators included. A program that exceeds either is refused with
+ * EINVAL and keeps running, which is what an `execve` that fails must do.
+ */
+#define SYSCALL_ARGUMENT_COUNT_MAXIMUM 16U
+#define SYSCALL_ARGUMENT_BYTES_MAXIMUM 2048U
 
 /*
  * The greatest length of a path a caller may name, excluding its terminator.

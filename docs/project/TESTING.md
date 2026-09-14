@@ -304,9 +304,11 @@ kernel at all.** A Bochs configured without `--enable-x86-64` reports a CPU whos
 `CPUID` leaf `0x80000001` is zero — no long mode — and the kernel cannot leave
 protected mode upon it; one configured without `--enable-smp` refuses
 `cpu: count=2`. Both were the case at sub-task 7.2 and both were a property of
-the local build rather than of Bochs. **Both were the case again at sub-task
-7.3** and **again at sub-task 7.4**, the installed binary having reverted to a
-default build each time: the symptom to look for is `bochs --help cpu` listing
+the local build rather than of Bochs. **Both were the case again at sub-tasks
+7.3, 7.4 and 7.6**, the installed binary having reverted to a default build each
+time — four occasions now, which is a property of this environment and not an
+accident, so **expect to rebuild before a Bochs run rather than discovering that
+you must**. The symptom to look for is `bochs --help cpu` listing
 nothing above `atom_n270`, every model in
 that list being 32-bit, and the run then failing at
 `>>PANIC<< numerical parameter 'n_processors' was set to 2` or — with one
@@ -317,6 +319,19 @@ configuration that works:
 ./configure --enable-x86-64 --enable-smp --enable-cpu-level=6 \
             --enable-pci --enable-cdrom --enable-long-phy-address --with-nogui
 ```
+
+**Installing over the system copy needs a password, and the run does not need
+the install.** At sub-task 7.6 `make install` could not be run, and the boot was
+made against the freshly built binary where it stood:
+
+```sh
+BXSHARE=/usr/local/share/bochs ~/src/bochs/bochs -q -f tools/bochsrc.cfg
+```
+
+`BXSHARE` names the *installed* share rather than the source tree, because the
+source tree holds the VGA BIOS as source and not as the `.bin` the configuration
+asks for. That is worth knowing before the half hour the wrong `vgaromimage`
+costs, which the note below records.
 
 The `bochsrc` that boots it is [`../../tools/bochsrc.cfg`](../../tools/bochsrc.cfg),
 which is in the repository and carries the reasoning for each value beside it.

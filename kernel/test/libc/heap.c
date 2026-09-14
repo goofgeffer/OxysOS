@@ -828,7 +828,7 @@ static void VerifyHeapProgram(void)
     VerifyHeapRequire(process->break_current == process->break_start,
                       "a program that has asked for nothing has a heap");
 
-    stack = ProcessCreateUserStack(process);
+    stack = ProcessCreateUserStack(process, NULL);
     VerifyHeapRequire(stack != 0U, "the program was given no stack");
 
     boot = ThreadAdoptCurrent("boot");

@@ -27,6 +27,14 @@ linked ELF64 program at privilege level 3 — which returns to the kernel by sys
 call, may make a child of itself and collect what it ended with, and is ended
 when it faults or when it asks.
 
+**And it runs programs a person would recognise.** Since sub-task 7.6 the kernel
+carries fourteen system calls rather than eight — `open`, `close`, `read`,
+`readdir`, `mkdir` and `unlink` joining them — each process holds a descriptor
+table of its own, and `execve` carries the argument and environment vectors it
+had refused since Phase 6. Above those stand `ls`, `cat`, `echo`, `mkdir` and
+`rm`, built from source, linked against the C library's archive, and run at
+privilege level 3 upon a mounted EXT2 volume.
+
 **It pre-empts, and it schedules across processors.** Since sub-task 6.15 each
 processor holds a run queue of its own with a lock of its own, rotates
 round-robin between the threads upon it, and is taken back by a local APIC timer
@@ -55,8 +63,11 @@ the buffered input and output of ISO/IEC 9899:2011, Section 7.21 — `stdin`,
 7.21.7 and 7.21.8, and one conversion engine beneath `printf`, `fprintf`,
 `snprintf` and the five other formatted-output names. Nothing in this system
 calls them yet, the buffers being static because a stream must be usable before a
-heap has been grown; and nothing can *read* a stream, this kernel having no
-system call that reads, so `stdin` is permanently at its end.
+heap has been grown; and nothing can *read* a stream, so `stdin` is permanently
+at its end. **Sub-task 7.6 added a `read` system call and did not change that**:
+it reads a file, reached through a descriptor `open` gave out, and there is still
+no call that reads the console — which is why `cat` with no operand reports the
+absence rather than copying its standard input.
 
 **Sub-task 7.5 stands at the top of the phase, and it is where the library stops
 being something only the kernel can run.** A program is now built rather than
@@ -88,6 +99,40 @@ the other, because a registered function that writes a diagnostic writes it into
 a buffer. The program asserts the order from inside itself: it leaves a partial
 line in the buffer as `main` returns, and a registered function checks that the
 line is still there.
+
+**Since sub-task 7.6 there are programs a person would recognise.** `ls`, `cat`,
+`echo`, `mkdir` and `rm` are built by that procedure, linked against that
+archive, and run at privilege level 3 upon a mounted EXT2 volume — listing it,
+copying files out of it, creating directories within it and removing names from
+it. Each is IEEE Std 1003.1-2017's utility as far as this system reaches, and
+each refuses the options it does not implement rather than accepting them and
+doing nothing. [`../design/LIBC.md`](../design/LIBC.md), Section 12.3.
+
+**A program may now reach the filesystem, and may be given arguments.** The
+kernel carries **fourteen** system calls: the eight it had, and `open`, `close`,
+`read`, `readdir`, `mkdir` and `unlink`, each a validation of a caller's
+arguments and then a call of the filesystem layer that has existed since Phase 5.
+Each process holds a descriptor table of its own, so that the numbers a program
+sees are small and its own and it cannot reach another's open file by guessing
+one. And `execve` accepts both vectors, which it had refused since Phase 6 for
+want of a convention about where a program finds them: the convention is the
+System V ABI's, the strings are copied out of the caller's memory before the
+address space they stand in is destroyed, and `_start` has read them since 7.5.
+
+**The count of failure results grew from seven to twenty**, which is not
+bookkeeping. Three of the five utilities act upon `errno` and not upon the sign
+of a result — `ls` prints an operand reporting `ENOTDIR`, `rm -f` treats `ENOENT`
+as success, `mkdir -p` treats `EEXIST` as success — so a kernel that collapsed
+the filesystem layer's fifteen causes into two would make all three do the wrong
+thing, and each would still exit with a plausible status.
+
+**What none of this asserts is what a program printed.** Nothing in the kernel
+captures the diagnostic path, so three of the eight programs exist to turn what
+would otherwise be printed-only into a status: `arg-check` compares the vector it
+was given, `exec-check` carries a vector across an `execve`, and `file-check`
+reads a file of known contents byte for byte and asserts twenty refusals by name.
+The last of those was written because a negative test proved it had to, and it
+then found a defect that had stood since sub-task 6.11.
 
 ## 2. By phase
 
@@ -165,7 +210,7 @@ the GRUB entry that permits writing. See
   rather than one for all; and composites all of it over a back buffer, after
   which **nothing reads the framebuffer**.
 - A `SYSCALL` entry path swaps `GS`, loads a kernel stack from a per-processor
-  block, dispatches through a table of eight calls and validates a caller's
+  block, dispatches through a table of fourteen calls and validates a caller's
   arguments against both the canonical user limit and the paging hierarchy — and
   resolves a copy-on-write fault upon a page it is asked to write, rather than
   refusing an address a fork had protected.
@@ -331,8 +376,9 @@ refused deliberately — it is the only conversion that writes through a pointer
 the format string selects, and a program that hands a received string to `printf`
 is a defect this library can decline to arm.
 
-**What can read a stream is nothing.** This kernel has eight system calls and not
-one of them reads, so the source beneath `stdin` reports end-of-file — an *end*
+**What can read a stream is nothing.** This kernel has a `read` since sub-task
+7.6 and it reads a *file*, reached through a descriptor `open` gave out; no call
+reads a console, so the source beneath `stdin` reports end-of-file — an *end*
 and not an *error*, which is the distinction every program reading it depends
 upon. The buffering above it is real, is exercised against streams whose device
 is a region of memory, and is correct on the day a call that reads exists; what
@@ -435,6 +481,18 @@ assertions passed or sound and no verdict of `FAILED` in any — and in each of 
 three the log carries lines written **by a program**, through the C library's own
 `printf`, at privilege level 3. The Bochs binary had reverted to a default build
 for the third sub-task running and was rebuilt again;
+[`TESTING.md`](TESTING.md), Section 4A.
+
+**Sub-task 7.6's image was run in all three likewise**, with sixty assertions
+passed or sound and no verdict of `FAILED` in any. In each of the three the log
+carries the output of **eight programs** run at privilege level 3 upon an EXT2
+volume this kernel composed — a directory listed, two files copied out of it, a
+directory created and a name removed — and in each, `arg-check` and `file-check`
+report zero failed comparisons of their own. Bochs raised no architectural
+objection; the only entries in its own log are the PC speaker declining
+`/dev/console`. **The Bochs binary had reverted to a default build for the
+fourth sub-task running** and was rebuilt again, which is beginning to be a
+property of the environment rather than an accident;
 [`TESTING.md`](TESTING.md), Section 4A.
 
 **Four of Bochs's self-tests failed on the first attempt and none of them was
@@ -565,7 +623,7 @@ functional. [`TESTING.md`](TESTING.md), Section 3.
 There is no test harness and there will be none before Phase 7, there being no
 userland to run one in. The kernel therefore asserts its own properties at boot,
 in the order the subsystems are initialised, and `make verify` fails if any of
-them reports a failure. Fifty-nine assertions presently report passed or sound.
+them reports a failure. Sixty assertions presently report passed or sound.
 
 Those tests are in [`../../kernel/test/`](../../kernel/test/), one file per
 subsystem. Each subsystem's design document carries a table pairing every

@@ -83,6 +83,7 @@
 #include <oxys/arch/cpu/percpu.h>
 #include <oxys/proc/sched.h>
 #include <oxys/arch/cpu/spinlock.h>
+#include <oxys/fs/vfs.h>
 
 static Process ProcessTable[PROCESS_CAPACITY];
 static Thread ThreadTable[THREAD_CAPACITY];
@@ -327,6 +328,28 @@ static Process *ProcessAllocate(const char *name, const Process *parent,
             process->threads[slot] = NULL;
         }
 
+        /*
+         * The descriptor table of sub-task 7.6, emptied explicitly.
+         *
+         * `ProcessCloseDescriptors` is not used here, because this slot may hold
+         * whatever its last occupant left in it and closing that would close
+         * descriptors belonging to a process that has already released them.
+         * The distinction matters exactly once — at this line — and it is why
+         * the free value is not zero: a table that had been cleared to zero
+         * would name filesystem descriptor 0 in every slot.
+         *
+         * **A child of `fork` reaches this line too**, and therefore inherits
+         * nothing. POSIX has a child inherit every descriptor its parent held;
+         * this kernel does not, because inheriting one means two processes
+         * sharing one open file and one file position, and the filesystem layer
+         * has no reference count upon an open file to make that safe.
+         * docs/design/PROCESS.md, Section 14.
+         */
+        for (size_t slot = 0U; slot < PROCESS_DESCRIPTOR_CAPACITY; ++slot)
+        {
+            process->descriptors[slot] = PROCESS_DESCRIPTOR_FREE;
+        }
+
         ++ProcessCreations;
 
         return process;
@@ -357,6 +380,15 @@ void ProcessDestroy(Process *process)
     {
         ThreadDestroy(process->threads[process->thread_count - 1U]);
     }
+
+    /*
+     * The descriptors go with it, of sub-task 7.6. A process that ends while
+     * holding one leaves an entry in the filesystem layer's table that nothing
+     * will ever close, and that table is the machine's and holds
+     * VFS_FILE_CAPACITY entries — so a program that ended with a file open would
+     * cost the machine a descriptor permanently.
+     */
+    ProcessCloseDescriptors(process);
 
     AddressSpaceDestroy(&process->space);
 
@@ -1216,15 +1248,240 @@ void ProcessRecordImage(Process *process, const ElfImage *image)
     ProcessEstablishBreak(process);
 }
 
-uint64_t ProcessCreateUserStack(Process *process)
+/*
+ * The frames a user stack was just built from, in ascending order of address.
+ *
+ * The frames are kept rather than translated for, because the alternative is an
+ * address-space walk the paging layer does not offer for a space that is not the
+ * active one — and the space a stack is being filled for very often is not:
+ * `ProcessCreateUserStack` is called from the boot sequence with the kernel's
+ * space active. Keeping the sixteen physical addresses the mapping loop already
+ * held is the same technique the ELF loader uses to write a segment it has not
+ * mapped yet, and it needs nothing new.
+ */
+typedef struct ProcessStackFrames
+{
+    PhysicalAddress frame[PROCESS_USER_STACK_PAGES];
+    uint64_t base;
+} ProcessStackFrames;
+
+/*
+ * Writes bytes into a stack that has been built but not entered, through the
+ * direct map of the frames above.
+ *
+ * The bounds check is not paranoia: every caller below computes an address from
+ * a layout it is building downward, and a layout that ran past the bottom of the
+ * stack would otherwise index the array out of range — which is the one way this
+ * function could corrupt memory that has nothing to do with the process.
+ */
+static bool ProcessWriteUserStack(const ProcessStackFrames *frames, uint64_t address,
+                                  const void *source, uint64_t length)
+{
+    const uint8_t *const bytes = (const uint8_t *)source;
+
+    for (uint64_t offset = 0U; offset < length; ++offset)
+    {
+        const uint64_t at = address + offset;
+        uint64_t page;
+        uint8_t *destination;
+
+        if ((at < frames->base) ||
+            (at >= (frames->base + ((uint64_t)PROCESS_USER_STACK_PAGES * PAGE_SIZE))))
+        {
+            return false;
+        }
+
+        page = (at - frames->base) / PAGE_SIZE;
+        destination = (uint8_t *)(uintptr_t)PhysicalToDirect(frames->frame[page]);
+        destination[at % PAGE_SIZE] = bytes[offset];
+    }
+
+    return true;
+}
+
+/* An eightbyte, which is what every field of the frame below one is. It is
+ * written byte by byte through the routine above rather than as a word, because
+ * an eightbyte may straddle two pages of the stack and the two pages need not be
+ * two consecutive frames. */
+static bool ProcessWriteUserStackWord(const ProcessStackFrames *frames, uint64_t address,
+                                      uint64_t value)
+{
+    return ProcessWriteUserStack(frames, address, &value, sizeof value);
+}
+
+/*
+ * Lays out the initial process stack of the System V ABI, AMD64 supplement,
+ * Section 3.4.1, and returns the stack pointer a program is to be entered upon.
+ *
+ * The order is the ABI's read from the top downward, which is the order it must
+ * be built in: the strings stand highest, because the pointers below them have
+ * to name addresses that are already fixed.
+ *
+ *   the information block   the argument and environment strings, terminated
+ *   (alignment padding)
+ *   the auxiliary vector    one null entry, being two eightbytes of zero
+ *   null                    ending the environment vector
+ *   envp[0..n)              pointers into the information block
+ *   null                    ending the argument vector
+ *   argv[0..argc)           pointers into the information block
+ *   argc                    at the stack pointer
+ *
+ * Returns zero where the vectors do not fit, which the caller must treat as a
+ * failure to make a stack at all. Nothing is written back: the pages were zeroed
+ * when they were mapped, so a partly built frame is a frame of zeroes and the
+ * caller is releasing the whole address space in any case.
+ */
+static uint64_t ProcessLayOutArguments(const ProcessStackFrames *frames,
+                                       const ProcessArguments *arguments)
+{
+    uint64_t address =
+        frames->base + ((uint64_t)PROCESS_USER_STACK_PAGES * PAGE_SIZE);
+    uint64_t argument_address[PROCESS_ARGUMENT_COUNT_MAXIMUM];
+    uint64_t environment_address[PROCESS_ARGUMENT_COUNT_MAXIMUM];
+    uint64_t words;
+    uint64_t pointer;
+
+    if ((arguments->argument_count > PROCESS_ARGUMENT_COUNT_MAXIMUM) ||
+        (arguments->environment_count > PROCESS_ARGUMENT_COUNT_MAXIMUM) ||
+        (arguments->storage_used > PROCESS_ARGUMENT_BYTES_MAXIMUM))
+    {
+        return 0U;
+    }
+
+    /*
+     * The information block, copied downward one string at a time so that each
+     * string's address is known the moment it has been written.
+     *
+     * The strings are laid out in reverse order, which is a consequence of
+     * building downward and not a requirement of anything: the ABI fixes where
+     * the *pointers* stand and says nothing about the order of the bytes they
+     * name.
+     */
+    for (uint32_t index = arguments->environment_count; index > 0U; --index)
+    {
+        const char *const string = &arguments->storage[arguments->environment[index - 1U]];
+        uint64_t length = 0U;
+
+        while (string[length] != '\0')
+        {
+            ++length;
+        }
+
+        address -= (length + 1U);
+
+        if (!ProcessWriteUserStack(frames, address, string, length + 1U))
+        {
+            return 0U;
+        }
+
+        environment_address[index - 1U] = address;
+    }
+
+    for (uint32_t index = arguments->argument_count; index > 0U; --index)
+    {
+        const char *const string = &arguments->storage[arguments->argument[index - 1U]];
+        uint64_t length = 0U;
+
+        while (string[length] != '\0')
+        {
+            ++length;
+        }
+
+        address -= (length + 1U);
+
+        if (!ProcessWriteUserStack(frames, address, string, length + 1U))
+        {
+            return 0U;
+        }
+
+        argument_address[index - 1U] = address;
+    }
+
+    /*
+     * How many eightbytes stand below the information block: the count, the two
+     * vectors, their two terminators, and the auxiliary vector's single null
+     * entry, which is two eightbytes and not one — an entry is a pair.
+     */
+    words = 1U + arguments->argument_count + 1U + arguments->environment_count + 1U + 2U;
+
+    /*
+     * The stack pointer must be sixteen-byte aligned at the entry point, which
+     * Section 3.4.1 guarantees a program. The information block's bottom is at
+     * whatever address the last string ended at, so the padding is computed
+     * here rather than assumed: the alignment is applied to the *stack pointer*,
+     * so the bottom of the block is first rounded down to eight and then the
+     * whole of the frame below it rounded down to sixteen.
+     */
+    address &= ~UINT64_C(7);
+    address -= (words * sizeof(uint64_t));
+    address &= ~UINT64_C(15);
+
+    pointer = address;
+
+    if (!ProcessWriteUserStackWord(frames, address, (uint64_t)arguments->argument_count))
+    {
+        return 0U;
+    }
+
+    address += sizeof(uint64_t);
+
+    for (uint32_t index = 0U; index < arguments->argument_count; ++index)
+    {
+        if (!ProcessWriteUserStackWord(frames, address, argument_address[index]))
+        {
+            return 0U;
+        }
+
+        address += sizeof(uint64_t);
+    }
+
+    /* The terminators and the auxiliary vector are zero, and the pages are
+     * already zeroed — but they are written all the same. The alignment above
+     * may have moved the frame down past bytes a longer string once occupied in
+     * some earlier layout, and "the page was zero when it was mapped" is an
+     * invariant about mapping and not about this frame. */
+    if (!ProcessWriteUserStackWord(frames, address, 0U))
+    {
+        return 0U;
+    }
+
+    address += sizeof(uint64_t);
+
+    for (uint32_t index = 0U; index < arguments->environment_count; ++index)
+    {
+        if (!ProcessWriteUserStackWord(frames, address, environment_address[index]))
+        {
+            return 0U;
+        }
+
+        address += sizeof(uint64_t);
+    }
+
+    for (uint32_t remaining = 0U; remaining < 3U; ++remaining)
+    {
+        if (!ProcessWriteUserStackWord(frames, address, 0U))
+        {
+            return 0U;
+        }
+
+        address += sizeof(uint64_t);
+    }
+
+    return pointer;
+}
+
+uint64_t ProcessCreateUserStack(Process *process, const ProcessArguments *arguments)
 {
     const uint64_t top = PROCESS_USER_STACK_TOP;
     const uint64_t base = top - ((uint64_t)PROCESS_USER_STACK_PAGES * PAGE_SIZE);
+    ProcessStackFrames frames;
 
     if ((process == NULL) || !process->used || (process->user_stack_top != 0U))
     {
         return 0U;
     }
+
+    frames.base = base;
 
     for (uint64_t page = base; page < top; page += PAGE_SIZE)
     {
@@ -1235,6 +1492,8 @@ uint64_t ProcessCreateUserStack(Process *process)
         {
             return 0U;
         }
+
+        frames.frame[(page - base) / PAGE_SIZE] = frame;
 
         /*
          * Zeroed, for the reason the loader zeroes a segment's pages: a frame
@@ -1296,8 +1555,95 @@ uint64_t ProcessCreateUserStack(Process *process)
      * The address is sixteen-byte aligned, `top` being page-aligned and the
      * frame a multiple of sixteen, which is what Section 3.4.1 guarantees a
      * program at its entry point.
+     *
+     * **Since sub-task 7.6 that is the case where there is nothing to put upon
+     * the frame**, and it is still a case: a process created by the kernel for
+     * its own purposes has no arguments, and the composed programs of Phase 6
+     * never read one. Where there are arguments, the frame is laid out rather
+     * than left as zeroes, and `ProcessLayOutArguments` does it.
      */
-    return top - PROCESS_USER_STACK_FRAME_BYTES;
+    if ((arguments == NULL) ||
+        ((arguments->argument_count == 0U) && (arguments->environment_count == 0U)))
+    {
+        return top - PROCESS_USER_STACK_FRAME_BYTES;
+    }
+
+    return ProcessLayOutArguments(&frames, arguments);
+}
+
+/* ------------------------------------------- the descriptors of sub-task 7.6 */
+
+void ProcessCloseDescriptors(Process *process)
+{
+    if (process == NULL)
+    {
+        return;
+    }
+
+    for (size_t index = 0U; index < PROCESS_DESCRIPTOR_CAPACITY; ++index)
+    {
+        if (process->descriptors[index] != PROCESS_DESCRIPTOR_FREE)
+        {
+            (void)VfsClose(process->descriptors[index]);
+            process->descriptors[index] = PROCESS_DESCRIPTOR_FREE;
+        }
+    }
+}
+
+int64_t ProcessAdoptDescriptor(Process *process, int file)
+{
+    if ((process == NULL) || !process->used || (file == VFS_NO_DESCRIPTOR))
+    {
+        return SYSCALL_EINVAL;
+    }
+
+    /*
+     * The search begins at SYSCALL_DESCRIPTOR_FIRST and not at zero. The three
+     * below it name the diagnostic path, and a program handed descriptor 1 for a
+     * file it opened would then write to that file every time it called printf.
+     */
+    for (size_t index = SYSCALL_DESCRIPTOR_FIRST; index < PROCESS_DESCRIPTOR_CAPACITY;
+         ++index)
+    {
+        if (process->descriptors[index] == PROCESS_DESCRIPTOR_FREE)
+        {
+            process->descriptors[index] = file;
+
+            return (int64_t)index;
+        }
+    }
+
+    return SYSCALL_EMFILE;
+}
+
+int ProcessDescriptorFile(const Process *process, int64_t descriptor)
+{
+    if ((process == NULL) || !process->used)
+    {
+        return VFS_NO_DESCRIPTOR;
+    }
+
+    if ((descriptor < (int64_t)SYSCALL_DESCRIPTOR_FIRST) ||
+        (descriptor >= (int64_t)PROCESS_DESCRIPTOR_CAPACITY))
+    {
+        return VFS_NO_DESCRIPTOR;
+    }
+
+    return process->descriptors[descriptor];
+}
+
+bool ProcessReleaseDescriptor(Process *process, int64_t descriptor)
+{
+    const int file = ProcessDescriptorFile(process, descriptor);
+
+    if (file == VFS_NO_DESCRIPTOR)
+    {
+        return false;
+    }
+
+    process->descriptors[descriptor] = PROCESS_DESCRIPTOR_FREE;
+
+    return VfsClose(file);
 }
 
 /* ------------------------------------------------------- sub-task 6.11 */
@@ -1387,7 +1733,8 @@ Process *ProcessFork(Process *parent, const SyscallFrame *frame)
     return child;
 }
 
-int64_t ProcessExecute(Process *process, const char *path)
+int64_t ProcessExecute(Process *process, const char *path,
+                       const ProcessArguments *arguments)
 {
     Thread *const thread = ProcessCurrentThreads[ProcessProcessorIndex()];
     AddressSpace fresh;
@@ -1458,7 +1805,20 @@ int64_t ProcessExecute(Process *process, const char *path)
      */
     ProcessEstablishBreak(process);
 
-    stack = ProcessCreateUserStack(process);
+    /*
+     * The descriptors the old program held are closed, of sub-task 7.6.
+     *
+     * They are the *machine's* descriptors — the filesystem layer has one table
+     * for all of them — so forgetting the table here would leak every entry the
+     * replaced program had open, and a machine that had executed enough programs
+     * would be one where nothing could open anything. POSIX would have them
+     * inherited across `execve` unless marked close-on-exec; this kernel has no
+     * such mark, so it does the safe half of that rule and none of the other.
+     * docs/design/PROCESS.md, Section 14.
+     */
+    ProcessCloseDescriptors(process);
+
+    stack = ProcessCreateUserStack(process, arguments);
 
     if (stack == 0U)
     {

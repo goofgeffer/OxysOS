@@ -42,6 +42,7 @@
 #include <oxys/dev/pit.h>
 #include <oxys/arch/cpu/tss.h>
 #include <oxys/proc/process.h>
+#include <oxys/fs/vfs.h>
 
 /* Defined in kernel/arch/x86_64/syscall/syscall_entry.asm. */
 extern void SyscallEntry(void);
@@ -445,10 +446,18 @@ void SyscallEstablishUserGsBase(void)
  */
 #define SYSCALL_TRANSFER_MAXIMUM 4096U
 
-/* The descriptors a write may name. There are no files until Phase 7; these are
- * the diagnostic path, which is what a program has to say anything with. */
-#define SYSCALL_DESCRIPTOR_OUTPUT 1U
-#define SYSCALL_DESCRIPTOR_ERROR  2U
+/*
+ * The descriptors a write may name: the diagnostic path, and nothing else.
+ *
+ * The numbers moved to <oxys/syscall_abi.h> at sub-task 7.6, because a program
+ * that opens a file has to know which numbers it will never be given. They are
+ * used here by those names.
+ *
+ * **A write still reaches no file**, which is the one place where the
+ * descriptors of 7.6 stop short: `open` accepts the read flags alone, so there
+ * is no descriptor a program could write to even if this accepted one. See
+ * docs/design/LIBC.md, Section 12.7, limitation 2.
+ */
 
 /*
  * Writes a caller's bytes to the diagnostic path.
@@ -586,27 +595,178 @@ static int64_t SyscallDoFork(const SyscallFrame *frame)
  * silently — and a program that passed arguments and found none would have no
  * way to tell that the kernel had thrown them away.
  */
+/*
+ * Copies a path out of a caller's memory and says which of the two things went
+ * wrong where something did.
+ *
+ * `SyscallCopyUserString` returns one `false` for two causes — memory the caller
+ * may not read, and a string longer than the room given — and every call that
+ * used it before this sub-task reported EFAULT for both. That was wrong and a
+ * program written by this sub-task found it: a path of three hundred characters,
+ * entirely within the program's own memory, was refused as an address the
+ * program may not use. A person reading that diagnostic looks for a pointer
+ * defect, and there is none.
+ *
+ * The two are told apart by asking whether the first byte was readable, which it
+ * was if the refusal was about length. That is one extra page walk upon a path
+ * that has already failed, and it buys the difference between "this address is
+ * not yours" and "this path is too long" — which are the only two things the
+ * caller can do anything about.
+ */
+static int64_t SyscallCopyUserPath(uint64_t address, char *destination, size_t capacity)
+{
+    if (SyscallCopyUserString(address, destination, capacity))
+    {
+        return SYSCALL_OK;
+    }
+
+    if (SyscallUserRangeIsReadable(address, 1U))
+    {
+        return SYSCALL_ENAMETOOLONG;
+    }
+
+    ++SyscallFaults;
+
+    return SYSCALL_EFAULT;
+}
+
+/*
+ * Copies one of `execve`'s two vectors out of a caller's memory into the block
+ * the new program's stack will be built from.
+ *
+ * Every string is copied **before** the caller's address space is destroyed, and
+ * that is the whole reason this function exists rather than the vectors being
+ * read where they stand. `execve` replaces an address space; a kernel that read
+ * `argv[1]` after the replacement would read whatever the new program has at
+ * that address, which is a fault if it is lucky and the new program's own data
+ * if it is not — and the second is a program started with arguments nobody
+ * wrote.
+ *
+ * A null vector is not a failure: it is an empty one, which is what a program
+ * passing no arguments has to hand.
+ *
+ * Returns a SYSCALL_ result. EFAULT for memory that is not the caller's to read,
+ * and EINVAL where either bound of <oxys/syscall_abi.h> is exceeded — both
+ * before the point of no return, so a program refused here keeps running.
+ */
+static int64_t SyscallCopyUserVector(uint64_t vector, ProcessArguments *arguments,
+                                     uint32_t *displacement, uint32_t *count)
+{
+    *count = 0U;
+
+    if (vector == 0U)
+    {
+        return SYSCALL_OK;
+    }
+
+    for (;;)
+    {
+        const uint64_t slot = vector + ((uint64_t)*count * sizeof(uint64_t));
+        uint64_t string;
+        size_t capacity;
+        size_t length = 0U;
+
+        if (!SyscallUserRangeIsReadable(slot, sizeof(uint64_t)))
+        {
+            return SYSCALL_EFAULT;
+        }
+
+        string = *(const uint64_t *)(uintptr_t)slot;
+
+        if (string == 0U)
+        {
+            return SYSCALL_OK;
+        }
+
+        if (*count >= PROCESS_ARGUMENT_COUNT_MAXIMUM)
+        {
+            return SYSCALL_EINVAL;
+        }
+
+        /*
+         * The copy is bounded by what is left of the block and not by
+         * SYSCALL_PATH_MAXIMUM, so that sixteen short arguments and one long one
+         * are both accommodated by the same two kibibytes rather than by a
+         * per-string bound that would have to be guessed at.
+         */
+        capacity = (size_t)(PROCESS_ARGUMENT_BYTES_MAXIMUM - arguments->storage_used);
+
+        if (capacity == 0U)
+        {
+            return SYSCALL_EINVAL;
+        }
+
+        if (!SyscallCopyUserString(string, &arguments->storage[arguments->storage_used],
+                                   capacity))
+        {
+            /*
+             * Two causes arrive here and they are not the same: memory the
+             * caller may not read, and a string longer than the room left. The
+             * first is EFAULT and the second EINVAL, and they are told apart by
+             * asking whether the first byte was readable — which it was, if the
+             * refusal was about length.
+             */
+            return SyscallUserRangeIsReadable(string, 1U) ? SYSCALL_EINVAL : SYSCALL_EFAULT;
+        }
+
+        displacement[*count] = arguments->storage_used;
+
+        while (arguments->storage[arguments->storage_used + length] != '\0')
+        {
+            ++length;
+        }
+
+        arguments->storage_used += (uint32_t)(length + 1U);
+        ++(*count);
+    }
+}
+
 static int64_t SyscallDoExecve(uint64_t path_address, uint64_t argument_vector,
                                uint64_t environment_vector)
 {
     Process *const process = ProcessCurrent();
     char path[SYSCALL_PATH_MAXIMUM + 1U];
+    ProcessArguments arguments;
+    int64_t copied;
 
     if (process == NULL)
     {
         return SYSCALL_EINVAL;
     }
 
-    if ((argument_vector != 0U) || (environment_vector != 0U))
+    arguments.storage_used = 0U;
+
+    copied = SyscallCopyUserVector(argument_vector, &arguments, arguments.argument,
+                                   &arguments.argument_count);
+
+    if (copied != SYSCALL_OK)
     {
-        return SYSCALL_EINVAL;
+        if (copied == SYSCALL_EFAULT)
+        {
+            ++SyscallFaults;
+        }
+
+        return copied;
     }
 
-    if (!SyscallCopyUserString(path_address, path, sizeof path))
-    {
-        ++SyscallFaults;
+    copied = SyscallCopyUserVector(environment_vector, &arguments, arguments.environment,
+                                   &arguments.environment_count);
 
-        return SYSCALL_EFAULT;
+    if (copied != SYSCALL_OK)
+    {
+        if (copied == SYSCALL_EFAULT)
+        {
+            ++SyscallFaults;
+        }
+
+        return copied;
+    }
+
+    copied = SyscallCopyUserPath(path_address, path, sizeof path);
+
+    if (copied != SYSCALL_OK)
+    {
+        return copied;
     }
 
     /*
@@ -616,7 +776,7 @@ static int64_t SyscallDoExecve(uint64_t path_address, uint64_t argument_vector,
      * told that its file does not exist, when the machine had in fact run out of
      * memory, would look for the fault in the one place it is not.
      */
-    return ProcessExecute(process, path);
+    return ProcessExecute(process, path, &arguments);
 }
 
 /* Ends the calling program. Does not return; the result exists so that the
@@ -720,6 +880,401 @@ static int64_t SyscallDoBrk(uint64_t requested)
     return ProcessSetBreak(process, requested);
 }
 
+/* ------------------------------------------ the six calls of sub-task 7.6 */
+
+/*
+ * The filesystem layer's refusal, as the result a program receives.
+ *
+ * The switch has no `default`, deliberately. `VfsError` is an enumeration and
+ * this function must answer for every one of its values; a default would answer
+ * for the ones nobody had thought about, and would keep on answering as the
+ * enumeration grew. Without one the compiler reports an unhandled value, which
+ * is the only notice of that omission that cannot be missed —
+ * PROJECT_GUIDELINES.md, Section 4, requires -Wall -Wextra -Werror, under which
+ * the report is a failure to build.
+ *
+ * VFS_ERROR_NONE becomes EINVAL rather than success: this is called only upon a
+ * path that has already failed, so a layer reporting no error at all is a layer
+ * that failed without saying why, and reporting success for it would turn a
+ * failed call into one that appeared to have worked.
+ */
+static int64_t SyscallFromVfsError(VfsError error)
+{
+    switch (error)
+    {
+    case VFS_ERROR_NONE:
+        return SYSCALL_EINVAL;
+    case VFS_ERROR_NOT_FOUND:
+        return SYSCALL_ENOENT;
+    case VFS_ERROR_EXISTS:
+        return SYSCALL_EEXIST;
+    case VFS_ERROR_NOT_DIRECTORY:
+        return SYSCALL_ENOTDIR;
+    case VFS_ERROR_IS_DIRECTORY:
+        return SYSCALL_EISDIR;
+    case VFS_ERROR_NOT_EMPTY:
+        return SYSCALL_ENOTEMPTY;
+    case VFS_ERROR_READ_ONLY:
+        return SYSCALL_EROFS;
+    case VFS_ERROR_INVALID:
+        return SYSCALL_EINVAL;
+    case VFS_ERROR_TOO_LONG:
+        return SYSCALL_ENAMETOOLONG;
+    case VFS_ERROR_TOO_MANY_LINKS:
+        return SYSCALL_ELOOP;
+    case VFS_ERROR_NO_SPACE:
+        return SYSCALL_ENOSPC;
+    case VFS_ERROR_NO_RESOURCE:
+        return SYSCALL_EMFILE;
+    case VFS_ERROR_BUSY:
+        return SYSCALL_EBUSY;
+    case VFS_ERROR_CROSSES_MOUNT:
+        return SYSCALL_EXDEV;
+    case VFS_ERROR_UNSUPPORTED:
+        return SYSCALL_ENOTSUP;
+    case VFS_ERROR_MEDIUM:
+        return SYSCALL_EIO;
+    }
+
+    /*
+     * Unreachable while the switch above covers the enumeration, and present
+     * because a value outside it may still arrive: an enumerated type may hold
+     * any value of its underlying type, and a caller passing one that names no
+     * member would otherwise fall off the end of a function that returns a
+     * value, which ISO/IEC 9899:2011, Section 6.9.1, paragraph 12, makes
+     * undefined the moment the result is used.
+     */
+    return SYSCALL_EINVAL;
+}
+
+/* The whole of the failure path of the six calls below: the layer's reason,
+ * translated, with the mount having been checked first. A program that calls
+ * before a root is mounted is told there is no such file, which is true of every
+ * path it can name. */
+static int64_t SyscallFilesystemRefusal(void)
+{
+    return SyscallFromVfsError(VfsLastErrorCode());
+}
+
+/*
+ * The agreement between what a program may see of a directory entry and what
+ * the filesystem layer holds, checked where both headers are visible.
+ *
+ * <oxys/syscall_abi.h> may not include the kernel's, so it restates the bound
+ * and the eight kinds. These are the only lines in the system where the two
+ * statements can be compared, and a divergence in either would otherwise appear
+ * as a program reading a truncated name or calling a regular file a directory.
+ */
+_Static_assert(SYSCALL_NAME_MAXIMUM == VFS_NAME_MAXIMUM,
+               "A program's bound upon a name is not the filesystem layer's.");
+_Static_assert((int)SYSCALL_TYPE_UNKNOWN == (int)VFS_NODE_UNKNOWN,
+               "SYSCALL_TYPE_UNKNOWN does not name VFS_NODE_UNKNOWN.");
+_Static_assert((int)SYSCALL_TYPE_REGULAR == (int)VFS_NODE_REGULAR,
+               "SYSCALL_TYPE_REGULAR does not name VFS_NODE_REGULAR.");
+_Static_assert((int)SYSCALL_TYPE_DIRECTORY == (int)VFS_NODE_DIRECTORY,
+               "SYSCALL_TYPE_DIRECTORY does not name VFS_NODE_DIRECTORY.");
+_Static_assert((int)SYSCALL_TYPE_SYMBOLIC_LINK == (int)VFS_NODE_SYMBOLIC_LINK,
+               "SYSCALL_TYPE_SYMBOLIC_LINK does not name VFS_NODE_SYMBOLIC_LINK.");
+_Static_assert((int)SYSCALL_TYPE_CHARACTER_DEVICE == (int)VFS_NODE_CHARACTER_DEVICE,
+               "SYSCALL_TYPE_CHARACTER_DEVICE does not name VFS_NODE_CHARACTER_DEVICE.");
+_Static_assert((int)SYSCALL_TYPE_BLOCK_DEVICE == (int)VFS_NODE_BLOCK_DEVICE,
+               "SYSCALL_TYPE_BLOCK_DEVICE does not name VFS_NODE_BLOCK_DEVICE.");
+_Static_assert((int)SYSCALL_TYPE_FIFO == (int)VFS_NODE_FIFO,
+               "SYSCALL_TYPE_FIFO does not name VFS_NODE_FIFO.");
+_Static_assert((int)SYSCALL_TYPE_SOCKET == (int)VFS_NODE_SOCKET,
+               "SYSCALL_TYPE_SOCKET does not name VFS_NODE_SOCKET.");
+_Static_assert((int)SYSCALL_OPEN_READ == (int)VFS_OPEN_READ,
+               "SYSCALL_OPEN_READ is not the layer's VFS_OPEN_READ.");
+_Static_assert((int)SYSCALL_OPEN_DIRECTORY == (int)VFS_OPEN_DIRECTORY,
+               "SYSCALL_OPEN_DIRECTORY is not the layer's VFS_OPEN_DIRECTORY.");
+
+/*
+ * Opens a file for reading and returns a descriptor of the calling process.
+ *
+ * The flags are checked against the pair the interface offers and any other bit
+ * is refused, rather than masked away. A program that asked to create a file and
+ * silently received one opened for reading would find out at its first write, in
+ * a call reporting something about a descriptor and nothing about what it asked
+ * for.
+ *
+ * The descriptor is adopted into the process's table *after* the file is opened,
+ * and the file is closed again where the table is full — because the table being
+ * full is the one failure that can happen with an open file already in hand, and
+ * an open file nobody holds a number for is a descriptor of the machine's that
+ * nothing can ever close.
+ */
+static int64_t SyscallDoOpen(uint64_t path_address, uint64_t flags)
+{
+    Process *const process = ProcessCurrent();
+    char path[SYSCALL_PATH_MAXIMUM + 1U];
+    int file;
+    int64_t descriptor;
+    int64_t copied;
+
+    if (process == NULL)
+    {
+        return SYSCALL_EINVAL;
+    }
+
+    if ((flags & ~(SYSCALL_OPEN_READ | SYSCALL_OPEN_DIRECTORY)) != 0U)
+    {
+        return SYSCALL_EINVAL;
+    }
+
+    if ((flags & SYSCALL_OPEN_READ) == 0U)
+    {
+        return SYSCALL_EINVAL;
+    }
+
+    copied = SyscallCopyUserPath(path_address, path, sizeof path);
+
+    if (copied != SYSCALL_OK)
+    {
+        return copied;
+    }
+
+    file = VfsOpen(path, (uint32_t)flags, 0U);
+
+    if (file == VFS_NO_DESCRIPTOR)
+    {
+        return SyscallFilesystemRefusal();
+    }
+
+    descriptor = ProcessAdoptDescriptor(process, file);
+
+    if (descriptor < 0)
+    {
+        (void)VfsClose(file);
+
+        return descriptor;
+    }
+
+    return descriptor;
+}
+
+/* Releases a descriptor and the open file beneath it. A number naming nothing is
+ * EBADF and not success: a program that closed the same descriptor twice has
+ * lost track of what it holds, and the second close would otherwise appear to
+ * have worked upon a number that may since have been given to another file. */
+static int64_t SyscallDoClose(uint64_t descriptor)
+{
+    Process *const process = ProcessCurrent();
+
+    if (process == NULL)
+    {
+        return SYSCALL_EINVAL;
+    }
+
+    if (!ProcessReleaseDescriptor(process, (int64_t)descriptor))
+    {
+        return SYSCALL_EBADF;
+    }
+
+    return SYSCALL_OK;
+}
+
+/*
+ * Reads bytes from a descriptor into a caller's buffer.
+ *
+ * The bytes are read into the kernel's own buffer and copied out afterwards,
+ * which is the reverse of what `write` does and is done for the same reason: the
+ * filesystem layer must not be handed an address in a caller's memory, because
+ * nothing below this function validates one and a path that faulted there would
+ * fault with a volume's locks held.
+ *
+ * A read of zero bytes is refused as EINVAL rather than answered with zero,
+ * because zero is what this call returns at the end of a file and a program
+ * cannot tell the two apart.
+ */
+static int64_t SyscallDoRead(uint64_t descriptor, uint64_t address, uint64_t length)
+{
+    Process *const process = ProcessCurrent();
+    char buffer[SYSCALL_TRANSFER_MAXIMUM];
+    char *const destination = (char *)(uintptr_t)address;
+    int file;
+    uint64_t read = 0U;
+
+    if (process == NULL)
+    {
+        return SYSCALL_EINVAL;
+    }
+
+    if (length == 0U)
+    {
+        return SYSCALL_EINVAL;
+    }
+
+    file = ProcessDescriptorFile(process, (int64_t)descriptor);
+
+    if (file == VFS_NO_DESCRIPTOR)
+    {
+        return SYSCALL_EBADF;
+    }
+
+    if (length > SYSCALL_TRANSFER_MAXIMUM)
+    {
+        length = SYSCALL_TRANSFER_MAXIMUM;
+    }
+
+    /* The caller's buffer is judged before the file is read and not afterwards.
+     * A read that succeeded and then found nowhere to put its bytes would have
+     * advanced the file's position over data the program never received. */
+    if (!SyscallUserRangeIsWritable(address, length))
+    {
+        ++SyscallFaults;
+
+        return SYSCALL_EFAULT;
+    }
+
+    if (!VfsRead(file, buffer, length, &read))
+    {
+        return SyscallFilesystemRefusal();
+    }
+
+    for (uint64_t index = 0U; index < read; ++index)
+    {
+        destination[index] = buffer[index];
+    }
+
+    return (int64_t)read;
+}
+
+/*
+ * Reads one entry of a directory into a caller's buffer.
+ *
+ * Returns 1 where an entry was placed, and 0 at the end of the directory. It is
+ * not the count of bytes: an entry is a structure of a fixed size and a caller
+ * that received its length would learn nothing it did not already know, whereas
+ * the end of a directory is the one thing it cannot otherwise discover.
+ *
+ * The entry is composed in the kernel's own storage and copied out whole, so a
+ * caller never sees a structure half filled — which is what it would see if the
+ * layer wrote into its memory and then failed.
+ */
+static int64_t SyscallDoReadDirectory(uint64_t descriptor, uint64_t address)
+{
+    Process *const process = ProcessCurrent();
+    VfsDirectoryEntry source;
+    SyscallDirectoryEntry entry;
+    uint8_t *const destination = (uint8_t *)(uintptr_t)address;
+    const uint8_t *const bytes = (const uint8_t *)&entry;
+    int file;
+    bool end = false;
+
+    if (process == NULL)
+    {
+        return SYSCALL_EINVAL;
+    }
+
+    file = ProcessDescriptorFile(process, (int64_t)descriptor);
+
+    if (file == VFS_NO_DESCRIPTOR)
+    {
+        return SYSCALL_EBADF;
+    }
+
+    if (!SyscallUserRangeIsWritable(address, sizeof entry))
+    {
+        ++SyscallFaults;
+
+        return SYSCALL_EFAULT;
+    }
+
+    if (!VfsReadDirectory(file, &source, &end))
+    {
+        return SyscallFilesystemRefusal();
+    }
+
+    if (end)
+    {
+        return 0;
+    }
+
+    entry.number = source.number;
+    entry.type = (uint32_t)source.type;
+    entry.reserved = 0U;
+
+    for (size_t index = 0U; index < sizeof entry.name; ++index)
+    {
+        entry.name[index] = source.name[index];
+    }
+
+    /* The name is terminated whatever the layer returned. The structure crosses
+     * a privilege boundary, and a name without a terminator is a program reading
+     * past the end of its own buffer on the kernel's authority. */
+    entry.name[sizeof entry.name - 1U] = '\0';
+
+    for (size_t index = 0U; index < sizeof entry; ++index)
+    {
+        destination[index] = bytes[index];
+    }
+
+    return 1;
+}
+
+/*
+ * Creates a directory.
+ *
+ * The permissions are the caller's, masked to the twelve bits a mode holds. No
+ * file mode creation mask is applied, this system having none: a program that
+ * wants 0755 asks for 0755. IEEE Std 1003.1-2017 has `mkdir` reduce the mode by
+ * the process's mask, and the mask belongs with the credentials this kernel does
+ * not yet have — docs/design/PROCESS.md, Section 14.
+ */
+static int64_t SyscallDoMakeDirectory(uint64_t path_address, uint64_t permissions)
+{
+    char path[SYSCALL_PATH_MAXIMUM + 1U];
+    int64_t copied;
+
+    if (ProcessCurrent() == NULL)
+    {
+        return SYSCALL_EINVAL;
+    }
+
+    copied = SyscallCopyUserPath(path_address, path, sizeof path);
+
+    if (copied != SYSCALL_OK)
+    {
+        return copied;
+    }
+
+    if (!VfsCreateDirectory(path, (uint16_t)(permissions & UINT64_C(0x0FFF))))
+    {
+        return SyscallFilesystemRefusal();
+    }
+
+    return SYSCALL_OK;
+}
+
+/* Removes a name. A directory is refused with EISDIR by the layer beneath, which
+ * is what lets `rm` report what IEEE Std 1003.1-2017 requires it to report for an
+ * operand naming a directory without -r. There is no call that removes a
+ * directory; docs/design/LIBC.md, Section 12.7, limitation 3. */
+static int64_t SyscallDoUnlink(uint64_t path_address)
+{
+    char path[SYSCALL_PATH_MAXIMUM + 1U];
+    int64_t copied;
+
+    if (ProcessCurrent() == NULL)
+    {
+        return SYSCALL_EINVAL;
+    }
+
+    copied = SyscallCopyUserPath(path_address, path, sizeof path);
+
+    if (copied != SYSCALL_OK)
+    {
+        return copied;
+    }
+
+    if (!VfsUnlink(path))
+    {
+        return SyscallFilesystemRefusal();
+    }
+
+    return SYSCALL_OK;
+}
+
 /* ------------------------------------------------------------- the dispatch */
 
 /* A call: what it is named, and how many arguments it reads. The count is
@@ -739,7 +1294,13 @@ static const SyscallEntryDescriptor SyscallTable[SYSCALL_COUNT] = {
     { "execve", 3U },
     { "exit", 1U },
     { "wait", 1U },
-    { "brk", 1U }
+    { "brk", 1U },
+    { "open", 2U },
+    { "close", 1U },
+    { "read", 3U },
+    { "readdir", 2U },
+    { "mkdir", 2U },
+    { "unlink", 1U }
 };
 
 bool SyscallNumberIsValid(uint64_t number)
@@ -806,6 +1367,30 @@ void SyscallDispatch(SyscallFrame *frame)
 
     case SYSCALL_BRK:
         frame->rax = (uint64_t)SyscallDoBrk(frame->rdi);
+        break;
+
+    case SYSCALL_OPEN:
+        frame->rax = (uint64_t)SyscallDoOpen(frame->rdi, frame->rsi);
+        break;
+
+    case SYSCALL_CLOSE:
+        frame->rax = (uint64_t)SyscallDoClose(frame->rdi);
+        break;
+
+    case SYSCALL_READ:
+        frame->rax = (uint64_t)SyscallDoRead(frame->rdi, frame->rsi, frame->rdx);
+        break;
+
+    case SYSCALL_READDIR:
+        frame->rax = (uint64_t)SyscallDoReadDirectory(frame->rdi, frame->rsi);
+        break;
+
+    case SYSCALL_MKDIR:
+        frame->rax = (uint64_t)SyscallDoMakeDirectory(frame->rdi, frame->rsi);
+        break;
+
+    case SYSCALL_UNLINK:
+        frame->rax = (uint64_t)SyscallDoUnlink(frame->rdi);
         break;
 
     default:
