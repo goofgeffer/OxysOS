@@ -2,18 +2,25 @@
 <!-- SPDX-License-Identifier: CC0-1.0 -->
 # `docs/storage/` — From a Medium to a Caller
 
-Nine documents describing one stack, bottom upwards. They are grouped apart from
+Ten documents describing one stack, bottom upwards. They are grouped apart from
 [`../devices/`](../devices/) because each exists to serve the one above it, and
 because the whole stack is what the filesystem of Phase 5 is written against. The
 stack is complete as of sub-task 5.8: a sector at the bottom, a path and an open
-file at the top. Three of the nine are the EXT2 volume, which
+file at the top. Three of the ten are the EXT2 volume, which
 [`EXT2.md`](EXT2.md) heads.
+
+The tenth is [`INITRD.md`](INITRD.md), and it belongs here rather than beside the
+boot documents for the reason everything else here does: its subject is a medium
+and a volume upon it. It is the first thing in this stack whose medium is not
+hardware at all, and the first that puts the whole stack to work at every boot
+rather than only upon a machine that happens to carry a disk.
 
 | Document | Subject | Implementation | Phase |
 | -------- | ------- | -------------- | ----- |
 | [`DISK.md`](DISK.md) | The ATA disk in programmed input/output mode: the task file, the two addressing modes, where a channel actually answers, the identification of what answered, the cache flush that makes a write durable, and what storage the driver cannot reach and how it says so. | [`../../drivers/ata/`](../../drivers/ata/) | 4.4 |
 | [`AHCI.md`](AHCI.md) | The AHCI disk by first-party direct memory access: the handoff from the firmware, the ports an adaptor implements, the command list and the region descriptors that name the caller's own pages to the device, and the single command slot this driver keeps. | [`../../drivers/ahci/ahci.c`](../../drivers/ahci/ahci.c) | 4.7 |
 | [`SDCARD.md`](SDCARD.md) | The SD card and the embedded MultiMediaCard: the host controller upon the bus, the second command set of the card behind it, the two encodings of a card's capacity, and the transfer through the buffer data port. | [`../../drivers/sdhci/sdhci.c`](../../drivers/sdhci/sdhci.c) | 4.8 |
+| [`INITRD.md`](INITRD.md) | The initial ramdisk: the EXT2 image `mke2fs` builds beside the kernel, the Multiboot2 module the boot loader carries it in, the frames that are reserved for it, the device it is presented as, and the root it is mounted as — so that `/bin/ls` exists upon a machine this project composed no volume for. | [`../../drivers/ramdisk/ramdisk.c`](../../drivers/ramdisk/ramdisk.c) | 7.7 |
 | [`BLOCK.md`](BLOCK.md) | The generic block-device layer: what a driver supplies to register a device, and what the layer refuses before any driver is reached. | [`../../kernel/block/block.c`](../../kernel/block/block.c) | 4.5 |
 | [`BUFFER.md`](BUFFER.md) | The buffer cache: how a block is found, what is discarded when the store is full, and when a modified block reaches its device. | [`../../kernel/block/buffer.c`](../../kernel/block/buffer.c) | 4.6 |
 | [`EXT2.md`](EXT2.md) | The EXT2 volume and its structures: the superblock, the block group descriptor table, and the inode with the direct and indirect pointers that name a file's blocks. **Section 10 enumerates every limitation of this kernel's EXT2 support**, the two documents below included. | [`../../kernel/fs/ext2/superblock.c`](../../kernel/fs/ext2/superblock.c), [`../../kernel/fs/ext2/group.c`](../../kernel/fs/ext2/group.c), [`../../kernel/fs/ext2/inode.c`](../../kernel/fs/ext2/inode.c) | 5.1 to 5.3 |

@@ -51,6 +51,7 @@ below where they used to be described records the move.
 | `ata/report.c` | The report, including every controller the bus carries and why each was or was not reached. | — | 4.4 |
 | `ahci/ahci.c` | The AHCI disk, by first-party direct memory access. | `<oxys/dev/storage/ahci.h>` | 4.7 |
 | `sdhci/sdhci.c` | The SD card or embedded MultiMediaCard, through its host controller. | `<oxys/dev/storage/sdhci.h>` | 4.8 |
+| `ramdisk/ramdisk.c` | The extent of physical memory a boot module occupies, presented to the block layer as a device — which is how the initial ramdisk of sub-task 7.7 becomes the root filesystem. It is the one driver here that converses with nothing: a transfer is a copy, and it can fail for no reason outside the file. It is here rather than beside the block layer because it is what a driver is — something that supplies the two operations the layer registers — and `../docs/storage/INITRD.md` records why the ramdisk is read through that layer at all. | `<oxys/dev/storage/ramdisk.h>` | 7.7 |
 
 ## Planned contents
 
@@ -211,6 +212,29 @@ against values composed for the purpose.
 
 Blocks move through the buffer data port a word at a time, one command per block.
 See [`../docs/storage/SDCARD.md`](../docs/storage/SDCARD.md).
+
+### `ramdisk/` — the medium that is not hardware
+
+The boot loader places the initial ramdisk of sub-task 7.7 in memory and says
+where it put it; this driver turns that extent into a block device named `ram0`,
+and everything above reads the volume upon it exactly as it reads a volume upon a
+disk.
+
+It is the shortest driver here and it converses with nothing. There is no state
+to reset, no command to time out, no status register, and no way for a transfer
+to fail: a transfer is a copy between two ranges of memory. What remains is the
+arithmetic that turns a block number into an address, done once at registration
+rather than upon every transfer, and two refusals — a module that is not a whole
+number of blocks, and nothing else, the block layer having already refused a null
+buffer, a count of zero, a range outside the device and a write to a read-only
+one.
+
+The device is registered **writable**, which is the one place it differs from how
+a disk is treated. A disk belongs to whoever owns the machine and is mounted
+read-only unless they asked otherwise; a ramdisk was made by this build, is read
+by nothing else, and ceases to exist when the machine is switched off.
+
+See [`../docs/storage/INITRD.md`](../docs/storage/INITRD.md).
 
 ### The block layer is no longer here
 
@@ -431,6 +455,7 @@ whoever knows the display, a mouse having no idea what it is pointing at.
 | Intel 82093AA I/O APIC datasheet, Sections 3.1 and 3.2 | The indirect register pair `IOREGSEL` and `IOWIN`; the identification, version and maximum-redirection-entry registers; and the 64-bit redirection table entry with its vector, delivery mode, destination mode, polarity, trigger mode, mask and destination. |
 | ACPI Specification 6.5, Sections 5.2.5.3, 5.2.6 to 5.2.8 and 5.2.12 | The Root System Description Pointer and its two checksums; the description header every table begins with; the RSDT and the XSDT; and the Multiple APIC Description Table with its processor, I/O APIC, interrupt source override and local NMI structures. |
 | Intel SDM, Volume 1, Section 18.3 | The programmed input/output address space through which both devices are reached. |
+| Multiboot2 Specification 2.0, Section 3.6.6 | The module tag, from which `ramdisk/ramdisk.c` learns where the initial ramdisk was placed: the physical start and end addresses, and the string the boot loader was given for it. |
 
 Full citations are held in [`../docs/project/REFERENCES.md`](../docs/project/REFERENCES.md).
 

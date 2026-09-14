@@ -22,6 +22,7 @@
  *          KernelVerifyPit, KernelVerifyKeyboard, KernelVerifySerial,
  *          KernelVerifyVga, KernelVerifyPci, KernelVerifyAta, KernelVerifyBlock,
  *          KernelVerifyBuffer, KernelVerifyExt2, KernelVerifyVfs,
+ *          KernelVerifyInitrd,
  *          KernelReportVolumes, KernelVfsProbeVolume, KernelBootInformation,
  *          KernelCommandLineHasOption.
  * References:
@@ -332,6 +333,38 @@ void KernelVerifyExt2(void);
 void KernelVerifyVfs(void);
 
 /*
+ * Sub-task 7.7: the initial ramdisk, and the root filesystem it is mounted as.
+ *
+ * It runs **after** KernelMountRootVolume rather than among the self-tests
+ * above, and that is the whole shape of it. Every other assertion here composes
+ * its own subject; this one's subject is the root the machine actually booted
+ * with, which does not exist until the mount has been performed. A test that
+ * mounted the ramdisk for itself would assert that a ramdisk *can* be mounted
+ * and say nothing whatever about whether this kernel in fact mounted one.
+ *
+ * Four things are asserted, and the second is the one that matters.
+ *
+ *   That the module arrived: a device named `ram0` is registered, its geometry
+ *   agrees with the module's extent, and the root is mounted upon it.
+ *
+ *   That the bytes are the right bytes. Each utility is read out of /bin through
+ *   the filesystem and compared, byte for byte, against the copy of the same
+ *   program embedded in this image. The two came from one file at build time, so
+ *   any difference is something the path between them did — a block read from
+ *   the wrong offset, an indirect block followed wrongly, a length rounded. A
+ *   test that merely opened the files would pass upon every one of those.
+ *
+ *   That a program from the root runs. One utility is loaded from the ramdisk
+ *   and entered at privilege level 3, so that the chain from a module through a
+ *   block device, a filesystem and the loader is closed by something executing.
+ *
+ *   That the root can be written. The ramdisk belongs to this kernel rather than
+ *   to whoever owns the machine, so it is mounted for writing; a file is created
+ *   upon it, read back and removed, which is what says so.
+ */
+void KernelVerifyInitrd(void);
+
+/*
  * The diagnostic probes, which are not self-tests.
  *
  * These examine whatever volume the machine actually carries, rather than the
@@ -341,6 +374,18 @@ void KernelVerifyVfs(void);
  * may be checked against a real one by a tool outside this kernel.
  */
 void KernelReportVolumes(void);
-void KernelVfsProbeVolume(void);
+
+/*
+ * The write probe, which acts only upon the volume mounted at `point` and only
+ * upon the file `path` within it, and only when the operator asked for it at the
+ * GRUB menu.
+ *
+ * Both are arguments since sub-task 7.7, and were written into the probe until
+ * then. The initial ramdisk takes the root, so the machine's own volume is
+ * mounted at `/mnt` where there is a ramdisk and at `/` where there is not, and
+ * a probe that named a path from the root would have quietly stopped examining
+ * anything at all upon the machines it exists for.
+ */
+void KernelVfsProbeVolume(const char *point, const char *path);
 
 #endif /* OXYS_TEST_VERIFY_H */

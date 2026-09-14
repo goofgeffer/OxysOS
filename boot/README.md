@@ -39,7 +39,7 @@ of step with the source it came from: the link fails if it was not assembled.
 | ---- | ----------- |
 | `boot.asm` | The Multiboot2 header, carrying the framebuffer request tag of sub-task 6.2 alongside the terminating tag; the entry point `_start`; `CPUID` and long-mode feature detection; `BootBuildPageTables`; `BootEnableLongMode`; the 64-bit trampoline `BootLongModeEntry`; the higher-half entry point `KernelEntryHigh`; and, in `.boot.data`, the boot GDT and the boot-time paging structures. |
 | `trampoline.asm` | The real-mode trampoline of sub-task 6.14, which an application processor begins executing when it answers a startup inter-processor interrupt. It carries that processor from 16-bit real mode through 32-bit protected mode into 64-bit long mode upon the kernel's own paging hierarchy, and hands it to `SmpApplicationProcessorEntry`. It holds `SmpTrampolineParameters`, the block the bootstrap processor fills in before each start. **It is assembled to a flat binary and not to an object file**, for the reason the note beneath **Purpose** gives; `kernel/arch/x86_64/smp/smp_trampoline.asm` embeds the result in the kernel image. |
-| `grub/grub.cfg` | The GRUB configuration embedded within the ISO image, defining the boot menu entries. Staged into the image by the `iso` target of the `Makefile`. |
+| `grub/grub.cfg` | The GRUB configuration embedded within the ISO image, defining the boot menu entries. Staged into the image by the `iso` target of the `Makefile`. Since sub-task 7.7 every entry also carries a `module2` line loading `/boot/initrd.img` under the name `initrd`, which is the root filesystem; see `../docs/storage/INITRD.md`. |
 
 ## Sequence of execution
 
@@ -79,7 +79,7 @@ omit it.
 | Intel SDM, Volume 3A | 9.1.4, Table 9-1 | `trampoline.asm`: the processor state after a reset, which is what it must start from. |
 | Intel SDM, Volume 3A | 9.9.1 | `trampoline.asm`: the descriptor table loaded before `CR0.PE`, and the far jump that follows. |
 | Intel SDM, Volume 3A | 2.5 | `trampoline.asm`: `CR0.WP`, which is per processor and must be set again here. |
-| GNU GRUB Manual | 6, 16.3.16 | The configuration file and the `multiboot2` command. |
+| GNU GRUB Manual | 6, 16.192 | The configuration file, and the module providing the `multiboot2` and `module2` commands. The second number was `16.3.16` until sub-task 7.7 and named nothing in the current manual; `../docs/project/REFERENCES.md` records the correction. |
 
 Full citations are held in [`../docs/project/REFERENCES.md`](../docs/project/REFERENCES.md).
 

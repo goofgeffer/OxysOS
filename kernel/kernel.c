@@ -5,13 +5,14 @@
  * Purpose: Contains the C entry point of the Oxys-OS kernel. It validates the
  *          state established by the boot loader, initialises in dependency order
  *          every subsystem the kernel presently has, runs the boot-time
- *          self-tests declared in <oxys/test/verify.h>, mounts a volume the machine
- *          carries at the root, and then either enters the echo loop, where a
- *          keyboard or a mouse is present, or halts the processor where neither
- *          is.
+ *          self-tests declared in <oxys/test/verify.h>, mounts the initial
+ *          ramdisk at the root and whatever volume the machine carries at /mnt,
+ *          and then either enters the echo loop, where a keyboard or a mouse is
+ *          present, or halts the processor where neither is.
  * Key functions: KernelMain, KernelPanic, KernelHalt, KernelWriteString,
  *          KernelWriteHexadecimal, KernelWriteDecimal,
  *          KernelCommandLineHasOption, KernelMountRootVolume,
+ *          KernelMountMachineVolume,
  *          KernelAttachPointer, KernelEchoLoop, KernelEchoBackspace,
  *          KernelSerialCursorToColumn.
  * References:
@@ -92,6 +93,7 @@
 #include <oxys/dev/storage/ata.h>
 #include <oxys/dev/storage/ahci.h>
 #include <oxys/dev/storage/sdhci.h>
+#include <oxys/dev/storage/ramdisk.h>
 #include <oxys/block/block.h>
 #include <oxys/block/buffer.h>
 #include <oxys/exec/elf.h>
@@ -402,16 +404,87 @@ bool KernelCommandLineHasOption(const char *option)
 
 
 /*
- * Mounts a volume the machine actually carries at the root, and reports what it
- * holds.
+ * Where a volume the machine actually carries is mounted once the initial
+ * ramdisk has taken the root, and the file the write probe acts upon within it.
  *
- * It is mounted read-only unless the operator booted the entry of the GRUB menu
- * that permits this kernel to write to their volumes. A kernel that mounted a
- * stranger's disk for writing would mark it as not cleanly unmounted merely by
- * having been booted, and every such disk would then demand a check before its
- * owner could mount it again — which is a real cost imposed for nothing.
+ * The directory exists upon the ramdisk because the Makefile puts it there; a
+ * mount point that does not exist is refused, and inventing one at boot would
+ * mean writing to a filesystem before anything had established that it works.
+ */
+#define KERNEL_MACHINE_MOUNT_POINT "/mnt"
+#define KERNEL_WRITE_PROBE_FILE    "/oxys-write-test"
+
+/*
+ * Mounts the first volume the machine carries at KERNEL_MACHINE_MOUNT_POINT, so
+ * that a disk is still reachable once the ramdisk holds the root.
  *
- * A machine carrying no volume is not in error. `make verify` runs upon one.
+ * The ramdisk is skipped by name. It is a registered device like any other and
+ * is already mounted at the root; mounting it a second time at `/mnt` would
+ * succeed, would present the same volume twice, and would be the sort of thing
+ * that is noticed only when something writes through one view and reads through
+ * the other.
+ *
+ * A machine carrying no volume is not in error and nothing is said about it: the
+ * report that follows lists what is mounted, and an absent line is the statement.
+ * `make verify` runs upon such a machine.
+ */
+static void KernelMountMachineVolume(void)
+{
+    const size_t count = BlockDeviceCount();
+    const BlockDevice *const ramdisk = RamdiskDevice();
+    const bool writable = KernelCommandLineHasOption("ext2-write-test");
+
+    for (size_t index = 0U; index < count; ++index)
+    {
+        const BlockDevice *const device = BlockDeviceAt(index);
+
+        if ((device == NULL) || (device == ramdisk))
+        {
+            continue;
+        }
+
+        if (VfsMountVolume(device->name, KERNEL_MACHINE_MOUNT_POINT, "ext2", !writable))
+        {
+            KernelWriteString("VFS: a volume the machine carries is mounted at "
+                              KERNEL_MACHINE_MOUNT_POINT ".\n");
+
+            return;
+        }
+    }
+}
+
+/*
+ * Mounts the root filesystem and reports what it holds.
+ *
+ * The initial ramdisk of sub-task 7.7 is preferred, and everything about how
+ * that preference is expressed is deliberate.
+ *
+ * **It is chosen by name and not by being found first.** `VfsMountRoot` walks
+ * the registered devices and mounts the first volume it can, which is exactly
+ * right when the question is "is there anything to mount" and exactly wrong
+ * when the answer must be a particular thing. A machine carrying a disk with an
+ * EXT2 volume upon it would otherwise boot with a stranger's filesystem at the
+ * root or with the ramdisk there, depending upon which driver had registered
+ * first — a difference nobody chose, that changes every path in the system, and
+ * that a boot log would not obviously show.
+ *
+ * **The ramdisk is mounted for writing and a disk is not.** The rule about
+ * read-only mounts exists because a disk belongs to whoever owns the machine,
+ * and a kernel that mounted theirs for writing would mark it as not cleanly
+ * unmounted merely by having been booted — so their disk would demand a check
+ * before they could mount it again, which is a real cost imposed for nothing.
+ * None of that reasoning reaches a ramdisk. It was made by this build, it is
+ * read by nothing else, and it ceases to exist when the machine is switched
+ * off. Writing to it costs nobody anything, and a root nothing may write to is
+ * a root the shell of Phase 8 cannot redirect into.
+ *
+ * A machine that was booted without a ramdisk falls back to the disks, under
+ * the rule that governed this function before 7.7. Every ISO this project
+ * builds carries one, so the fall-back is for a kernel loaded by some other
+ * means; `make verify` exercises the ramdisk path and nothing presently
+ * exercises this one.
+ *
+ * A machine carrying neither is not in error.
  */
 static void KernelMountRootVolume(void)
 {
@@ -425,6 +498,32 @@ static void KernelMountRootVolume(void)
         return;
     }
 
+    if (RamdiskDevice() != NULL)
+    {
+        if (VfsMountVolume(RAMDISK_DEVICE_NAME, "/", "ext2", false))
+        {
+            KernelWriteString("VFS: the initial ramdisk is mounted at the root.\n");
+            KernelMountMachineVolume();
+            VfsReport();
+            VfsReportDirectory("/");
+            KernelVfsProbeVolume(KERNEL_MACHINE_MOUNT_POINT,
+                                 KERNEL_MACHINE_MOUNT_POINT KERNEL_WRITE_PROBE_FILE);
+
+            return;
+        }
+
+        /*
+         * A ramdisk that is present and will not mount is reported and then
+         * fallen through from, rather than being treated as fatal. The
+         * self-test of sub-task 7.7 is what turns this into a failure; saying
+         * it here as well and stopping would deny a machine with a real volume
+         * the root it could still have had.
+         */
+        KernelWriteString("VFS: the initial ramdisk would not mount: ");
+        KernelWriteString(VfsLastError());
+        KernelWriteString("\n");
+    }
+
     if (!VfsMountRoot("ext2", !writable))
     {
         KernelWriteString("VFS: no volume was mounted at the root: ");
@@ -435,7 +534,7 @@ static void KernelMountRootVolume(void)
 
     VfsReport();
     VfsReportDirectory("/");
-    KernelVfsProbeVolume();
+    KernelVfsProbeVolume("/", KERNEL_WRITE_PROBE_FILE);
 }
 
 /*
@@ -1277,6 +1376,22 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
     (void)AtaRegisterBlockDevices();
     (void)AhciRegisterBlockDevices();
     (void)SdhciRegisterBlockDevices();
+
+    /*
+     * Sub-task 7.7. The initial ramdisk is a device like any other, and is
+     * registered here beside the three that are disks rather than anywhere
+     * nearer the filesystem it carries.
+     *
+     * It needs nothing of the drivers above it: the boot loader has already put
+     * the image in memory, `PhysicalMemoryInitialise` has already reserved the
+     * frames it stands upon, and this call is the arithmetic that turns an
+     * extent into a geometry. It is placed after them because the order devices
+     * appear in a report is the order they are registered in, and a reader
+     * should meet the machine's own storage before the one this build supplied.
+     */
+    (void)RamdiskInitialise(&KernelBootInformation);
+    RamdiskReport();
+
     KernelVerifyBlock();
     BlockReport();
 
@@ -1408,6 +1523,19 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
     KernelVerifyUtilities();
 
     KernelMountRootVolume();
+
+    /*
+     * Sub-task 7.7, and it is the only self-test in this sequence that runs
+     * after a mount rather than before one.
+     *
+     * Its subject is the root the machine actually booted with, which does not
+     * exist until the line above has been executed. Every other test here
+     * composes the thing it asserts; this one cannot, because a test that
+     * mounted a ramdisk for itself would establish that a ramdisk can be
+     * mounted and would say nothing at all about whether this kernel mounted
+     * one.
+     */
+    KernelVerifyInitrd();
 
     IrqReport();
     LocalApicReport();

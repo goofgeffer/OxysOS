@@ -21,6 +21,10 @@
  *     (ACPI new RSDP): tag types 14 and 15, each carrying, after the common type
  *     and size fields, a copy of the Root System Description Pointer as the ACPI
  *     1.0 and the ACPI 2.0 or later specifications respectively define it.
+ *   - Multiboot2 Specification 2.0, Section 3.6.6 (Modules): tag type 3, which
+ *     carries after the common fields the 32-bit physical start and end
+ *     addresses of one boot module and then a zero-terminated string naming it.
+ *     One tag appears per module and the type may appear any number of times.
  *   - Multiboot2 Specification 2.0, Section 3.6.7 (ELF-Symbols): tag type 9.
  *   - Multiboot2 Specification 2.0, Section 3.6.8 (Memory map): tag type 6, its
  *     entry_size and entry_version fields, and the entry layout of base_addr,
@@ -38,6 +42,7 @@
 #define MULTIBOOT2_TAG_TYPE_END           UINT32_C(0)
 #define MULTIBOOT2_TAG_TYPE_COMMAND_LINE  UINT32_C(1)
 #define MULTIBOOT2_TAG_TYPE_BOOT_LOADER   UINT32_C(2)
+#define MULTIBOOT2_TAG_TYPE_MODULE        UINT32_C(3)
 #define MULTIBOOT2_TAG_TYPE_BASIC_MEMORY  UINT32_C(4)
 #define MULTIBOOT2_TAG_TYPE_MEMORY_MAP    UINT32_C(6)
 #define MULTIBOOT2_TAG_TYPE_FRAMEBUFFER   UINT32_C(8)
@@ -214,6 +219,34 @@ typedef struct Multiboot2FramebufferTag
 #define MULTIBOOT2_ACPI_RSDP_LEGACY_LENGTH   20U
 #define MULTIBOOT2_ACPI_RSDP_EXTENDED_LENGTH 36U
 #define MULTIBOOT2_FRAMEBUFFER_SIZE_RGB    38U
+
+/*
+ * One boot module, per Section 3.6.6.
+ *
+ * `start` and `end` are physical addresses and `end` is exclusive, so the module
+ * measures end - start bytes. The string is whatever the boot loader was given
+ * upon the `module2` line that loaded it, and is how a kernel carrying more than
+ * one module tells them apart: the addresses say where a module is and nothing
+ * whatever about what it is for.
+ *
+ * The string is declared as a one-element array for the reason
+ * Multiboot2StringTag declares one: a flexible array member would be the honest
+ * declaration and is a C99 construction this project's diagnostic regime treats
+ * as it treats every other, while the tag's own size field is what actually
+ * bounds the string.
+ */
+typedef struct Multiboot2ModuleTag
+{
+    uint32_t type;
+    uint32_t size;
+    uint32_t module_start;
+    uint32_t module_end;
+    char string[1];
+} Multiboot2ModuleTag;
+
+/* The least a module tag must measure to carry its two addresses and the
+ * terminator of a string that is empty. */
+#define MULTIBOOT2_MODULE_SIZE_MINIMUM 17U
 
 /* A tag whose payload is a null-terminated string: types 1 and 2. */
 typedef struct Multiboot2StringTag

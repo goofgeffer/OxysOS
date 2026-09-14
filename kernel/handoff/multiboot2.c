@@ -6,13 +6,17 @@
  *          reduces it to the boot-protocol-neutral BootInformation description
  *          upon which the remainder of the kernel depends.
  * Key functions: BootInformationParseMultiboot2, BootInformationReport,
- *          BootMemoryTypeName, Multiboot2TranslateMemoryType,
- *          Multiboot2ParseMemoryMap, Multiboot2ParseElfSections.
+ *          BootMemoryTypeName, BootInformationFindModule,
+ *          Multiboot2TranslateMemoryType, Multiboot2ParseMemoryMap,
+ *          Multiboot2ParseElfSections, Multiboot2ParseModule.
  * References:
  *   - Multiboot2 Specification 2.0, Section 3.6.2: the fixed part of the
  *     structure; the common tag header; the rule that a tag's size excludes its
  *     trailing padding and that each tag begins at an 8-byte aligned address;
  *     the terminating tag of type 0 and size 8.
+ *   - Multiboot2 Specification 2.0, Section 3.6.6: the module tag, which carries
+ *     the physical start and end addresses of one boot module and the string the
+ *     boot loader was given for it; one tag appears per module.
  *   - Multiboot2 Specification 2.0, Section 3.6.7: the ELF sections tag.
  *   - Multiboot2 Specification 2.0, Section 3.6.8: the memory map tag, the
  *     guarantee that entry_size is a multiple of eight, and the region types.
@@ -118,6 +122,96 @@ static void Multiboot2CopyString(char *destination, const char *source, size_t c
     }
 
     destination[index] = '\0';
+}
+
+/*
+ * Whether two null-terminated strings are equal, the comparison being bounded by
+ * the capacity of the shorter buffer. Supplied here because the C library does
+ * not exist until Phase 7 and the kernel is not compiled against it even then.
+ */
+static bool Multiboot2SameString(const char *left, const char *right, size_t capacity)
+{
+    for (size_t index = 0U; index < capacity; ++index)
+    {
+        if (left[index] != right[index])
+        {
+            return false;
+        }
+
+        if (left[index] == '\0')
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/*
+ * Parses one module tag, per Section 3.6.6, recording where the boot loader put
+ * the module and what it called it.
+ *
+ * Three things are refused, and each of them is a module that would be read as
+ * though it were sound.
+ *
+ * A tag too short to hold its own two addresses is refused, because the string
+ * would then be read from beyond the tag. An extent whose end does not exceed
+ * its start is refused, because it describes no bytes at all and every caller
+ * below would compute a length by subtraction and obtain zero or a length that
+ * has wrapped. And a module beyond the number that can be recorded is refused
+ * with the truncation noted in the description, rather than overwriting the
+ * last one recorded — which would leave the kernel holding a set of modules it
+ * could not tell was incomplete.
+ */
+static void Multiboot2ParseModule(const Multiboot2Tag *tag, BootInformation *information)
+{
+    const Multiboot2ModuleTag *const module = (const Multiboot2ModuleTag *)tag;
+    BootModule *recorded;
+
+    if (tag->size < MULTIBOOT2_MODULE_SIZE_MINIMUM)
+    {
+        KernelWriteString("A Multiboot2 module tag is too short to describe a module.\n");
+        return;
+    }
+
+    if (module->module_end <= module->module_start)
+    {
+        KernelWriteString("A Multiboot2 module tag describes an empty or inverted extent.\n");
+        return;
+    }
+
+    if (information->module_count >= BOOT_MODULE_MAXIMUM)
+    {
+        information->modules_truncated = true;
+        return;
+    }
+
+    recorded = &information->modules[information->module_count];
+    recorded->start = (PhysicalAddress)module->module_start;
+    recorded->end = (PhysicalAddress)module->module_end;
+    Multiboot2CopyString(recorded->name, module->string, sizeof(recorded->name));
+    ++information->module_count;
+}
+
+const BootModule *BootInformationFindModule(const BootInformation *information,
+                                            const char *name)
+{
+    if ((information == NULL) || (name == NULL))
+    {
+        return NULL;
+    }
+
+    for (size_t index = 0U; index < information->module_count; ++index)
+    {
+        const BootModule *const module = &information->modules[index];
+
+        if (Multiboot2SameString(module->name, name, sizeof(module->name)))
+        {
+            return module;
+        }
+    }
+
+    return NULL;
 }
 
 /*
@@ -456,6 +550,10 @@ bool BootInformationParseMultiboot2(uint32_t information_address,
             Multiboot2ParseFramebuffer((const uint8_t *)tag, information);
             break;
 
+        case MULTIBOOT2_TAG_TYPE_MODULE:
+            Multiboot2ParseModule(tag, information);
+            break;
+
         case MULTIBOOT2_TAG_TYPE_ELF_SECTIONS:
             Multiboot2ParseElfSections((const Multiboot2ElfSectionsTag *)tag, information);
             break;
@@ -567,6 +665,38 @@ void BootInformationReport(const BootInformation *information)
     KernelWriteString(" - ");
     KernelWriteHexadecimal(information->boot_information_end);
     KernelWriteString(".\n");
+
+    if (information->module_count == 0U)
+    {
+        KernelWriteString("Boot modules: none were supplied.\n");
+    }
+    else
+    {
+        KernelWriteString("Boot modules: ");
+        KernelWriteDecimal((uint64_t)information->module_count);
+        KernelWriteString(".\n");
+
+        for (size_t index = 0U; index < information->module_count; ++index)
+        {
+            const BootModule *const module = &information->modules[index];
+
+            KernelWriteString("  ");
+            KernelWriteHexadecimal(module->start);
+            KernelWriteString(" - ");
+            KernelWriteHexadecimal(module->end);
+            KernelWriteString("  ");
+            KernelWriteDecimal((module->end - module->start) / 1024U);
+            KernelWriteString(" KiB  ");
+            KernelWriteString(module->name[0] != '\0' ? module->name : "unnamed");
+            KernelWriteString("\n");
+        }
+    }
+
+    if (information->modules_truncated)
+    {
+        KernelWriteString("  More modules were supplied than could be recorded; "
+                          "not every one is listed.\n");
+    }
 
     KernelWriteString("ACPI pointer: ");
 

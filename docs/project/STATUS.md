@@ -35,6 +35,13 @@ had refused since Phase 6. Above those stand `ls`, `cat`, `echo`, `mkdir` and
 `rm`, built from source, linked against the C library's archive, and run at
 privilege level 3 upon a mounted EXT2 volume.
 
+**And since sub-task 7.7 those programs are *somewhere*.** The ISO carries an
+initial ramdisk — an EXT2 image built beside the kernel by `mke2fs` — which GRUB
+places in memory as a Multiboot2 module, the frame allocator reserves, the
+ramdisk driver presents as the block device `ram0`, and the kernel mounts at the
+root before anything else. `/bin/echo` is a file upon it. A volume the machine
+carries is mounted at `/mnt`.
+
 **It pre-empts, and it schedules across processors.** Since sub-task 6.15 each
 processor holds a run queue of its own with a lock of its own, rotates
 round-robin between the threads upon it, and is taken back by a local APIC timer
@@ -292,7 +299,7 @@ See [`../design/PRIVILEGE.md`](../design/PRIVILEGE.md),
 [`../devices/ACPI.md`](../devices/ACPI.md) and
 [`../devices/APIC.md`](../devices/APIC.md).
 
-**Phase 7 — userland and the C library.** Begun. Sub-task 7.1 stands: the
+**Phase 7 — userland and the C library.** Complete. Sub-task 7.1 stands: the
 nineteen functions of ISO/IEC 9899:2011, Section 7.24, that do not require a
 locale or an `errno`, in [`../../libc/`](../../libc/) under the userland's
 permissive licence, divided into four translation units as the standard divides
@@ -428,6 +435,46 @@ stay behind. Nothing changed in the move. See
 [`../design/LIBC.md`](../design/LIBC.md) and
 [`../../LICENSING.md`](../../LICENSING.md), Section 2.1.
 
+**Sub-task 7.7 closes the phase, and it is what makes any of the above findable.**
+There is a root filesystem: an EXT2 image of two mebibytes built beside the kernel
+by `mke2fs`, carried in the ISO, placed in memory by GRUB as a Multiboot2 module
+named `initrd`, reserved from the frame allocator, presented to the block layer as
+the device `ram0`, and mounted at `/` before anything else. It holds the five
+utilities under `/bin` and an empty `/mnt`. Every program Phase 7 had run before
+it came from one of two places — embedded in the kernel image, or written onto a
+volume the kernel composed in an array — and both are a self-test's apparatus.
+
+**It adds no filesystem code at all**, and that is the measure of Phase 5 rather
+than of this sub-task: the mount is `VfsMountVolume(…, "ext2", …)` and the code
+that reads a program off the ramdisk is the code that reads a file off a disk.
+What is new is the module tag of Multiboot2, Section 3.6.6; the reservation of
+the frames the module occupies, without which the allocator would issue them and
+the root would decay under load; a block driver that converses with nothing; and
+the decision about which volume is the root.
+
+**The root is chosen by name and mounted for writing.** A kernel that took
+whichever device registered first would mount a stranger's disk at the root upon a
+machine that carries one, so `ram0` is named; a volume the machine carries is
+mounted at `/mnt` instead, read-only unless the operator asked otherwise at the
+GRUB menu. The ramdisk itself is writable, because the rule that protects a disk
+— that it belongs to somebody and must not be marked unclean merely by being
+booted — does not reach a volume this build made and the machine forgets when it
+is switched off.
+
+**The image is produced by an implementation this project did not write**, which
+is the point of it: e2fsprogs composed the volume the kernel mounts at every boot
+in every environment, so Phase 5's superblock, group descriptor, inode, directory
+and file-block readers are put against something that shares none of their
+assumptions before the banner is printed. The self-test then compares each
+utility, byte for byte, against the copy of the same program embedded in the
+kernel image — one file at build time, so any difference is something the path
+between them did — and reads, loads and runs one of them at privilege level 3.
+[`../storage/INITRD.md`](../storage/INITRD.md).
+
+**Nothing pivots.** The ramdisk is the root and stays the root; exchanging it for
+a volume upon a disk needs a working directory and a way to move a mount, and the
+first of those is sub-task 8.3's.
+
 ## 3. Where it has been observed to work
 
 A sub-task marked *implemented* in [`PLAN.md`](PLAN.md) means the code exists and
@@ -455,6 +502,8 @@ The physical machine is one machine — the HP Laptop 14-dq0052dx specified in
 | 7.3 The heap and `brk` | Yes | **Yes** | **Yes** | — | **Not yet run** |
 | 7.4 The buffered streams | Yes | **Yes** | **Yes** | — | **Not yet run** |
 | 7.5 The runtime startup object | Yes | **Yes** | **Yes** | — | **Not yet run** |
+| 7.6 The utilities and the filesystem calls | Yes | **Yes** | **Yes** | — | **Not yet run** |
+| 7.7 The initial ramdisk | Yes | **Yes** | **No** — the `bochs` upon the `PATH` had reverted to a default build for the fifth sub-task running and cannot execute long mode | — | **Not yet run** |
 
 **The rows marked "— 7.2" were all established by two boots of one image**,
 because a boot runs every self-test in the corpus and a clean one is therefore
@@ -494,6 +543,26 @@ objection; the only entries in its own log are the PC speaker declining
 fourth sub-task running** and was rebuilt again, which is beginning to be a
 property of the environment rather than an accident;
 [`TESTING.md`](TESTING.md), Section 4A.
+
+**Sub-task 7.7's image was run under QEMU and under VirtualBox 7.2.0**, with
+sixty-one assertions passed or sound and no verdict of `FAILED` in either. In
+both, the root filesystem is the initial ramdisk, the five utilities stand in
+`/bin` byte for byte as they were built, and the log carries a line written by
+`/bin/echo` — read off that filesystem, loaded, and entered at privilege level 3.
+It was run under QEMU a second way, with an EXT2 disk attached and the `EXT2
+write self-test` entry selected, to establish that a machine carrying a volume
+still reaches it: the volume was mounted at `/mnt`, written through the
+filesystem layer, read back identically, withdrawn and mounted afresh read-only,
+and `e2fsck -fn` upon the image afterwards reported no error.
+
+**It was not run under Bochs, and the reason is the one this project has recorded
+four times.** The `bochs` upon the `PATH` had reverted to a default build again —
+for the fifth sub-task running — and a default build offers no processor model
+above `atom_n270` and refuses `count=2` outright, every model in its list being
+32-bit. It cannot execute long mode and therefore cannot run this kernel at all.
+The position is stated rather than a run being claimed;
+[`TESTING.md`](TESTING.md), Section 4A, holds the configuration a usable build
+needs, and [`TESTING-RECORD.md`](TESTING-RECORD.md) holds the dated row.
 
 **Four of Bochs's self-tests failed on the first attempt and none of them was
 the kernel's.** The `bochsrc` named the system BIOS where it should have named
@@ -623,7 +692,7 @@ functional. [`TESTING.md`](TESTING.md), Section 3.
 There is no test harness and there will be none before Phase 7, there being no
 userland to run one in. The kernel therefore asserts its own properties at boot,
 in the order the subsystems are initialised, and `make verify` fails if any of
-them reports a failure. Sixty assertions presently report passed or sound.
+them reports a failure. Sixty-one assertions presently report passed or sound.
 
 Those tests are in [`../../kernel/test/`](../../kernel/test/), one file per
 subsystem. Each subsystem's design document carries a table pairing every

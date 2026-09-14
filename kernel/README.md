@@ -115,6 +115,7 @@ are separate.
 | `include/oxys/dev/storage/ata.h` | The interface of the ATA driver implemented in `drivers/ata/`: the description of a device and the reading and writing of sectors. |
 | `include/oxys/dev/storage/ahci.h` | The interface of the AHCI driver implemented in `drivers/ahci/`: the host and port register displacements, the command header and frame information structure layouts, and the description of a port and its attached device. |
 | `include/oxys/dev/storage/sdhci.h` | The interface of the SD host controller driver implemented in `drivers/sdhci/`: the controller's registers, the card's own command set, the two encodings of a card's capacity, and the description of the card found. |
+| `include/oxys/dev/storage/ramdisk.h` | The interface of the ramdisk driver implemented in `drivers/ramdisk/`: the name the initial ramdisk is registered under, the name of the module it arrives in, and the registration and report. Sub-task 7.7; `../docs/storage/INITRD.md`. |
 | `include/oxys/dev/pci.h` | The interface of the PCI enumeration implemented in `drivers/pci/`: the configuration accessors, the description of a function, and the searches by class and by identifier. |
 | `include/oxys/dev/vga.h` | The interface of the VGA text-mode display driver implemented in `drivers/vga/`: colour, cursor control, scrolling, cell read-back and the erase limit. |
 | `include/oxys/dev/serial.h` | The interface of the interrupt-driven COM1 serial driver implemented in `drivers/serial/`, including the line parameters and the accounting the self-test reads. |

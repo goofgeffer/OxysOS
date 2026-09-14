@@ -46,7 +46,7 @@ rotates round-robin between the threads upon it, and is taken back by a local
 timer calibrated against the interval timer when a ten-millisecond quantum
 expires.
 
-**Phase 7 has begun.** Sub-task 7.1 is complete: the nineteen string and memory
+**Phase 7 is complete.** Sub-task 7.1 is complete: the nineteen string and memory
 functions of ISO/IEC 9899:2011, Section 7.24, that do not require a locale or an
 `errno`, in [`../../libc/`](../../libc/) under the userland's permissive licence
 — and, because 7.2 could not be written until it was done,
@@ -112,10 +112,36 @@ with zero. That program then found a defect that had stood since sub-task 6.11,
 in which a path too long to copy was reported as an address the program may not
 use. [`../design/LIBC.md`](../design/LIBC.md), Section 12.
 
-**Next: sub-task 7.7** — the initial ramdisk carrying the utilities, mounted as
-the early root. It is what makes the eight programs of 7.6 reachable upon a
-machine the kernel did not compose a volume for, and the last thing Phase 7
-owes the shell.
+**Sub-task 7.7 is complete, and Phase 7 with it.** There is a filesystem: an
+EXT2 image built beside the kernel by `mke2fs`, carried in the ISO, placed in
+memory by GRUB as a Multiboot2 module, presented to the block layer as the device
+`ram0`, and mounted at the root before anything else. `/bin/echo` is a file upon
+it, and the line it prints is the first in this project's boot log written by a
+program that was read off a filesystem.
+
+**It adds almost no kernel**, which is the measure of Phase 5 rather than of this
+sub-task: the image is EXT2, so the mount is the mount Phase 5 already built and
+the code that reads a program off the ramdisk is the code that reads a file off a
+disk. What is new is the module tag, the reservation of the frames it occupies, a
+block driver that converses with nothing, and the decision about which volume is
+the root — which is made **by name**, because a kernel that took whichever device
+registered first would boot a stranger's disk at the root upon a machine that had
+one. A volume the machine carries is mounted at `/mnt` instead.
+[`../storage/INITRD.md`](../storage/INITRD.md).
+
+**The image is made by an implementation this project did not write**, and that
+is deliberate: the volume the kernel mounts as its root at every boot, in every
+environment, was composed by e2fsprogs, so the superblock, the group descriptor,
+the root inode, the directory entries and the file blocks of Phase 5 are read
+against something that shares none of their assumptions before the banner is
+printed. Each utility is then compared, byte for byte, against the copy of the
+same program embedded in the kernel image — the two having been one file at build
+time — so a block read from the wrong offset or a length rounded to a boundary is
+caught rather than returned as data.
+
+**Next: sub-task 8.1** — line editing with history, and the beginning of the
+shell. Phase 8 is what the whole of Phase 7 was built for, and `Oxys 1 Alpha` is
+cut at the end of it.
 
 **Three releases are planned, and each is fixed to a sub-task below rather than
 to a date**: `Oxys 1 Alpha` at **8.7**, `Oxys 1 Beta` at **9.7**, and `Oxys 1` at
@@ -191,7 +217,7 @@ sub-task being the verification itself.
 | [4](#phase-4--basic-device-drivers) | Basic device drivers | Implemented |
 | [5](#phase-5--ext2-filesystem) | EXT2 filesystem | Implemented |
 | [6](#phase-6--graphics-system-calls-process-management-and-symmetric-multi-processing) | Graphics, system calls, processes, SMP | Implemented |
-| [7](#phase-7--userland-and-minimal-c-library) | Userland and minimal C library | In progress |
+| [7](#phase-7--userland-and-minimal-c-library) | Userland and minimal C library | Implemented |
 | [8](#phase-8--shell) | Shell | Planned |
 | [9](#phase-9--the-desktop-its-system-services-and-its-configuration) | The desktop, its services and its configuration | Planned |
 | [10](#phase-10--cryptography) | Cryptography | Planned |
@@ -428,8 +454,16 @@ visible from outside; and that a quantum expired, which is the one thing a
 voluntary yield cannot demonstrate.
 
 Two of those assertions were got wrong first and the corrections are recorded in
-[`../design/SCHEDULER.md`](../design/SCHEDULER.md), Section 7. **The locks are
-still not applied beyond two of them** — the run queues, which this sub-task
+[`../design/SCHEDULER.md`](../design/SCHEDULER.md), Section 7. **A third was
+recorded at sub-task 7.3 and closed at 7.7**: the test read two fields of a
+thread whose affinity names every processor, with the scheduler already running,
+so the other processor was entitled to take the thread between the admission and
+the read, and it reported a defect that had not occurred. It was seen once in
+twelve runs on 2026-09-11 and left for the sub-task that next revisited the file;
+7.7 shifted the timing enough to make it one boot in three. Section 7.3 of that
+document records what may now be asserted of which field, and why.
+
+**The locks are still not applied beyond two of them** — the run queues, which this sub-task
 creates, and the process and thread tables, which it makes contended. A user
 thread's affinity mask names the bootstrap processor alone for exactly that
 reason, and Section 4 of that document says so; widening it is the work of the
@@ -479,7 +513,7 @@ changes about it.
 | 7.4 | Implement buffered input and output (`<stdio.h>`) and formatted conversion. | Implemented | `libc/stdio/` — see note (d) |
 | 7.5 | Author the C runtime startup object (`crt0`) and the static-linking procedure for user programs. | Implemented | `userland/startup-check/` — see note (e) |
 | 7.6 | Implement the utilities `ls`, `cat`, `echo`, `mkdir` and `rm`. | Implemented | `userland/` — see note (f) |
-| 7.7 | Construct an initial ramdisk containing the utilities and mount it as the early root. | Planned | — |
+| 7.7 | Construct an initial ramdisk containing the utilities and mount it as the early root. | Implemented | `kernel/test/storage/initrd.c` — see note (g) |
 
 **(a)** Sub-task 7.1 implements nineteen of the twenty-two functions of ISO/IEC
 9899:2011, Section 7.24, and sub-task 7.2 adds `strerror`, making twenty. The two
@@ -669,6 +703,63 @@ shell's output redirection at sub-task 8.5 will need, and neither is invented
 before something calls it. There is also **no working directory**, which is
 8.3's `cd`, and the reason `ls` with no operand lists the root rather than `.`.
 Section 12.7.
+
+**(g)** Sub-task 7.7 is the first thing in this project that a person could
+find. Everything Phase 7 built before it ran from one of two places — embedded in
+the kernel image by `incbin`, or written onto a volume the kernel composed in an
+array — and both are a self-test's apparatus. Since 7.7 there is a filesystem:
+`/bin/echo` is a file, upon a volume, upon a device, and it is where it is when
+the machine finishes booting. [`../storage/INITRD.md`](../storage/INITRD.md).
+
+**It adds no filesystem and almost no kernel.** The image is an EXT2 volume, so
+everything above the block layer is what Phase 5 already built: the mount is
+`VfsMountVolume(…, "ext2", …)` and the code that reads a program off the ramdisk
+is the code that reads a file off a disk. What 7.7 actually adds is the module
+tag of Multiboot2, Section 3.6.6; the reservation of the frames it occupies; a
+block driver that converses with nothing; and the decision about which volume is
+the root. Section 3.1 of that document records why a format of this project's own
+was refused, and the first of the two reasons is that it would have had no
+specification to cite.
+
+**The image is made by `mke2fs` and this is the point of it.** A volume composed
+here and read here proves the reader consistent with the composer, which is what
+[`../../kernel/test/volume.h`](../../kernel/test/volume.h) has warned about its
+own fixture since Phase 5. A volume e2fsprogs composed proves it consistent with
+an implementation that has never seen this one — and where
+[`../storage/EXT2-VERIFICATION.md`](../storage/EXT2-VERIFICATION.md), Section 6,
+made that comparison upon images somebody had to remember to build, **this makes
+it happen at every boot in every environment**. `mke2fs` is accordingly a build
+dependency, the first here that is not a compiler, an assembler, a linker or an
+image builder; [`TOOLCHAIN.md`](TOOLCHAIN.md) records it and
+`PROJECT_GUIDELINES.md`, Section 3, is unamended, the five tools it names all
+still being required.
+
+**The assertion that matters is a byte-for-byte comparison.** Each utility is
+upon the ramdisk *and* inside the kernel image, both copied from one file at
+build time, so any difference observed at boot was introduced by the path between
+them — the module's extent, the direct map, the device's arithmetic, the buffer
+cache, an indirect block, a length. Every one of those failures returns *data*,
+and a test that opened the files and found them present would pass upon all of
+them. One utility is then read from the root, loaded, and entered at privilege
+level 3.
+
+**Two things were nearly lost quietly, and both were caught by asking what the
+change displaced.** The root was the machine's own volume until this sub-task, so
+the write probe of 5.8 resolved its path from the root and would have found
+nothing ever again — a diagnostic that stops printing, which is indistinguishable
+from a volume that does not hold the file. The machine's volume is now mounted at
+`/mnt` and the probe is told where to look. And the self-test of 6.15 read two
+fields of a thread the *other* processor was entitled to be running — a race
+recorded on 2026-09-11 and left for whichever sub-task next revisited that file.
+This one shifted the timing enough to make it fail upon about one boot in three,
+always with the scheduler working correctly, so it is the sub-task that closes
+it. [`../design/SCHEDULER.md`](../design/SCHEDULER.md), Section 7.3.
+
+**Six limitations are recorded and the first is Phase 8's.** Nothing pivots: the
+ramdisk is the root and stays the root, because exchanging it needs a working
+directory, a way to move a mount, and something that decides which volume is the
+system's — and the first of those is sub-task 8.3's.
+[`../storage/INITRD.md`](../storage/INITRD.md), Section 8.
 
 ---
 

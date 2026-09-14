@@ -10,6 +10,10 @@
  * References:
  *   - docs/design/SCHEDULER.md, Section 7: the assertions, each paired with the
  *     silent failure it exists to catch.
+ *   - The same, Section 7.3: why the admission below is made with this
+ *     processor's interrupts masked, and why only one of the two fields it reads
+ *     may be asserted unconditionally. The assertion was a race until sub-task
+ *     7.7 and failed upon boots where nothing was wrong.
  *   - Intel SDM, Volume 3A, Section 10.5.4: the local timer this test observes
  *     rather than trusts.
  *
@@ -349,22 +353,56 @@ void KernelVerifyScheduler(void)
             break;
         }
 
+        bool admitted;
+        uint32_t queue;
+        bool recorded;
+
         if (!SchedulerSetAffinity(thread, SCHED_AFFINITY_ANY))
         {
             ThreadDestroy(thread);
             break;
         }
 
-        if (!SchedulerAdmit(thread))
+        /*
+         * An admitted thread must say it is queued and must name the queue it is
+         * on. A thread whose flag said otherwise would be admitted twice by the
+         * next caller, and a queue holding one thread twice is a cycle.
+         *
+         * **What may be asserted of which field is decided by who can reach the
+         * thread**, and the first version of this assertion did not distinguish
+         * them. It read both fields of a thread whose affinity names every
+         * processor, with the scheduler already running — so the other processor
+         * was entitled to dequeue the thread to run it between the admission and
+         * the read, at which point `queued` is false because the scheduler did
+         * exactly what it is for. The assertion reported a defect that had not
+         * occurred, upon about one boot in three, always with the fixture itself
+         * running correctly upon both processors afterwards. A test that fails
+         * one run in three is a test nobody reads.
+         *
+         * So: the queue a thread was put upon is asserted always, that field
+         * being written once at admission and not cleared. Whether it is still
+         * upon that queue is asserted only where the queue is *this* processor's
+         * — the interrupts of which are masked across both the admission and the
+         * read, so nothing can have taken it. A thread queued elsewhere is left
+         * to the assertions further down, which are about a rotation rather than
+         * about a flag and are not races.
+         */
+        PerCpuPushInterruptState();
+
+        admitted = SchedulerAdmit(thread);
+        queue = admitted ? thread->processor : PER_CPU_MAXIMUM;
+        recorded = (queue < PER_CPU_MAXIMUM) &&
+                   ((queue != PerCpuIndex()) || thread->queued);
+
+        PerCpuPopInterruptState();
+
+        if (!admitted)
         {
             ThreadDestroy(thread);
             break;
         }
 
-        /* An admitted thread must say it is queued and must name the queue it
-         * is on. A thread whose flag said otherwise would be admitted twice by
-         * the next caller, and a queue holding one thread twice is a cycle. */
-        if (!thread->queued || (thread->processor >= PER_CPU_MAXIMUM))
+        if (!recorded)
         {
             KernelWriteString("  an admitted thread does not record its queue. "
                               "FAILED.\n");

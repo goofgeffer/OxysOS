@@ -584,8 +584,17 @@ kept, this section describing what the kernel does now.
    (`drivers/pic/pic.c`), the I/O APIC's select-then-window sequence
    (`drivers/apic/ioapic.c`), the 8042's configuration byte
    (`drivers/ps2/ps2.c`), the drawing surfaces (`graphics/draw.c`), the fault
-   screen (`graphics/faultscreen.c`), and the keyboard and mouse buffers
-   (`drivers/keyboard/keyboard.c`, `drivers/mouse/mouse.c`).
+   screen (`graphics/faultscreen.c`), the keyboard and mouse buffers
+   (`drivers/keyboard/keyboard.c`, `drivers/mouse/mouse.c`), and the ramdisk's
+   extent and registration (`drivers/ramdisk/ramdisk.c`).
+
+   The last of those is the mildest entry in the list and is named anyway. A
+   transfer to or from a ramdisk is a copy between disjoint ranges, so two
+   processors performing one simultaneously would each be correct; what is
+   unsynchronised is the registration, and the block layer's accounting and the
+   buffer cache above it — both of which are already in this list. A driver that
+   is safe by accident and not by construction still belongs here, because the
+   accident is a property of what it does today.
 
    **Sub-task 7.6 added one more to that list**: each process's descriptor table,
    a field of the process control block in `kernel/proc/process.c`, guarded by

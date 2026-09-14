@@ -323,6 +323,53 @@ asserts the failing branch later in the same boot. A thread left current here
 would silently turn that assertion into a test of something else — which is how
 the regression was found.
 
+### 7.3 The assertion that was a race, recorded at 7.3 and closed at 7.7
+
+Immediately after admitting each fixture thread, the self-test read two of its
+fields and required both: that `queued` is set, and that `processor` names a
+queue. The stated reason was sound — a thread whose flag said otherwise would be
+admitted twice by the next caller, and a queue holding one thread twice is a
+cycle.
+
+**The reading was not sound.** The threads are admitted with an affinity that
+names every processor, with the scheduler already running upon both, so the other
+processor is entitled to dequeue a thread and run it the instant it appears upon a
+queue. When it does, `queued` becomes false because the scheduler did exactly what
+it exists for — and an assertion made at that moment reports a defect that did not
+occur.
+
+It did occur, and it had been seen before it was understood.
+[`../project/TESTING-RECORD.md`](../project/TESTING-RECORD.md) holds the row: on
+2026-09-11, during sub-task 7.3, it was observed once in twelve runs, diagnosed
+correctly as racy by construction, and **left for the sub-task that next revisited
+this file** — which is the right disposition for a defect that belongs to neither
+the sub-task in hand nor the code under test.
+
+Sub-task 7.7 is that sub-task, and it arrived having made the race far easier to
+see: it changed nothing in the scheduler, shifted the boot's timing, and the
+failure appeared upon about one boot in three, always followed by a report stating
+that the fixture had run correctly upon both processors and completed every round.
+A test that fails one run in three is a test nobody reads, and its next genuine
+failure would have been dismissed as the flake.
+
+**What is asserted now is decided by who can reach the thread.**
+
+| Field | Asserted | Why it is safe to |
+| ----- | -------- | ----------------- |
+| `processor` | Always. | It is written once, at admission, and not cleared when the thread is dequeued. Whatever reads it reads the queue the thread was put upon. |
+| `queued` | Only where `processor` is *this* processor's queue. | The admission and the read are made with this processor's interrupts masked, and no other processor may take a thread from this one's queue. Nothing can have changed it. |
+
+A thread queued elsewhere is left to the assertions further down, which are about
+a rotation rather than about a flag and are not races: that every thread completed
+its rounds, upon a processor it names itself, and that the slices exceed the
+number of threads.
+
+The masking is the whole of the fix, and it is worth being exact about what it
+does. It does not make the other processor wait. It makes *this* processor's
+sequence — admit, then read — indivisible with respect to anything that could
+run here, and the affinity comparison is what excludes everything that could run
+elsewhere.
+
 ## 8. Observed state
 
 Under QEMU with `-machine q35 -cpu qemu64 -smp cores=2`, on 2026-09-10:

@@ -18,7 +18,7 @@ complementary, and neither replaces the other.
 | [`project/`](project/) | How the work is conducted: the plan, the tests, the toolchain, the standards, the bibliography. | You are about to make a change, or want to know what is done and what is not. |
 | [`design/`](design/) | The kernel itself: its architecture, its boot, its address space, its interrupts, the apparatus of a privilege transition, the framebuffer and the drawing upon it, the executable and the process that runs one, the processors it all runs upon — and, from sub-task 7.1, the interface it presents to a program and the C library built upon that. | You want to know how the machine is brought up, how it is arranged once it is, and what a program standing upon it is given. |
 | [`devices/`](devices/) | The hardware the kernel drives, one document per device. | You are working upon a driver, or want to know what a device does and why the driver treats it so. |
-| [`storage/`](storage/) | The path from a medium to a caller: the disk, the block layer above it, the cache above that, and the filesystem above that. | You are working anywhere between a sector and a file. |
+| [`storage/`](storage/) | The path from a medium to a caller: the disk, the block layer above it, the cache above that, the filesystem above that — and, from sub-task 7.7, the initial ramdisk that puts the whole of it to work at every boot. | You are working anywhere between a sector and a file. |
 
 ## Contents
 
@@ -82,6 +82,7 @@ complementary, and neither replaces the other.
 | [`DISK.md`](storage/DISK.md) | The ATA disk in programmed input/output mode, and what storage the driver cannot reach and how it says so. | `drivers/ata/` |
 | [`AHCI.md`](storage/AHCI.md) | The AHCI disk by first-party direct memory access: the handoff from the firmware, the ports, and the command list. | `drivers/ahci/` |
 | [`SDCARD.md`](storage/SDCARD.md) | The SD card and the embedded MultiMediaCard, and the host controller they are reached through. | `drivers/sdhci/` |
+| [`INITRD.md`](storage/INITRD.md) | The initial ramdisk: the EXT2 image built beside the kernel, the Multiboot2 module that carries it, the device it becomes and the root it is mounted as. | `drivers/ramdisk/ramdisk.c` |
 | [`BLOCK.md`](storage/BLOCK.md) | The generic block-device layer. | `kernel/block/block.c` |
 | [`BUFFER.md`](storage/BUFFER.md) | The buffer cache. | `kernel/block/buffer.c` |
 | [`EXT2.md`](storage/EXT2.md) | The EXT2 volume's structures: its superblock, its group descriptors and its inodes — and, in Section 10, every limitation of this kernel's EXT2 support. |

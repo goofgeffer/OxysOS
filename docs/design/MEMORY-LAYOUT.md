@@ -168,14 +168,35 @@ memory is representative:
 Multiboot2 Specification, Section 3.6.8, states that the map "includes the
 regions occupied by kernel, mbi, segments and modules", and that the kernel must
 take care not to overwrite them. The map is a description of the machine, not of
-what is free. Three extents therefore fall within a region the map calls usable
-and must be reserved separately by the frame allocator of sub-task 2.2:
+what is free. Five extents therefore fall within a region the map calls usable
+and must be reserved separately by the frame allocator of sub-task 2.2. The
+fourth was added by sub-task 7.7; the third has been reserved since sub-task 2.2
+and is listed here for the first time, this table having described three of the
+four reservations `pmm.c` actually makes.
 
 | Extent | Source | Observed range |
 | ------ | ------ | -------------- |
 | The kernel image | The linker symbols `KernelPhysicalStart` and `KernelPhysicalEnd`. | `0x00100000` – `0x0011A000` |
 | The boot information structure | Its address and its `total_size` field. | `0x00120370` – `0x00120948` |
+| The frame bitmap itself | `PhysicalMemoryPlaceBitmap`, which chooses where it stands before the bitmap governs anything. | Varies with the size of memory. |
+| **The boot modules** | Each module tag of Multiboot2, Section 3.6.6: `mod_start` and `mod_end`. | `0x003E7000` – `0x005E7000`, the initial ramdisk, under QEMU |
 | The low 1 MiB | Legacy device and firmware reservations, the real-mode interrupt vector table and the VGA frame buffer. | `0x00000000` – `0x00100000` |
+
+**The modules are the one of these whose omission would not be noticed.** A
+kernel that failed to reserve its own image, its boot information or its bitmap
+stops almost immediately and obviously. A kernel that fails to reserve a module
+boots perfectly, mounts the filesystem upon it, and then reads from it whatever
+the frame allocator has since put there — which is a root filesystem that decays
+under load rather than one that fails, and by the time anything notices, the
+evidence has been overwritten. The reservation was added with the initial ramdisk
+at sub-task 7.7; [`../storage/INITRD.md`](../storage/INITRD.md), Section 4.4.
+
+Each is reserved by extent and not by page, `FrameMarkRange` marking every frame a
+range touches in its entirety. That is what makes it safe for a module to be
+unaligned: a frame shared between a module and something else is reserved for
+both, which costs a frame and never issues one from beneath a module. It is why
+the Multiboot2 module-alignment header tag is not carried; [`BOOT.md`](BOOT.md),
+Section 2.1.
 
 The low mebibyte is reserved in its entirety rather than by the map, because it
 contains structures that the map does not describe and that later phases will

@@ -201,6 +201,7 @@ C_SOURCES := kernel/kernel.c \
              kernel/test/storage/ext2/write.c \
              kernel/test/storage/ext2/probe.c \
              kernel/test/storage/vfs.c \
+             kernel/test/storage/initrd.c \
              kernel/test/libc/string.c \
              kernel/test/libc/wrappers.c \
              kernel/test/libc/heap.c \
@@ -262,6 +263,7 @@ C_SOURCES := kernel/kernel.c \
              drivers/ata/report.c \
              drivers/ahci/ahci.c \
              drivers/sdhci/sdhci.c \
+             drivers/ramdisk/ramdisk.c \
              kernel/block/block.c \
              kernel/block/buffer.c \
              graphics/framebuffer.c \
@@ -543,11 +545,124 @@ $(TRAMPOLINE_BINARY): $(TRAMPOLINE_SOURCE)
 
 $(BUILD_DIR)/kernel/arch/x86_64/smp/smp_trampoline.asm.o: $(TRAMPOLINE_BINARY)
 
+# ------------------------------------------------------------------------------
+# The initial ramdisk of sub-task 7.7.
+#
+# An EXT2 volume holding the five utilities under /bin, delivered to the kernel
+# as a Multiboot2 module and mounted as the root. docs/storage/INITRD.md holds
+# the reasoning; what follows is the part of it that concerns this file.
+#
+# **It is made by `mke2fs` and not by anything in this repository**, and that is
+# the decision worth recording. This project already possesses a complete
+# understanding of the EXT2 format — it is the whole of kernel/fs/ext2/ — so a
+# composer here would have been a few hundred lines it already knows how to
+# write. It would also have shared every assumption the reader makes. A volume
+# this kernel composed and then read back proves the reader consistent with the
+# composer and nothing else; a volume e2fsprogs composed proves the reader
+# consistent with an implementation that has never seen this one. That is the
+# same argument the `clang-check` target rests upon and the same one
+# docs/storage/EXT2-VERIFICATION.md, Section 6, made by hand three sub-tasks
+# ago — except that this runs at every boot rather than upon the day somebody
+# remembers to run it.
+#
+# `mke2fs` is therefore a build dependency, and the first one this project has
+# that is not a compiler, an assembler, a linker or an image builder. It is
+# recorded in docs/project/TOOLCHAIN.md and reported by the `toolcheck` target.
+# PROJECT_GUIDELINES.md, Section 3, names the five tools that must be present and
+# remains true as it stands; it is not amended, Section 7 of that document
+# reserving amendments to the project owner.
+#
+# The options are not defaults and each one is load-bearing:
+#
+#   -b 1024   The block size the EXT2 implementation is written against and the
+#             only one the buffer cache of sub-task 4.6 holds. A 4096-byte volume
+#             is readable — EXT2-VERIFICATION.md, Section 6, records one being
+#             read — but 1024 is the size every self-test asserts against.
+#   -r 1      Revision 1, which is what supplies the three feature words the
+#             superblock reader of sub-task 5.1 refuses an unknown bit in. The
+#             inode size is left to `mke2fs`, which chooses 256: the reader takes
+#             it from the superblock, and a volume somebody else made is far more
+#             likely to be 256 than 128, so that is the layout worth exercising.
+#   -d        Populate from a directory, which is what makes this possible at all
+#             without root: no loop device, no mount, no privilege.
+#   -F        Do not ask. The target is a regular file and the answer is always
+#             yes; a build that stops for a question is a build that hangs in CI.
+#
+# **The image is not bit-reproducible here, and the three lines that try are
+# still worth having.** `mke2fs` draws three things from outside the source: the
+# volume UUID, the seed of the directory hash, and the timestamps. `-U` and
+# `-E hash_seed` fix the first two upon every version. `SOURCE_DATE_EPOCH` fixes
+# the third only from e2fsprogs 1.47.1, which is where it was implemented; the
+# version upon this machine is 1.47.0 and ignores it, so two builds of an
+# unchanged tree made in different seconds differ in the superblock's times and
+# in each inode's three times, and in nothing else. That is measured and not
+# assumed: `cmp -l` between two such images reports forty-two bytes, every one of
+# them within a time field, and two images built within the same second are
+# identical to the byte. The variable is set
+# regardless, because it costs nothing and the build becomes reproducible upon a
+# host whose e2fsprogs is new enough without anybody editing this file. Its
+# value is 2026-09-13, the date the build register was cleared and numbering
+# restarted, which is arbitrary and had to be something.
+#
+# The image is truncated to its full length before `mke2fs` is run. That is not
+# required — `mke2fs` creates the file — and it stops the tool printing
+# "Creating regular file" into an otherwise silent build, which is a line a
+# reader has to learn to ignore.
+#
+# The size is stated in 1024-byte blocks. It is comfortably more than the
+# utilities need, because the cost of the slack is a few tens of kibibytes of an
+# ISO and the cost of being short is a build that fails on the day a utility
+# grows.
+# ------------------------------------------------------------------------------
+
+INITRD_IMAGE   := $(BUILD_DIR)/initrd.img
+INITRD_STAGING := $(BUILD_DIR)/initrd
+INITRD_BLOCKS  := 2048
+INITRD_UUID    := 0c5f7a10-7b41-4d2e-9a3c-6f0c5f7a1000
+
+# The programs the ramdisk carries, which are the five utilities of sub-task 7.6
+# and not the four check programs beside them. A check program is a test's
+# apparatus: it is embedded in the kernel image, where the self-test that runs it
+# is, and a system that shipped it in /bin would be shipping its own test harness
+# to somebody who asked for a shell.
+INITRD_UTILITIES := echo cat ls mkdir rm
+INITRD_SOURCES   := $(foreach utility,$(INITRD_UTILITIES),$(USER_DIR)/$(utility).embed.elf)
+
+# `/mnt` is the second and last thing upon the image, and it is empty.
+#
+# Before sub-task 7.7 the root was whatever volume the machine carried, and the
+# EXT2 write probe of sub-task 5.8 reached that volume by resolving a path from
+# the root. The ramdisk takes the root, so without somewhere to put it a machine
+# with a disk would lose that probe entirely — which is exactly the kind of
+# capability that disappears without anybody noticing, because what it leaves
+# behind is a diagnostic that no longer prints rather than a test that fails.
+# The machine's own volume is mounted here instead. See kernel/kernel.c,
+# KernelMountMachineVolume.
+
+$(INITRD_IMAGE): $(INITRD_SOURCES)
+	@command -v mke2fs >/dev/null \
+		|| (echo "ERROR: mke2fs was not found upon the PATH, and the initial ramdisk requires it." \
+		    && echo "It is supplied by e2fsprogs; see docs/project/TOOLCHAIN.md." && false)
+	@rm -rf $(INITRD_STAGING)
+	@mkdir -p $(INITRD_STAGING)/bin
+	@mkdir -p $(INITRD_STAGING)/mnt
+	@for utility in $(INITRD_UTILITIES); do \
+		cp $(USER_DIR)/$$utility.embed.elf $(INITRD_STAGING)/bin/$$utility; \
+		chmod 755 $(INITRD_STAGING)/bin/$$utility; \
+	done
+	@rm -f $@
+	@truncate -s $$(( $(INITRD_BLOCKS) * 1024 )) $@
+	@SOURCE_DATE_EPOCH=1789257600 mke2fs -q -F -t ext2 -b 1024 -r 1 \
+		-U $(INITRD_UUID) -E hash_seed=$(INITRD_UUID) \
+		-L oxys-initrd -d $(INITRD_STAGING) $@ $(INITRD_BLOCKS)
+	@echo "The initial ramdisk has been written to $@ ($(words $(INITRD_UTILITIES)) utilities in /bin)."
+
 iso: $(ISO_IMAGE)
 
-$(ISO_IMAGE): $(KERNEL_ELF) boot/grub/grub.cfg
+$(ISO_IMAGE): $(KERNEL_ELF) $(INITRD_IMAGE) boot/grub/grub.cfg
 	@mkdir -p $(ISO_DIR)/boot/grub
 	cp $(KERNEL_ELF) $(ISO_DIR)/boot/oxys.elf
+	cp $(INITRD_IMAGE) $(ISO_DIR)/boot/initrd.img
 	cp boot/grub/grub.cfg $(ISO_DIR)/boot/grub/grub.cfg
 	$(GRUB_MKRESCUE) -o $@ $(ISO_DIR) 2>/dev/null
 	@echo "The ISO image has been written to $@."
@@ -702,7 +817,7 @@ build-record:
 # ------------------------------------------------------------------------------
 
 toolcheck:
-	@for tool in $(CC) $(LD) $(AR) $(NASM) $(GRUB_MKRESCUE) $(QEMU) xorriso; do \
+	@for tool in $(CC) $(LD) $(AR) $(NASM) $(GRUB_MKRESCUE) $(QEMU) xorriso mke2fs; do \
 		if command -v $$tool >/dev/null; then \
 			echo "PRESENT: $$tool"; \
 		else \

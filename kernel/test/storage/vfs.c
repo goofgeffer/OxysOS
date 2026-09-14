@@ -8,10 +8,13 @@
  *          position, the mount and the withdrawal, and the refusals that keep a
  *          volume from being withdrawn while something still holds it. Probes
  *          whatever volume the machine actually carries.
- * Key functions: KernelVerifyVfs, KernelVfsProbeVolume.
+ * Key functions: KernelVerifyVfs, KernelVfsProbeVolume, KernelVfsMountedDevice.
  * References:
-   - docs/storage/VFS.md, Section 10: every assertion below, paired with the
+ *   - docs/storage/VFS.md, Section 10: every assertion below, paired with the
  *     silent failure it catches.
+ *   - docs/storage/INITRD.md, Section 6.3: why KernelVfsProbeVolume takes the
+ *     mount point and the path as arguments since sub-task 7.7, having had both
+ *     written into it before.
  *   - IEEE Std 1003.1-2017: the depth bound upon following symbolic links, and
  *     the semantics of . and .. that the layer does and does not interpret.
  *
@@ -942,6 +945,47 @@ void KernelVerifyVfs(void)
 #define KERNEL_VFS_PROBE_SIZE 5000U
 
 /*
+ * Copies the name of the device carrying the volume mounted at a point, and
+ * reports whether there was one.
+ *
+ * The copy is what makes it useful. The probe below withdraws the mount and then
+ * mounts the volume afresh, and the VfsMount that named the device is destroyed
+ * by the withdrawal — so the name must be taken out of it beforehand or the
+ * fresh mount has nothing to name.
+ */
+static bool KernelVfsMountedDevice(const char *point, char *name)
+{
+    const size_t count = VfsMountCount();
+
+    for (size_t index = 0U; index < count; ++index)
+    {
+        const VfsMount *const mount = VfsMountAt(index);
+
+        if ((mount == NULL) || (mount->device == NULL) ||
+            !KernelSameString(mount->point, point))
+        {
+            continue;
+        }
+
+        for (size_t position = 0U; position <= BLOCK_NAME_MAXIMUM; ++position)
+        {
+            name[position] = mount->device->name[position];
+
+            if (name[position] == '\0')
+            {
+                break;
+            }
+        }
+
+        name[BLOCK_NAME_MAXIMUM] = '\0';
+
+        return true;
+    }
+
+    return false;
+}
+
+/*
  * Exercises a volume the machine actually carries, through the layer rather than
  * through the format.
  *
@@ -958,11 +1002,19 @@ void KernelVerifyVfs(void)
  * operator's disk is left clean rather than left claiming to be open, which is
  * both the better outcome and the one that demonstrates both directions of the
  * mark.
+ *
+ * **The mount point and the path are given by the caller since sub-task 7.7**,
+ * and were written here until then. The initial ramdisk now takes the root, so
+ * the machine's own volume is mounted at `/mnt` where there is a ramdisk and at
+ * `/` where there is not, and a probe that named `/oxys-write-test` would have
+ * stopped finding anything upon the machines this exists for — silently, a
+ * diagnostic that prints "not present" being indistinguishable from a volume
+ * that does not hold the file.
  */
-void KernelVfsProbeVolume(void)
+void KernelVfsProbeVolume(const char *point, const char *path)
 {
-    static const char *const path = "/oxys-write-test";
     VfsAttributes attributes;
+    char device_name[BLOCK_NAME_MAXIMUM + 1U];
     uint64_t transferred = 0U;
     uint64_t index;
     int descriptor;
@@ -972,20 +1024,29 @@ void KernelVfsProbeVolume(void)
         return;
     }
 
-    KernelWriteString("VFS write test: the command line permits writing to the mounted "
-                      "volume.\n");
+    if (!KernelVfsMountedDevice(point, device_name))
+    {
+        return;
+    }
+
+    KernelWriteString("VFS write test: the command line permits writing to the volume "
+                      "mounted at ");
+    KernelWriteString(point);
+    KernelWriteString(".\n");
 
     if (!VfsStat(path, &attributes))
     {
-        KernelWriteString("VFS write test: " "/oxys-write-test" " is not present; nothing "
-                          "written.\n");
+        KernelWriteString("VFS write test: ");
+        KernelWriteString(path);
+        KernelWriteString(" is not present; nothing written.\n");
         return;
     }
 
     if (attributes.type != VFS_NODE_REGULAR)
     {
-        KernelWriteString("VFS write test: " "/oxys-write-test" " is not a regular file; "
-                          "nothing written.\n");
+        KernelWriteString("VFS write test: ");
+        KernelWriteString(path);
+        KernelWriteString(" is not a regular file; nothing written.\n");
         return;
     }
 
@@ -1071,11 +1132,12 @@ void KernelVfsProbeVolume(void)
 
     KernelWriteString("VFS write test: ");
     KernelWriteDecimal(KERNEL_VFS_PROBE_SIZE);
-    KernelWriteString(" bytes written to " "/oxys-write-test" " and read back "
-                      "identically.\n");
+    KernelWriteString(" bytes written to ");
+    KernelWriteString(path);
+    KernelWriteString(" and read back identically.\n");
 
     /* The withdrawal, and the fresh mount that leaves the volume clean. */
-    if (!VfsUnmount("/"))
+    if (!VfsUnmount(point))
     {
         KernelWriteString("VFS write test: the volume could not be withdrawn: ");
         KernelWriteString(VfsLastError());
@@ -1086,7 +1148,14 @@ void KernelVfsProbeVolume(void)
     KernelWriteString("VFS write test: the volume was withdrawn and marked cleanly "
                       "unmounted.\n");
 
-    if (!VfsMountRoot("ext2", true))
+    /*
+     * The fresh mount names the device rather than searching for one. Before
+     * sub-task 7.7 this called VfsMountRoot, which mounts the first volume it
+     * finds — and with a ramdisk registered that is no longer the volume just
+     * withdrawn. The device's name was copied above, before the mount that held
+     * it was destroyed.
+     */
+    if (!VfsMountVolume(device_name, point, "ext2", true))
     {
         KernelWriteString("VFS write test: the volume could not be mounted afresh: ");
         KernelWriteString(VfsLastError());

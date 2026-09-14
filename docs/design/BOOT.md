@@ -73,6 +73,47 @@ let the boot proceed. See [`FRAMEBUFFER.md`](FRAMEBUFFER.md), Section 2.
 The header is accordingly 48 bytes rather than 24, the four bytes at offset 36
 being the padding that returns the terminating tag to an 8-byte boundary.
 
+### 2.1 The module-alignment tag is deliberately absent
+
+Sub-task 7.7 has the boot loader carry an initial ramdisk as a module, and
+Multiboot2, Section 3.1.11, defines a header tag by which an image may require
+its modules to be page aligned. This header does not carry it.
+
+It would change nothing. The ramdisk is read through the direct map at byte
+granularity, so alignment cannot affect a transfer; and the frames it occupies
+are reserved by `FrameMarkRange`, which reserves every frame a range touches in
+its entirety — so a module sharing its first or last frame with something else
+costs that frame, and nothing is ever issued from beneath a module either way.
+
+Eight bytes that change no behaviour are eight bytes somebody will one day reason
+from. The same judgement removed `-z max-page-size=0x1000` from the user link at
+sub-task 7.5, where it was measured to change the output by not one byte.
+[`../storage/INITRD.md`](../storage/INITRD.md), Section 4.5.
+
+### 2.2 What the boot loader supplies in return
+
+The tags the kernel consumes from the boot information structure are the memory
+map (Section 3.6.8), the framebuffer (3.6.12), the ELF sections (3.6.7), the two
+ACPI pointers (3.6.16 and 3.6.17), the boot loader's name (3.6.2) and the command
+line (3.6.1) — and, since sub-task 7.7, **the module tag of Section 3.6.6**.
+
+A module tag carries the physical start and end addresses of one file the boot
+loader placed in memory, and a zero-terminated string naming it; one tag appears
+per module. `boot/grub/grub.cfg` loads `/boot/initrd.img` under the name
+`initrd`, and the kernel finds it **by that name and never by position** — a
+kernel that took the first module would find the right thing until the day a
+second module is added, and a module is a range of bytes, so nothing would say it
+had found the wrong one.
+
+Up to `BOOT_MODULE_MAXIMUM` modules are recorded and the truncation is reported.
+Recording one would have made the *set* of modules something the kernel cannot
+represent, and a kernel that cannot represent a set cannot select from it by name.
+
+Their extents lie in memory the map reports as available — Section 3.6.8 warns
+that the map "includes the regions occupied by kernel, mbi, segments and modules"
+— so they are reserved from the frame allocator alongside the kernel image, the
+boot information structure and the frame bitmap. `MEMORY-LAYOUT.md`, Section 6.
+
 ## 3. The machine state at entry
 
 The Multiboot2 Specification, Section 3.3, guarantees the following state upon

@@ -16,7 +16,22 @@
 | `make` | Build orchestration. | Present. |
 | `qemu-system-x86_64` | Virtual machine execution and automated verification. | Present. |
 | OVMF firmware | UEFI firmware for QEMU, at `/usr/share/ovmf/OVMF.fd`. | Present. |
-| `VBoxManage` | VirtualBox execution. | **Absent.** The `run-vbox` target is provided but cannot presently be executed. |
+| `mke2fs` | The initial ramdisk of sub-task 7.7. Builds the EXT2 image the kernel mounts as its root, populating it from a directory with `-d` — so no loop device, no mount and no privilege is needed. | Present, e2fsprogs 1.47.0. |
+| `VBoxManage` | VirtualBox execution. | **Absent from the Linux environment.** `make run-vbox` is provided and cannot be executed there; the VirtualBox runs this project records are made through the Windows host's `VBoxManage.exe`, the WSL2 environment being a guest of it. |
+
+**`mke2fs` is the first required tool here that is not a compiler, an assembler,
+a linker or an image builder**, and it is required for a reason rather than for
+convenience. `docs/storage/INITRD.md`, Section 3.2, argues it at length; the short
+form is that a filesystem image composed by this project and read by this project
+proves the reader consistent with the composer and nothing more, while one
+composed by e2fsprogs is corroboration from an implementation that has never seen
+this one — delivered at every boot rather than upon the day somebody remembers to
+run a comparison.
+
+`PROJECT_GUIDELINES.md`, Section 3, names five tools that must be installed and
+functional. That statement stands: all five still must be. It is not amended,
+Section 7 of that document reserving amendments to the project owner, and this
+table is where the build's full set of dependencies is recorded.
 
 One tool is **optional** and is listed apart, nothing in the build requiring it:
 
@@ -117,7 +132,7 @@ permissions.
 | Target | Effect |
 | ------ | ------ |
 | `all` | Builds `build/oxys.elf` and confirms, by `grub-file --is-x86-multiboot2`, that the image is Multiboot2 compliant. This is the default target. |
-| `iso` | Builds `build/oxys.iso` by staging the kernel and the GRUB configuration and invoking `grub-mkrescue`. |
+| `iso` | Builds `build/oxys.iso` by staging the kernel, the initial ramdisk and the GRUB configuration, and invoking `grub-mkrescue`. |
 | `clean` | Removes the whole of the `build` directory. |
 | `run-qemu` | Executes the ISO under QEMU with legacy BIOS firmware, the serial port directed to the standard output stream. |
 | `run-uefi` | Executes the ISO under QEMU with the OVMF UEFI firmware. |
@@ -127,6 +142,15 @@ permissions.
 | `clang-check` | Compiles every translation unit with a second compiler and discards the objects. Builds nothing; see Section 9. |
 | `spdx-check`, `spdx-apply`, `docs-check`, `lint` | The corpus checks of [`../../tools/README.md`](../../tools/README.md). Neither builds anything nor needs this toolchain; `lint` is the two checks together and is what CI runs. |
 | `build-record` | Appends one numbered row to [`builds.tsv`](builds.tsv), the build register, and re-renders the view in [`BUILDS.md`](BUILDS.md). Builds nothing and runs nothing. `NOTE`, `ENVIRONMENT`, `RESULT` and `ASSERTIONS` are its variables, and `BUILD_DIR` selects which image it reads — which is how an image built by the second compiler is recorded as such. |
+
+**No target was added for the initial ramdisk**, and that is deliberate rather
+than an omission. `build/initrd.img` is a prerequisite of the ISO exactly as
+`build/trampoline.bin` and the user programs are prerequisites of the kernel
+image, so it is built by `make iso` without anybody having to remember a second
+command. A phony target would also have obliged an amendment to
+`PROJECT_GUIDELINES.md`, Section 3, which Section 7 of that document permits only
+by explicit decision of the project owner — the same reasoning sub-task 7.5
+recorded when it declined to add a target for the user-mode build.
 
 ## 7. Header dependency tracking
 

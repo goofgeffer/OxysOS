@@ -352,6 +352,39 @@ unmounted merely by having been booted, and every such disk would then demand a
 check before its owner could mount it again. That is a real cost imposed for
 nothing, and it is imposed by the very mechanism that exists to protect them.
 
+### 8.2 The initial ramdisk is not a stranger's disk
+
+Since sub-task 7.7 the volume mounted at the root is not a disk at all: it is the
+initial ramdisk, an EXT2 image built beside the kernel and placed in memory by
+the boot loader. It is mounted **for writing**, and the exception is not a
+relaxation of Section 8.1 but the same rule applied.
+
+Every word of that reasoning is about a volume that belongs to somebody. The
+ramdisk was made by this build, is read by nothing else, and ceases to exist when
+the machine is switched off. There is nothing to protect and nobody to
+inconvenience — and a root that nothing may write to is a root the shell's output
+redirection at sub-task 8.5 cannot redirect into.
+
+**The root is chosen by name, not by search.** `VfsMountRoot` walks the
+registered devices and mounts the first volume it can, which answers "is there
+anything to mount" and not "is this the right thing". `KernelMountRootVolume`
+therefore names `ram0` outright: a machine carrying an EXT2 volume upon a disk
+would otherwise boot with that volume at the root, or with the ramdisk there,
+according to which driver happened to register first — a difference nobody chose,
+that changes every path in the system, and that a boot log does not obviously
+show.
+
+A volume the machine carries is mounted at **`/mnt`** instead, read-only unless
+the operator asked otherwise, under Section 8.1 which still governs it. The
+directory exists upon the ramdisk because the build puts it there. That is also
+what keeps the write probe of Section 10 alive: before 7.7 it resolved its path
+from the root, and a root it no longer reaches would have turned it into a
+diagnostic that prints "not present" for ever —
+[`INITRD.md`](INITRD.md), Section 6.3.
+
+A kernel booted without a ramdisk falls back to `VfsMountRoot` exactly as this
+function behaved before 7.7.
+
 ## 9. What the layer refuses
 
 ### 9.1 The codes
@@ -501,6 +534,13 @@ then withdrawn and reported clean; and the whole was repeated upon a volume of
 4096-byte blocks.
 
 **That corroboration found a defect in sub-task 5.7.** It is Section 11.1.
+
+**Since sub-task 7.7 it happens at every boot.** The root filesystem is a volume
+`mke2fs` composed, so the mount, the root inode, the directory entries and the
+file blocks of this layer are exercised against an image this project did not
+write before the banner is printed — in every environment, upon every machine,
+without anybody remembering to build one.
+[`INITRD.md`](INITRD.md), Section 3.2.
 
 ## 11. Corrections this sub-task made elsewhere
 

@@ -100,27 +100,46 @@ asserts exists.
 `kernel/test/README.md` records the arrangement, the distinction between a
 self-test and a diagnostic probe, and the limitations of both.
 
-### 1.2 One assertion is known to be intermittent
+### 1.2 The assertion that was intermittent, and how it was closed
 
 **`an admitted thread does not record its queue`**, in
-`kernel/test/proc/sched.c`, failed once in about twenty runs of the same image
-during sub-task 7.5 and has not been reproduced since — nine consecutive runs of
-that image and four of the sub-task 7.4 image were clean.
+`kernel/test/proc/sched.c`, was intermittent for four sub-tasks and is not any
+longer. This section is kept rather than deleted, because how a defect of this
+kind is found and closed is worth more than the fact that it is closed.
 
-It is recorded here rather than investigated, because the diagnosis is plain from
-the code and the fix belongs to whoever next works upon Phase 6. The assertion is
-made **after** `SchedulerAdmit` has returned and reads `thread->queued`; the
-machine has two processors, and the other one may take the thread off the queue
-and run it to completion in that window. The race is in the test and not in the
+**The diagnosis was made from the code, three sub-tasks before it could be
+reproduced at will.** The assertion is made *after* `SchedulerAdmit` has returned
+and reads `thread->queued`; the machine has two processors and the fixture's
+affinity names both, so the other processor may take the thread off the queue and
+begin running it within that window. The race is in the test and not in the
 scheduler: a thread that was admitted and then promptly run is a scheduler
-working correctly, and the assertion cannot tell that from a thread that was
+working correctly, and the assertion could not tell that from a thread that was
 never queued.
 
-**A test that reports a failure which is not one is worse than no test**, so this
-is a real defect and not a curiosity. It is left as it stands here because
-altering a Phase 6 assertion was outside what sub-task 7.5 was asked to do, and
-because a change made without being able to reproduce the failure cannot be shown
-to have fixed it.
+**It was seen at three different rates.** Once in about twenty runs during
+sub-task 7.5; once in twelve during 7.3, recorded in
+[`TESTING-RECORD.md`](TESTING-RECORD.md) with the diagnosis and left for whichever
+sub-task next revisited the file; and then **once in three** during 7.7, which
+changed nothing in the scheduler and merely shifted the boot's timing. That last
+rate is what made it fixable: a change cannot be shown to have fixed a failure
+nobody can produce.
+
+**What it is now.** The queue a thread was put upon is asserted always, that field
+being written once at admission and not cleared. Whether the thread is still upon
+that queue is asserted only where the queue is the bootstrap processor's — the
+admission and the read being made with this processor's interrupts masked, and no
+other processor being able to take from this one's queue. A thread queued
+elsewhere is left to the assertions about the rotation, which are not races.
+[`../design/SCHEDULER.md`](../design/SCHEDULER.md), Section 7.3.
+
+**A first attempt was rejected by measurement**, and that is the part worth
+keeping. Pinning the fixture to the bootstrap processor made the fields stable
+and passed four consecutive runs — and the report then read `the fixture ran upon
+1 of 2 processor(s)`, a re-enqueue keeping a thread upon the processor that ran
+it. The fix had removed the multi-processor rotation the test exists to
+demonstrate, and only the report said so. **A test that reports a failure which is
+not one is worse than no test**; a test that passes because it stopped testing
+anything is worse than both.
 
 ## 2. Interactive execution under QEMU
 
@@ -305,10 +324,23 @@ kernel at all.** A Bochs configured without `--enable-x86-64` reports a CPU whos
 protected mode upon it; one configured without `--enable-smp` refuses
 `cpu: count=2`. Both were the case at sub-task 7.2 and both were a property of
 the local build rather than of Bochs. **Both were the case again at sub-tasks
-7.3, 7.4 and 7.6**, the installed binary having reverted to a default build each
-time — four occasions now, which is a property of this environment and not an
-accident, so **expect to rebuild before a Bochs run rather than discovering that
-you must**. The symptom to look for is `bochs --help cpu` listing
+7.3, 7.4, 7.6 and 7.7**, the installed binary having reverted to a default build
+each time — five occasions now, which is a property of this environment and not
+an accident, so **expect to rebuild before a Bochs run rather than discovering
+that you must**.
+
+**At sub-task 7.7 the rebuild was not made and the run was not claimed.** The
+symptom was the full set — `>>PANIC<< numerical parameter 'n_processors' was set
+to 2, which is out of range 1 to 1`, and then, with the count forced to one,
+`wrong value for parameter 'model'`, `bochs --help cpu` listing eleven models of
+which the highest is `atom_n270`. A build with no long mode cannot run this
+kernel at all, so there was not even a reduced run to be had, and
+[`STATUS.md`](STATUS.md) and [`TESTING-RECORD.md`](TESTING-RECORD.md) say that
+rather than reporting a result. **An environment that was not exercised must be
+recorded as not exercised**; a row that says "passed" because something else
+passed is the failure this whole document exists to prevent.
+
+The symptom to look for is `bochs --help cpu` listing
 nothing above `atom_n270`, every model in
 that list being 32-bit, and the run then failing at
 `>>PANIC<< numerical parameter 'n_processors' was set to 2` or — with one

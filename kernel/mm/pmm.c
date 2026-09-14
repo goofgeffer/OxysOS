@@ -333,6 +333,27 @@ void PhysicalMemoryInitialise(const BootInformation *information)
                    information->boot_information_end);
     FrameMarkRange(FrameBitmapPhysicalStart, FrameBitmapPhysicalEnd);
 
+    /*
+     * The boot modules, of which the initial ramdisk of sub-task 7.7 is one.
+     *
+     * They stand in memory the map reports as available — Multiboot2, Section
+     * 3.6.8, says as much — and nothing else here would keep them. A kernel that
+     * omitted this reservation would boot, mount the ramdisk, and read from it
+     * whatever the frame allocator had since put there, which is a filesystem
+     * that decays under a load rather than a filesystem that fails.
+     *
+     * The reservation is by extent and not by module: FrameMarkRange reserves
+     * every frame a range touches in its entirety, so a module sharing its first
+     * or last frame with something else costs that frame and nothing is issued
+     * from beneath a module. That is why no page alignment is asked of the boot
+     * loader; see docs/storage/INITRD.md, Section 4.
+     */
+    for (size_t index = 0U; index < information->module_count; ++index)
+    {
+        FrameMarkRange(information->modules[index].start,
+                       information->modules[index].end);
+    }
+
     FrameSearchHint = FrameIndexOf(LOW_MEMORY_LIMIT);
 }
 

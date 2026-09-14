@@ -41,6 +41,16 @@ Sections relied upon:
   size 20, a flags field whose bit 0 marks the request optional, and width,
   height and depth of which zero means no preference. Its presence is what
   obliges the boot loader to emit the framebuffer information tag below.
+- **3.1.11**, the module-alignment tag placed in the image header: it declares
+  that the image requires its modules to be page aligned. **This kernel does not
+  carry it**, and `docs/design/BOOT.md`, Section 2.1, records why: the ramdisk is
+  read through the direct map at byte granularity and its frames are reserved by
+  a range that rounds outward to whole frames, so alignment would change nothing.
+- **3.6.6**, the modules tag, type 3: after the common `type` and `size` fields,
+  the 32-bit physical `mod_start` and `mod_end` addresses of one boot module and
+  then a zero-terminated string naming it. One tag appears per module and the
+  type may appear any number of times. It is how the initial ramdisk of sub-task
+  7.7 reaches the kernel, which selects among the modules by that string.
 - **3.6.7**, the ELF-Symbols tag, type 9. Note the discrepancy recorded in
   `kernel/handoff/multiboot2.h`: the prose of this section and the reference
   C header in the same document disagree upon the widths of the `num`, `entsize`
@@ -1297,7 +1307,18 @@ Free Software Foundation.
 `https://www.gnu.org/software/grub/manual/grub/grub.html`
 
 Sections relied upon: Section 3.4, `grub-mkrescue`; Section 6, the configuration
-file; Section 16.3.16, the `multiboot2` command.
+file; and Section 16.192, the `multiboot2` module, which "provides support for
+commands `multiboot2` and `module2` to load a multiboot kernel and load a
+multiboot module, respectively". The second of those two commands is what carries
+the initial ramdisk of sub-task 7.7, the rest of its line becoming the string of
+the module tag.
+
+**The citation was `Section 16.3.16` until sub-task 7.7, and was wrong.** That is
+the numbering of an earlier edition of this manual. In the manual for GRUB 2.14
+Chapter 16 is *Modules*, numbered 16.3 (`affs`) through 16.192 (`multiboot2`) and
+beyond, and Chapter 17 is *Available commands*; there is no Section 16.3.16 of
+that name. It was checked rather than copied because a second citation was being
+added beside it, which is the only reason a stale number is ever found.
 
 Used by: `boot/grub/grub.cfg`, `Makefile`.
 

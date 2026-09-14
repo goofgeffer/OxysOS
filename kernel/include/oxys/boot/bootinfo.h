@@ -7,11 +7,14 @@
  *          kernel proper depends upon this description alone, so that the UEFI
  *          boot path of Phase 12 may populate it identically without any change
  *          above the handoff layer.
- * Key definitions: BootMemoryType, BootMemoryRegion, BootInformation,
- *          BootInformationParseMultiboot2, BootInformationReport.
+ * Key definitions: BootMemoryType, BootMemoryRegion, BootModule,
+ *          BootInformation, BootInformationParseMultiboot2,
+ *          BootInformationReport, BootInformationFindModule.
  * References:
  *   - Multiboot2 Specification 2.0, Section 3.6.8: the memory region types from
  *     which BootMemoryType is derived.
+ *   - Multiboot2 Specification 2.0, Section 3.6.6: the boot module, from which
+ *     BootModule is derived.
  *   - docs/design/ARCHITECTURE.md, Section 1, premise 3: boot-protocol neutrality is a
  *     design constraint of the project, not a later accommodation.
  */
@@ -31,6 +34,21 @@
 
 /* The greatest length of the boot loader name and the command line retained. */
 #define BOOT_STRING_MAXIMUM 128
+
+/*
+ * The greatest number of boot modules recorded.
+ *
+ * Four rather than one, and the difference is not generosity. A kernel that
+ * recorded a single module would find the initial ramdisk only while it happened
+ * to be the first thing named in the boot loader's configuration, and would
+ * begin loading the wrong thing on the day a second module is added — silently,
+ * because a module is a range of bytes and every range of bytes looks alike.
+ * Modules are therefore recorded as a set and selected from it by name.
+ */
+#define BOOT_MODULE_MAXIMUM 4
+
+/* The greatest length of a module's name retained, excluding its terminator. */
+#define BOOT_MODULE_NAME_MAXIMUM 31
 
 /*
  * The classification of a physical memory region, independent of the boot
@@ -57,6 +75,26 @@ typedef struct BootMemoryRegion
     uint64_t length;
     BootMemoryType type;
 } BootMemoryRegion;
+
+/*
+ * One file the boot loader placed in memory beside the kernel, and the name it
+ * was given upon the line that loaded it.
+ *
+ * `end` is exclusive, so the module measures end - start bytes.
+ *
+ * The name is copied rather than pointed at, for the reason every other string
+ * in this structure is: the boot loader's own memory is reclaimed once the
+ * kernel has finished reading it, and a retained pointer would become a defect
+ * at that moment. The *contents* are not copied, and cannot be — a module may be
+ * megabytes — so the extent below is reserved from the frame allocator instead
+ * and the module is read where the boot loader left it.
+ */
+typedef struct BootModule
+{
+    PhysicalAddress start;
+    PhysicalAddress end;
+    char name[BOOT_MODULE_NAME_MAXIMUM + 1];
+} BootModule;
 
 /*
  * The complete description of the machine as reported by the boot loader,
@@ -146,6 +184,19 @@ typedef struct BootInformation
     PhysicalAddress boot_information_start;
     PhysicalAddress boot_information_end;
 
+    /*
+     * The modules the boot loader placed in memory, and how many of them there
+     * are. Their extents lie within memory the map reports as available, exactly
+     * as the boot information structure's does, and must be reserved explicitly
+     * for the same reason: Multiboot2, Section 3.6.8, warns that the map
+     * "includes the regions occupied by kernel, mbi, segments and modules".
+     */
+    BootModule modules[BOOT_MODULE_MAXIMUM];
+    size_t module_count;
+
+    /* True if the boot loader supplied more modules than could be recorded. */
+    bool modules_truncated;
+
     /* The number of ELF section headers reported, and their aggregate extent. */
     uint32_t elf_section_count;
 
@@ -190,6 +241,16 @@ void BootInformationReport(const BootInformation *information);
 
 /* Returns a constant, human-readable name for a memory region classification. */
 const char *BootMemoryTypeName(BootMemoryType type);
+
+/*
+ * The module of the given name, or null where the boot loader supplied none.
+ *
+ * The name is compared in full and not by prefix. A prefix match would accept a
+ * module named `initrd-debug` where `initrd` was asked for, and the caller would
+ * mount something nobody intended without a word being said about it.
+ */
+const BootModule *BootInformationFindModule(const BootInformation *information,
+                                            const char *name);
 
 /* The name of a framebuffer format, for reporting. */
 const char *BootFramebufferFormatName(BootFramebufferFormat format);

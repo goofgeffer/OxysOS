@@ -4,8 +4,13 @@
 
 **Phase**: 7 of [`../docs/project/PLAN.md`](../docs/project/PLAN.md). Sub-task
 7.5 placed the first material here; sub-task 7.6 added the utilities and the three
-programs that assert them, and 7.7 the
-ramdisk they are carried upon.
+programs that assert them; and sub-task 7.7 put five of them somewhere a person
+could find, in `/bin` upon the initial ramdisk the kernel mounts as its root. See
+[`../docs/storage/INITRD.md`](../docs/storage/INITRD.md), and Section 2 of it for
+why the four `-check` programs are **not** carried there: each exists to make a
+machine-readable statement about a system call, so each is embedded in the kernel
+image beside the self-test that runs it, and a system that shipped them in `/bin`
+would be shipping its own test harness to somebody who asked for a shell.
 **Detailed design**: [`../docs/design/LIBC.md`](../docs/design/LIBC.md), Section
 11, which is the runtime and the link procedure every program here is built by,
 and Section 12, which is the five utilities, the calls beneath them and the three

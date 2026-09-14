@@ -871,6 +871,30 @@ Three of those five produced a passing or absent verdict. That is the argument
 for [`../design/SCHEDULER.md`](../design/SCHEDULER.md), Section 7, existing at
 all: an assertion is only as good as the state it can actually reach.
 
+**A sixth was recorded at sub-task 7.3 and closed at 7.7, and it is the opposite
+failure: a verdict worth less than nothing.** Immediately after admitting each
+fixture thread, the test read two of its fields and required that the thread still
+be queued. The threads are admitted with an affinity that names every processor,
+and the scheduler is already running — so the other processor is entitled to take
+the thread and run it between the admission and the read, at which point the flag
+is false because the scheduler did exactly what it exists for.
+
+It was observed once in twelve runs on 2026-09-11, during sub-task 7.3, and
+diagnosed correctly then: [`TESTING-RECORD.md`](TESTING-RECORD.md) holds the row,
+which calls it racy by construction and leaves it for the sub-task that next
+revisits the file. Sub-task 7.7 changed nothing in the scheduler, shifted the
+boot's timing, and the same assertion began failing upon about one boot in three
+— **always followed by a report stating that the fixture had run correctly upon
+both processors**. A test that fails one run in three is a test nobody reads, and
+its next genuine failure would have been dismissed as the flake.
+
+What is asserted now is decided by who can reach the thread: the queue a thread
+was put upon, always, that field being written once and not cleared; and whether
+it is still upon that queue, only where the queue is the *bootstrap* processor's,
+the admission and the read being made with this processor's interrupts masked and
+no other processor being able to take from this one's queue.
+[`../design/SCHEDULER.md`](../design/SCHEDULER.md), Section 7.3.
+
 ### 11.4 Reading the log
 
 ```
@@ -1261,3 +1285,155 @@ The counts upon the second line are not assertions and are worth reading beside
 them: eighteen splits and eighteen joins is a heap that gave back everything it
 divided, which is the same fact the final assertion states and is visible without
 knowing that it is being asserted.
+
+---
+
+## 15. Verification of the initial ramdisk and the root filesystem
+
+**Subject**: sub-task 7.7 — the EXT2 image built beside the kernel, the
+Multiboot2 module that carries it, the block device it becomes, and the root it
+is mounted as. [`../storage/INITRD.md`](../storage/INITRD.md).
+
+**Asserted by**: `KernelVerifyInitrd` in
+[`../../kernel/test/storage/initrd.c`](../../kernel/test/storage/initrd.c).
+
+### 15.1 Why this one runs after a mount rather than before one
+
+Every other self-test in this corpus composes its subject. `kernel/test/volume.c`
+writes an EXT2 volume into an array, registers a device over it, and asserts
+against what it wrote — which is exactly right for asserting a *parser* and no
+use at all for asserting a *boot*.
+
+The subject here is the root the machine actually booted with, and it does not
+exist until `KernelMountRootVolume` has run. So this test composes nothing and
+mounts nothing: it examines what that function left behind. A test that mounted a
+ramdisk for itself would establish that a ramdisk *can* be mounted, and would say
+nothing whatever about whether this kernel mounted one — which is the only
+question sub-task 7.7 raises.
+
+It is therefore the last thing `KernelMain` asserts, after the root mount and
+before the closing reports.
+
+### 15.2 What is asserted, and the silent failure each catches
+
+| Property | The failure it catches |
+| -------- | ---------------------- |
+| A module named `initrd` was supplied. | A `module2` line dropped from one GRUB menu entry, which affects only whoever boots that entry. |
+| `ram0` is registered. | A module found but refused — a length that is not a whole number of blocks, or a block table that is full. |
+| The device's block count times its block size equals the module's extent. | A geometry off by a block, which reads correctly everywhere except at the end of the volume — which is where the last file's last block is. |
+| The device is not read-only. | A ramdisk registered under the rule that protects somebody else's disk, which Phase 8's redirection would then fail upon for a reason nothing states. |
+| Something is mounted at the root, upon that device. | A root that is the machine's own disk, reached because the ramdisk was preferred by accident rather than by name. Every assertion below would then concern the wrong filesystem. |
+| **Each utility in `/bin` is byte for byte the copy embedded in this image.** | A block read from the wrong offset; an indirect block followed wrongly; a length rounded up to a block boundary; a transfer that reported a count it did not deliver. Every one of these returns *data*. |
+| A read of one byte past the declared length delivers nothing. | A file whose size and whose contents disagree, which a reader that asks only for the size cannot see. |
+| `/bin/echo` is read from the root, loaded, entered at privilege level 3, and ends with status 0. | A chain from module to device to filesystem to loader that delivers something which is not an executable. |
+| A file is created upon the root, read back identically, removed, and is then absent. | A root mounted read-only, or one whose writes do not reach the medium beneath it. |
+| No program run from the ramdisk leaves an open file behind. | A descriptor leaked per execution, which costs a table entry per command in Phase 8. |
+
+### 15.3 The comparison is the assertion
+
+The `Makefile` copies one file — `build/user/<name>.embed.elf` — into the kernel
+image and onto the ramdisk. The bytes are therefore identical at build time by
+construction, and any difference observed at boot was introduced by the path
+between them: the module's extent, the direct map, the block device's arithmetic,
+the buffer cache, the inode's direct and indirect block pointers, the recorded
+length.
+
+That is a stronger statement than any layer in the stack can make about itself,
+and it is available only because the same object exists on both sides of the
+path. It is the same shape of evidence as the sixty-six `snprintf` conversions of
+Section 13 compared against the host's C library: two things that must agree, and
+a comparison that says whether they do.
+
+### 15.4 Corroboration, and why it now happens at every boot
+
+The image is made by `mke2fs` and not by anything in this repository. A volume
+composed here and read here proves the reader consistent with the composer, which
+[`../../kernel/test/volume.h`](../../kernel/test/volume.h) has warned about its
+own fixture since Phase 5.
+
+[`../storage/EXT2-VERIFICATION.md`](../storage/EXT2-VERIFICATION.md), Section 6,
+made the comparison against e2fsprogs by hand, upon images somebody had to
+remember to build. Since sub-task 7.7 the volume this kernel mounts as its root
+*is* such an image, so Phase 5's superblock, group descriptor, inode, directory
+and file-block readers are put against an implementation that shares none of
+their assumptions at every boot, in every environment, before the banner is
+printed.
+
+### 15.5 The run with a disk attached
+
+The ramdisk takes the root, so a machine carrying a volume reaches it at `/mnt`.
+That path is exercised separately, because `make verify` runs upon a machine with
+no disk and would never enter it:
+
+```sh
+mkdir -p seed/sub
+printf 'corroboration' > seed/hello.txt
+printf 'placeholder'   > seed/oxys-write-test
+printf 'inner'         > seed/sub/inner.txt
+ln -sf sub seed/link
+mke2fs -q -t ext2 -b 1024 -L oxys-probe -d seed -F probe.img 16384
+
+# The `EXT2 write self-test` entry, which is the fifth in the menu.
+qemu-system-x86_64 -machine q35 -cpu qemu64 -smp cores=2 -m 512M \
+    -cdrom build/oxys.iso \
+    -drive file=probe.img,format=raw,if=ide,index=0,media=disk \
+    -display none -serial file:probe.log -no-reboot
+
+e2fsck -fn probe.img
+```
+
+The kernel reported:
+
+```
+VFS: the initial ramdisk is mounted at the root.
+VFS: a volume the machine carries is mounted at /mnt.
+VFS: 2 mount(s).
+  / <- ram0 (ext2, block 1024, writable)
+  /mnt <- ahci0 (ext2, block 1024, writable)
+VFS write test: the command line permits writing to the volume mounted at /mnt.
+VFS write test: 5000 bytes written to /mnt/oxys-write-test and read back identically.
+VFS write test: the volume was withdrawn and marked cleanly unmounted.
+  /mnt <- ahci0 (ext2, block 1024, read-only)
+```
+
+and `e2fsck -fn` found no error in the image afterwards. Both volumes are
+mounted, both are reachable, the write probe acts upon the machine's volume and
+not upon the ramdisk, and the withdrawal leaves the operator's volume clean.
+
+### 15.6 What this verification cannot establish
+
+- **What `echo` printed.** Nothing in this kernel captures the diagnostic path,
+  so the line the program writes is evidence for a person reading the serial log
+  and not for a machine. It is the limitation
+  [`../design/LIBC.md`](../design/LIBC.md), Section 12.7, records of the whole of
+  sub-task 7.6.
+- **That the ramdisk survives being written a great deal.** The write made here
+  is one small file, created and removed. A ramdisk exhausted by an hour of a
+  shell writing to it would satisfy every assertion above.
+- **The fall-back path.** A kernel booted without a ramdisk mounts the first
+  volume it finds, as it did before 7.7. Every ISO this project builds carries a
+  ramdisk, so nothing presently exercises that branch.
+
+### 15.7 Reading the log
+
+```
+Ramdisk: ram0 is the module initrd at 0x3E7000, 2048 KiB in 4096 blocks of 512 bytes, writable.
+...
+VFS: the initial ramdisk is mounted at the root.
+VFS: contents of /:
+  2 directory .
+  2 directory ..
+  11 directory lost+found
+  12 directory bin
+  18 directory mnt
+VFS: 5 entries.
+Initial ramdisk: the module of sub-task 7.7, the device beneath it, and the root it is mounted as.
+the root filesystem is the initial ramdisk.
+Initial ramdisk self-test passed: 5 utilities stand in /bin byte for byte as they
+were built, one of them ran from there at privilege level 3, and the root took a write.
+```
+
+**The second-to-last line is the point of the section.** It was written by
+`/bin/echo`, which was read off a filesystem, loaded into an address space, and
+entered at privilege level 3 — the first line in this project's boot log produced
+by a program that existed as a *file* before it existed as a process.

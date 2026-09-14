@@ -440,6 +440,7 @@ either.
 | `drivers/mouse/mouse.c` | The PS/2 mouse upon the controller's second port: the framing of a packet stream that has none, the nine-bit movement, the single inversion of the vertical sense, and the position the driver keeps. |
 | `drivers/ahci/ahci.c` | The AHCI adaptor by first-party direct memory access: the handoff from the firmware, the ports it implements, the command list, and the region descriptors that name a caller's pages to the device. |
 | `drivers/sdhci/sdhci.c` | The SD host controller and the card behind it: the card's own command set, the two encodings of its capacity, and the transfer through the buffer data port. |
+| `drivers/ramdisk/ramdisk.c` | The extent of physical memory a boot module occupies, presented to the block layer as a device. The one driver here that converses with nothing: a transfer is a copy and cannot fail. It is what makes the initial ramdisk of sub-task 7.7 readable by the code that reads a disk. |
 | `kernel/block/block.c` | The generic block-device layer: the registry of devices that transfer fixed-size blocks, and the validated path through which every caller above reaches a driver. |
 | `kernel/block/buffer.c` | The buffer cache above the block layer: the hash, the recency list, the reference discipline and the write-back policy. |
 | `linker.ld` | The link script establishing the higher-half image layout. |
