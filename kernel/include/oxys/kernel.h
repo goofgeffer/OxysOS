@@ -7,7 +7,7 @@
  * Key definitions: KERNEL_VIRTUAL_BASE, PhysicalToVirtual, VirtualToPhysical,
  *          KernelTextStart, KernelTextEnd, KernelMain, KernelPanic,
  *          KernelWriteString, KernelDiagnosticChannelReset,
- *          KernelDisplaySetQuiet, KernelDisplayIsQuiet.
+ *          KernelDisplaySetQuiet, KernelDisplayIsQuiet, OXYS_VERSION_BANNER.
  * References:
  *   - Intel 64 and IA-32 Architectures Software Developer's Manual, Volume 3A,
  *     Section 4.5 (Four-Level Paging) and Section 3.3.7.1 (Canonical Addressing).
@@ -75,6 +75,10 @@ extern char KernelTextEnd[];
  */
 #define OXYS_SYSTEM_NAME    "Oxys-OS"
 #define OXYS_VERSION_STRING "unreleased"
+
+/* The same, as the boot banner shows it. The two change together; a release
+ * is named in one place and shown in two. */
+#define OXYS_VERSION_BANNER "UNRELEASED"
 
 #define DIRECT_MAP_BASE UINT64_C(0xFFFF800000000000)
 

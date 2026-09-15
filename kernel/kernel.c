@@ -958,35 +958,33 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
     VgaInitialise();
 
     VgaSetColour(VGA_COLOUR_LIGHT_CYAN, VGA_COLOUR_BLACK);
-    KernelWriteString(OXYS_SYSTEM_NAME "\n");
-
-    /*
-     * The release, in the ordinal form of docs/project/VERSIONING.md, Section 3,
-     * or the word "unreleased" where this image belongs to no release — which is
-     * every image built so far.
-     *
-     * It said "Version 0.1.0" until the versioning scheme was written, naming a
-     * release that had been withdrawn three days after it was published. A boot
-     * banner is the one line of the log a person reads without being asked to,
-     * and a version number in it that names nothing is worse than no number:
-     * somebody would eventually cite it.
-     */
-    VgaSetColour(VGA_COLOUR_LIGHT_GREY, VGA_COLOUR_BLACK);
-    KernelWriteString("Release " OXYS_VERSION_STRING
-                      ", x86_64, long mode active, higher-half kernel.\n");
-
     /*
      * The magic value is validated a second time here, the first validation
      * having been performed in 32-bit mode by boot/boot.asm. The repetition
      * guards against a transfer of control that bypasses the assembly entry
-     * point, and costs nothing measurable.
+     * point, and costs nothing measurable. It is validated before the banner
+     * is printed, since 2026-09-15, because the banner now says it was.
      */
     if (multiboot_magic != MULTIBOOT2_BOOTLOADER_MAGIC)
     {
         KernelPanic("The boot loader is not Multiboot2 compliant.");
     }
 
-    KernelWriteString("Multiboot2 magic value verified.\n");
+    /*
+     * The banner: one line, at the project owner's request of 2026-09-15,
+     * where it had been three. The release is OXYS_VERSION_BANNER — the
+     * ordinal form of docs/project/VERSIONING.md, Section 3, as the banner
+     * shows it, and "UNRELEASED" where this image belongs to no release, which
+     * is every image built so far. It said "Version 0.1.0" until the
+     * versioning scheme was written, naming a release that had been withdrawn
+     * three days after it was published: a boot banner is the one line of the
+     * log a person reads without being asked to, and a version number in it
+     * that names nothing is worse than no number, because somebody would
+     * eventually cite it.
+     */
+    KernelWriteString(OXYS_SYSTEM_NAME " x86-64 " OXYS_VERSION_BANNER
+                      ", Multiboot2 magic value verified\n");
+    VgaSetColour(VGA_COLOUR_LIGHT_GREY, VGA_COLOUR_BLACK);
 
     /*
      * The per-processor area of sub-task 6.13, established before anything that
@@ -1024,7 +1022,7 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
     /*
      * Sub-task 8.2: the display falls silent here unless the `diagnostics`
      * entry of the menu was chosen, and stays silent until the shell is about
-     * to be started. The three lines above it are the banner and are left upon
+     * to be started. The line above it is the banner and is left upon
      * the screen; everything from here to the shell is the boot log, which the
      * serial line carries whether or not the screen does. KernelDisplaySetQuiet
      * records why the serial line is exempt.

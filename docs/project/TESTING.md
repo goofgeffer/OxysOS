@@ -71,12 +71,11 @@ export PATH="$HOME/opt/cross/bin:$PATH"
 make verify
 ```
 
-The expected output at the completion of Phase 1 is:
+The expected output at the completion of Phase 1 was as follows; the banner is
+shown as it has read since 2026-09-15, one line where it was three:
 
 ```
-Oxys-OS
-Version 0.1.0, x86_64, long mode active, higher-half kernel.
-Multiboot2 magic value verified.
+Oxys-OS x86-64 UNRELEASED, Multiboot2 magic value verified
 Multiboot2 information structure at physical address 0x11E4D8.
 Multiboot2 information structure total size: 0x5D8 bytes.
 Phase 1 initialisation complete.
