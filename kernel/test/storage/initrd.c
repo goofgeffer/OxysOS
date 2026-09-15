@@ -37,12 +37,12 @@
  * The comparison against the embedded copy, and why it is the assertion that
  * matters.
  *
- *   The five utilities are upon the ramdisk *and* inside this image: the Makefile
- *   copies one file, `build/user/<name>.embed.elf`, into both. So the bytes are
- *   known to be the same at build time, and any difference observed here was
- *   introduced by the path between them — the module's extent, the direct map,
- *   the block device's arithmetic, the buffer cache, the inode's direct and
- *   indirect block pointers, the file's length.
+ *   The five utilities and the shell are upon the ramdisk *and* inside this
+ *   image: the Makefile copies one file, `build/user/<name>.embed.elf`, into
+ *   both. So the bytes are known to be the same at build time, and any
+ *   difference observed here was introduced by the path between them — the
+ *   module's extent, the direct map, the block device's arithmetic, the buffer
+ *   cache, the inode's direct and indirect block pointers, the file's length.
  *
  *   Every one of those fails silently. A read that follows the wrong indirect
  *   block returns a block; a length rounded up to the block returns bytes. A
@@ -63,7 +63,7 @@
 #include <oxys/proc/process.h>
 
 /* The directory the utilities stand in upon the ramdisk. The Makefile's
- * INITRD_UTILITIES list and this one describe the same five programs, and the
+ * INITRD_UTILITIES list and this one describe the same six programs, and the
  * count below is what says so out loud. */
 #define KERNEL_INITRD_BIN "/bin"
 
@@ -79,7 +79,8 @@
 
 /*
  * The copies embedded in this image, placed here by
- * kernel/test/libc/utilities_image.asm. They are arrays of unknown size and not
+ * kernel/test/libc/utilities_image.asm — and the shell by
+ * kernel/test/libc/line_image.asm. They are arrays of unknown size and not
  * pointers, for the reason kernel/test/libc/startup.c records: a linker symbol
  * has an address and no storage.
  */
@@ -93,10 +94,12 @@ extern const uint8_t KernelProgramMakeDirBegin[];
 extern const uint8_t KernelProgramMakeDirEnd[];
 extern const uint8_t KernelProgramRemoveBegin[];
 extern const uint8_t KernelProgramRemoveEnd[];
+extern const uint8_t KernelProgramShellBegin[];
+extern const uint8_t KernelProgramShellEnd[];
 
-/* One utility: where it stands upon the ramdisk, and the extent of the copy
- * embedded here. The table is walked rather than the five being written out, so
- * that a sixth utility is one row and not five edits. */
+/* One program: where it stands upon the ramdisk, and the extent of the copy
+ * embedded here. The table is walked rather than the six being written out, so
+ * that a seventh is one row and not six edits — as the shell of 8.1 was. */
 typedef struct KernelInitrdUtility
 {
     const char *path;
@@ -110,6 +113,7 @@ static const KernelInitrdUtility KernelInitrdUtilities[] = {
     { KERNEL_INITRD_BIN "/ls", KernelProgramListBegin, KernelProgramListEnd },
     { KERNEL_INITRD_BIN "/mkdir", KernelProgramMakeDirBegin, KernelProgramMakeDirEnd },
     { KERNEL_INITRD_BIN "/rm", KernelProgramRemoveBegin, KernelProgramRemoveEnd },
+    { KERNEL_INITRD_BIN "/sh", KernelProgramShellBegin, KernelProgramShellEnd },
 };
 
 #define KERNEL_INITRD_UTILITY_COUNT \
@@ -624,7 +628,7 @@ void KernelVerifyInitrd(void)
     {
         KernelWriteString("Initial ramdisk self-test passed: ");
         KernelWriteDecimal((uint64_t)KERNEL_INITRD_UTILITY_COUNT);
-        KernelWriteString(" utilities stand in " KERNEL_INITRD_BIN
+        KernelWriteString(" programs stand in " KERNEL_INITRD_BIN
                           " byte for byte as they were built, one of them ran from "
                           "there at privilege level 3, and the root took a write.\n");
     }

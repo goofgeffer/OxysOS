@@ -18,7 +18,7 @@
  *          KernelVerifyShootdown, KernelVerifyApplicationProcessors,
  *          KernelVerifyScheduler, KernelVerifyString, KernelVerifyWrappers,
  *          KernelVerifyHeap, KernelVerifyStdio, KernelVerifyStartup,
- *          KernelVerifyUtilities,
+ *          KernelVerifyUtilities, KernelVerifyLine, KernelVerifyTerminal,
  *          KernelVerifyPit, KernelVerifyKeyboard, KernelVerifySerial,
  *          KernelVerifyVga, KernelVerifyPci, KernelVerifyAta, KernelVerifyBlock,
  *          KernelVerifyBuffer, KernelVerifyExt2, KernelVerifyVfs,
@@ -313,9 +313,37 @@ void KernelVerifyStartup(void);
  */
 void KernelVerifyUtilities(void);
 
+/*
+ * Sub-task 8.1: the line editor, in two halves.
+ *
+ *   The editing and the history, driven in this kernel with the editor's
+ *   output captured and compared byte for byte — the character echoed, the
+ *   tail redrawn, the backspaces that return the cursor, the recalled line
+ *   drawn over the old one. The one place in this project where what a
+ *   program would have printed is asserted rather than read by a person.
+ *
+ *   Then a session of keystrokes, as a terminal sends them, placed upon the
+ *   terminal's queue, and `line-check` run at privilege level 3 to read it
+ *   through descriptor 0 and compare the lines it edits into.
+ *
+ * It runs after KernelVerifyUtilities, because the program it runs is built by
+ * the procedure KernelVerifyStartup asserts and reads a terminal
+ * KernelVerifyTerminal asserts.
+ */
+void KernelVerifyLine(void);
+
 /* Phases 3 and 4: the remaining devices. */
 void KernelVerifyPit(void);
 void KernelVerifyKeyboard(void);
+
+/*
+ * Sub-task 8.1: the terminal input path. The keyboard decoder is driven with
+ * scancodes and the bytes the terminal delivers are compared against what a
+ * terminal would send — a character, a control character, a cursor key's
+ * control sequence — and the queue's order and bound are asserted by
+ * injection. Nothing here needs a keyboard present.
+ */
+void KernelVerifyTerminal(void);
 void KernelVerifySerial(void);
 void KernelVerifyVga(void);
 void KernelVerifyPci(void);

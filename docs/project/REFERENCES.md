@@ -885,7 +885,34 @@ Cursor Character Absolute, `CSI Pn G`, which moves it to column Pn of the active
 line, the columns being numbered from one. They are used only by the echo loop,
 and only where the display driver has carried its own cursor into the row above.
 
-Used by: `kernel/kernel.c`.
+**From sub-task 8.1 it is relied upon in the other direction too — for what a
+terminal *sends*.** Section 5.4 defines a control sequence as CSI, then
+parameter bytes in 0x30 to 0x3F, then intermediate bytes in 0x20 to 0x2F, then
+one final byte in 0x40 to 0x7E; the line editor parses that grammar whatever the
+final byte turns out to be. Sections 8.3.18 (**CUB**, final byte D), 8.3.19
+(**CUD**, B), 8.3.20 (**CUF**, C) and 8.3.22 (**CUU**, A) are the four cursor
+movements a terminal's arrow keys send, and are what the kernel's terminal makes
+the keyboard's arrow keys send. The section numbers were checked against the
+fifth edition's own text on 2026-09-15, a first draft having recalled CUU as
+8.3.107, which is SACS.
+
+Used by: `kernel/kernel.c`, `kernel/terminal/terminal.c`, `libc/line/line.c`.
+
+### XTerm Control Sequences
+Edward Moy, Stephen Gildea and Thomas E. Dickey; the document maintained with
+xterm. `https://invisible-island.net/xterm/ctlseqs/ctlseqs.html`
+
+Not a standard, and relied upon for exactly what a standard does not settle:
+which sequence a terminal emulator sends for a key ECMA-48 assigns no movement
+to. From **PC-Style Function Keys**: the cursor keys as `CSI A` to `CSI D` in
+normal mode and `SS3 A` to `SS3 D` in application mode, Home and End as `CSI H`
+and `CSI F` or `SS3 H` and `SS3 F`. From **VT220-Style Function Keys**: Delete
+as `CSI 3 ~`, and Home and End as `CSI 1 ~` and `CSI 4 ~`. The kernel's terminal
+sends the first form of each for the keyboard's keys, and the line editor accepts
+every form, because which form arrives is the terminal's choice and not the
+program's. The tables were read from the plain-text edition on 2026-09-15.
+
+Used by: `kernel/terminal/terminal.c`, `libc/line/line.c`.
 
 ### PCI Local Bus Specification, revision 3.0
 PCI Special Interest Group.
@@ -1285,7 +1312,14 @@ And from `open()`: `O_APPEND` places each write at the end of the file "prior to
 each write", which is why an appending write here takes the size and not the
 position.
 
-Used by: `kernel/fs/vfs/`, `kernel/include/oxys/fs/vfs.h`.
+**From sub-task 8.1**: Section 11, General Terminal Interface — 11.1.9, the
+special characters, and the `stty` utility, from which the erase character is
+DEL or BS according to the terminal, which is why the line editor treats both
+as an erase; and the canonical and non-canonical modes of 11.1.6 and 11.1.7,
+of which this kernel's terminal is the second alone, as `SHELL.md`, Section
+2.1, records.
+
+Used by: `kernel/fs/vfs/`, `kernel/include/oxys/fs/vfs.h`, `libc/line/line.c`.
 
 ### The UNIX Time-Sharing System
 Ritchie, D. M., and Thompson, K. Communications of the ACM, volume 17, number 7,

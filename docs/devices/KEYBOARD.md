@@ -307,7 +307,12 @@ reading the data port — asserted only as configured state.
 
 That path is exercised by the echo loop `KernelEchoLoop`, which the kernel
 enters at the completion of Phase 3 in place of halting, and which prints every
-character typed. It was driven from the QEMU monitor:
+character typed. Since sub-task 8.1 the shell precedes it: the kernel starts
+`/bin/sh` where there is a root to read it from, and every keystroke reaches the
+shell through the terminal of `kernel/terminal/terminal.c` — the same path, with
+the key events translated to bytes on the way; `../design/SHELL.md`, Section 2.
+The echo loop remains where there is no root. It was driven from the QEMU
+monitor:
 
 ```sh
 ( sleep 6; for k in h e l l o spc o x y s; do echo "sendkey $k"; sleep 0.15; done; \

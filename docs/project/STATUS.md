@@ -42,6 +42,16 @@ ramdisk driver presents as the block device `ram0`, and the kernel mounts at the
 root before anything else. `/bin/echo` is a file upon it. A volume the machine
 carries is mounted at `/mnt`.
 
+**And since sub-task 8.1 a person can type at it.** When the boot finishes the
+kernel reads `/bin/sh` off the ramdisk and runs it at privilege level 3; it
+prompts, edits a line with the cursor keys, Home, End, Delete and the control
+characters of every shell of this lineage, keeps a history of thirty-two lines
+the arrow keys walk, and — there being no tokeniser until sub-task 8.2 — answers
+each line with a statement that nothing runs it. Beneath it is the thing that had
+to exist first: a terminal, one byte stream drawn from the keyboard and the
+serial line that a `read` of descriptor 0 waits upon, with the keyboard's keys
+translated to the sequences a terminal sends. `stdin` reads.
+
 **It pre-empts, and it schedules across processors.** Since sub-task 6.15 each
 processor holds a run queue of its own with a lock of its own, rotates
 round-robin between the threads upon it, and is taken back by a local APIC timer
@@ -70,11 +80,11 @@ the buffered input and output of ISO/IEC 9899:2011, Section 7.21 — `stdin`,
 7.21.7 and 7.21.8, and one conversion engine beneath `printf`, `fprintf`,
 `snprintf` and the five other formatted-output names. Nothing in this system
 calls them yet, the buffers being static because a stream must be usable before a
-heap has been grown; and nothing can *read* a stream, so `stdin` is permanently
-at its end. **Sub-task 7.6 added a `read` system call and did not change that**:
-it reads a file, reached through a descriptor `open` gave out, and there is still
-no call that reads the console — which is why `cat` with no operand reports the
-absence rather than copying its standard input.
+heap has been grown. **Nothing could *read* a stream until sub-task 8.1**: 7.6's
+`read` reads a file through a descriptor `open` gave out, and the call that
+reads the console arrived with the shell — so `stdin` is now the terminal, raw,
+and `cat` with no operand still reports the absence rather than copying
+keystrokes; [`../design/SHELL.md`](../design/SHELL.md), Section 2.
 
 **Sub-task 7.5 stands at the top of the phase, and it is where the library stops
 being something only the kernel can run.** A program is now built rather than
@@ -475,6 +485,43 @@ between them did — and reads, loads and runs one of them at privilege level 3.
 a volume upon a disk needs a working directory and a way to move a mount, and the
 first of those is sub-task 8.3's.
 
+**Phase 8 — the shell, in progress.** Sub-task 8.1 is complete, and it is three
+things where its line names one. **The terminal**: `kernel/terminal/terminal.c`,
+a queue of a kibibyte filled by polling the keyboard's events and the serial
+adapter's characters when a reader asks, the keyboard's cursor, home, end and
+delete keys translated to the control sequences of ECMA-48 and xterm, and the
+control key collapsed onto a letter as a terminal collapses it. A `read` of
+descriptor 0 halts the processor, interrupts enabled, until at least one byte is
+queued, and delivers what is — never nothing. It is raw: nothing echoes and
+nothing assembles a line. **The line editor**: `libc/line/`, behind
+`<line.h>`, which parses the grammar of ECMA-48, Section 5.4, whatever the final
+byte, redraws every edit with printable characters, spaces and backspaces alone,
+and keeps a ring of thirty-two lines with the draft preserved across a recall.
+**The shell**: `/bin/sh`, started by `KernelRunShell` when the boot finishes and
+started again when it ends at the end of its input.
+
+**The editor is the first thing here whose output is asserted.** It writes
+through a function it is given, and the self-test gives it one that appends to
+an array; so the display an editing key produces is compared byte for byte, and
+the one negative test that mattered — an insertion that redraws the tail and
+does not backspace over it — was caught by that alone, `line-check` passing
+because the line was right and only the screen was wrong.
+[`../design/SHELL.md`](../design/SHELL.md), Section 5.
+
+**`stdin` reads, and two tests stopped reading it.** `OxysStreamFill` is now
+`OxysRead`, as the note it replaced said it would one day be; the kernel's stdio
+self-test and `startup-check` both read `stdin` to assert it was at its end, and
+both would now execute `SYSCALL` — the first fatally, the second waiting for a
+person in the middle of `make verify` — so both stop, and the end-of-file
+discipline is asserted upon a memory stream instead.
+
+**What it is not.** A shell: nothing is parsed, expanded or run. A canonical
+terminal: `fgets` upon `stdin` delivers keystrokes and `cat` with no operand
+still reports the absence. A wait that yields: the `read` halts the processor,
+which is right while one program runs upon the bootstrap processor's own flow of
+control and wrong the moment there are two. Section 6 of the design document
+counts eight.
+
 ## 3. Where it has been observed to work
 
 A sub-task marked *implemented* in [`PLAN.md`](PLAN.md) means the code exists and
@@ -504,6 +551,7 @@ The physical machine is one machine — the HP Laptop 14-dq0052dx specified in
 | 7.5 The runtime startup object | Yes | **Yes** | **Yes** | — | **Not yet run** |
 | 7.6 The utilities and the filesystem calls | Yes | **Yes** | **Yes** | — | **Not yet run** |
 | 7.7 The initial ramdisk | Yes | **Yes** | **No** — the `bochs` upon the `PATH` had reverted to a default build for the fifth sub-task running and cannot execute long mode | — | **Not yet run** |
+| 8.1 The terminal, the line editor and the shell | Yes, and driven over the serial line | **Yes, and driven at the PS/2 keyboard** | **Yes — 8.1**, to the prompt | — | **Not yet run** |
 
 **The rows marked "— 7.2" were all established by two boots of one image**,
 because a boot runs every self-test in the corpus and a clean one is therefore
@@ -554,6 +602,22 @@ write self-test` entry selected, to establish that a machine carrying a volume
 still reaches it: the volume was mounted at `/mnt`, written through the
 filesystem layer, read back identically, withdrawn and mounted afresh read-only,
 and `e2fsck -fn` upon the image afterwards reported no error.
+
+**Sub-task 8.1's image was run in all three environments, and typed at in two
+of them.** Sixty-three assertions passed or sound and no verdict of `FAILED` in
+any; in each, `line-check` read a session of seventy-one bytes through
+descriptor 0 at privilege level 3 and reported zero failures, and the boot ended
+at the shell's prompt rather than at the echo loop. Under QEMU the shell was
+driven over the serial line by a script — a line typed, edited with Home, Right,
+Delete and End, recalled with the arrow keys, and the shell ended with control-D
+and started again. Under VirtualBox 7.2.0 it was driven at the **PS/2 keyboard**
+by `VBoxManage controlvm keyboardputscancode`, so the path from a scancode
+through the 8042, the decoder, the terminal's translation and the `read` to the
+editor's redraw upon the framebuffer console was exercised whole, and a
+screenshot shows `oxys$ hxi` drawn where `hi`, Left, `x` had been typed. Bochs
+3.1 — the `bochs` upon the `PATH` a default build for the sixth sub-task running,
+the source-tree build of Section 4A used instead — reached the prompt with every test
+clean and was not typed at, its serial channel being a file.
 
 **It was not run under Bochs, and the reason is the one this project has recorded
 four times.** The `bochs` upon the `PATH` had reverted to a default build again —
@@ -692,7 +756,7 @@ functional. [`TESTING.md`](TESTING.md), Section 3.
 There is no test harness and there will be none before Phase 7, there being no
 userland to run one in. The kernel therefore asserts its own properties at boot,
 in the order the subsystems are initialised, and `make verify` fails if any of
-them reports a failure. Sixty-one assertions presently report passed or sound.
+them reports a failure. Sixty-three assertions presently report passed or sound.
 
 Those tests are in [`../../kernel/test/`](../../kernel/test/), one file per
 subsystem. Each subsystem's design document carries a table pairing every
@@ -717,6 +781,8 @@ design document ends with its particular ones.
 | ------ | ---------- |
 | A user program upon anything but the bootstrap processor. Every user thread's affinity mask names processor 0 alone, because the allocators, the process tables and the filesystem layer its system calls reach are still unsynchronised. `SCHEDULER.md`, Section 4, and `CONCURRENCY.md`, Section 10, limitation 1. | Phase 7 |
 | More than one program at a time. The scheduler rotates threads, but nothing yet creates a second *program* that runs beside the first rather than in place of it. | Phase 7 |
+| A wait that yields the processor. A `read` of the terminal halts the bootstrap processor until a key arrives, which is right while one program runs upon its own flow of control and wrong the moment there are two; it is the first thing that would use the wait queue `SCHEDULER.md`, Section 9, limitation 8, records as absent. `SHELL.md`, Section 6. | Phase 8 |
+| A canonical terminal. `stdin` is raw: `fgets` delivers keystrokes and control sequences, unechoed, and `cat` with no operand still reports the absence. The shell wants raw; nothing yet wants the other. `SHELL.md`, Section 2.1. | When something wants it |
 | Synchronisation **applied**, beyond three structures. The diagnostic channel was locked at 6.14; the run queues and the process and thread tables at 6.15. Every other shared structure is still unsynchronised and still says so in its own file's header; `CONCURRENCY.md`, Section 10, limitation 1, enumerates them. | Phase 7 |
 | A reaper. A kernel thread that finishes cannot free its own stack — it is standing on it — and nothing else does. Its slot and its four pages are held until the machine stops. | Phase 7 |
 | Migration, work stealing, and more than one priority. A thread is placed once, at admission, upon the shortest queue its affinity permits, and stays there. | Later |

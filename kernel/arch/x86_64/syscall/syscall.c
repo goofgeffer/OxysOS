@@ -43,6 +43,7 @@
 #include <oxys/arch/cpu/tss.h>
 #include <oxys/proc/process.h>
 #include <oxys/fs/vfs.h>
+#include <oxys/terminal/terminal.h>
 
 /* Defined in kernel/arch/x86_64/syscall/syscall_entry.asm. */
 extern void SyscallEntry(void);
@@ -1085,6 +1086,21 @@ static int64_t SyscallDoClose(uint64_t descriptor)
  * A read of zero bytes is refused as EINVAL rather than answered with zero,
  * because zero is what this call returns at the end of a file and a program
  * cannot tell the two apart.
+ *
+ * **Descriptor 0 is the terminal, since sub-task 8.1**, and a read of it does
+ * not reach the filesystem layer at all. It waits until at least one byte has
+ * been typed and then delivers what has been — up to the length asked for and
+ * never nothing, so that a program can tell the terminal from a file at its end
+ * by the one property that distinguishes them: a file that has run out stays
+ * run out, and a terminal has more the moment somebody types. Nothing here
+ * echoes and nothing assembles a line; docs/design/SHELL.md, Section 2, says
+ * why the program does both.
+ *
+ * The caller's buffer is judged before the wait and not after it. The wait may
+ * be long — it is however long a person takes to press a key — and a buffer
+ * that was writable when the call was made is the buffer the program asked to
+ * receive into; judging it afterwards would change nothing about what is
+ * written and would make the refusal arrive after the keystroke was consumed.
  */
 static int64_t SyscallDoRead(uint64_t descriptor, uint64_t address, uint64_t length)
 {
@@ -1102,6 +1118,31 @@ static int64_t SyscallDoRead(uint64_t descriptor, uint64_t address, uint64_t len
     if (length == 0U)
     {
         return SYSCALL_EINVAL;
+    }
+
+    if (length > SYSCALL_TRANSFER_MAXIMUM)
+    {
+        length = SYSCALL_TRANSFER_MAXIMUM;
+    }
+
+    if (descriptor == SYSCALL_DESCRIPTOR_INPUT)
+    {
+        if (!SyscallUserRangeIsWritable(address, length))
+        {
+            ++SyscallFaults;
+
+            return SYSCALL_EFAULT;
+        }
+
+        TerminalWaitForInput();
+        read = (uint64_t)TerminalRead(buffer, (size_t)length);
+
+        for (uint64_t index = 0U; index < read; ++index)
+        {
+            destination[index] = buffer[index];
+        }
+
+        return (int64_t)read;
     }
 
     file = ProcessDescriptorFile(process, (int64_t)descriptor);

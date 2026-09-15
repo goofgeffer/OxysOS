@@ -1207,13 +1207,15 @@ for both, named `transfers`, and the self-test asserted it was zero — which is
 the assertion that keeps the test from resetting the machine.
 
 **It failed on the first run, and the failure was the assertion's and not the
-code's.** Only one of the two seams executes `SYSCALL`. `OxysStreamWrite` does;
-`OxysStreamFill` does not, there being no call that reads for it to make, so it
-is ordinary C that returns zero. The self-test reads the standard input — because
+code's.** Only one of the two seams executed `SYSCALL` then. `OxysStreamWrite` did;
+`OxysStreamFill` did not, there being no call that reads for it to make, so it
+was ordinary C that returned zero. The self-test read the standard input — because
 asserting that `stdin` reports an *end* rather than an *error* is worth doing and
 is safe — and the single counter therefore recorded a transfer that had reached
 nothing. The choice was to loosen the assertion or to split the counter, and a
-loosened assertion would have stopped reporting the thing it exists for.
+loosened assertion would have stopped reporting the thing it exists for. (Since
+sub-task 8.1 both seams execute `SYSCALL` and the self-test asserts both
+counters are zero; the split is what let that be one assertion each.)
 
 ### 10.3 The stream
 
@@ -1221,7 +1223,7 @@ loosened assertion would have stopped reporting the thing it exists for.
 
 | Stream | Descriptor | Buffering | Why |
 | ------ | ---------- | --------- | --- |
-| `stdin` | 0 | Fully buffered | Nothing reads it. Its policy is real and asserted; its source reports end-of-file. |
+| `stdin` | 0 | Fully buffered | Nothing read it until sub-task 8.1, when it became the terminal; [`SHELL.md`](SHELL.md), Section 2.4. Its policy is real and asserted; its source reported end-of-file until then, and now reads. |
 | `stdout` | 1 | **Line** buffered | Section 7.21.3, paragraph 7, permits full buffering only where the stream does not refer to an interactive device, and the thing at the far end here is a person reading a console. A fully buffered `stdout` loses the last partial line whenever a program faults, and the last partial line before a fault is the one worth having. |
 | `stderr` | 2 | **Un**buffered | Paragraph 7 requires it not to be fully buffered. A diagnostic still in a buffer when the program dies is a diagnostic that was not issued. |
 
@@ -1277,7 +1279,9 @@ an error**, and the distinction is the whole of why it is written as a function
 that returns zero rather than as a function that does not exist: an error would
 make every program reading `stdin` report a fault that did not occur. The day
 this kernel acquires a call that reads, the change is the body of one function of
-six lines and nothing else in the library.
+six lines and nothing else in the library. **That day was sub-task 8.1**, and that
+is what happened; [`SHELL.md`](SHELL.md), Section 2.4, records it and the two
+tests that had to stop reading `stdin` because it now reads.
 
 ### 10.4 The conversion
 
@@ -1969,7 +1973,7 @@ built by the procedure of Section 11 and linked against the same archive.
 | Program | What it does | What it deliberately does not |
 | ------- | ------------ | ----------------------------- |
 | [`echo`](../../userland/echo/main.c) | Writes its operands separated by one space and followed by one newline. | `-n` is an operand and a backslash is an ordinary character. Both are implementation-defined in IEEE Std 1003.1-2017, and both alternatives make `echo` unable to print something. |
-| [`cat`](../../userland/cat/main.c) | Copies each operand to the standard output. | No operand is a diagnostic rather than a copy of the standard input, there being no call that reads one; `-` is a path; `-u` is not recognised. |
+| [`cat`](../../userland/cat/main.c) | Copies each operand to the standard output. | No operand is a diagnostic rather than a copy of the standard input, there being no call that read one when it was written and the standard input being a raw terminal since sub-task 8.1; `-` is a path; `-u` is not recognised. |
 | [`ls`](../../userland/ls/main.c) | Lists each directory operand, one entry to a line, with `-a`. | It does not sort and does not use columns. Limitations 4 and 5. |
 | [`mkdir`](../../userland/mkdir/main.c) | Creates each operand, with `-p`. | `-m` is not implemented and no file mode creation mask is applied. Limitation 6. |
 | [`rm`](../../userland/rm/main.c) | Removes each operand, with `-f`. | `-i` cannot be implemented and `-r` is not, there being no call that removes a directory. Limitation 3. |
@@ -2115,7 +2119,13 @@ inherited.
    part that is about the *programs* stands open: what reaches the serial channel
    is read by a person. Closing it needs a way for the kernel to capture the
    diagnostic path, or a shell that can redirect a program's output into a file
-   the test then reads. The second arrives at sub-task 8.5.
+   the test then reads. The second arrives at sub-task 8.5. **Sub-task 8.1 found
+   a third way for one program**: the line editor writes through a function it
+   is given rather than to a descriptor, so the kernel's self-test captures what
+   it wrote and compares the bytes — the first output in this project asserted
+   rather than read. It is a property of that editor's design and not a way
+   round this limitation, which stands for every other program;
+   [`SHELL.md`](SHELL.md), Section 3.4.
 2. **No program may create or write a file.** `open` accepts `SYSCALL_OPEN_READ`
    and `SYSCALL_OPEN_DIRECTORY` and refuses every other bit, and `write` still
    reaches the two diagnostic descriptors alone. The filesystem layer has offered

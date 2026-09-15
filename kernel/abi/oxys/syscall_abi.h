@@ -238,8 +238,11 @@
  * rather than left to the C library because the kernel refuses a `write` to
  * anything else: the two halves must agree, and this file is where they do.
  *
- * **Nothing reads descriptor 0.** It is reserved and named so that the first
- * call that reads a stream does not have to renumber the other two.
+ * **Descriptor 0 is the terminal, since sub-task 8.1.** A `read` of it delivers
+ * the bytes typed at the keyboard or received upon the serial line, as they
+ * were typed and without echo, and waits until there is at least one. It was
+ * reserved and named before anything read it, so that the first call to do so
+ * did not have to renumber the other two — and it did not.
  */
 #define SYSCALL_DESCRIPTOR_INPUT  0
 #define SYSCALL_DESCRIPTOR_OUTPUT 1

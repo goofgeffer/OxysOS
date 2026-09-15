@@ -1,0 +1,147 @@
+/* SPDX-FileCopyrightText: 2026 The Oxys-OS Authors */
+/* SPDX-License-Identifier: LGPL-3.0-or-later */
+/*
+ * File: kernel/include/oxys/terminal/terminal.h
+ * Purpose: Declares the terminal input path of sub-task 8.1 — the one byte
+ *          stream a program reads as its standard input, assembled from the
+ *          keyboard's key events and the serial adapter's received characters,
+ *          with the keys that produce no character of their own translated into
+ *          the control sequences a terminal would send for them.
+ * Key definitions: TERMINAL_QUEUE_CAPACITY, TerminalInitialise, TerminalInject,
+ *          TerminalPoll, TerminalRead, TerminalWaitForInput, TerminalHasInput,
+ *          TerminalFlush, TerminalBytesQueued, TerminalBytesDelivered,
+ *          TerminalBytesDiscarded, TerminalKeysTranslated, TerminalReport.
+ * References:
+ *   - ECMA-48, 5th edition (1991), Section 5.4: the structure of a control
+ *     sequence, CSI followed by parameter bytes and a final byte; and Sections
+ *     8.3.18 (CUB), 8.3.19 (CUD), 8.3.20 (CUF) and 8.3.22 (CUU), the four
+ *     cursor movements whose final bytes D, B, C and A a terminal's cursor keys
+ *     send.
+ *   - XTerm Control Sequences (Dickey), "PC-Style Function Keys": Home and End
+ *     are CSI H and CSI F, and the VT220 editing keypad's Delete is CSI 3 ~.
+ *     These are what every terminal emulator this project is tested through
+ *     sends for those keys, so they are what the keyboard is made to send too.
+ *   - IBM Personal Computer AT technical reference, scan code set 1: the codes
+ *     of the extended keys translated below, each prefixed by 0xE0.
+ *   - docs/design/SHELL.md, Section 2: why the translation is made here and not
+ *     in the keyboard driver or in the program, and what a program may assume of
+ *     the stream.
+ *
+ * What this is, and what it is not.
+ *
+ *   It is the thing a program's `read` of descriptor 0 reaches. Before this
+ *   sub-task there was no such thing: the keyboard driver produced events and
+ *   the serial driver produced characters, and the kernel's own echo loop was
+ *   the only consumer of either. A shell needs one stream of bytes, in the order
+ *   they were typed, whichever device they were typed at.
+ *
+ *   It is *not* a line discipline. Nothing here echoes, nothing edits, nothing
+ *   waits for a newline: every byte is delivered as it arrives, and the program
+ *   that reads it does the editing — which is the arrangement a terminal in raw
+ *   mode has, and the only arrangement under which a line editor can move a
+ *   cursor. A canonical mode, in which the kernel assembles lines and a program
+ *   reads them whole, would need to be built in front of this one; nothing yet
+ *   wants it, and docs/design/SHELL.md, Section 6, records what it would cost.
+ *
+ * Why the keys are translated to control sequences rather than to a code of this
+ * kernel's own.
+ *
+ *   A byte stream must carry the cursor keys somehow, and the two choices are a
+ *   private encoding or the one every terminal already uses. The private one
+ *   would be a convention this kernel's programs alone understood, and a serial
+ *   terminal — which sends what it sends — would then be a second dialect the
+ *   editor had to parse anyway. Translating the keyboard into the terminal's own
+ *   sequences means a program parses one dialect, and the same program behaves
+ *   the same whether the person typing is at the machine or at the far end of
+ *   a serial line.
+ */
+
+#ifndef OXYS_TERMINAL_TERMINAL_H
+#define OXYS_TERMINAL_TERMINAL_H
+
+#include <oxys/types.h>
+
+/*
+ * The capacity of the byte queue. A power of two, so that an index is reduced to
+ * a subscript by a mask, as the keyboard's buffer is.
+ *
+ * It is larger than the keyboard's buffer because one key may become four
+ * bytes, and because the self-test of sub-task 8.1 places an editing session's
+ * worth of keystrokes here before the program that reads them is started.
+ */
+#define TERMINAL_QUEUE_CAPACITY 1024U
+
+/* Empties the queue and the counters. Requires nothing: the devices it will
+ * later draw upon are consulted by TerminalPoll and not here, so it may run
+ * before either exists. */
+void TerminalInitialise(void);
+
+/*
+ * Appends bytes to the queue, as if they had arrived from a device.
+ *
+ * This is the one entry by which bytes reach the queue — the keyboard's
+ * translation and the serial drain both call it — and it is exposed for the
+ * reason KeyboardProcessScancode is: the boot-time self-test places a session's
+ * keystrokes here and then starts the program that reads them, upon a machine at
+ * which nobody is typing.
+ *
+ * Bytes for which there is no room are discarded, and the discard is counted.
+ * The newest are dropped rather than the oldest, for the reason the keyboard
+ * driver gives: what was typed first is the beginning of a line, and a buffer
+ * that dropped from the front would silently rewrite text a program had not yet
+ * read.
+ */
+void TerminalInject(const char *bytes, size_t count);
+
+/*
+ * Moves whatever the keyboard and the serial adapter hold into the queue,
+ * translating key events on the way. Returns the number of bytes appended.
+ *
+ * A release produces nothing. A depression that produces a character produces
+ * that character, or its control counterpart where the control key is held. A
+ * depression of an extended key that produces no character produces the control
+ * sequence named in the references above, or nothing where the key is one no
+ * sequence is assigned to.
+ */
+size_t TerminalPoll(void);
+
+/*
+ * Removes up to `capacity` bytes from the queue into `buffer`, after polling the
+ * devices, and returns how many were removed — zero where the queue was empty.
+ * It never waits; the caller that wants to wait calls TerminalWaitForInput
+ * first.
+ */
+size_t TerminalRead(char *buffer, size_t capacity);
+
+/*
+ * Halts the processor until at least one byte is available, with interrupts
+ * enabled for the duration and masked again upon return.
+ *
+ * The wait is `sti; hlt` in a loop and not a spin, for the reason the kernel's
+ * echo loop records: the two instructions together are the one idiom under
+ * which an interrupt cannot arrive between the enable and the halt. The caller
+ * is the `read` system call, executing upon the bootstrap processor on behalf of
+ * the one program this system runs at a time; docs/design/SHELL.md, Section 2.3,
+ * says why that is enough for now and what changes when it is not.
+ */
+void TerminalWaitForInput(void);
+
+/* Reports whether the queue holds at least one byte, polling the devices first. */
+bool TerminalHasInput(void);
+
+/* Discards every byte queued, and every event and character the devices hold. */
+void TerminalFlush(void);
+
+/* The number of bytes presently queued. */
+size_t TerminalBytesQueued(void);
+
+/* The bytes delivered to readers, the bytes discarded for want of room, and the
+ * key events translated to a control sequence, since initialisation. */
+uint64_t TerminalBytesDelivered(void);
+uint64_t TerminalBytesDiscarded(void);
+uint64_t TerminalKeysTranslated(void);
+
+/* Emits a summary upon both output devices. */
+void TerminalReport(void);
+
+#endif /* OXYS_TERMINAL_TERMINAL_H */

@@ -27,12 +27,14 @@
  *   It is guarded the same way: the last assertion this file makes is that the
  *   census records no transfer at all, so a change that made one is reported
  *   rather than suffered. The three standard streams are examined — their
- *   descriptors, their buffering, and the fact that stdin is at its end — and
- *   never written to.
+ *   descriptors and their buffering — and never written to or read.
  *
- *   Reading stdin is safe and is done. OxysStreamFill is ordinary C that returns
- *   zero, this kernel having no call that reads; the assertion that stdin is
- *   permanently at end-of-file is therefore one the kernel may make itself.
+ *   Reading stdin was safe and was done, until sub-task 8.1. OxysStreamFill was
+ *   ordinary C that returned zero, this kernel having no call that reads, and
+ *   the assertion that stdin was permanently at end-of-file was one the kernel
+ *   could make itself. Since 8.1 that function reads the terminal through
+ *   SYSCALL, so stdin is now as untouchable here as stdout, and the last
+ *   assertion covers both seams.
  *
  * Why the shipped transfers are not asserted here.
  *
@@ -613,9 +615,11 @@ static void VerifyStdioFormat(void)
  * What can be asserted of stdin, stdout and stderr without touching the system.
  *
  * Their descriptors and their buffering are properties of the objects and are
- * examined directly. Nothing is written to stdout or stderr, for the reason at
- * the head of this file; stdin is read, because its source is ordinary C that
- * reports end-of-file.
+ * examined directly. Nothing is written to stdout or stderr, and since sub-task
+ * 8.1 nothing is read from stdin, for the reason at the head of this file: each
+ * would execute SYSCALL. The end-of-file discipline stdin used to be asserted
+ * by is asserted upon a memory stream instead, in VerifyStdioInput, which is
+ * the same policy above a different source.
  */
 static void VerifyStdioStandardStreams(void)
 {
@@ -631,13 +635,6 @@ static void VerifyStdioStandardStreams(void)
     VerifyStdioRequire(OxysStreamClose(stdout) == EOF, "the standard output could be closed");
     VerifyStdioRequire(OxysStreamClose(stderr) == EOF, "the standard error could be closed");
     VerifyStdioRequire(OxysStreamClose(stdin) == EOF, "the standard input could be closed");
-
-    /* This kernel has no call that reads, so the standard input is permanently
-     * at its end — and reports it as an end and not as an error, which is the
-     * distinction every program reading it depends upon. */
-    VerifyStdioRequire(fgetc(stdin) == EOF, "the standard input delivered a character");
-    VerifyStdioRequire(feof(stdin) != 0, "the standard input did not report end-of-file");
-    VerifyStdioRequire(ferror(stdin) == 0, "the standard input reported an error rather than an end");
 
     /* Flushing a stream with nothing pending must not reach the system, which is
      * what makes fflush(NULL) safe to call here at all. */
@@ -663,8 +660,8 @@ void KernelVerifyStdio(void)
     OxysStreamInspect(&census);
 
     /*
-     * Every stream this test opened was closed; nothing reached the system; and
-     * the standard input was asked for characters exactly once.
+     * Every stream this test opened was closed, and nothing reached the system
+     * through either seam.
      *
      * The first is the leak assertion: the pool is FOPEN_MAX entries and three
      * of them are the standard streams, so a test that opened a stream without
@@ -672,26 +669,23 @@ void KernelVerifyStdio(void)
      * only after enough assertions had been added, which is a failure that
      * arrives in a later session for no reason a reader can see.
      *
-     * The second is what keeps this test from resetting the machine. A byte
-     * delivered to a descriptor would execute SYSCALL, which this kernel cannot
-     * survive; this is the assertion that says so rather than the comment at the
-     * head of the file. It names `write_calls` and not both seams, because
-     * OxysStreamFill executes nothing — see <stream.h> upon why the two are
-     * counted apart.
-     *
-     * The third is the other half of that: the standard input was read, it
-     * reported its end, and it was not asked again. A stream that asked its
-     * source once per call after being told there was nothing would make one
-     * system call per character for the whole of a program's output loop, on the
-     * day a call that reads exists.
+     * The second and third are what keep this test from resetting the machine.
+     * A byte delivered to a descriptor, or asked of one, would execute SYSCALL,
+     * which this kernel cannot survive; these are the assertions that say so
+     * rather than the comment at the head of the file. Until sub-task 8.1 the
+     * third read `1` and not `0`: OxysStreamFill executed nothing then, the
+     * standard input was read here to assert it reported its end, and the
+     * count said it was asked exactly once. Since 8.1 the fill reads the
+     * terminal, and the discipline that a stream at its end is not asked again
+     * is asserted upon a memory stream in VerifyStdioInput instead.
      */
     VerifyStdioRequire(census.open == 3U,
                        "a stream this test opened was not closed");
     VerifyStdioRequire(census.write_calls == 0U,
                        "a stream reached the system, which this kernel cannot provide");
-    VerifyStdioRequire(census.fill_calls == 1U,
-                       "the standard input was asked for characters more than once "
-                       "after it had reported its end");
+    VerifyStdioRequire(census.fill_calls == 0U,
+                       "a stream asked the system for characters, which this kernel "
+                       "cannot provide");
     VerifyStdioRequire(census.rejections == 3U,
                        "the count of refused conversions is not the three this test makes");
 

@@ -21,11 +21,15 @@
  * What this does not do, and why each is a property of the system.
  *
  *   **No operand means a failure and not the standard input.** POSIX has `cat`
- *   with no operand copy standard input to standard output. This kernel has no
- *   call that reads a stream — `stdin` is permanently at its end, as
- *   libc/include/stdio.h records — so such a run would copy nothing and exit
+ *   with no operand copy standard input to standard output. When this was
+ *   written this kernel had no call that reads a stream — `stdin` was
+ *   permanently at its end — so such a run would have copied nothing and exited
  *   successfully, which is a program that appears to have worked and did not.
- *   It reports the absence instead.
+ *   Since sub-task 8.1 `stdin` is the terminal, and it is *raw*: a copy of it
+ *   would deliver keystrokes, control sequences and all, unechoed, with no
+ *   line discipline to assemble them and no end-of-file until control-D. That
+ *   is not what a person means by `cat` with no operand, so it still reports
+ *   the absence; docs/design/SHELL.md, Section 6, limitation 1.
  *
  *   **An operand of `-` is a path and not the standard input**, for the same
  *   reason. It will name no file, and the diagnostic will say so.

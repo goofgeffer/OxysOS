@@ -87,10 +87,12 @@
  * error, and a byte read back after being pushed back. All of that is policy
  * above a source, exactly as the heap of sub-task 7.3 is policy above a source,
  * and it is asserted the same way — against a memory stream, which supplies
- * characters without a system call. What is absent is only the shipped source:
- * this kernel has no call that reads, so OxysStreamFill reports end-of-file and
- * stdin is a stream that is permanently at it. The day a read call exists, one
- * function of six lines changes and every program above it keeps working.
+ * characters without a system call. The shipped source was absent until
+ * sub-task 8.1 — this kernel had no call that reads, so OxysStreamFill reported
+ * end-of-file and stdin was a stream permanently at it — and when the call
+ * arrived one function changed and every program above it kept working, which
+ * is what the arrangement was for. stdin is now the terminal: a read of it
+ * waits until something has been typed.
  *
  * Why these keep their standard names when every other global function in this
  * repository is PascalCase.
@@ -184,8 +186,9 @@ typedef struct OxysStream FILE;
  * themselves, which is what the standard requires and also what allows them to
  * be incomplete above. The three are:
  *
- *   stdin   Permanently at end-of-file, this kernel having no call that reads.
- *           Its buffering policy is real and is asserted; its source is not.
+ *   stdin   The terminal, since sub-task 8.1: a read of it waits until something
+ *           has been typed and delivers what was, unechoed and unedited. Fully
+ *           buffered, as 7.21.3 paragraph 7 permits, and a fill returns short.
  *   stdout  Line buffered, which 7.21.3 paragraph 7 permits and which is chosen
  *           because the thing at the far end is a person reading a console. A
  *           fully buffered stdout loses the last partial line whenever a program

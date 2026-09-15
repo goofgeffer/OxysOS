@@ -13,7 +13,7 @@
  *          KernelWriteHexadecimal, KernelWriteDecimal,
  *          KernelCommandLineHasOption, KernelMountRootVolume,
  *          KernelMountMachineVolume,
- *          KernelAttachPointer, KernelEchoLoop, KernelEchoBackspace,
+ *          KernelAttachPointer, KernelRunShell, KernelEchoLoop, KernelEchoBackspace,
  *          KernelSerialCursorToColumn.
  * References:
  *   - Multiboot2 Specification 2.0, Section 3.3 ("I386 machine state"): EAX
@@ -81,6 +81,7 @@
 #include <oxys/dev/ps2.h>
 #include <oxys/dev/keyboard.h>
 #include <oxys/dev/mouse.h>
+#include <oxys/terminal/terminal.h>
 #include <oxys/dev/vga.h>
 #include <oxys/gfx/framebuffer.h>
 #include <oxys/gfx/graphics.h>
@@ -693,6 +694,101 @@ static void KernelAttachPointer(void)
     CursorMoveTo(MouseX(), MouseY());
 }
 
+/* Where the shell stands upon the root, and the name its process carries. */
+#define KERNEL_SHELL_PATH "/bin/sh"
+#define KERNEL_SHELL_NAME "sh"
+
+/*
+ * Runs the shell from the root filesystem, at privilege level 3, and returns
+ * true when it ends, with its status; or false, having changed nothing, where
+ * it could not be started at all.
+ *
+ * This is sub-task 8.1's one addition to the entry point, and it is what the
+ * whole of Phase 7 was built towards: a program read from a volume, entered
+ * with an argument vector, reading a terminal and writing a console, that a
+ * person can type at. The procedure is the one every self-test that runs a
+ * program performs — create, load, stack, thread, start — and it is repeated
+ * here rather than shared, for the reason kernel/test/storage/initrd.c gives:
+ * a helper shared between a test and the thing it asserts can be wrong in
+ * both at once.
+ *
+ * The shell runs upon this processor's own flow of control, as every program
+ * so far has: ThreadStart does not return until the program ends, and the
+ * `read` the shell blocks in halts this processor until a key arrives. That is
+ * the arrangement docs/design/SHELL.md, Section 2.3, records, and it holds
+ * until something else needs the bootstrap processor while a program waits.
+ */
+static bool KernelRunShell(int64_t *status)
+{
+    ProcessArguments arguments;
+    Process *process;
+    Thread *thread;
+    Thread *boot;
+    ElfImage image;
+    uint64_t stack;
+
+    arguments.argument_count = 1U;
+    arguments.environment_count = 0U;
+    arguments.argument[0] = 0U;
+    arguments.storage_used = (uint32_t)(sizeof KERNEL_SHELL_NAME);
+
+    for (size_t index = 0U; index < sizeof KERNEL_SHELL_NAME; ++index)
+    {
+        arguments.storage[index] = KERNEL_SHELL_NAME[index];
+    }
+
+    boot = ThreadAdoptCurrent("boot");
+
+    if (boot == NULL)
+    {
+        return false;
+    }
+
+    process = ProcessCreate(KERNEL_SHELL_NAME, NULL);
+
+    if (process == NULL)
+    {
+        ThreadDestroy(boot);
+
+        return false;
+    }
+
+    if (ElfLoadFile(&process->space, KERNEL_SHELL_PATH, &image) != ELF_OK)
+    {
+        ProcessDestroy(process);
+        ThreadDestroy(boot);
+
+        return false;
+    }
+
+    ProcessRecordImage(process, &image);
+    stack = ProcessCreateUserStack(process, &arguments);
+
+    if (stack == 0U)
+    {
+        ProcessDestroy(process);
+        ThreadDestroy(boot);
+
+        return false;
+    }
+
+    thread = ThreadCreate(process, image.entry, stack);
+
+    if ((thread == NULL) || !ThreadStart(thread))
+    {
+        ProcessDestroy(process);
+        ThreadDestroy(boot);
+
+        return false;
+    }
+
+    *status = process->exit_status;
+
+    ProcessDestroy(process);
+    ThreadDestroy(boot);
+
+    return true;
+}
 static _Noreturn void KernelEchoLoop(void)
 {
     VgaSetColour(VGA_COLOUR_LIGHT_CYAN, VGA_COLOUR_BLACK);
@@ -1095,6 +1191,17 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
     (void)KeyboardInitialise();
     KernelVerifyKeyboard();
     KeyboardReport();
+
+    /*
+     * Sub-task 8.1: the terminal, which is the one byte stream a program reads
+     * as its standard input. It draws upon the keyboard above and upon the
+     * serial adapter, whose receiver is made interrupt-driven later in this
+     * sequence; the self-test drives the keyboard decoder and needs neither
+     * device present.
+     */
+    TerminalInitialise();
+    KernelVerifyTerminal();
+    TerminalReport();
 
     /*
      * Sub-task 6.5: the mouse upon the controller's second port, and the pointer
@@ -1522,6 +1629,16 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
      */
     KernelVerifyUtilities();
 
+    /*
+     * Sub-task 8.1, which runs after it for the same reason. It asserts the
+     * line editor twice over: the editing and the history in this kernel, with
+     * what the editor writes captured and compared byte for byte, and then a
+     * session placed upon the terminal and read by a program through
+     * descriptor 0 at privilege level 3 — the first `read` of the standard
+     * input this system has ever made.
+     */
+    KernelVerifyLine();
+
     KernelMountRootVolume();
 
     /*
@@ -1551,22 +1668,63 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
      * than faulting, hanging or resetting on the way. What follows them says
      * which sub-task the boot got as far as, and must be revised with the boot.
      */
-    KernelWriteString("Phase 7 initialisation complete: a program has been loaded, "
-                      "run at privilege level 3,\nhas made a child of itself, replaced "
-                      "that child's program with one read from a\nvolume, collected "
-                      "what it ended with, and ended; every device request is now "
-                      "delivered\nby the I/O APIC and completed at the Local APIC, the "
-                      "8259A pair having been retired;\nevery processor this machine "
-                      "has holds an area of its own, takes locks that\nmask its "
-                      "interrupts, answers a translation-lookaside-buffer shootdown "
-                      "sent\nto it by another, and rotates between the threads upon a "
-                      "run queue of its own;\nand the C library's string and memory "
-                      "functions, its system-call wrappers and its heap\nstand, "
-                      "asserted by the kernel because there is not yet a userland to "
-                      "assert\nthem in — a program having asked this kernel for a page "
-                      "of memory, used it,\nand given it back.\n");
+    KernelWriteString("Phase 8 initialisation complete: the shell of sub-task 8.1 is "
+                      "about to be read off the root\nfilesystem and entered at privilege "
+                      "level 3, where it prompts, edits a line with a\nhistory, and reads "
+                      "the terminal through descriptor 0 — the first thing upon this\n"
+                      "system a person can type at and be answered by; beneath it, "
+                      "everything Phase 7\nbuilt: a program loaded from a volume, "
+                      "entered with an argument vector, making a\nchild of itself and "
+                      "collecting it, above a C library whose streams, heap and\n"
+                      "wrappers were asserted by the kernel before a userland existed "
+                      "to assert them in.\n");
 
     VgaSetColour(VGA_COLOUR_LIGHT_GREY, VGA_COLOUR_BLACK);
+
+    /*
+     * Sub-task 8.1: the shell, where there is a root to read it from and a
+     * terminal to type at. It is started again when it ends, because the
+     * alternative is a machine that halts the first time somebody presses
+     * control-D — and each ending is reported, so that a shell which faulted
+     * is not mistaken for one that was asked to stop.
+     *
+     * The erase limit is set before the first prompt for the reason the echo
+     * loop sets it: everything above this line is the boot log, and a backspace
+     * must not consume it. The editor never backspaces past its own prompt, so
+     * the limit is a guard and not a mechanism the shell depends upon.
+     *
+     * Where there is a keyboard or a mouse but no root, the echo loop of Phase 3
+     * remains, as the demonstration of the interrupt path it always was.
+     */
+    if (VfsRootIsMounted() && (KeyboardIsPresent() || SerialIsPresent()))
+    {
+        VgaSetEraseLimit();
+        ConsoleSetEraseLimit();
+
+        for (;;)
+        {
+            int64_t status = 0;
+
+            if (!KernelRunShell(&status))
+            {
+                KernelWriteString("The shell " KERNEL_SHELL_PATH " could not be started.\n");
+                break;
+            }
+
+            if (status != 0)
+            {
+                /* A shell that faulted, or ended saying something went wrong,
+                 * is not started again: a shell that failed at once would be
+                 * started at once, for ever, and the log would be that. */
+                KernelWriteString("The shell ended with status ");
+                KernelWriteHexadecimal((uint64_t)status);
+                KernelWriteString(" and is not started again.\n");
+                break;
+            }
+
+            KernelWriteString("The shell ended at the end of its input; starting it again.\n");
+        }
+    }
 
     /*
      * With a keyboard the kernel has something to wait for, and waiting for it

@@ -607,6 +607,17 @@ kept, this section describing what the kernel does now.
    left to be discovered. It needs the same lock the rest of the process control
    block will take. [`LIBC.md`](LIBC.md), Section 12.7, limitation 10.
 
+   **Sub-task 8.1 added the terminal's queue** (`kernel/terminal/terminal.c`),
+   which is the mildest entry here for a reason of its own: it is filled and
+   drained by the one flow of control that reads the terminal — the `read`
+   system call upon the bootstrap processor — and no interrupt handler touches
+   it, the two device buffers beneath it being drained by polling rather than
+   from their handlers precisely so that this would be so. Two readers would
+   race upon the read index and each would receive part of what the other was
+   owed. There is one reader, by the same affinity that keeps everything above
+   safe, and the queue is counted here because that is a property of today.
+   [`SHELL.md`](SHELL.md), Section 2.3.
+
    **None of that is unsafe today, and the reason has changed twice.** It used to
    be that there was one flow of control. Then sub-task 6.14 started the other
    processors, and the reason became that a started processor had nothing to run.

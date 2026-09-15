@@ -46,7 +46,7 @@ rotates round-robin between the threads upon it, and is taken back by a local
 timer calibrated against the interval timer when a ten-millisecond quantum
 expires.
 
-**Phase 7 is complete.** Sub-task 7.1 is complete: the nineteen string and memory
+**Phase 7 is complete, and Phase 8 has begun.** Sub-task 7.1 is complete: the nineteen string and memory
 functions of ISO/IEC 9899:2011, Section 7.24, that do not require a locale or an
 `errno`, in [`../../libc/`](../../libc/) under the userland's permissive licence
 — and, because 7.2 could not be written until it was done,
@@ -139,9 +139,40 @@ same program embedded in the kernel image — the two having been one file at bu
 time — so a block read from the wrong offset or a length rounded to a boundary is
 caught rather than returned as data.
 
-**Next: sub-task 8.1** — line editing with history, and the beginning of the
-shell. Phase 8 is what the whole of Phase 7 was built for, and `Oxys 1 Alpha` is
-cut at the end of it.
+**Phase 8 is open, and sub-task 8.1 is complete**: a person can type at this
+system and be answered by it. The plan's line for it is "line editing with
+history", and that is what is seen — a prompt, a line edited with the cursor
+keys, Home, End, Delete, Backspace and the control characters every shell of
+this lineage accepts, and a history of thirty-two lines the arrow keys walk —
+but the thing that had to exist first is the one the line does not name: **a way
+for a program to read what a person types.** Until this sub-task there was none.
+
+So it is three things. **The terminal**, in the kernel: one byte stream, drawn
+from the keyboard and the serial line, that `read` of descriptor 0 delivers,
+waiting until there is something to deliver. The keyboard's cursor keys become
+the control sequences ECMA-48 and every terminal emulator send, so a program
+parses one dialect whether the person is at the machine or at the far end of a
+serial line. It is raw — nothing echoes and nothing assembles a line — because
+that is the only arrangement a line editor can work upon. **The line editor**,
+in the C library, above an output function and never a descriptor: the division
+of the heap and the streams made a third time, and this time it buys something
+new, because the kernel's self-test captures what the editor writes and asserts
+the *display* byte for byte — the first output in this project asserted rather
+than read by a person. A negative test removed the backspaces after an
+insertion and every assertion upon the *line* still passed. **The shell**,
+`/bin/sh` upon the ramdisk, which the kernel starts when the boot finishes and
+which, there being no tokeniser until 8.2, answers every line with a statement
+that nothing runs it. [`../design/SHELL.md`](../design/SHELL.md).
+
+**`stdin` reads.** `OxysStreamFill` was written as a function that reported
+end-of-file so that, on the day a call that reads existed, one function would
+change and nothing above it; that day was this one, and that is what happened.
+Two self-tests that read `stdin` to assert it was at its end had to stop,
+because it now waits for a person.
+
+**Next: sub-task 8.2** — the tokeniser and the command parser, which are what
+turn a line into something 8.3's built-ins and 8.4's `fork` and `execve` can
+act upon.
 
 **Three releases are planned, and each is fixed to a sub-task below rather than
 to a date**: `Oxys 1 Alpha` at **8.7**, `Oxys 1 Beta` at **9.7**, and `Oxys 1` at
@@ -218,7 +249,7 @@ sub-task being the verification itself.
 | [5](#phase-5--ext2-filesystem) | EXT2 filesystem | Implemented |
 | [6](#phase-6--graphics-system-calls-process-management-and-symmetric-multi-processing) | Graphics, system calls, processes, SMP | Implemented |
 | [7](#phase-7--userland-and-minimal-c-library) | Userland and minimal C library | Implemented |
-| [8](#phase-8--shell) | Shell | Planned |
+| [8](#phase-8--shell) | Shell | In progress |
 | [9](#phase-9--the-desktop-its-system-services-and-its-configuration) | The desktop, its services and its configuration | Planned |
 | [10](#phase-10--cryptography) | Cryptography | Planned |
 | [11](#phase-11--networking) | Networking | Planned |
@@ -769,13 +800,49 @@ system's — and the first of those is sub-task 8.3's.
 
 | # | Sub-task | State | Asserted by |
 | - | -------- | ----- | ----------- |
-| 8.1 | Implement line editing with history. | Planned | — |
+| 8.1 | Implement line editing with history. | Implemented | `KernelVerifyTerminal`, `KernelVerifyLine` |
 | 8.2 | Implement the tokeniser and the command parser. | Planned | — |
 | 8.3 | Implement built-in commands (`cd`, `exit`, `export`, `pwd`). | Planned | — |
 | 8.4 | Implement external program execution by `fork()` and `execve()`. | Planned | — |
 | 8.5 | Implement input and output redirection. | Planned | — |
 | 8.6 | Implement pipelines. | Planned | — |
 | 8.7 | Implement job control, process groups and terminal signal delivery. **`Oxys 1 Alpha` is cut here.** | Planned | — |
+
+**Specifications**: IEEE Std 1003.1-2017, Section 11 (the terminal) and `sh`;
+ECMA-48, Section 5.4 and Sections 8.3.18 to 8.3.22; XTerm Control Sequences.
+**Design**: [`../design/SHELL.md`](../design/SHELL.md), one section per
+sub-task.
+
+**(a)** Sub-task 8.1 is more than its line names, and had to be. "Line editing
+with history" presumes a program can read what a person types, and until this
+sub-task none could: `stdin` was a stream permanently at its end. So the
+sub-task is the **terminal** — one byte stream in the kernel, drawn from the
+keyboard and the serial line, that `read` of descriptor 0 delivers, the
+keyboard's cursor keys translated to the sequences ECMA-48 and every terminal
+emulator send — and the **line editor** in the C library above it, and the
+**shell** that prompts with it. The terminal is raw, echoing nothing and
+assembling nothing, because that is the only arrangement a line editor can work
+upon; a canonical mode is recorded as absent and wanted by nothing yet.
+[`../design/SHELL.md`](../design/SHELL.md), Section 2.
+
+**The editor asks one thing of a display — that a backspace moves the cursor
+left — and is asserted by what it writes.** It draws every edit with printable
+characters, spaces and backspaces, so it draws correctly upon a serial terminal,
+the text-mode display and the framebuffer console alike; and it writes through a
+function it is given, so the kernel's self-test captures the bytes and compares
+them. That is the first output in this project asserted rather than read by a
+person, and the negative test that removed the backspaces after an insertion
+showed why it matters: `line-check`, reading the same session at privilege level
+3, passed — the line was right and only the screen was wrong. Section 5.
+
+**Eight limitations are recorded and two are structural.** A `read` of the
+terminal halts the processor, which is right while one program runs upon the
+bootstrap processor's own flow of control and wrong the moment there are two;
+it is the first thing here that would use the wait queue
+[`../design/SCHEDULER.md`](../design/SCHEDULER.md), Section 9, records as
+absent. And a line longer than the display is wide is drawn wrongly once it
+wraps upon a serial terminal, the editor being unable to move the cursor up.
+Section 6.
 
 **Sub-task 8.7 closes Phase 8 and is where the first release is cut.** `Oxys 1
 Alpha` is the first image worth handing to somebody, because it is the first one

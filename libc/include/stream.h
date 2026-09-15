@@ -90,14 +90,16 @@ int64_t OxysStreamWrite(int descriptor, const void *buffer, size_t length);
  * Obtains at most `capacity` bytes from the system upon the given descriptor,
  * and returns how many were obtained, zero at end-of-file, or -1.
  *
- * **The shipped implementation returns zero and always will until this kernel
- * acquires a call that reads a console.** Sub-task 7.6 added a `read`, and it
- * reads a file through a descriptor `open` gave out; no call reads the thing
- * `stdin` is connected to. A stream whose source is this function is therefore
- * permanently at end-of-file, which is what stdin is. That is a limitation of the system and
- * not of the buffering above it, and it is written as a function that reports
- * end-of-file rather than as an absent function so that every program above it
- * is already correct on the day the call exists.
+ * **The shipped implementation reads the descriptor, since sub-task 8.1.** It
+ * returned zero before that: sub-task 7.6's `read` read a file through a
+ * descriptor `open` gave out, and no call read the thing `stdin` is connected
+ * to, so a stream whose source was this function was permanently at
+ * end-of-file. It was written as a function that reported end-of-file rather
+ * than as an absent function so that every program above it would already be
+ * correct on the day the call existed — and on that day the body of this
+ * function changed and nothing above it did. A fill of `stdin` now waits until
+ * something has been typed and returns short, which the policy above treats as
+ * ordinary.
  *
  * Zero and -1 are distinguished because the policy above must distinguish them:
  * end-of-file sets one indicator and an error sets another, and a stream that
@@ -183,14 +185,18 @@ int OxysStreamDescriptor(FILE *stream);
  * not reach the system can assert it is zero, and so discovers a change that
  * made it reach the system rather than suffering one.
  *
- * The two seams are counted separately and that is not tidiness. Only one of
- * them executes SYSCALL: OxysStreamWrite does, and OxysStreamFill does not,
- * there being no call that reads for it to make. A self-test conducted inside
- * this kernel may therefore read a stream and may not write one, so it needs to
- * assert that `write_calls` is zero while `fill_calls` may be whatever its own
- * reading made it. A single counter for both would have forced that assertion to
- * be made loosely or not at all — and the first version of this structure had
- * one, which is how the distinction came to be noticed.
+ * The two seams are counted separately and that is not tidiness. Until sub-task
+ * 8.1 only one of them executed SYSCALL: OxysStreamWrite did, and
+ * OxysStreamFill did not, there being no call that reads for it to make, so a
+ * self-test conducted inside this kernel could read a stream and could not
+ * write one, and needed to assert that `write_calls` was zero while
+ * `fill_calls` was whatever its own reading made it. A single counter for both
+ * would have forced that assertion to be made loosely or not at all — and the
+ * first version of this structure had one, which is how the distinction came
+ * to be noticed. Since 8.1 both seams execute SYSCALL and the self-test asserts
+ * both counters are zero; the two are kept apart because a census that could
+ * not say which seam was reached would be a census that could not say what a
+ * program did.
  */
 typedef struct OxysStreamCensus
 {

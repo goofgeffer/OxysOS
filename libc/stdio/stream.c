@@ -138,7 +138,7 @@ static char StreamBuffers[FOPEN_MAX][STREAM_BUFFER_BYTES];
  *
  * Descriptor 0 is the standard input, 1 the output and 2 the error, which is the
  * numbering kernel/abi/oxys/syscall_abi.h's `write` already uses for the latter
- * two. Nothing reads descriptor 0; see OxysStreamFill.
+ * two. Descriptor 0 is the terminal since sub-task 8.1; see OxysStreamFill.
  */
 static struct OxysStream StreamPool[FOPEN_MAX] = {
     {

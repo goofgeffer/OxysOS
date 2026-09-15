@@ -156,6 +156,44 @@ The VGA console is expected to present the identification banner in light cyan
 upon black, followed by the status lines. The serial output is directed to the
 standard output stream of the invoking terminal.
 
+### 2.1 Typing at the shell, and driving it without a person
+
+Since sub-task 8.1 the boot ends at a prompt rather than at the echo loop, and
+`make run-qemu` leaves the invoking terminal attached to the shell over the
+serial line: type at it. A serial terminal sends `CR` for Return and `DEL` for
+Backspace, and the line editor accepts both alongside the keyboard's `LF` and
+`BS`, so nothing needs configuring.
+
+**The one property of the sub-task that no self-test can reach is that a `read`
+of the terminal waits**, the self-test placing its session before the program
+starts; so an interactive session is part of the evidence for 8.1 and not a
+demonstration, and it can be made without a person. Give QEMU a socket for its
+serial port and write the bytes a terminal would send:
+
+```sh
+qemu-system-x86_64 -machine q35 -cpu qemu64 -smp cores=2 -m 512M \
+    -cdrom build/oxys.iso -display none -no-reboot \
+    -chardev socket,id=s,path=/tmp/oxys-serial.sock,server=on,wait=off \
+    -serial chardev:s
+```
+
+Then, from anything that can connect to a Unix socket, wait for `oxys$ ` and
+send, for example, `wrold` `ESC [ H` `ESC [ C` `ESC [ 3 ~` `ESC [ C` `r`
+`ESC [ F` `CR` — which is Home, Right, Delete, Right, `r`, End, Return — and
+read back `sh: no tokeniser yet, so nothing runs: world`. `ESC [ A` recalls it;
+control-D upon an empty line ends the shell and the kernel starts it again.
+The rows of [`TESTING-RECORD.md`](TESTING-RECORD.md) for 8.1 were made this
+way, and the bytes are the session `kernel/test/libc/line.c` uses, so a
+difference between the two runs is a difference between the injected path and
+the interrupt-driven one.
+
+**Under VirtualBox the same can be done at the PS/2 keyboard**, which is the
+path a person at the machine takes and the one the serial line does not
+exercise: `VBoxManage controlvm "Oxys-OS" keyboardputscancode 23 a3 17 97`
+presses and releases `h` and `i`, the make code and then the break code of
+each, and `e0 4b e0 cb` is the left arrow. Section 4 holds the machine's
+configuration and Section 4.1 the serial log the answer is read from.
+
 ## 3. Execution under UEFI firmware
 
 ```sh

@@ -34,11 +34,11 @@
  *
  * What it must not do.
  *
- *   It must not read the standard input expecting characters, this kernel having
- *   no call that reads; it must not open a file, there being no call that opens
- *   one; and it must not allocate more than PROCESS_BREAK_MAXIMUM, which is
- *   sixteen mebibytes. Each of those is a property of the system and not of this
- *   program, and each is asserted here rather than avoided silently.
+ *   It must not read the standard input, which since sub-task 8.1 is the terminal
+ *   and would wait for a person; it must not open a file, there being no call
+ *   that opened one when this was written; and it must not allocate more than
+ *   PROCESS_BREAK_MAXIMUM, which is sixteen mebibytes. Each of those is a
+ *   property of the system and not of this program.
  */
 
 #include <errno.h>
@@ -301,12 +301,14 @@ int main(int argc, char *argv[], char *envp[])
         (void)fprintf(stderr, "  This line went to the standard error, which is "
                               "unbuffered.\n");
 
-        /* And the standard input is at its end rather than in error, this kernel
-         * having no call that reads. */
-        StartupRequire(fgetc(stdin) == EOF, "the standard input delivered a character");
-        StartupRequire(feof(stdin) != 0, "the standard input did not report its end");
-        StartupRequire(ferror(stdin) == 0,
-                       "the standard input reported an error rather than an end");
+        /*
+         * The standard input is not read. Until sub-task 8.1 it was, to assert
+         * that it reported an end rather than an error, this kernel having no
+         * call that reads; since 8.1 it is the terminal, and a program that
+         * read it here would wait for a person to press a key in the middle of
+         * `make verify`. That the terminal delivers what was typed is asserted
+         * by `line-check`, which is given a session to read.
+         */
     }
 
     /* ------------------------------------------------- termination */

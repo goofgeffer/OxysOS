@@ -2,12 +2,14 @@
 <!-- SPDX-License-Identifier: CC0-1.0 -->
 # `userland/` — The Programs That Run Upon This System
 
-**Phase**: 7 of [`../docs/project/PLAN.md`](../docs/project/PLAN.md). Sub-task
+**Phase**: 7 and 8 of [`../docs/project/PLAN.md`](../docs/project/PLAN.md). Sub-task
 7.5 placed the first material here; sub-task 7.6 added the utilities and the three
 programs that assert them; and sub-task 7.7 put five of them somewhere a person
-could find, in `/bin` upon the initial ramdisk the kernel mounts as its root. See
+could find, in `/bin` upon the initial ramdisk the kernel mounts as its root; and
+sub-task 8.1 added the shell, which the kernel starts when the boot finishes, and
+the program that asserts its line editor. See
 [`../docs/storage/INITRD.md`](../docs/storage/INITRD.md), and Section 2 of it for
-why the four `-check` programs are **not** carried there: each exists to make a
+why the five `-check` programs are **not** carried there: each exists to make a
 machine-readable statement about a system call, so each is embedded in the kernel
 image beside the self-test that runs it, and a system that shipped them in `/bin`
 would be shipping its own test harness to somebody who asked for a shell.
@@ -40,15 +42,17 @@ which is what makes the boundary worth having somewhere a person can see.
 | ---- | ----------- |
 | [`startup-check/main.c`](startup-check/main.c) | Sub-task 7.5: the first program in this project built from source rather than composed byte by byte, and the thing that asserts the runtime startup object and the link procedure. It makes its own assertions and ends with the number that failed; `kernel/test/libc/startup.c` runs it and checks that number. |
 | [`echo/main.c`](echo/main.c) | Sub-task 7.6: writes its operands separated by one space and followed by one newline. `-n` is an operand and a backslash is an ordinary character, both cases being implementation-defined in IEEE Std 1003.1-2017. |
-| [`cat/main.c`](cat/main.c) | Sub-task 7.6: copies each operand to the standard output. No operand is a diagnostic rather than a copy of the standard input, there being no call that reads one. |
+| [`cat/main.c`](cat/main.c) | Sub-task 7.6: copies each operand to the standard output. No operand is a diagnostic rather than a copy of the standard input: there was no call that read one when it was written, and since sub-task 8.1 the standard input is a raw terminal that no line discipline stands in front of, so a copy of it would deliver keystrokes. |
 | [`ls/main.c`](ls/main.c) | Sub-task 7.6: lists each directory operand, one entry to a line, with `-a`. It does not sort, this system having no locale and no heap sized by a directory it has not finished reading. |
 | [`mkdir/main.c`](mkdir/main.c) | Sub-task 7.6: creates each operand, with `-p`. No file mode creation mask is applied, this system having none. |
 | [`rm/main.c`](rm/main.c) | Sub-task 7.6: removes each operand, with `-f`. A directory is refused, there being no call that removes one. |
 | [`arg-check/main.c`](arg-check/main.c) | Sub-task 7.6: compares the argument vector it was given against the vector it expects, and ends with the number of comparisons that failed. It exists because nothing in this kernel can read what a program printed. |
 | [`exec-check/main.c`](exec-check/main.c) | Sub-task 7.6: becomes `arg-check` through `execve`, so that a vector crosses an address space that is destroyed. It has no assertions of its own — upon success it no longer exists, and the status the kernel collects is `arg-check`'s. |
 | [`file-check/main.c`](file-check/main.c) | Sub-task 7.6: asserts the six filesystem calls by comparison — a file of known contents read byte for byte, a directory of known entries listed, and twenty refusals asserted by the **name** of the failure rather than by its sign. It was written because a negative test showed that a `read` delivering no bytes at all was reported by nothing. |
+| [`sh/main.c`](sh/main.c) | Sub-task 8.1: the shell, as far as a line editor takes it. It prompts with `oxys$ `, reads a line through the C library's editor with its history, and — there being no tokeniser until 8.2 — prints the line back preceded by a statement that nothing runs it. Control-D upon an empty line ends it, and the kernel starts it again. |
+| [`line-check/main.c`](line-check/main.c) | Sub-task 8.1: reads an editing session the kernel's self-test placed upon the terminal, through the same `LineRead` the shell uses, and ends with the number of lines that were not what the session should have edited into. It asserts the half of the sub-task the kernel cannot: the `read` of descriptor 0 and the editor's output reaching descriptor 1, both of which execute `SYSCALL`. |
 
-**The three `-check` programs are not utilities and are not shipped as such.**
+**The `-check` programs are not utilities and are not shipped as such.**
 They exist to assert what a utility cannot assert of itself, for the reason
 [`../docs/design/LIBC.md`](../docs/design/LIBC.md), Section 12.4, gives: nothing
 in this kernel can read what a program printed, so a program whose whole output
@@ -115,10 +119,13 @@ The kernel has fourteen system calls; `OxysOpen` accepts `SYSCALL_OPEN_READ` and
 `SYSCALL_OPEN_DIRECTORY` and refuses every other bit, and `OxysWrite` still
 reaches the two diagnostic descriptors alone. `fopen` is accordingly still absent
 from `<stdio.h>`, a program reaching a file through `<syscall.h>` and a
-descriptor instead. **And `stdin` is still permanently at end-of-file**: the
-`read` of 7.6 reads a file and there is no call that reads a console. Each of
-those is recorded at the head of the header that would otherwise declare it, and
-the reasoning is [`../docs/design/LIBC.md`](../docs/design/LIBC.md), Section 12.7.
+descriptor instead. **And since sub-task 8.1 `stdin` is the terminal**: a `read`
+of descriptor 0 waits until something has been typed and delivers it raw,
+unechoed and unedited, which is what the shell's line editor wants and what
+`fgets` upon `stdin` does not; [`../docs/design/SHELL.md`](../docs/design/SHELL.md),
+Section 2.1, records why there is no canonical mode. The rest is recorded at
+the head of the header that would otherwise declare it, and the reasoning is
+[`../docs/design/LIBC.md`](../docs/design/LIBC.md), Section 12.7.
 
 **There is no working directory**, so a relative path resolves against the root.
 That is why `ls` with no operand lists `/` rather than `.`, and it is sub-task

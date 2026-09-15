@@ -209,7 +209,10 @@ refusing the movement. The driver holds an **erase limit**: a position
 before which the cursor will not retreat under any backspace. `VgaSetEraseLimit`
 records the current cursor position as that limit, and whoever is reading input
 calls it where the input is to begin — `KernelEchoLoop` does so immediately after
-printing its banner. Everything before the limit is the kernel's and is
+printing its banner, and `KernelMain` does so before starting the shell of
+sub-task 8.1, whose line editor never backspaces past its own prompt and for
+which the limit is therefore a guard rather than a mechanism. Everything
+before the limit is the kernel's and is
 unreachable; everything after it is the user's and may be erased.
 
 Within that constraint the backspace behaves as the standard describes:

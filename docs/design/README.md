@@ -3,18 +3,20 @@
 # `docs/design/` — The Kernel Itself, and the Interface It Presents
 
 How the machine is brought up, how it is arranged once it is, and — from
-sub-task 7.1 — what a program standing upon it is given. These seventeen
+sub-task 7.1 — what a program standing upon it is given. These eighteen
 documents describe the parts of the kernel that no device driver may assume the
 absence of. Five of them are the graphical work, which
 [`GRAPHICS.md`](GRAPHICS.md) indexes and no longer holds.
 
-**[`LIBC.md`](LIBC.md) is the one whose subject is not the kernel**, and it is
-here rather than in a group of its own because what it describes is the other
-side of a boundary this group already documents: [`PRIVILEGE.md`](PRIVILEGE.md)
-is the system-call interface as the kernel implements it, and `LIBC.md` is the
-same interface as a program is given it, together with the library built above.
-A fifth group for one document would have been a worse arrangement than a
-widened description of this one.
+**[`LIBC.md`](LIBC.md) and [`SHELL.md`](SHELL.md) are the two whose subject is
+not the kernel**, and they are here rather than in a group of their own because
+what each describes is the other side of a boundary this group already
+documents: [`PRIVILEGE.md`](PRIVILEGE.md) is the system-call interface as the
+kernel implements it, `LIBC.md` is the same interface as a program is given it,
+together with the library built above, and `SHELL.md` is the first program that
+stands upon that library — and the terminal the kernel had to grow for it to
+read. A fifth group for two documents would have been a worse arrangement than
+a widened description of this one.
 
 | Document | Subject | Implementation | Phase |
 | -------- | ------- | -------------- | ----- |
@@ -35,6 +37,7 @@ widened description of this one.
 | [`SMP.md`](SMP.md) | The bring-up of the application processors: the INIT-startup-startup protocol and the delays it prescribes, the real-mode trampoline that carries a processor from a reset to 64-bit mode upon the kernel's own hierarchy, the identity mapping that exists for the duration and is removed by the first shootdown this kernel sends to anybody, and the rule that a starting processor allocates nothing. | [`../../kernel/arch/x86_64/smp/smp.c`](../../kernel/arch/x86_64/smp/smp.c), [`../../boot/trampoline.asm`](../../boot/trampoline.asm) | 6.14 |
 | [`SCHEDULER.md`](SCHEDULER.md) | The run queue each processor holds and the lock upon it, the round-robin rotation, the affinity mask that decides which queue a thread may join — and which is the state of the outstanding locks written as a value in a field — the local timer whose rate the kernel measures rather than assumes, and the critical section a switch is made inside. | [`../../kernel/proc/sched.c`](../../kernel/proc/sched.c) | 6.15 |
 | [`LIBC.md`](LIBC.md) | The C library: the division of the system-call header into the interface a program is entitled to and the implementation it is not — a licensing obligation discharged before the wrappers depended upon it — and the nineteen string and memory functions of ISO/IEC 9899:2011, Section 7.24, that this library implements, the three it does not, and why a userland library is presently compiled into the kernel image. | [`../../libc/`](../../libc/), [`../../kernel/abi/`](../../kernel/abi/) | 7.1 |
+| [`SHELL.md`](SHELL.md) | The shell, and what had to exist before a program could read what a person types: the terminal — one byte stream assembled in the kernel from the keyboard and the serial line, the cursor keys translated to the control sequences ECMA-48 and every terminal emulator send — and the line editor above it, which asks nothing of a display but a backspace, keeps a history of thirty-two lines, and is the first thing here built so that what a program prints can be asserted. One section per sub-task of Phase 8; sub-task 8.1 so far. | [`../../kernel/terminal/`](../../kernel/terminal/), [`../../libc/line/`](../../libc/line/), [`../../userland/sh/`](../../userland/sh/) | 8.1 |
 
 They are listed in the order the phases build them, and that is the order to read
 them in if you are new to the project: each depends upon the ones before it, and

@@ -153,7 +153,9 @@ LIBC_SOURCES := libc/string/copying.c \
                 libc/stdio/stream.c \
                 libc/stdio/format.c \
                 libc/stdio/system.c \
-                libc/stdlib/exit.c
+                libc/stdlib/exit.c \
+                libc/line/line.c \
+                libc/line/system.c
 
 # The C library's one assembly translation unit, which is the system-call
 # instruction itself.
@@ -208,6 +210,9 @@ C_SOURCES := kernel/kernel.c \
              kernel/test/libc/stdio.c \
              kernel/test/libc/startup.c \
              kernel/test/libc/utilities.c \
+             kernel/test/libc/line.c \
+             kernel/test/terminal/terminal.c \
+             kernel/terminal/terminal.c \
              kernel/mm/pmm.c \
              kernel/mm/vmm.c \
              kernel/mm/heap.c \
@@ -283,6 +288,7 @@ ASM_SOURCES := boot/boot.asm \
                kernel/arch/x86_64/proc/switch.asm \
                kernel/test/libc/startup_image.asm \
                kernel/test/libc/utilities_image.asm \
+               kernel/test/libc/line_image.asm \
                $(LIBC_ASM_SOURCES)
 
 OBJECTS := $(patsubst %.c,$(BUILD_DIR)/%.c.o,$(C_SOURCES)) \
@@ -469,7 +475,7 @@ $(USER_CRT0): libc/crt/crt0.asm
 # Within the generated rule, the archive is named *after* the program's objects,
 # which is not a style choice: a linker resolves an archive's members against the
 # references it has already seen, so an archive named first contributes nothing.
-USER_PROGRAMS := startup-check arg-check exec-check file-check echo cat ls mkdir rm
+USER_PROGRAMS := startup-check arg-check exec-check file-check line-check echo cat ls mkdir rm sh
 
 USER_PROGRAM_SOURCES := $(foreach program,$(USER_PROGRAMS),userland/$(program)/main.c)
 USER_PROGRAM_IMAGES  := $(foreach program,$(USER_PROGRAMS),$(USER_DIR)/$(program).elf)
@@ -514,9 +520,13 @@ USER_DEPENDENCIES := $(patsubst %.c,$(USER_DIR)/%.c.d,$(LIBC_SOURCES)) \
 # The self-test of sub-task 7.6 embeds seven more by the same means, and its
 # translation unit is therefore made to depend upon every one of them — written
 # as a list derived from USER_PROGRAMS rather than spelled out, so that a program
-# added to that list cannot be embedded stale.
+# added to that list cannot be embedded stale. The self-test of sub-task 8.1
+# embeds the two of its own — `line-check`, which it runs, and `sh`, which the
+# ramdisk self-test compares against /bin/sh — and names them, because the
+# derived list would embed every program twice.
 $(BUILD_DIR)/kernel/test/libc/startup_image.asm.o: $(USER_DIR)/startup-check.embed.elf
 $(BUILD_DIR)/kernel/test/libc/utilities_image.asm.o: $(USER_PROGRAM_EMBEDS)
+$(BUILD_DIR)/kernel/test/libc/line_image.asm.o: $(USER_DIR)/line-check.embed.elf $(USER_DIR)/sh.embed.elf
 $(BUILD_DIR)/%.asm.o: %.asm
 	@mkdir -p $(dir $@)
 	$(NASM) $(ASFLAGS) $< -o $@
@@ -621,11 +631,11 @@ INITRD_BLOCKS  := 2048
 INITRD_UUID    := 0c5f7a10-7b41-4d2e-9a3c-6f0c5f7a1000
 
 # The programs the ramdisk carries, which are the five utilities of sub-task 7.6
-# and not the four check programs beside them. A check program is a test's
-# apparatus: it is embedded in the kernel image, where the self-test that runs it
-# is, and a system that shipped it in /bin would be shipping its own test harness
-# to somebody who asked for a shell.
-INITRD_UTILITIES := echo cat ls mkdir rm
+# and the shell of sub-task 8.1, and not the five check programs beside them. A
+# check program is a test's apparatus: it is embedded in the kernel image, where
+# the self-test that runs it is, and a system that shipped it in /bin would be
+# shipping its own test harness to somebody who asked for a shell.
+INITRD_UTILITIES := echo cat ls mkdir rm sh
 INITRD_SOURCES   := $(foreach utility,$(INITRD_UTILITIES),$(USER_DIR)/$(utility).embed.elf)
 
 # `/mnt` is the second and last thing upon the image, and it is empty.

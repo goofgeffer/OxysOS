@@ -45,7 +45,8 @@ simply there.
 
 ## 2. What is upon it
 
-Five files and two directories.
+Six files and two directories: the five utilities of sub-task 7.6, and since
+sub-task 8.1 the shell.
 
 | Path | What it is |
 | ---- | ---------- |
@@ -54,11 +55,12 @@ Five files and two directories.
 | `/bin/ls` | The same. |
 | `/bin/mkdir` | The same. |
 | `/bin/rm` | The same. |
+| `/bin/sh` | The shell of sub-task 8.1, which the kernel reads off this filesystem and starts when the boot finishes. [`../design/SHELL.md`](../design/SHELL.md), Section 4. |
 | `/mnt` | Empty. Where a volume the machine carries is mounted; Section 6.3. |
 | `/lost+found` | `mke2fs` makes it. Nothing here uses it. |
 
-**The four check programs of sub-task 7.6 are deliberately not here.**
-`arg-check`, `exec-check`, `file-check` and `startup-check` are a test's
+**The check programs — four of sub-task 7.6, one of 8.1 — are deliberately not here.**
+`arg-check`, `exec-check`, `file-check`, `startup-check` and `line-check` are a test's
 apparatus: each exists to make a machine-readable statement about a system call,
 and each is embedded in the kernel image beside the self-test that runs it. A
 system that shipped them in `/bin` would be shipping its own test harness to
@@ -358,7 +360,7 @@ with, and a test that mounted a ramdisk for itself would establish that a ramdis
 | The device's block count times its block size is the module's extent. | A geometry off by a block, which reads correctly everywhere except at the end of the volume — which is where the last file's last block is. |
 | The device is not read-only. | A ramdisk registered under the rule that governs somebody else's disk, which Phase 8's redirection would then fail upon for a reason nothing states. |
 | Something is mounted at the root, and it is mounted upon that device. | A root that is the machine's own disk, reached because the ramdisk was preferred by accident rather than by name. Every assertion below would then be about the wrong filesystem. |
-| **Each of the five utilities is byte for byte the copy embedded in the kernel image.** | A block read from the wrong offset, an indirect block followed wrongly, a length rounded up to the block, a transfer that reported a count it did not deliver. Every one of those returns *data*, and a test that opened the files and found them present passes upon all of them. |
+| **Each of the five utilities, and the shell, is byte for byte the copy embedded in the kernel image.** | A block read from the wrong offset, an indirect block followed wrongly, a length rounded up to the block, a transfer that reported a count it did not deliver. Every one of those returns *data*, and a test that opened the files and found them present passes upon all of them. |
 | A read of one byte beyond the declared length delivers nothing. | A file whose size and whose contents disagree, which a reader that asks only for the size cannot see. |
 | `/bin/echo` is read from the root, loaded, entered at privilege level 3, and ends with a status of zero. | A chain from module to block device to filesystem to loader that delivers something which is not an executable — and, since `_start` is at the beginning of a program, a last page that is wrong would still start. |
 | A file is created upon the root, read back identically, removed, and is then absent. | A root mounted read-only, or one whose writes do not reach the medium beneath it. |

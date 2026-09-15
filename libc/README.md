@@ -54,10 +54,13 @@ self-test is presently the only thing that runs any of this, and what sub-task
 | [`stdio/stream.c`](stdio/stream.c) | The policy: the `FILE` object, the three standard streams, the decision of when a buffer is emptied or filled, and every transfer of Sections 7.21.7 and 7.21.8 above it. Nothing here knows where a byte goes. |
 | [`stdio/format.c`](stdio/format.c) | The conversion: one engine that reads a format string and produces characters, and the eight standard names above it, which differ only in where the characters go. A conversion it does not implement is refused and the refusal is reported. |
 | [`stdio/internal.h`](stdio/internal.h) | The two counters the conversion keeps in the census the stream owns. It is in `stdio/` and not `include/` so that the include root a program is compiled against does not carry it. |
-| [`stdio/system.c`](stdio/system.c) | Where a stream's bytes go: eleven lines above `OxysWrite`, and a source that reports end-of-file because this kernel has no call that reads. A translation unit of its own so that the policy may be asserted without it. |
+| [`stdio/system.c`](stdio/system.c) | Where a stream's bytes go and, since sub-task 8.1, where they come from: eleven lines above `OxysWrite`, and a fill above `OxysRead` that was a function reporting end-of-file until there was a call that reads — the one function that changed when there was. A translation unit of its own so that the policy may be asserted without it. |
 | [`crt/crt0.asm`](crt/crt0.asm) | The first instructions of every program this system runs: the argument count, the two vectors, the call of `main` and the `exit` that takes what it returned. Assembly because a C function cannot read its own stack pointer and because there is nowhere to return to. |
 | [`stdlib/exit.c`](stdlib/exit.c) | ISO/IEC 9899:2011, Section 7.22.4: `atexit`, `exit`, `_Exit` and `abort`. Thirty-two registrations in `.bss`, called in reverse, and the streams flushed **after** them — which is the order the standard fixes and the reason it fixes it. |
 | [`user.ld`](user.ld) | The linker script every program is linked with: four mebibytes, three page-separated segments one per permission, and the discard list that keeps a fourth segment from appearing for a build identifier nothing reads. |
+| [`include/line.h`](include/line.h) | The line editor of sub-task 8.1, which ISO/IEC 9899:2011 has no such thing as, and which is here for the reason `<syscall.h>` and `<heap.h>` are: it is this system's library. The editor, the table of what every byte does, the history of thirty-two lines, and the seam — an output function, so that the editing never names a descriptor. |
+| [`line/line.c`](line/line.c) | The editing, the parsing of the terminal's control sequences (ECMA-48, Section 5.4) and the history, above an output function. It assumes one thing of a display: that a backspace moves the cursor left without erasing. |
+| [`line/system.c`](line/system.c) | `LineRead`: the prompt written to descriptor 1, the bytes read from descriptor 0 one at a time, the editor's output carried to descriptor 1 between them. A translation unit of its own so that the editing may be asserted without it, and the first thing in this library that reads the standard input. |
 
 The five `string/` units divide Section 7.24 as the standard divides it, rather
 than by size or by taste, so that a reader looking for the whole of that section
@@ -104,6 +107,13 @@ two are apart.
 - **Intel 64 and IA-32 Architectures Software Developer's Manual**, Volume 2B,
   "SYSCALL": the instruction destroys `RCX` and `R11`, which fixes the order of
   the moves in `syscall/invoke.asm`.
+- **ECMA-48**, 5th edition, Section 5.4: the grammar of a control sequence —
+  CSI, parameter bytes, intermediate bytes, a final byte — which `line/line.c`
+  parses whatever the final byte turns out to be; and Sections 8.3.18 to
+  8.3.22, the four cursor movements the arrow keys send. **XTerm Control
+  Sequences** (Dickey): the forms in which Home, End, Delete and the cursor
+  keys arrive, every one of which is accepted because which form arrives is the
+  terminal's choice and not the program's.
 
 Each file cites the subsection of 7.24, or of 7.5, that defines each function it
 holds. The corpus is enumerated in
@@ -132,3 +142,14 @@ where they belong. The third divides the same way for a reason of its own: its
 subject is a policy that runs anywhere above a system call that does not, and
 `include/heap.h` names the seam between them so that each may be asserted where
 it can be.
+
+**The line editor of sub-task 8.1 is divided the same way, and it is the first
+thing here whose output is asserted.** `include/line.h` names the seam — an
+output function — so [`../kernel/test/libc/line.c`](../kernel/test/libc/line.c)
+drives the editing with the bytes a terminal sends and compares, byte for byte,
+what it wrote; then places a session upon the kernel's terminal and runs
+`userland/line-check`, which reads it through `LineRead` at privilege level 3.
+[`../docs/design/LIBC.md`](../docs/design/LIBC.md), Section 12.7, limitation 1,
+records why nothing else here can be asserted that way;
+[`../docs/design/SHELL.md`](../docs/design/SHELL.md), Section 5, holds the
+tables and the negative test that showed the point of it.

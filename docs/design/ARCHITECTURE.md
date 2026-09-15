@@ -39,16 +39,17 @@ than as later additions, in accordance with `PROJECT_GUIDELINES.md`, Section 5:
 | --------- | -------- | ---------- |
 | `boot/` | The Multiboot2 header, the 32-bit entry point, the long-mode transition, and the GRUB configuration. | Phase 1 |
 | `kernel/` | The kernel core: entry, memory management, scheduling, the block layer, the virtual filesystem, and the boot-protocol handoff. It was described here as architecture-independent while `kernel/cpu/` sat within it, which it plainly was not; what is architecture-independent is this directory **less** `arch/`, and that is now a statement about the tree rather than about the prose. | Phase 1 |
-| `kernel/include/oxys/` | The kernel's internal header corpus, grouped to mirror the source tree: `arch/`, `mm/`, `proc/`, `exec/`, `acpi/`, `block/`, `fs/`, `boot/`, `dev/`, `gfx/` and `test/`, with `types.h` and `kernel.h` at the root because they belong to no subsystem. Section 2.5 records the grouping and what it buys. | Phase 1 |
+| `kernel/include/oxys/` | The kernel's internal header corpus, grouped to mirror the source tree: `arch/`, `mm/`, `proc/`, `exec/`, `acpi/`, `block/`, `fs/`, `boot/`, `dev/`, `gfx/`, `terminal/` and `test/`, with `types.h` and `kernel.h` at the root because they belong to no subsystem. Section 2.5 records the grouping and what it buys. | Phase 1 |
 | `kernel/abi/oxys/` | A **second include root**: the system-call interface a program is entitled to — the call numbers, the failure results, the register convention and the two limits an argument is judged against — held apart from the corpus above it and licensed permissively so that the `MIT` C library may include it without including the kernel. It holds constants and never a declaration. | Phase 7 (sub-task 7.1) |
 | `kernel/arch/x86_64/` | Everything in the kernel that could not survive a change of processor, in six subdirectories: `cpu/`, `interrupt/`, `syscall/`, `smp/`, `mm/` and `proc/`. The headers of these subsystems are **not** here; they are in the corpus above, under `oxys/arch/`, which mirrors this tree without naming a processor. [`kernel/arch/README.md`](../../kernel/arch/README.md) states the test for admitting a file, and Section 2.4 below records the boundary. | Phase 1, gathered here at the sub-task 7.3 review |
 | `kernel/test/` | The boot-time self-tests, one file per subsystem, and the composed volume they are conducted upon. | Phase 2 |
 | `kernel/handoff/` | The boot-protocol handoff layer: the reading of whatever structure the boot loader left, reduced to the neutral `BootInformation` of `<oxys/boot/bootinfo.h>`. It carries its own private header rather than one in the corpus above, because the wire format of a boot protocol is exactly what design premise 3 forbids anything above it to know. Multiboot2 is its one member; the UEFI equivalent joins it in Phase 12. | Phase 1 |
 | `kernel/acpi/` | The reading of the firmware's ACPI description tables. | Phase 6 (sub-task 6.12) |
 | `kernel/block/` | The generic block-device layer and the buffer cache above it: the layer a storage driver registers into, and the cache the filesystems read through. Above `drivers/` and below `kernel/fs/`, and in neither. | Phase 4 (sub-tasks 4.5 and 4.6) |
+| `kernel/terminal/` | The terminal input path: one byte stream, drawn from the keyboard and the serial line, that a program's `read` of descriptor 0 delivers — the keyboard's keys translated to the sequences a terminal sends, and nothing echoed or assembled. Above `drivers/` and below the system call, and in neither. | Phase 8 (sub-task 8.1) |
 | `drivers/` | Device drivers, one subdirectory per device class. | Phase 1 |
 | `libc/` | The minimal C library linked into user programs. `libc/include/` is its header root and `libc/string/` its first material. | Phase 7 (sub-task 7.1) |
-| `userland/` | User programs: the utilities and the shell. | Phase 7 |
+| `userland/` | User programs: the utilities of Phase 7, and from sub-task 8.1 the shell. | Phases 7 and 8 |
 | `graphics/` | The framebuffer, the drawing primitives, the font and the compositing surface. | Phase 6 (established) |
 | `crypto/` | The random-number generator, the hash function and the symmetric cipher. | Phase 10 |
 | `net/` | The network protocol stack. | Phase 11 |
@@ -314,7 +315,8 @@ they assert and the prefix is dropped, `kernel/test/arch/syscall.c` saying what
 | `storage/` | `stack.c`, `ext2.c` with its five chapters beneath, `vfs.c` |
 | `gfx/` | `framebuffer.c`, `graphics.c`, `console.c`, `compositor.c`, `faultscreen.c` |
 | `dev/` | `devices.c`, `mouse.c` |
-| `libc/` | `string.c`, `wrappers.c`, `heap.c` |
+| `libc/` | `string.c`, `wrappers.c`, `heap.c`, `stdio.c`, `startup.c`, `utilities.c`, `line.c` |
+| `terminal/` | `terminal.c` |
 
 The **function** names did not change. `KernelVerifySyscall` is still
 `KernelVerifySyscall`, because `<oxys/test/verify.h>` declares it and `kernel.c`
@@ -360,6 +362,7 @@ either.
 | `kernel/acpi/acpi.c` | The firmware's ACPI description tables: the discovery and validation of the Root System Description Pointer, the walk of the RSDT or XSDT, and the parse of the Multiple APIC Description Table. |
 | `kernel/exec/elf.c` | The ELF64 loader for statically linked executables: the decoding of the file and program headers, the fifteen refusals an image must survive whole before a page of it is mapped, and the placing of its segments into an address space through the direct physical map. |
 | `kernel/proc/process.c` | The process control block, the thread and the saved context: the two tables, the address space a process is given, the kernel stack and guard page a thread is given, the writing of `rsp0` when a thread becomes current, the switch, the descent to privilege level 3, the termination that returns from it, and — from sub-task 6.11 — `fork`, `execve`, `exit` and `wait`. |
+| `kernel/terminal/terminal.c` | The terminal input path of sub-task 8.1: the queue, the poll that drains the keyboard's events and the serial adapter's characters into it, the translation of a key event to the bytes a terminal would send, and the wait a `read` of descriptor 0 makes upon it. |
 | `kernel/arch/x86_64/proc/switch.asm` | `ThreadSwitchContext`, which exchanges six registers and a stack pointer; `ThreadTrampoline`, where a thread that has never run begins; `ThreadEnterUser`, which clears every register and descends to privilege level 3 by `IRETQ`; and `ThreadResumeUser`, which descends with a whole saved register set restored, as a thread made by `fork` requires. |
 | `graphics/compositor.c` | The compositor: the back buffer that stands in for the framebuffer, the ordered layers composited over it, the damage rectangle that narrows what is carried to the display, and the suspension a fault screen imposes. |
 | `graphics/cursor.c` | The pointer: its two-bitmap shape, and the layer the compositor draws it as. |
