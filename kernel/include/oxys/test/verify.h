@@ -18,7 +18,8 @@
  *          KernelVerifyShootdown, KernelVerifyApplicationProcessors,
  *          KernelVerifyScheduler, KernelVerifyString, KernelVerifyWrappers,
  *          KernelVerifyHeap, KernelVerifyStdio, KernelVerifyStartup,
- *          KernelVerifyUtilities, KernelVerifyLine, KernelVerifyTerminal,
+ *          KernelVerifyUtilities, KernelVerifyLine, KernelVerifyShell,
+ *          KernelVerifyTerminal,
  *          KernelVerifyPit, KernelVerifyKeyboard, KernelVerifySerial,
  *          KernelVerifyVga, KernelVerifyPci, KernelVerifyAta, KernelVerifyBlock,
  *          KernelVerifyBuffer, KernelVerifyExt2, KernelVerifyVfs,
@@ -331,6 +332,19 @@ void KernelVerifyUtilities(void);
  * KernelVerifyTerminal asserts.
  */
 void KernelVerifyLine(void);
+
+/*
+ * Sub-task 8.2: the shell's tokeniser and parser, asserted in this kernel
+ * against the translation units the shell ships — every operator, the quoting
+ * of Section 2.2, the io_number, the subset of the grammar parsed and the
+ * remainder refused by name, and every bound — and then the shell itself run
+ * at privilege level 3 upon a session that continues a command across lines
+ * and ends with control-D.
+ *
+ * It runs after KernelVerifyLine, because the shell reads the terminal through
+ * the editor that one asserts.
+ */
+void KernelVerifyShell(void);
 
 /* Phases 3 and 4: the remaining devices. */
 void KernelVerifyPit(void);

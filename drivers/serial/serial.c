@@ -439,6 +439,37 @@ static bool SerialWaitForTransmitterEmpty(void)
 }
 
 /*
+ * Waits until the transmitter is wholly idle: the holding register *and* the
+ * shift register empty, which is bit 6 of the line status register (TEMT of
+ * the PC16550D datasheet) where bit 5 (THRE) says only that the holding
+ * register, or the FIFO, has room.
+ *
+ * The distinction is the whole of why this exists beside the wait above. A
+ * caller about to change what the adapter does with the next byte — the
+ * loopback test — must know that the *last* byte has left, and THRE cannot
+ * tell it: with the FIFO enabled THRE is set while a byte is still being
+ * shifted out. Under Bochs 3.1 that byte is then shifted into whatever mode
+ * the adapter is in when its timer fires, which is not the mode it was written
+ * in; the first character of the loopback pattern went to the log file and
+ * the test failed, upon the boot after the display was made quiet and the
+ * timing of the log changed. The bound is the polling bound, and a transmitter
+ * that never idles reports false rather than hanging the boot.
+ */
+static bool SerialWaitForTransmitterIdle(void)
+{
+    for (uint32_t iteration = 0U; iteration < SERIAL_POLL_LIMIT; ++iteration)
+    {
+        if ((SerialRead(SERIAL_REGISTER_LINE_STATUS) &
+             SERIAL_LINE_STATUS_TRANSMITTER_IDLE) != 0U)
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/*
  * Waits, by polling, until a received character is available. Returns false if
  * the bound is exhausted, which in loopback denotes a character that was
  * transmitted and never returned.
@@ -929,9 +960,21 @@ bool SerialLoopbackTest(void)
      * pattern below. QEMU shifts a character out fast enough that the window
      * closed before the next instruction, so the fault lived only upon the other
      * machine of the two this kernel is required to be tested upon.
+     *
+     * **The wait was upon the wrong bit until 2026-09-15.** It waited for THRE,
+     * the holding register empty, which the paragraph above already says is
+     * not the same as the adapter having finished: with the FIFO enabled THRE
+     * stands while the shift register still holds a byte. Upon Bochs 3.1 that
+     * byte is shifted out by a timer that does not consult the mode, so the
+     * first character of the pattern, written while it was in flight, followed
+     * it to the log file instead of returning through the loopback — and the
+     * test failed, on the boot after the display was made quiet and the log's
+     * timing changed. The wait is now upon TEMT, bit 6, which is set only when
+     * both registers are empty and is the bit the datasheet provides for
+     * exactly this question.
      */
     SerialFlush();
-    (void)SerialWaitForTransmitterEmpty();
+    (void)SerialWaitForTransmitterIdle();
 
     saved_interrupt_enable = SerialInterruptEnableShadow;
     SerialWrite(SERIAL_REGISTER_INTERRUPT_ENABLE, 0x00U);

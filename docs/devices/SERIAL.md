@@ -319,6 +319,19 @@ where it appears as a character the test never sent. VirtualBox reported a
 surplus `0x79` — the letter *y*, out of the boot log and not out of the test's
 own pattern.
 
+**The wait it then added was upon the wrong bit, and Bochs found it on
+2026-09-15.** The correction above waited for THRE, bit 5 of the line status
+register — the holding register empty — which with the FIFO enabled is set
+while the shift register still holds a byte, so the wait closed the window it
+had described only where the shift register happened to be empty as well. It
+was, upon every boot until the default boot was made quiet upon the screen and
+the timing of the log changed: Bochs 3.1 then shifted the in-flight byte out by
+a timer that does not consult the mode, the first character of the pattern
+followed it to the log file instead of returning through the loopback, and the
+test failed. The wait is now upon TEMT, bit 6, which the PC16550D datasheet sets
+only when both registers are empty — the bit it provides for exactly this
+question. `SerialWaitForTransmitterIdle`.
+
 **The test trusted a data-ready flag it had not seen change.** Two consequences,
 both intermittent, both about half the time upon VirtualBox and never upon QEMU:
 the second character of the sequence was read as `0x00` because data ready was

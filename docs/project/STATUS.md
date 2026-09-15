@@ -522,6 +522,23 @@ which is right while one program runs upon the bootstrap processor's own flow of
 control and wrong the moment there are two. Section 6 of the design document
 counts eight.
 
+**Sub-task 8.2 is complete: the tokeniser and the parser.** `userland/sh/lexer.c`
+is Section 2.3 of IEEE Std 1003.1-2017 — the operators longest first, the
+`io_number`, the comment, the three quotings of Section 2.2 with the quotes
+kept upon the word — and `userland/sh/parser.c` is the subset of Section
+2.10's grammar the phase acts upon: a list of pipelines of simple commands,
+each with its words in order and its redirections with their descriptors, the
+conditions `&&` and `||`, the separators `;` and `&`, and `!`. Compound
+commands, functions, the here-document and subshells are refused by name;
+reserved words are reserved only in command position; nothing is expanded and
+nothing allocates. A command that ends inside a quote or after an operator is
+continued upon a `> ` prompt and parsed again whole. **The shell describes what
+it parsed**, every word unquoted and every redirection named, because there is
+nothing yet to run it — and both grammar units are compiled into the kernel
+image and asserted there against fifty lines, the shell then being run upon a
+session at privilege level 3. [`../design/SHELL.md`](../design/SHELL.md),
+Sections 8 to 10.
+
 ## 3. Where it has been observed to work
 
 A sub-task marked *implemented* in [`PLAN.md`](PLAN.md) means the code exists and
@@ -552,6 +569,7 @@ The physical machine is one machine — the HP Laptop 14-dq0052dx specified in
 | 7.6 The utilities and the filesystem calls | Yes | **Yes** | **Yes** | — | **Not yet run** |
 | 7.7 The initial ramdisk | Yes | **Yes** | **No** — the `bochs` upon the `PATH` had reverted to a default build for the fifth sub-task running and cannot execute long mode | — | **Not yet run** |
 | 8.1 The terminal, the line editor and the shell | Yes, and driven over the serial line | **Yes, and driven at the PS/2 keyboard** | **Yes — 8.1**, to the prompt | — | **Not yet run** |
+| 8.2 The tokeniser and the parser | Yes, and driven over the serial line | **Yes** | **Yes — 8.2**, to the prompt | — | **Not yet run** |
 
 **The rows marked "— 7.2" were all established by two boots of one image**,
 because a boot runs every self-test in the corpus and a clean one is therefore
@@ -756,7 +774,7 @@ functional. [`TESTING.md`](TESTING.md), Section 3.
 There is no test harness and there will be none before Phase 7, there being no
 userland to run one in. The kernel therefore asserts its own properties at boot,
 in the order the subsystems are initialised, and `make verify` fails if any of
-them reports a failure. Sixty-three assertions presently report passed or sound.
+them reports a failure. Sixty-four assertions presently report passed or sound.
 
 Those tests are in [`../../kernel/test/`](../../kernel/test/), one file per
 subsystem. Each subsystem's design document carries a table pairing every

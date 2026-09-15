@@ -1319,7 +1319,23 @@ as an erase; and the canonical and non-canonical modes of 11.1.6 and 11.1.7,
 of which this kernel's terminal is the second alone, as `SHELL.md`, Section
 2.1, records.
 
-Used by: `kernel/fs/vfs/`, `kernel/include/oxys/fs/vfs.h`, `libc/line/line.c`.
+**From sub-task 8.2**: the Shell Command Language, Chapter 2 of the Shell and
+Utilities volume. **Section 2.2**, Quoting — 2.2.1 the escape character,
+2.2.2 single quotes, 2.2.3 double quotes and the five characters a backslash
+escapes within them (`$`, `` ` ``, `"`, `\` and newline). **Section 2.3**,
+Token Recognition, rules 1 to 10, each cited at the code in `lexer.c` that
+implements it; rule 5, the expansions, is the one not implemented. **Section
+2.6.7**, Quote Removal, and its place last among the expansions, which is why
+the tokens keep their quotes. **Section 2.7**, Redirection, 2.7.1 to 2.7.7,
+and the default descriptor of each operator. **Section 2.9.1**, Simple
+Commands, for the order of a command's words. **Section 2.10**, the grammar —
+`list`, `and_or`, `pipeline`, `pipe_sequence`, `simple_command`, `io_redirect`
+and `io_number` — and **2.10.2**, rule 1, that a reserved word is recognised
+only where the grammar permits one, and rule 2, the `io_number`. The chapter
+was read from the online edition on 2026-09-15 for this sub-task.
+
+Used by: `kernel/fs/vfs/`, `kernel/include/oxys/fs/vfs.h`, `libc/line/line.c`,
+`userland/sh/`.
 
 ### The UNIX Time-Sharing System
 Ritchie, D. M., and Thompson, K. Communications of the ACM, volume 17, number 7,

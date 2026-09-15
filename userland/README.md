@@ -49,7 +49,10 @@ which is what makes the boundary worth having somewhere a person can see.
 | [`arg-check/main.c`](arg-check/main.c) | Sub-task 7.6: compares the argument vector it was given against the vector it expects, and ends with the number of comparisons that failed. It exists because nothing in this kernel can read what a program printed. |
 | [`exec-check/main.c`](exec-check/main.c) | Sub-task 7.6: becomes `arg-check` through `execve`, so that a vector crosses an address space that is destroyed. It has no assertions of its own — upon success it no longer exists, and the status the kernel collects is `arg-check`'s. |
 | [`file-check/main.c`](file-check/main.c) | Sub-task 7.6: asserts the six filesystem calls by comparison — a file of known contents read byte for byte, a directory of known entries listed, and twenty refusals asserted by the **name** of the failure rather than by its sign. It was written because a negative test showed that a `read` delivering no bytes at all was reported by nothing. |
-| [`sh/main.c`](sh/main.c) | Sub-task 8.1: the shell, as far as a line editor takes it. It prompts with `oxys$ `, reads a line through the C library's editor with its history, and — there being no tokeniser until 8.2 — prints the line back preceded by a statement that nothing runs it. Control-D upon an empty line ends it, and the kernel starts it again. |
+| [`sh/main.c`](sh/main.c) | Sub-task 8.1, extended at 8.2: the shell, as far as a line editor, a tokeniser and a parser take it. It prompts with `oxys$ `, reads a command through the C library's editor — continuing it upon a `> ` prompt where a quote or an operator is left open — parses it, and, there being nothing yet that runs one, describes the structure back: every word unquoted and every redirection named. A refused line is answered with the status and the token it stopped at. Control-D upon an empty line ends it. |
+| [`sh/shell.h`](sh/shell.h) | Sub-task 8.2: the token, the command structure the parser builds — pipelines of simple commands with their redirections, conditions and separators — the bounds upon both, and why the tokens keep their quotes. |
+| [`sh/lexer.c`](sh/lexer.c) | Sub-task 8.2: the tokeniser of IEEE Std 1003.1-2017, Section 2.3, the quoting of Section 2.2, and the quote removal of Section 2.6.7 applied last. Compiled into the kernel image as well, where the self-test asserts it. |
+| [`sh/parser.c`](sh/parser.c) | Sub-task 8.2: the subset of Section 2.10's grammar this shell implements, and the remainder refused by name. Compiled into the kernel image as well. |
 | [`line-check/main.c`](line-check/main.c) | Sub-task 8.1: reads an editing session the kernel's self-test placed upon the terminal, through the same `LineRead` the shell uses, and ends with the number of lines that were not what the session should have edited into. It asserts the half of the sub-task the kernel cannot: the `read` of descriptor 0 and the editor's output reaching descriptor 1, both of which execute `SYSCALL`. |
 
 **The `-check` programs are not utilities and are not shipped as such.**
@@ -87,8 +90,13 @@ would repeat the shape; it is not repeated, because eight copies of a link
 command is eight places for a flag to be forgotten, and the way that fails is
 that one program links without the archive and the defect appears as an undefined
 symbol in whichever program was edited last. **A program is a directory under
-this one holding `main.c`, and the directory's name is the program's**, so adding
-one is adding a name to that list and a directory beside the others.
+this one, every `.c` file in it is the program's, and the directory's name is the
+program's**, so adding one is adding a name to that list and a directory beside
+the others. It was `main.c` alone until sub-task 8.2, whose shell is three
+translation units; two of them, the tokeniser and the parser, are also compiled
+into the kernel image under `SHELL_SOURCES`, where the self-test asserts the
+grammar without running the shell — the arrangement the C library has, and the
+`Makefile` records why a program's sources in the kernel image are named apart.
 
 A stripped copy is then made for embedding. `build/user/<name>.elf` keeps its
 debugging information and is the file a debugger is pointed at;

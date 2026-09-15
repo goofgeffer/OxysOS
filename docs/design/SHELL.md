@@ -5,13 +5,15 @@
 **Phase**: 8 of [`../project/PLAN.md`](../project/PLAN.md). This document is
 Phase 8's, as [`LIBC.md`](LIBC.md) is Phase 7's: one section per sub-task, in
 order, each recording what that sub-task built and why, and each revised as the
-design is. Sub-task 8.1 is the whole of it so far.
+design is. Sub-tasks 8.1 (Sections 1 to 7) and 8.2 (Sections 8 to 10) are
+here so far.
 
 **Authority**: `PROJECT_GUIDELINES.md`, Sections 2, 3 and 6. Every control
-sequence named below carries a citation, and the two documents cited are
-registered in [`../project/REFERENCES.md`](../project/REFERENCES.md).
+sequence and every rule of the grammar named below carries a citation, and the
+documents cited are registered in
+[`../project/REFERENCES.md`](../project/REFERENCES.md).
 
-**Implementation of sub-task 8.1**: the terminal is
+**Implementation of sub-task 8.1** (8.2's is at Section 8): the terminal is
 [`../../kernel/terminal/terminal.c`](../../kernel/terminal/terminal.c) behind
 [`../../kernel/include/oxys/terminal/terminal.h`](../../kernel/include/oxys/terminal/terminal.h),
 reached by `SyscallDoRead` in
@@ -254,11 +256,12 @@ that return the cursor — are compared byte for byte. Section 5 records the one
 defect class this catches that nothing else could: a redraw that leaves the
 line right and the screen wrong.
 
-## 4. The shell at sub-task 8.1
+## 4. The shell at sub-task 8.1 (superseded by Section 8.5)
 
-It prompts with `oxys$ `, reads a line through `LineRead`, remembers it if it
-is not empty, and prints `sh: no tokeniser yet, so nothing runs:` followed by
-the line. Control-D upon an empty line ends it, and there is no `exit` word:
+At 8.1 it prompted with `oxys$ `, read a line through `LineRead`, remembered
+it if it was not empty, and printed `sh: no tokeniser yet, so nothing runs:`
+followed by the line. Since 8.2 it parses the line and describes the structure;
+Section 8.5. Control-D upon an empty line ends it, and there is no `exit` word:
 that is a built-in of sub-task 8.3, and a word recognised specially here would
 be the beginning of a parser written in the wrong file.
 
@@ -407,3 +410,180 @@ Typing `wrold`, pressing Home, Right, Delete, Right, `r`, End and Return
 produces `sh: no tokeniser yet, so nothing runs: world`; pressing Up recalls
 it. Control-D upon an empty line prints `sh: end of input.`, the kernel reports
 that the shell ended at the end of its input, and starts it again.
+
+## 8. Sub-task 8.2: the tokeniser and the parser
+
+**Implementation**: [`../../userland/sh/shell.h`](../../userland/sh/shell.h),
+[`../../userland/sh/lexer.c`](../../userland/sh/lexer.c) and
+[`../../userland/sh/parser.c`](../../userland/sh/parser.c), used by
+[`../../userland/sh/main.c`](../../userland/sh/main.c); asserted by
+[`../../kernel/test/shell/parser.c`](../../kernel/test/shell/parser.c).
+
+### 8.1 What of the grammar is here
+
+IEEE Std 1003.1-2017, Section 2.10, gives the grammar of the shell language,
+and this sub-task implements the part of it that sub-tasks 8.3 to 8.7 act
+upon: a `list` of `and_or`s separated by `;` and `&`, each an `and_or` of
+`pipeline`s joined by `&&` and `||`, each pipeline a `!`-negatable sequence of
+`simple_command`s joined by `|`, and each simple command its words and its
+redirections — every operator of Section 2.7 with its `io_number`, the
+here-document excepted. The tokeniser is Section 2.3's ten rules, the quoting
+is Section 2.2's three forms, and every one is cited at the code that
+implements it.
+
+**What is outside the subset is refused by name, and that is a design decision
+and not a gap.** A compound command — `if`, `while`, `for`, `case`, `{ }`,
+`( )` — a function definition, a here-document and `;;` are each recognised as
+what they are and answered `not implemented by this shell near `if'`. The
+alternative, a parser that did not know the word `if`, would have parsed
+`if true` as a simple command naming a program called `if`, and the failure
+would have looked like a missing program. The reserved words are recognised
+only in command position, as Section 2.10.2, rule 1, requires, so `echo if`
+is the word `if`.
+
+**Nothing is expanded.** Section 2.3, rule 5, has the tokeniser recognise the
+extent of a `$` or backquote expansion; no expansion is performed at this
+sub-task, so a `$` is an ordinary character of a word. The expansions of
+Section 2.6 arrive with the environment they expand from, and Section 10
+counts what the tokeniser will then have to learn.
+
+### 8.2 The tokens keep their quotes
+
+Section 2.6 orders the expansions before quote removal, and the expansions
+must know which characters were quoted: `"$HOME"` expands and `'$HOME'` does
+not. A tokeniser that removed the quotes as it went would have been simpler,
+and would have had to be rewritten one sub-task later, with its assertions.
+So a token is the characters of the line, quotes and all, and `ShellUnquote`
+— Section 2.6.7 — is applied last, by whoever wants the string: the shell's
+description at this sub-task, and the argument vector at 8.4.
+
+### 8.3 The structure, and why it is flat
+
+The parser builds a `ShellList`: pipelines in order, each carrying the
+*condition* under which it follows the one before (`&&`, `||`, or none) and
+the *separator* that follows it (`;`, `&`, or none), each pipeline its
+commands, and each command its words and redirections in the order written. A
+tree — a list of and_ors of pipelines — would have said the same thing in more
+structure than a shell that runs left to right needs; what 8.4 needs to know
+of a pipeline is what came before it and what follows it, and both are one
+field.
+
+**Nothing here allocates**, for the reason the line editor does not: a shell
+that could not parse a line for want of memory could not report the failure.
+Every bound is a number in `shell.h` — sixteen words to a command, which is
+the argument vector's own bound; eight redirections; eight commands to a
+pipeline; sixteen pipelines to a line; a hundred and twenty-eight tokens — and
+a line that exceeds one is refused with a status naming which.
+
+### 8.4 A line that continues
+
+A quote left open, a `|`, a `&&` or `||` with nothing after it, or a
+redirection with no target, is not a syntax error: it is a command that is not
+finished, and Section 2.10's `linebreak` after those operators is where the
+grammar says so. The tokeniser and the parser both report `INCOMPLETE`, and
+the shell prompts with `> ` — PS2 — and appends the next line with the newline
+between, which is a character inside a quote and a blank outside one. The
+whole is then parsed again from the start. A parser that resumed from the
+middle would have been a second parser to assert.
+
+Each line is remembered in the history on its own, as typed. A command of
+several lines recalled as one would not fit the editor's line, and a recalled
+continuation is a thing a person may want.
+
+### 8.5 The shell at sub-task 8.2
+
+It reads a command as above, and — there being nothing yet that runs one —
+describes what it understood: one line per pipeline, each word in brackets
+with its quotes removed, each redirection as its descriptor and operator and
+target, the condition before and the separator after. A refused line is
+answered upon the standard error with the status and the token it stopped at:
+
+```
+oxys$ echo hello world >out 2>&1 | wc -l ;
+sh: parsed 1 pipeline(s); nothing runs until sub-task 8.4:
+  1: [echo] [hello] [world] 1>[out] 2>&[1] | [wc] [-l] ;
+oxys$ ls ; ; wc
+sh: syntax error: unexpected token near `;'.
+```
+
+### 8.6 The shell's grammar is compiled into the kernel
+
+`lexer.c` and `parser.c` reach no system call, so they are compiled into the
+kernel image as the C library is, under `SHELL_SOURCES` in the `Makefile`, and
+`kernel/test/shell/parser.c` asserts them against fifty lines with known
+answers — the code the shell ships and not a reconstruction. It is named apart
+from `LIBC_SOURCES` because a program's sources in the kernel image is a
+stranger arrangement than a library's and should be visible as one. The
+`Makefile`'s program rule was generalised in the same change: a program is
+every `.c` file in its directory, where it had been `main.c` alone.
+
+## 9. Verification of sub-task 8.2
+
+### 9.1 The tokeniser
+
+| Property asserted | The silent failure it catches |
+| ----------------- | ----------------------------- |
+| Words separated by spaces and tabs are three tokens of the right text, at the right columns, and the END token follows. | A column off by one names the wrong token in a diagnostic. |
+| Every operator, longest first: `a>>b` is three tokens, `> >` is two, and the twenty kinds are recognised in one line. | `>>` read as two `>` is an output redirection that truncates where it should append — a file emptied. The negative test of Section 9.4 made exactly that change. |
+| Digits immediately before `<` or `>` are an `io_number`; `2 >` is the word 2. | `2>err` sending the standard output to `err`. |
+| A quoted blank or operator character delimits nothing, and the quotes are kept upon the word. | `'a b'` as two words; a quote removed before an expansion could see it. |
+| A `#` at the start of a token begins a comment; within a word it is a character. | A comment run as a command; `a#b` cut in half. |
+| An unterminated quote, in either form, and a trailing backslash, are INCOMPLETE. | A quote silently closed at the end of the line. |
+| An empty line and a line of blanks are one END token. | A blank line reported as a syntax error. |
+| More tokens than the bound are refused, not overrun. | A token written past the end of the array. |
+
+### 9.2 Quote removal
+
+| Property asserted | The silent failure it catches |
+| ----------------- | ----------------------------- |
+| An unquoted word is unchanged; single quotes are removed and their contents kept literal, backslash included. | `'\n'` becoming a newline. |
+| Within double quotes a backslash escapes exactly `$`, `` ` ``, `"`, `\` and newline, and nothing else. | `"\d"` becoming `d`, or `"\$"` staying `\$`. |
+| An unquoted backslash preserves the character after it; adjacent quoted and unquoted parts join into one word; `''` is the empty word; an escaped newline is removed. | `f\ g` as two words; `a'b'` as two. |
+| A word that does not fit is refused. | A string written past its buffer. |
+
+### 9.3 The parser
+
+| Property asserted | The silent failure it catches |
+| ----------------- | ----------------------------- |
+| A simple command's words are in order, the first the name, with no condition, separator or negation. | An argument vector in the wrong order. |
+| A pipeline of three is one pipeline of three commands; `<in` on the first and `>out` on the last carry descriptors 0 and 1 and their targets, and neither becomes a word. | A redirection's target run as a command. |
+| Every redirection operator, with and without an `io_number`, records its meaning and its descriptor, and the words either side of them stay in order. | `4>&1` acting upon descriptor 1; `<&3` recorded as an input file named 3. |
+| A list's separators, conditions and negation are as written, a trailing `;` ends it, and `!` is not a word of the command it negates. | A program called `!` sought upon the ramdisk. |
+| A blank line and a comment are EMPTY; `ls |`, `a &&` and `a >` are INCOMPLETE; a pipeline continued across a newline parses as one, and a quote continued across one keeps the newline. | A continuation reported as a syntax error, or a newline lost from a quoted string. |
+| A leading `|`, a doubled `;` and a redirection whose target is an operator are UNEXPECTED, at the token's position. **The negative test of Section 9.4 made an empty command legal and these two caught it.** | An empty pipeline run as nothing, silently. |
+| `if true`, `cat <<EOF`, `(ls)` and `1<<-y` are UNSUPPORTED; `echo if` is not. | A program called `if` sought upon the ramdisk. |
+| Seventeen words, nine redirections, nine commands, seventeen pipelines and a four-digit `io_number` are each refused by name. | A word written past the end of a command's array. |
+
+### 9.4 The shell, upon a session
+
+The shell itself is then run at privilege level 3 upon a session of eight
+lines — a command with every kind of redirection and a pipe, a quote continued
+across a line, a pipe continued across a line, a doubled separator, a compound
+command, a comment, and control-D — and asserted to consume exactly the
+session and to end with zero. What it printed is read by a person; Section 8.5
+shows it.
+
+**Two negative tests**, each caught and reverted: `>>` tokenised as two `>`,
+caught by the operator assertion and by three upon the redirections; and an
+empty simple command made legal, caught by the two UNEXPECTED assertions —
+while the shell, run upon the same session, still ended with zero, because it
+printed an empty pipeline and nothing asserts what it prints.
+
+## 10. Limitations of sub-task 8.2
+
+1. **No expansion.** `$HOME`, `$1`, `$?`, `~`, `` `…` ``, `$(…)`, `$((…))`,
+   field splitting and pathname expansion are all absent; a `$` is a character
+   of a word. The tokeniser will have to recognise the extent of an expansion
+   (Section 2.3, rule 5) when one exists, and that is a change to `lexer.c`
+   and to its assertions.
+2. **No assignment words.** `NAME=value cmd` is the word `NAME=value` and a
+   command named by it. Section 2.9.1's assignment prefix arrives with the
+   variables 8.3's `export` sets.
+3. **No compound command, function or here-document**, each refused by name;
+   Section 8.1. A subshell `( )` likewise.
+4. **The bounds are small**, and sixteen words to a command is the smallest of
+   them: it is the argument vector's own bound and a command with more would be
+   refused by the kernel in any case. A larger vector is the change
+   [`LIBC.md`](LIBC.md), Section 12.7, limitation 9, describes.
+5. **Nothing runs.** The structure is built and described, and 8.3 and 8.4 are
+   what act upon it.

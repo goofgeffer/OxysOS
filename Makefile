@@ -173,6 +173,23 @@ LIBC_SOURCES := libc/string/copying.c \
 # level 3.
 LIBC_ASM_SOURCES := libc/syscall/invoke.asm
 
+# ------------------------------------------------------------------------------
+# The shell's grammar, of sub-task 8.2.
+#
+# The tokeniser and the parser are two translation units of the shell that
+# reach no system call, so they are compiled into the kernel image as the C
+# library is and for the same reason: `make verify` is the only thing here that
+# can run code, and kernel/test/shell/parser.c asserts the grammar against the
+# code the shell actually ships rather than a reconstruction. They are named
+# apart from LIBC_SOURCES because they are not the library's — a program's
+# sources compiled into the kernel is a stranger arrangement than a library's,
+# and it should be visible as one — and they are compiled by a rule of their
+# own that gives them the library's include root, which the kernel is denied.
+# ------------------------------------------------------------------------------
+
+SHELL_SOURCES := userland/sh/lexer.c \
+                 userland/sh/parser.c
+
 C_SOURCES := kernel/kernel.c \
              kernel/handoff/multiboot2.c \
              kernel/test/volume.c \
@@ -212,6 +229,7 @@ C_SOURCES := kernel/kernel.c \
              kernel/test/libc/utilities.c \
              kernel/test/libc/line.c \
              kernel/test/terminal/terminal.c \
+             kernel/test/shell/parser.c \
              kernel/terminal/terminal.c \
              kernel/mm/pmm.c \
              kernel/mm/vmm.c \
@@ -278,7 +296,8 @@ C_SOURCES := kernel/kernel.c \
              graphics/compositor.c \
              graphics/faultscreen.c \
              graphics/cursor.c \
-             $(LIBC_SOURCES)
+             $(LIBC_SOURCES) \
+             $(SHELL_SOURCES)
 
 ASM_SOURCES := boot/boot.asm \
                kernel/arch/x86_64/interrupt/interrupt_stubs.asm \
@@ -355,6 +374,18 @@ $(BUILD_DIR)/libc/%.c.o: libc/%.c
 # Every other file under kernel/ is still compiled without <string.h> in reach,
 # which is the property being protected.
 $(BUILD_DIR)/kernel/test/libc/%.c.o: kernel/test/libc/%.c
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) $(LIBC_INCLUDE_DIRS) -MMD -MP -MF $(patsubst %.o,%.d,$@) -c $< -o $@
+
+# The shell's grammar units, compiled for the kernel image with the library's
+# include root, for the reason SHELL_SOURCES records; and the self-test that
+# asserts them, which is in a directory of its own for the reason the one above
+# is: a file is in kernel/test/shell/ exactly when it asserts the shell.
+$(BUILD_DIR)/userland/%.c.o: userland/%.c
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) $(LIBC_INCLUDE_DIRS) -MMD -MP -MF $(patsubst %.o,%.d,$@) -c $< -o $@
+
+$(BUILD_DIR)/kernel/test/shell/%.c.o: kernel/test/shell/%.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) $(LIBC_INCLUDE_DIRS) -MMD -MP -MF $(patsubst %.o,%.d,$@) -c $< -o $@
 
@@ -468,26 +499,31 @@ $(USER_CRT0): libc/crt/crt0.asm
 # archive and the defect appears as an undefined symbol in whichever program was
 # edited last. The rule is generated instead, once per name in USER_PROGRAMS.
 #
-# A program is a *directory* under userland/ holding main.c, and the directory's
-# name is the program's. So adding one is adding a name to the list below and a
-# directory beside the others, and nothing else in this file.
+# A program is a *directory* under userland/, and every `.c` file in it is the
+# program's. It was `main.c` alone until sub-task 8.2, whose shell is three
+# translation units — the tokeniser and the parser being compiled into the
+# kernel image as well, so that the self-test may assert the grammar without
+# running the shell; see SHELL_SOURCES. Adding a program is adding a name to
+# the list below and a directory beside the others, and nothing else in this
+# file.
 #
 # Within the generated rule, the archive is named *after* the program's objects,
 # which is not a style choice: a linker resolves an archive's members against the
 # references it has already seen, so an archive named first contributes nothing.
 USER_PROGRAMS := startup-check arg-check exec-check file-check line-check echo cat ls mkdir rm sh
 
-USER_PROGRAM_SOURCES := $(foreach program,$(USER_PROGRAMS),userland/$(program)/main.c)
+USER_PROGRAM_SOURCES := $(foreach program,$(USER_PROGRAMS),$(wildcard userland/$(program)/*.c))
 USER_PROGRAM_IMAGES  := $(foreach program,$(USER_PROGRAMS),$(USER_DIR)/$(program).elf)
 USER_PROGRAM_EMBEDS  := $(foreach program,$(USER_PROGRAMS),$(USER_DIR)/$(program).embed.elf)
 
 # $(1) is the program's name. The double dollar signs survive the first expansion
-# `eval` performs and reach `make` as ordinary automatic variables.
+# `eval` performs and reach `make` as ordinary automatic variables; the wildcard
+# is expanded once, here, so that the objects named are the sources that exist.
 define USER_PROGRAM_RULE
-$$(USER_DIR)/$(1).elf: $$(USER_CRT0) $$(USER_DIR)/userland/$(1)/main.c.o \
+$$(USER_DIR)/$(1).elf: $$(USER_CRT0) $(patsubst %.c,$$(USER_DIR)/%.c.o,$(wildcard userland/$(1)/*.c)) \
                        $$(USER_LIBC_ARCHIVE) libc/user.ld
 	@mkdir -p $$(dir $$@)
-	$$(LD) $$(USER_LDFLAGS) -o $$@ $$(USER_CRT0) $$(USER_DIR)/userland/$(1)/main.c.o \
+	$$(LD) $$(USER_LDFLAGS) -o $$@ $$(USER_CRT0) $(patsubst %.c,$$(USER_DIR)/%.c.o,$(wildcard userland/$(1)/*.c)) \
 		$$(USER_LIBC_ARCHIVE)
 	@echo "Linked the user program $$@."
 endef

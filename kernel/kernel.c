@@ -1689,6 +1689,14 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
      */
     KernelVerifyLine();
 
+    /*
+     * Sub-task 8.2, which runs after it because the shell it runs reads the
+     * terminal through the editor 8.1 asserts. The tokeniser and the parser
+     * are asserted here first, compiled into this image as the C library is;
+     * the shell is then run upon a session of eight lines.
+     */
+    KernelVerifyShell();
+
     KernelMountRootVolume();
 
     /*

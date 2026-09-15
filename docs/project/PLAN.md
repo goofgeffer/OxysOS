@@ -170,9 +170,22 @@ change and nothing above it; that day was this one, and that is what happened.
 Two self-tests that read `stdin` to assert it was at its end had to stop,
 because it now waits for a person.
 
-**Next: sub-task 8.2** — the tokeniser and the command parser, which are what
-turn a line into something 8.3's built-ins and 8.4's `fork` and `execve` can
-act upon.
+**Sub-task 8.2 is complete**: the tokeniser and the command parser. A line is
+now the operators and words of IEEE Std 1003.1-2017, Section 2.3, quoted as
+Section 2.2 quotes them, and parsed into lists of pipelines of simple commands
+with their redirections — the subset of Section 2.10's grammar the rest of the
+phase acts upon, with the remainder refused by name so that `if true` is not
+a search for a program called `if`. The tokens keep their quotes for the
+expansions that have not arrived; a command that ends inside a quote or after
+an operator is continued upon a second prompt; and the shell, having nothing
+yet to run, describes what it understood. The grammar is compiled into the
+kernel image and asserted there, as the C library is.
+[`../design/SHELL.md`](../design/SHELL.md), Sections 8 to 10.
+
+**Next: sub-task 8.3** — the built-in commands `cd`, `exit`, `export` and
+`pwd`, and with them the working directory this kernel does not yet have and
+the environment nothing yet sets.
+
 
 **Three releases are planned, and each is fixed to a sub-task below rather than
 to a date**: `Oxys 1 Alpha` at **8.7**, `Oxys 1 Beta` at **9.7**, and `Oxys 1` at
@@ -801,7 +814,7 @@ system's — and the first of those is sub-task 8.3's.
 | # | Sub-task | State | Asserted by |
 | - | -------- | ----- | ----------- |
 | 8.1 | Implement line editing with history. | Implemented | `KernelVerifyTerminal`, `KernelVerifyLine` |
-| 8.2 | Implement the tokeniser and the command parser. | Planned | — |
+| 8.2 | Implement the tokeniser and the command parser. | Implemented | `KernelVerifyShell` |
 | 8.3 | Implement built-in commands (`cd`, `exit`, `export`, `pwd`). | Planned | — |
 | 8.4 | Implement external program execution by `fork()` and `execve()`. | Planned | — |
 | 8.5 | Implement input and output redirection. | Planned | — |
@@ -843,6 +856,36 @@ it is the first thing here that would use the wait queue
 absent. And a line longer than the display is wide is drawn wrongly once it
 wraps upon a serial terminal, the editor being unable to move the cursor up.
 Section 6.
+
+**(b)** Sub-task 8.2 is the tokeniser of IEEE Std 1003.1-2017, Section 2.3,
+the quoting of Section 2.2, and the parser of the subset of Section 2.10's
+grammar that the rest of the phase acts upon: lists of pipelines of simple
+commands, with `;`, `&`, `&&`, `||`, `!`, `|`, and every redirection operator
+of Section 2.7 with its `io_number`, the here-document excepted. **What is
+outside the subset is refused by name** — `if true` is answered "not
+implemented by this shell near `if'" rather than parsed as a program called
+`if` — and the reserved words are recognised only in command position, as rule
+1 of 2.10.2 requires. **The tokens keep their quotes**, because Section 2.6
+orders the expansions before quote removal and a tokeniser that removed them
+now would be rewritten when the expansions arrive; quote removal is the last
+step, applied by whoever wants the string. A line that ends inside a quote or
+after an operator is not an error but a command that continues, and the shell
+prompts for the rest with `> `. Nothing allocates and every bound is a number
+a person can be told. [`../design/SHELL.md`](../design/SHELL.md), Section 8.
+
+**The shell's grammar is compiled into the kernel image**, as the C library
+is, so that the self-test asserts the code the shell ships against fifty lines
+with known answers; the shell is then run at privilege level 3 upon a session
+that continues commands across lines and is refused twice. Of two negative
+tests one made an empty command legal, and the shell run upon the same session
+still ended with zero — it printed an empty pipeline and nothing asserts what
+it prints — while two of the kernel's assertions caught it. Section 9.
+
+**Five limitations are recorded.** No expansion of any kind — a `$` is a
+character — and no assignment word, both arriving with the environment 8.3's
+`export` sets; no compound command, function or here-document; bounds of
+sixteen words, eight redirections, eight commands and sixteen pipelines; and
+nothing runs. Section 10.
 
 **Sub-task 8.7 closes Phase 8 and is where the first release is cut.** `Oxys 1
 Alpha` is the first image worth handing to somebody, because it is the first one

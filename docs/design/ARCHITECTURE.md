@@ -49,7 +49,7 @@ than as later additions, in accordance with `PROJECT_GUIDELINES.md`, Section 5:
 | `kernel/terminal/` | The terminal input path: one byte stream, drawn from the keyboard and the serial line, that a program's `read` of descriptor 0 delivers — the keyboard's keys translated to the sequences a terminal sends, and nothing echoed or assembled. Above `drivers/` and below the system call, and in neither. | Phase 8 (sub-task 8.1) |
 | `drivers/` | Device drivers, one subdirectory per device class. | Phase 1 |
 | `libc/` | The minimal C library linked into user programs. `libc/include/` is its header root and `libc/string/` its first material. | Phase 7 (sub-task 7.1) |
-| `userland/` | User programs: the utilities of Phase 7, and from sub-task 8.1 the shell. | Phases 7 and 8 |
+| `userland/` | User programs: the utilities of Phase 7, and from sub-task 8.1 the shell — whose tokeniser and parser are compiled into the kernel image as well, under `SHELL_SOURCES`, for the self-test to assert. | Phases 7 and 8 |
 | `graphics/` | The framebuffer, the drawing primitives, the font and the compositing surface. | Phase 6 (established) |
 | `crypto/` | The random-number generator, the hash function and the symmetric cipher. | Phase 10 |
 | `net/` | The network protocol stack. | Phase 11 |
@@ -317,6 +317,7 @@ they assert and the prefix is dropped, `kernel/test/arch/syscall.c` saying what
 | `dev/` | `devices.c`, `mouse.c` |
 | `libc/` | `string.c`, `wrappers.c`, `heap.c`, `stdio.c`, `startup.c`, `utilities.c`, `line.c` |
 | `terminal/` | `terminal.c` |
+| `shell/` | `parser.c` |
 
 The **function** names did not change. `KernelVerifySyscall` is still
 `KernelVerifySyscall`, because `<oxys/test/verify.h>` declares it and `kernel.c`
