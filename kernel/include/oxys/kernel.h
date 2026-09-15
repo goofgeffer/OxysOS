@@ -6,7 +6,8 @@
  *          kernel's position within the virtual address space.
  * Key definitions: KERNEL_VIRTUAL_BASE, PhysicalToVirtual, VirtualToPhysical,
  *          KernelTextStart, KernelTextEnd, KernelMain, KernelPanic,
- *          KernelWriteString, KernelDiagnosticChannelReset.
+ *          KernelWriteString, KernelDiagnosticChannelReset,
+ *          KernelDisplaySetQuiet, KernelDisplayIsQuiet.
  * References:
  *   - Intel 64 and IA-32 Architectures Software Developer's Manual, Volume 3A,
  *     Section 4.5 (Four-Level Paging) and Section 3.3.7.1 (Canonical Addressing).
@@ -158,6 +159,17 @@ void KernelWriteString(const char *string);
  * it would be a machine that failed silently instead of one that said why.
  */
 void KernelDiagnosticChannelReset(void);
+
+/*
+ * Silences, or restores, the two paths a person at the machine sees — the
+ * text-mode display and the framebuffer console. The serial line is never
+ * silenced: it is the record. The default boot is quiet from the parse of the
+ * command line to the start of the shell, and the `diagnostics` menu entry is
+ * what asks for the boot log upon the screen. KernelPanic restores the display
+ * unconditionally.
+ */
+void KernelDisplaySetQuiet(bool quiet);
+bool KernelDisplayIsQuiet(void);
 
 /*
  * Writes an unsigned value in hexadecimal, prefixed by "0x", to both output

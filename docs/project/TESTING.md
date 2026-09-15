@@ -156,6 +156,18 @@ The VGA console is expected to present the identification banner in light cyan
 upon black, followed by the status lines. The serial output is directed to the
 standard output stream of the invoking terminal.
 
+**The default entry is quiet upon the screen, from 2026-09-15.** The boot log —
+the self-test verdicts and device reports, some four hundred lines — is carried
+by the serial line in every boot, which is what `make verify` and this target's
+`-serial stdio` read; but the screen of the default entry shows the banner, one
+line saying where the log went, and the shell's prompt. The **`Oxys-OS
+(diagnostics)`** entry of the menu shows the log upon the screen as well, and is
+the one to boot when a person at the machine is diagnosing a boot. It replaced
+the "serial console diagnostics" entry, whose `serial=com1` option had been read
+by nothing since Phase 1. `KernelPanic` restores the display whatever the entry,
+a machine that has stopped having to say why. `kernel/kernel.c`,
+`KernelDisplaySetQuiet`.
+
 ### 2.1 Typing at the shell, and driving it without a person
 
 Since sub-task 8.1 the boot ends at a prompt rather than at the echo loop, and

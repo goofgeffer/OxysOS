@@ -202,6 +202,36 @@ void KernelWriteDecimal(uint64_t value)
  */
 static Spinlock KernelDiagnosticLock = SPINLOCK_INITIALISER("diagnostic channel");
 
+/*
+ * Whether the display is silent, which is the default boot since sub-task 8.2.
+ *
+ * The boot log is some four hundred lines of self-test verdicts and device
+ * reports, and it is written for a machine — `make verify` reads it off the
+ * serial line — and for a person diagnosing a boot, who selects the
+ * `diagnostics` entry of the menu to see it upon the screen. Everybody else
+ * boots to a shell and should see a shell. **The serial channel is never
+ * silenced**: it is the record, it is what the automated assertion reads, and a
+ * bug report from a quiet boot is still a complete log. What this governs is
+ * the two paths a person at the machine sees, the text-mode display and the
+ * framebuffer console.
+ *
+ * It is lifted in two places: before the shell is started, because the shell's
+ * output reaches the display through the same routine; and by KernelPanic,
+ * because a machine that has stopped must say why upon whatever is in front of
+ * the person, quiet or not.
+ */
+static bool KernelDisplayQuiet;
+
+void KernelDisplaySetQuiet(bool quiet)
+{
+    KernelDisplayQuiet = quiet;
+}
+
+bool KernelDisplayIsQuiet(void)
+{
+    return KernelDisplayQuiet;
+}
+
 void KernelWriteString(const char *string)
 {
     /*
@@ -264,11 +294,17 @@ void KernelWriteString(const char *string)
         SpinlockAcquire(&KernelDiagnosticLock);
     }
 
-    VgaWriteString(string);
-    ConsoleWriteString(string);
+    /* The serial line is written whether or not the display is quiet: it is the
+     * record, and the quiet is a courtesy to a person and not a change to what
+     * the machine says of itself. */
     SerialWriteString(string);
 
-    CompositorPresent();
+    if (!KernelDisplayQuiet)
+    {
+        VgaWriteString(string);
+        ConsoleWriteString(string);
+        CompositorPresent();
+    }
 
     if (locked)
     {
@@ -316,6 +352,10 @@ void KernelPanic(const char *message)
      * thing that stops it being written.
      */
     KernelDiagnosticChannelReset();
+
+    /* A quiet display is quiet no longer: the machine has stopped and must say
+     * why upon whatever is in front of the person. */
+    KernelDisplaySetQuiet(false);
 
     VgaSetColour(VGA_COLOUR_WHITE, VGA_COLOUR_RED);
     KernelWriteString("\nKERNEL PANIC: ");
@@ -980,6 +1020,16 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
     {
         KernelPanic("The Multiboot2 boot information structure could not be parsed.");
     }
+
+    /*
+     * Sub-task 8.2: the display falls silent here unless the `diagnostics`
+     * entry of the menu was chosen, and stays silent until the shell is about
+     * to be started. The three lines above it are the banner and are left upon
+     * the screen; everything from here to the shell is the boot log, which the
+     * serial line carries whether or not the screen does. KernelDisplaySetQuiet
+     * records why the serial line is exempt.
+     */
+    KernelDisplaySetQuiet(!KernelCommandLineHasOption("diagnostics"));
 
     /*
      * The display is tested next, because it is the instrument through which
@@ -1680,6 +1730,19 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
                       "to assert them in.\n");
 
     VgaSetColour(VGA_COLOUR_LIGHT_GREY, VGA_COLOUR_BLACK);
+
+    /*
+     * The display speaks again, if it was quiet, and is told in one line what
+     * it was not shown. A person who booted the default entry sees the banner,
+     * this line, and a prompt; the boot log is upon the serial line and upon
+     * the screen of the `diagnostics` entry.
+     */
+    if (KernelDisplayIsQuiet())
+    {
+        KernelDisplaySetQuiet(false);
+        KernelWriteString("The boot log was carried by the serial line; the "
+                          "\"diagnostics\" entry of the boot menu shows it here.\n");
+    }
 
     /*
      * Sub-task 8.1: the shell, where there is a root to read it from and a
