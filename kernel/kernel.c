@@ -1741,17 +1741,13 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
     VgaSetColour(VGA_COLOUR_LIGHT_GREY, VGA_COLOUR_BLACK);
 
     /*
-     * The display speaks again, if it was quiet, and is told in one line what
-     * it was not shown. A person who booted the default entry sees the banner,
-     * this line, and a prompt; the boot log is upon the serial line and upon
-     * the screen of the `diagnostics` entry.
+     * The display speaks again, if it was quiet. A person who booted the
+     * default entry sees the banner and a prompt and nothing between: the
+     * boot log is upon the serial line, and upon the screen of the
+     * `diagnostics` entry. It said so in a line here until 2026-09-15, at the
+     * project owner's request removed — the menu entry's name is the notice.
      */
-    if (KernelDisplayIsQuiet())
-    {
-        KernelDisplaySetQuiet(false);
-        KernelWriteString("The boot log was carried by the serial line; the "
-                          "\"diagnostics\" entry of the boot menu shows it here.\n");
-    }
+    KernelDisplaySetQuiet(false);
 
     /*
      * Sub-task 8.1: the shell, where there is a root to read it from and a
