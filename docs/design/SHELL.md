@@ -6,7 +6,8 @@
 Phase 8's, as [`LIBC.md`](LIBC.md) is Phase 7's: one section per sub-task, in
 order, each recording what that sub-task built and why, and each revised as the
 design is. Sub-tasks 8.1 (Sections 1 to 7), 8.2 (Sections 8 to 10), 8.3
-(Sections 11 to 15) and 8.4 (Sections 16 to 18) are here so far.
+(Sections 11 to 15), 8.4 (Sections 16 to 18) and 8.5 (Sections 19 to 21) are
+here so far.
 
 **Authority**: `PROJECT_GUIDELINES.md`, Sections 2, 3 and 6. Every control
 sequence and every rule of the grammar named below carries a citation, and the
@@ -889,3 +890,125 @@ sixteen variables** by the kernel's vector bound; **a program is run upon the
 shell's own flow of control** — `wait` runs the child synchronously, as
 [`PROCESS.md`](PROCESS.md), Section 13.2, records — so nothing runs beside
 the shell until the scheduler carries a user thread of its own.
+
+## 19. Sub-task 8.5: input and output redirection
+
+**Implementation**: `ShellApplyRedirections` in
+[`../../userland/sh/run.c`](../../userland/sh/run.c); in the kernel, the
+holder count of [`../../kernel/fs/vfs/file.c`](../../kernel/fs/vfs/file.c),
+`ProcessPlaceDescriptor` and the inheritance in
+[`../../kernel/proc/process.c`](../../kernel/proc/process.c), and `open` with
+its four new flags, `write` to a file, `read` from a redirected 0, `dup2` and
+`rmdir` in [`../../kernel/arch/x86_64/syscall/syscall.c`](../../kernel/arch/x86_64/syscall/syscall.c);
+asserted by [`../../userland/file-check/main.c`](../../userland/file-check/main.c)
+and the fourth session of [`../../kernel/test/shell/parser.c`](../../kernel/test/shell/parser.c).
+
+### 19.1 What a redirection is, and where it is done
+
+A redirection makes a program's 0, 1 or 2 name a file, before the program
+runs; the program itself neither knows nor cares. It is done **in the child,
+between `fork` and `execve`**, in the order written — IEEE Std 1003.1-2017,
+Section 2.7 — so that `>out 2>&1` sends both to the file and `2>&1 >out`
+does not, which is the difference between the two that every shell of this
+lineage has and every person who has typed the wrong one has learned. Each
+operator opens or duplicates and then places by `dup2`; a failure ends the
+child with 1 before any program runs upon the wrong descriptors.
+
+| Operator | What the child does |
+| -------- | ------------------- |
+| `[n]<word` | `open` for reading, placed at `n` (0). |
+| `[n]>word`, `[n]>\|word` | `open` for writing, created or truncated, placed at `n` (1). `noclobber` does not exist, so the two are one. |
+| `[n]>>word` | `open` for writing, created, appending. |
+| `[n]<>word` | `open` for reading and writing, created. |
+| `[n]<&m`, `[n]>&m` | `dup2(m, n)`; `-` closes `n`. |
+
+The expansion of the target word is the shell's ordinary one — `>$F` works
+— and quote removal follows it.
+
+### 19.2 What the kernel had to grow
+
+[`LIBC.md`](LIBC.md), Section 12.7, held two limitations for this sub-task
+since 7.6, and it closes both.
+
+**A call that creates or writes a file.** `open` accepts WRITE, CREATE,
+TRUNCATE and APPEND beside READ and DIRECTORY, refusing any other bit and any
+of the three change flags without WRITE; it takes a mode, recorded and not
+enforced, as `mkdir`'s has been. `write` reaches the open file a descriptor
+names, and the diagnostic path only where 1 or 2 names none. `read` of 0
+reaches a file placed there and the terminal otherwise.
+
+**A descriptor a child inherits — and its cause, a count of holders.** An
+open file of the filesystem layer now counts how many descriptors name it:
+one at `open`, one more per `VfsHold`, one fewer per `VfsClose`, released by
+the last. That single field is what `dup2` and inheritance both are: two
+numbers, or two processes, holding one open file and one position. So a child
+of `fork` inherits every descriptor, as POSIX has it, and `execve` keeps them
+— it closed them from 7.6 to 8.4, the safe half of the rule while nothing
+could mean to keep one; the redirection is what means to, and the table is
+the same process's. [`PROCESS.md`](PROCESS.md), Section 14, and
+[`../storage/VFS.md`](../storage/VFS.md), limitation 2.
+
+**`dup2`, with one rule of this kernel's own.** A number below
+`SYSCALL_DESCRIPTOR_FIRST` that holds no file names the kernel's own path —
+the terminal for 0, the diagnostic path for 1 and 2 — and that path may be
+given to another of the three (`2>&1` with nothing else redirected) but not to
+a number above them, the table holding files and the kernel's paths not being
+files. A program that closes a redirected 2 finds it the diagnostic path
+again. `file-check` asserts each of these.
+
+**`rmdir`**, the call `rm` could not stand in for since 7.6, exposed now that a
+directory made from the prompt is a thing a person wants gone.
+
+### 19.3 More commands
+
+`help`, `true`, `false` and `unset` join the built-ins — `help` because a
+person at a prompt with no manual has nothing else to ask — and `touch`, `cp`
+and `rmdir` join `/bin`, the first two being the first utilities that write a
+file and the third the first that removes a directory. `cat` with no operand,
+or `-`, copies the standard input at last: a file the shell redirected ends,
+and the terminal, which does not, ends at a control-D, which `cat` treats as
+the end because no line discipline is there to do it for every program.
+The shell prints no greeting: the prompt is the whole of what a person sees,
+and `help` is for the rest.
+
+## 20. Verification of sub-task 8.5
+
+### 20.1 `file-check`, extended
+
+| Property asserted | The silent failure it catches |
+| ----------------- | ----------------------------- |
+| Two writes to a created file are one file of six bytes; a read of a write-only descriptor is `EINVAL`. | A position that did not advance, overwriting the first write with the second. |
+| Append goes to the end; a truncating open empties the file. | An append at the start; a truncate that did nothing. |
+| Two numbers of one file share one position; closing the original leaves the duplicate; a closed duplicate is `EBADF`. | The negative test below: a close by one number releasing the file from under the other. |
+| A file placed at 2 receives what is written to 2, and 2 reverts to the diagnostic path when it is closed. | A redirected 2 writing to the log, or a closed 2 refusing the next diagnostic. |
+| The diagnostic path cannot be duplicated above the three; an empty number cannot be duplicated. | A table slot holding a number that names no file. |
+| A child writes through the inherited descriptor and the parent's write follows it. | A child that inherited nothing, or a copy of the file rather than a share of it. |
+
+### 20.2 The shell, upon a session the files answer for
+
+A fourth session uses every operator from the prompt — `>`, `>>`, `<` with
+`>`, `2>`, `>` with `2>&1`, `>|` — and the three utilities, and the kernel then
+reads each file back and compares it: `/verify/out` holds `written` and
+`more`, `/verify/copy` what `cat </verify/out` copied, `/verify/err` and
+`/verify/both` `cat`'s own diagnostic, `/verify/t` nothing, `/verify/c2` the
+copy `cp` made; and `rmdir` removed what `mkdir` made, which `exit $D` and
+`VfsStat` both say.
+
+**Two negative tests**, each caught and reverted: `VfsClose` releasing a file
+at the first close regardless of holders, caught by `file-check` six times
+and by the redirection session; and the redirections applied in reverse order,
+caught by `/verify/both` holding nothing.
+
+## 21. Limitations of sub-task 8.5
+
+1. **A redirection upon a built-in is named and not performed.** Applying one
+   in the shell and restoring it needs the terminal to be duplicable above the
+   three, which Section 19.2's rule forbids; `export >file` is the case a
+   person will meet. It arrives when the kernel's paths become files.
+2. **No here-document, and `<<` is still refused by name.**
+3. **The environment and the vector are still bounded at sixteen strings**,
+   and the descriptor table at sixteen numbers.
+4. **`cat` upon the terminal ends at a control-D by its own reading**, there
+   being no line discipline; every other program reading the terminal reads
+   keystrokes without end until 8.7.
+5. **Pipelines and `&`** are 8.6's and 8.7's, as before.

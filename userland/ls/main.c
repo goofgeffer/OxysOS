@@ -79,7 +79,7 @@ static bool ListDirectory(const char *path, bool all, bool heading)
     int64_t descriptor;
     bool succeeded = true;
 
-    descriptor = OxysOpen(path, SYSCALL_OPEN_READ | SYSCALL_OPEN_DIRECTORY);
+    descriptor = OxysOpen(path, SYSCALL_OPEN_READ | SYSCALL_OPEN_DIRECTORY, 0U);
 
     if (descriptor < 0)
     {

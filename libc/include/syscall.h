@@ -3,13 +3,14 @@
 /*
  * File: libc/include/syscall.h
  * Purpose: Declares the C library's system-call wrappers — one for each of the
- *          sixteen calls <oxys/syscall_abi.h> numbers — together with the raw
+ *          eighteen calls <oxys/syscall_abi.h> numbers — together with the raw
  *          invocation they are built upon and the translation that turns a
  *          kernel result into a library result and an errno.
  * Key definitions: OxysSyscallInvoke0, OxysSyscallInvoke1, OxysSyscallInvoke2,
  *          OxysSyscallInvoke3, OxysSyscallResult, OxysOpen, OxysClose,
  *          OxysRead, OxysReadDirectory, OxysMakeDirectory, OxysUnlink,
- *          OxysChangeDirectory, OxysGetWorkingDirectory,
+ *          OxysChangeDirectory, OxysGetWorkingDirectory, OxysDuplicate,
+ *          OxysRemoveDirectory,
  *          OxysWrite, OxysTicks,
  *          OxysVersion, OxysFork, OxysExecve, OxysExit, OxysWait, OxysBrk,
  *          OxysSbrk.
@@ -225,13 +226,17 @@ void *OxysSbrk(intptr_t increment);
  * ------------------------------------------------------------------------- */
 
 /*
- * Opens a file for reading and returns a descriptor of this program's own.
+ * Opens a file and returns a descriptor of this program's own.
  *
- * `flags` must include SYSCALL_OPEN_READ and may include SYSCALL_OPEN_DIRECTORY,
- * which refuses anything that is not one. No other bit is accepted: there is no
- * way through this interface to create a file or to open one for writing, and a
- * program that asks for either is refused with EINVAL rather than quietly given
- * a file it may only read.
+ * `flags` must include SYSCALL_OPEN_READ or SYSCALL_OPEN_WRITE and may include
+ * SYSCALL_OPEN_DIRECTORY, which refuses anything that is not one, and — since
+ * sub-task 8.5, when the shell's redirection became the first thing that
+ * needed to write a file — SYSCALL_OPEN_CREATE, SYSCALL_OPEN_TRUNCATE and
+ * SYSCALL_OPEN_APPEND, each of which needs WRITE beside it. No other bit is
+ * accepted: a program that asks for a flag this interface does not name is
+ * refused with EINVAL rather than quietly given something else. `permissions`
+ * is the mode a created file is given, 0644 being the usual; it is recorded
+ * and not enforced, this system checking no permission bit.
  *
  * **A directory is opened by this and read by OxysReadDirectory, not by
  * OxysRead.** A read of a descriptor naming a directory fails with EISDIR, which
@@ -243,7 +248,7 @@ void *OxysSbrk(intptr_t increment);
  * descriptor left, ENAMETOOLONG beyond SYSCALL_PATH_MAXIMUM, and EFAULT for a
  * path this program may not read.
  */
-int64_t OxysOpen(const char *path, uint64_t flags);
+int64_t OxysOpen(const char *path, uint64_t flags, uint16_t permissions);
 
 /*
  * Releases a descriptor and the open file beneath it.
@@ -338,5 +343,26 @@ int64_t OxysChangeDirectory(const char *path);
  * written to the standard should be told what the standard says.
  */
 int64_t OxysGetWorkingDirectory(char *buffer, size_t capacity);
+
+/*
+ * Makes `to` name what `from` names, of sub-task 8.5 — `dup2` of IEEE Std
+ * 1003.1-2017. Whatever `to` named is closed; the two then share one open file
+ * and one position until both are closed. Returns -1 with errno set to EBADF
+ * where `from` names nothing, or where a number below SYSCALL_DESCRIPTOR_FIRST
+ * that names the terminal or the diagnostic path is asked to become a number
+ * above them, the kernel's paths not being files.
+ */
+int64_t OxysDuplicate(int from, int to);
+
+/*
+ * Removes an empty directory, of sub-task 8.5.
+ *
+ * Returns -1 with errno set to ENOENT where there is nothing of that name,
+ * ENOTDIR where it is not a directory, ENOTEMPTY where it holds more than `.`
+ * and `..`, EBUSY where it is a mount point or the working directory of the
+ * filesystem layer's own resolution, and EROFS for a volume that may not be
+ * written.
+ */
+int64_t OxysRemoveDirectory(const char *path);
 
 #endif /* OXYS_LIBC_SYSCALL_H */

@@ -2,8 +2,9 @@
 /* SPDX-License-Identifier: MIT */
 /*
  * File: userland/sh/builtins.c
- * Purpose: The four built-in commands of sub-task 8.3 — `cd`, `pwd`, `export`
- *          and `exit` — which are the commands a shell must run itself because
+ * Purpose: The built-in commands — `cd`, `pwd`, `export` and `exit` of sub-task
+ *          8.3, and `unset`, `help`, `true` and `false` added at 8.5 —
+ *          which are the commands a shell must run itself because
  *          a child process could not do them on the shell's behalf: a
  *          directory changed in a child is changed for the child, and so is a
  *          variable set there.
@@ -41,8 +42,8 @@
 /* The names, and which of them Section 2.14 makes special: an assignment
  * before a special built-in persists in the shell, and before a regular one
  * does not. */
-static const char *const ShellSpecialBuiltins[] = { "exit", "export" };
-static const char *const ShellRegularBuiltins[] = { "cd", "pwd" };
+static const char *const ShellSpecialBuiltins[] = { "exit", "export", "unset" };
+static const char *const ShellRegularBuiltins[] = { "cd", "pwd", "help", "true", "false" };
 
 static bool ShellNameIsAmong(const char *name, const char *const *names, size_t count)
 {
@@ -285,6 +286,47 @@ static int ShellBuiltinExit(int argc, char **argv, int last_status, bool *exit_r
     return status;
 }
 
+
+/* `unset name...`: each variable removed, IEEE Std 1003.1-2017's `unset`
+ * without its `-f`, this shell having no functions. */
+static int ShellBuiltinUnset(int argc, char **argv)
+{
+    int status = 0;
+
+    for (int index = 1; index < argc; ++index)
+    {
+        if (!ShellIsName(argv[index], strlen(argv[index])))
+        {
+            (void)fprintf(stderr, "sh: unset: %s: not a valid name.\n", argv[index]);
+            status = 1;
+            continue;
+        }
+
+        (void)ShellVariableUnset(argv[index]);
+    }
+
+    return status;
+}
+
+/* `help`: what is built in, and where the rest is. It is here because a
+ * person at a prompt with no manual has nothing else to ask. */
+static int ShellBuiltinHelp(void)
+{
+    (void)printf("The Oxys-OS shell. Built in:\n"
+                 "  cd [dir | -]       change the working directory; HOME with no operand\n"
+                 "  pwd                print the working directory\n"
+                 "  export [NAME[=v]]  mark a variable for the environment; alone, list them\n"
+                 "  unset NAME...      remove a variable\n"
+                 "  exit [n]           end the shell with status n, or the last status\n"
+                 "  true, false        succeed, fail\n"
+                 "  help               this\n"
+                 "Programs are sought upon PATH, which is /bin when unset: ls, cat, echo,\n"
+                 "mkdir, rmdir, rm, touch, cp. NAME=value sets a variable and $NAME reads it;\n"
+                 "$? is the last status. ; && || ! and < > >> <> <& >& are honoured; a\n"
+                 "pipeline, & and control-C are not yet. Arrow keys edit and recall.\n");
+
+    return 0;
+}
 int ShellRunBuiltin(int argc, char **argv, int last_status, bool *exit_requested)
 {
     if ((argc < 1) || (argv == NULL) || (argv[0] == NULL))
@@ -310,6 +352,26 @@ int ShellRunBuiltin(int argc, char **argv, int last_status, bool *exit_requested
     if (strcmp(argv[0], "exit") == 0)
     {
         return ShellBuiltinExit(argc, argv, last_status, exit_requested);
+    }
+
+    if (strcmp(argv[0], "unset") == 0)
+    {
+        return ShellBuiltinUnset(argc, argv);
+    }
+
+    if (strcmp(argv[0], "help") == 0)
+    {
+        return ShellBuiltinHelp();
+    }
+
+    if (strcmp(argv[0], "true") == 0)
+    {
+        return 0;
+    }
+
+    if (strcmp(argv[0], "false") == 0)
+    {
+        return 1;
     }
 
     return -1;

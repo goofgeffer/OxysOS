@@ -55,6 +55,7 @@
 #include <oxys/fs/vfs.h>
 #include <oxys/block/block.h>
 #include <oxys/arch/syscall/syscall.h>
+#include <oxys/terminal/terminal.h>
 
 /*
  * The device the composed volume is presented through, and it is a name of its
@@ -746,11 +747,27 @@ void KernelVerifyUtilities(void)
                           cat_directory_vector, KERNEL_UTILITIES_FAILURE,
                           "cat did not report a directory given as an operand");
 
-    KernelUtilitiesExpect("cat", KernelProgramCatBegin,
-                          (uint64_t)(KernelProgramCatEnd - KernelProgramCatBegin),
-                          cat_bare_vector, KERNEL_UTILITIES_FAILURE,
-                          "cat with no operand did not report that there is no standard "
-                          "input to read");
+    /*
+     * `cat` with no operand copies the standard input since sub-task 8.5, so
+     * it is given one: the terminal, with a line and the control-D at which
+     * a copy of the terminal ends. It ends with zero, having copied the line
+     * to the log, and consumed exactly what was placed — a `cat` that stopped
+     * short would leave the control-D for the shell to read as its end.
+     */
+    {
+        static const char line[] = "a line for cat to copy\n\x04";
+        const uint64_t delivered = TerminalBytesDelivered();
+
+        TerminalFlush();
+        TerminalInject(line, sizeof line - 1U);
+        KernelUtilitiesExpect("cat", KernelProgramCatBegin,
+                              (uint64_t)(KernelProgramCatEnd - KernelProgramCatBegin),
+                              cat_bare_vector, 0,
+                              "cat with no operand did not copy the standard input to its end");
+        KernelUtilitiesRequire(TerminalBytesDelivered() - delivered == sizeof line - 1U,
+                               "cat did not consume exactly the line and the control-D");
+        TerminalFlush();
+    }
 
     /* ----------------------------------------------------------------- ls */
 

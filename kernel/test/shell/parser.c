@@ -583,6 +583,101 @@ static const char VerifyShellProgramSession[] =
 extern const uint8_t KernelProgramEnvCheckBegin[];
 extern const uint8_t KernelProgramEnvCheckEnd[];
 
+/*
+ * A fourth session, of sub-task 8.5, whose evidence is what the files hold
+ * afterwards: every redirection operator used from the prompt, and the three
+ * utilities that write. The kernel reads each file back below and compares
+ * it; `exit $D` carries the one thing a file cannot show, that `rmdir`
+ * removed a directory `mkdir` made.
+ */
+static const char VerifyShellRedirectSession[] =
+    "echo written >/verify/out\n"
+    "echo more >>/verify/out\n"
+    "cat </verify/out >/verify/copy\n"
+    "cat /verify/nonexistent 2>/verify/err\n"
+    "cat /verify/nonexistent >/verify/both 2>&1\n"
+    "echo clobbered >|/verify/clob\n"
+    "touch /verify/t && cp /verify/out /verify/c2\n"
+    "mkdir /verify/d && rmdir /verify/d && D=4\n"
+    "exit $D\n";
+
+#define VERIFY_SHELL_REDIRECT_STATUS 4
+
+/* What the session should have left. `cat`'s diagnostic is its own text. */
+typedef struct VerifyShellFile
+{
+    const char *path;
+    const char *contents;
+} VerifyShellFile;
+
+static const VerifyShellFile VerifyShellRedirectFiles[] = {
+    { "/verify/out", "written\nmore\n" },
+    { "/verify/copy", "written\nmore\n" },
+    { "/verify/clob", "clobbered\n" },
+    { "/verify/err", "cat: /verify/nonexistent: No such file, or one that will not load\n" },
+    { "/verify/both", "cat: /verify/nonexistent: No such file, or one that will not load\n" },
+    { "/verify/t", "" },
+    { "/verify/c2", "written\nmore\n" },
+};
+
+#define VERIFY_SHELL_REDIRECT_FILE_COUNT \
+    (sizeof VerifyShellRedirectFiles / sizeof VerifyShellRedirectFiles[0])
+
+/* Reads a file whole and compares it, length first; then removes it. */
+static void VerifyShellFileHolds(const VerifyShellFile *expected)
+{
+    char buffer[256];
+    uint64_t read = 0U;
+    const size_t length = strlen(expected->contents);
+    const int descriptor = VfsOpen(expected->path, VFS_OPEN_READ, 0U);
+
+    if (descriptor < 0)
+    {
+        KernelWriteString("  ");
+        KernelWriteString(expected->path);
+        KernelWriteString(" was not made by the redirection FAILED.\n");
+        VerifyShellSucceeded = false;
+
+        return;
+    }
+
+    if (!VfsRead(descriptor, buffer, sizeof buffer, &read) || (read != length) ||
+        (memcmp(buffer, expected->contents, length) != 0))
+    {
+        KernelWriteString("  ");
+        KernelWriteString(expected->path);
+        KernelWriteString(" does not hold what the redirection should have written FAILED.\n");
+        VerifyShellSucceeded = false;
+    }
+
+    (void)VfsClose(descriptor);
+    (void)VfsUnlink(expected->path);
+}
+/* Defined below, with the run procedure. */
+static void VerifyShellProgram(const char *session, size_t length, int64_t expected,
+                               const char *what);
+
+
+static void VerifyShellRedirections(void)
+{
+    VerifyShellProgram(VerifyShellRedirectSession, sizeof VerifyShellRedirectSession - 1U,
+                       VERIFY_SHELL_REDIRECT_STATUS, "upon the redirections' session");
+
+    for (size_t index = 0U; index < VERIFY_SHELL_REDIRECT_FILE_COUNT; ++index)
+    {
+        VerifyShellFileHolds(&VerifyShellRedirectFiles[index]);
+    }
+
+    /* And the directory rmdir removed is gone: a status of 4 said so, and
+     * the layer is asked as well. */
+    {
+        VfsAttributes attributes;
+
+        VerifyShellRequire(!VfsStat("/verify/d", &attributes),
+                           "the directory rmdir removed is still there");
+    }
+}
+
 /* Writes env-check onto the root. Returns false having said why. */
 static bool VerifyShellPlaceProgram(void)
 {
@@ -762,6 +857,7 @@ void KernelVerifyShell(void)
     {
         VerifyShellProgram(VerifyShellProgramSession, sizeof VerifyShellProgramSession - 1U,
                            VERIFY_SHELL_PROGRAM_STATUS, "upon the programs' session");
+        VerifyShellRedirections();
         VerifyShellRemoveProgram();
     }
 
@@ -775,7 +871,9 @@ void KernelVerifyShell(void)
         KernelWriteDecimal((uint64_t)(sizeof VerifyShellBuiltinSession - 1U));
         KernelWriteString(" and ");
         KernelWriteDecimal((uint64_t)(sizeof VerifyShellProgramSession - 1U));
-        KernelWriteString(" bytes at privilege level 3, ending with zero, with the status its built-ins composed, and with the status the programs it ran composed.\n");
+        KernelWriteString(" and ");
+        KernelWriteDecimal((uint64_t)(sizeof VerifyShellRedirectSession - 1U));
+        KernelWriteString(" bytes at privilege level 3, ending with zero, with the status its built-ins composed, with the status the programs it ran composed, and with every redirection's file holding what was written.\n");
     }
     else
     {

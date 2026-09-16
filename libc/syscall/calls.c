@@ -2,7 +2,7 @@
 /* SPDX-License-Identifier: MIT */
 /*
  * File: libc/syscall/calls.c
- * Purpose: The sixteen system-call wrappers, one for each call
+ * Purpose: The eighteen system-call wrappers, one for each call
  *          <oxys/syscall_abi.h> numbers: the arguments named rather than
  *          numbered, and the result translated into the convention a C program
  *          expects.
@@ -209,10 +209,10 @@ void *OxysSbrk(intptr_t increment)
 
 /* ---------------------------------------------------------- sub-task 7.6 */
 
-int64_t OxysOpen(const char *path, uint64_t flags)
+int64_t OxysOpen(const char *path, uint64_t flags, uint16_t permissions)
 {
-    return OxysSyscallResult(OxysSyscallInvoke2(SYSCALL_OPEN,
-                                                (uint64_t)(uintptr_t)path, flags));
+    return OxysSyscallResult(OxysSyscallInvoke3(SYSCALL_OPEN, (uint64_t)(uintptr_t)path,
+                                                flags, (uint64_t)permissions));
 }
 
 int64_t OxysClose(int descriptor)
@@ -280,4 +280,15 @@ int64_t OxysGetWorkingDirectory(char *buffer, size_t capacity)
     }
 
     return OxysSyscallResult(result);
+}
+
+int64_t OxysDuplicate(int from, int to)
+{
+    return OxysSyscallResult(OxysSyscallInvoke2(SYSCALL_DUP2, (uint64_t)from, (uint64_t)to));
+}
+
+int64_t OxysRemoveDirectory(const char *path)
+{
+    return OxysSyscallResult(OxysSyscallInvoke1(SYSCALL_RMDIR,
+                                                (uint64_t)(uintptr_t)path));
 }

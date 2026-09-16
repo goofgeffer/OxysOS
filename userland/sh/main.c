@@ -253,19 +253,9 @@ static int ShellRunCommand(const ShellCommand *command, bool *exit_requested)
 
     if (!ShellIsBuiltin(ShellArgumentVector[0]))
     {
-        /*
-         * A program, since sub-task 8.4. Its redirections are still named and
-         * not performed, 8.5 being where a descriptor is redirected; the
-         * diagnostic says so rather than letting `ls > out` print to the
-         * screen with no word about the file that was not made.
-         */
-        if (command->redirection_count > 0U)
-        {
-            (void)fprintf(stderr, "sh: %s: redirections are not performed until sub-task 8.5.\n",
-                          ShellArgumentVector[0]);
-        }
-
-        return ShellRunProgram(ShellArgumentVector);
+        /* A program, since sub-task 8.4, its redirections performed in the
+         * child since 8.5: run.c. */
+        return ShellRunProgram(ShellArgumentVector, command, ShellLookupParameter, NULL);
     }
 
     special = ShellIsSpecialBuiltin(ShellArgumentVector[0]);
@@ -391,9 +381,8 @@ int main(void)
         }
     }
 
-    (void)printf("The Oxys-OS shell, sub-task 8.4: programs run from /bin with the exported\n"
-                 "environment; cd, pwd, export and exit are built in; `exit' or control-D ends\n"
-                 "the shell. No redirection, no pipeline, no job control yet.\n");
+    /* No greeting, at the project owner's request of 2026-09-15: the prompt is
+     * the whole of what a person sees, and `help` is the built-in for the rest. */
 
     while (!exit_requested)
     {

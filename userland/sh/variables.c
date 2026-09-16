@@ -7,7 +7,7 @@
  *          `export` marks, `$NAME` reads, and — from sub-task 8.4 — the
  *          environment of a program is built from.
  * Key functions: ShellVariablesInitialise, ShellVariableSet, ShellVariableGet,
- *          ShellVariableExport, ShellVariableIsExported, ShellVariableCount,
+ *          ShellVariableExport, ShellVariableIsExported, ShellVariableUnset, ShellVariableCount,
  *          ShellVariableAt, ShellIsName, ShellIsAssignmentWord.
  * References:
  *   - IEEE Std 1003.1-2017, Section 2.5.3 (Shell Variables) and Section 3.235
@@ -217,4 +217,18 @@ bool ShellVariableAt(size_t position, const char **name, const char **value, boo
     }
 
     return false;
+}
+
+bool ShellVariableUnset(const char *name)
+{
+    ShellVariable *const variable = (name != NULL) ? ShellVariableFind(name) : NULL;
+
+    if (variable == NULL)
+    {
+        return false;
+    }
+
+    memset(variable, 0, sizeof *variable);
+
+    return true;
 }

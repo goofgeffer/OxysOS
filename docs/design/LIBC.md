@@ -2128,18 +2128,21 @@ inherited.
    rather than read. It is a property of that editor's design and not a way
    round this limitation, which stands for every other program;
    [`SHELL.md`](SHELL.md), Section 3.4.
-2. **No program may create or write a file.** `open` accepts `SYSCALL_OPEN_READ`
-   and `SYSCALL_OPEN_DIRECTORY` and refuses every other bit, and `write` still
-   reaches the two diagnostic descriptors alone. The filesystem layer has offered
-   creation, truncation and appending since Phase 5; they are not exposed because
-   nothing here would call them, and a call whose only caller is a future one is
-   a call nothing asserts. The shell's output redirection at sub-task 8.5 is the
-   first thing that needs them.
-3. **There is no call that removes a directory**, so `rm` has no `-r` and no
-   `-d`. `VfsRemoveDirectory` exists and is not exposed, for the reason above; a
-   recursive removal built upon `unlink` alone could empty a directory and then
-   be unable to remove it, which is worse than not offering the option. A
-   directory made by `mkdir` here can be removed by nothing in this system.
+2. **No program could create or write a file until sub-task 8.5.** `open`
+   accepted `SYSCALL_OPEN_READ` and `SYSCALL_OPEN_DIRECTORY` and refused every
+   other bit, and `write` reached the two diagnostic descriptors alone; the
+   filesystem layer had offered creation, truncation and appending since Phase
+   5, unexposed because nothing would call them and a call whose only caller is
+   a future one is a call nothing asserts. The shell's redirection was that
+   caller. **Closed at 8.5**: `open` takes WRITE, CREATE, TRUNCATE and APPEND
+   and a mode, `write` reaches a file, `touch` and `cp` are the first
+   utilities to use it, and `file-check` asserts the four.
+   [`SHELL.md`](SHELL.md), Section 19.
+3. **There was no call that removed a directory until sub-task 8.5**, so `rm`
+   had no `-r` and no `-d` and a directory made by `mkdir` could be removed by
+   nothing. **Closed at 8.5** by `rmdir`, the call and the utility; a recursive
+   `rm -r` is still absent, a removal built upon `unlink` and `rmdir` being a
+   thing to write carefully rather than in passing.
 4. **`ls` does not sort.** POSIX sorts by the collating sequence of the locale;
    this system has no locale, and sorting needs every name held at once — a heap
    sized by a directory the program has not finished reading. The entries appear
@@ -2162,12 +2165,14 @@ inherited.
    missing is the decision about buffering a file's stream from a heap that may
    not exist yet. It is deliberately not invented here: the first thing that
    needs `fopen` is a ported tool, and a port is what will say what it needs.
-8. **A child of `fork` inherits no descriptor**, and `execve` closes every one.
-   POSIX has both inherited. Inheriting means two processes sharing one open file
-   and one file position, which needs a reference count upon an open file that
-   the filesystem layer does not have. The shell of Phase 8 needs this — a
-   redirection is established in the child between the `fork` and the `execve` —
-   so it is sub-task 8.5's to fix and not a permanent shape.
+8. **A child of `fork` inherited no descriptor until sub-task 8.5, and `execve`
+   closed every one.** POSIX has both inherited, which means two processes
+   sharing one open file and one position, which needed a reference count upon
+   an open file that the filesystem layer did not have. **Closed at 8.5**: the
+   layer counts holders, a child inherits everything, `execve` keeps it, and
+   `dup2` is what the shell places a redirection with. `file-check` asserts
+   a child's write and its parent's sharing one position.
+   [`../storage/VFS.md`](../storage/VFS.md), limitation 2.
 9. **The two bounds upon a vector are small**: sixteen strings and two
    kibibytes. They are what a kernel stack frame can hold, `ProcessArguments`
    being a local of the system call. A shell expanding a pattern over a large

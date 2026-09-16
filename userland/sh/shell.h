@@ -267,6 +267,7 @@ bool ShellVariableSet(const char *name, const char *value);
 const char *ShellVariableGet(const char *name);
 bool ShellVariableExport(const char *name);
 bool ShellVariableIsExported(const char *name);
+bool ShellVariableUnset(const char *name);
 size_t ShellVariableCount(void);
 bool ShellVariableAt(size_t position, const char **name, const char **value, bool *exported);
 
@@ -308,7 +309,8 @@ int ShellRunBuiltin(int argc, char **argv, int last_status, bool *exit_requested
  * program's, 127 where it could not be found, 126 where it was found and
  * could not run, or 128 plus the vector where it ended by a fault.
  */
-int ShellRunProgram(char **argv);
+int ShellRunProgram(char **argv, const ShellCommand *command, ShellLookup lookup,
+                    void *context);
 char **ShellBuildEnvironment(void);
 
 #endif /* OXYS_SHELL_H */

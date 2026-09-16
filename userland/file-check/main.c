@@ -103,7 +103,7 @@ static void FileContents(void)
     int64_t descriptor;
     int64_t read;
 
-    descriptor = OxysOpen(FileFirstPath, SYSCALL_OPEN_READ);
+    descriptor = OxysOpen(FileFirstPath, SYSCALL_OPEN_READ, 0U);
     FileRequire(descriptor >= (int64_t)SYSCALL_DESCRIPTOR_FIRST,
                 "a file could not be opened, or was opened upon a descriptor reserved "
                 "to the diagnostic path");
@@ -176,7 +176,7 @@ static void FileDirectoryContents(void)
     bool saw_hidden = false;
     int entries = 0;
 
-    descriptor = OxysOpen(FileDirectoryPath, SYSCALL_OPEN_READ | SYSCALL_OPEN_DIRECTORY);
+    descriptor = OxysOpen(FileDirectoryPath, SYSCALL_OPEN_READ | SYSCALL_OPEN_DIRECTORY, 0U);
     FileRequire(descriptor >= 0, "a directory could not be opened");
 
     if (descriptor < 0)
@@ -268,24 +268,29 @@ static void FileRefusals(void)
     char buffer[8];
     int64_t descriptor;
 
-    FileRefused(OxysOpen(FileAbsentPath, SYSCALL_OPEN_READ), ENOENT,
+    FileRefused(OxysOpen(FileAbsentPath, SYSCALL_OPEN_READ, 0U), ENOENT,
                 "a path that leads nowhere was not refused as absent");
 
-    FileRefused(OxysOpen(FileFirstPath, SYSCALL_OPEN_READ | SYSCALL_OPEN_DIRECTORY),
+    FileRefused(OxysOpen(FileFirstPath, SYSCALL_OPEN_READ | SYSCALL_OPEN_DIRECTORY, 0U),
                 ENOTDIR, "a regular file was opened as a directory");
 
-    FileRefused(OxysOpen("/scratch/one/below", SYSCALL_OPEN_READ), ENOTDIR,
+    FileRefused(OxysOpen("/scratch/one/below", SYSCALL_OPEN_READ, 0U), ENOTDIR,
                 "a path leading through a regular file was not refused");
 
     /*
-     * A flag outside the pair the interface offers. This is the assertion that
+     * A flag outside the set the interface offers. This is the assertion that
      * the kernel refuses what it does not implement rather than masking it away
      * — and it is worth making from a program, because no utility here would
-     * ever pass such a flag and nothing else would notice.
+     * ever pass such a flag and nothing else would notice. It was WRITE until
+     * sub-task 8.5 gave the interface writing; it is now a bit the interface
+     * has never named, and CREATE without WRITE, which asks to change a file
+     * without opening it for change.
      */
-    FileRefused(OxysOpen(FileFirstPath, SYSCALL_OPEN_READ | UINT64_C(0x0002)), EINVAL,
-                "an open asking to write was not refused");
-    FileRefused(OxysOpen(FileFirstPath, 0U), EINVAL,
+    FileRefused(OxysOpen(FileFirstPath, SYSCALL_OPEN_READ | UINT64_C(0x8000), 0U), EINVAL,
+                "an open asking for a flag the interface does not name was not refused");
+    FileRefused(OxysOpen(FileFirstPath, SYSCALL_OPEN_READ | SYSCALL_OPEN_CREATE, 0U), EINVAL,
+                "an open asking to create without writing was not refused");
+    FileRefused(OxysOpen(FileFirstPath, 0U, 0U), EINVAL,
                 "an open asking for neither reading nor writing was not refused");
 
     /* A path beyond what the kernel will copy. The bound is the kernel's and is
@@ -294,16 +299,16 @@ static void FileRefusals(void)
     memset(path, 'a', sizeof path - 1U);
     path[0] = '/';
     path[sizeof path - 1U] = '\0';
-    FileRefused(OxysOpen(path, SYSCALL_OPEN_READ), ENAMETOOLONG,
+    FileRefused(OxysOpen(path, SYSCALL_OPEN_READ, 0U), ENAMETOOLONG,
                 "a path beyond the published bound was not refused as too long");
 
-    FileRefused(OxysOpen((const char *)(uintptr_t)0x10, SYSCALL_OPEN_READ), EFAULT,
+    FileRefused(OxysOpen((const char *)(uintptr_t)0x10, SYSCALL_OPEN_READ, 0U), EFAULT,
                 "a path this program may not read was not refused");
 
     /* A directory opens, and refuses to be read as a file. This is the one case
      * where `cat` fails at the read rather than at the open, and the refusal
      * must say which. */
-    descriptor = OxysOpen(FileDirectoryPath, SYSCALL_OPEN_READ);
+    descriptor = OxysOpen(FileDirectoryPath, SYSCALL_OPEN_READ, 0U);
     FileRequire(descriptor >= 0, "a directory could not be opened for reading");
 
     if (descriptor >= 0)
@@ -344,7 +349,7 @@ static void FileExhaustion(void)
 
     for (;;)
     {
-        const int64_t descriptor = OxysOpen(FileFirstPath, SYSCALL_OPEN_READ);
+        const int64_t descriptor = OxysOpen(FileFirstPath, SYSCALL_OPEN_READ, 0U);
 
         if (descriptor < 0)
         {
@@ -375,7 +380,7 @@ static void FileExhaustion(void)
     /* And the table takes one again, which is what says the releases above did
      * something. */
     {
-        const int64_t descriptor = OxysOpen(FileFirstPath, SYSCALL_OPEN_READ);
+        const int64_t descriptor = OxysOpen(FileFirstPath, SYSCALL_OPEN_READ, 0U);
 
         FileRequire(descriptor >= 0,
                     "the descriptor table is still full after every descriptor was "
@@ -389,14 +394,178 @@ static void FileExhaustion(void)
     }
 }
 
+
+/* ---------------------------------------------------------------------------
+ * Sub-task 8.5: writing, and the sharing of an open file.
+ * ------------------------------------------------------------------------- */
+
+static const char FileWrittenPath[] = "/scratch/written";
+
+/* Reads the whole of a file into `buffer` and compares it with `expected`,
+ * length first. */
+static bool FileHolds(const char *path, const char *expected)
+{
+    char buffer[128];
+    const int64_t descriptor = OxysOpen(path, SYSCALL_OPEN_READ, 0U);
+    int64_t total = 0;
+
+    if (descriptor < 0)
+    {
+        return false;
+    }
+
+    for (;;)
+    {
+        const int64_t got = OxysRead((int)descriptor, &buffer[total],
+                                     sizeof buffer - 1U - (size_t)total);
+
+        if (got <= 0)
+        {
+            break;
+        }
+
+        total += got;
+    }
+
+    (void)OxysClose((int)descriptor);
+    buffer[total] = '\0';
+
+    return strcmp(buffer, expected) == 0;
+}
+
+static void FileWriting(void)
+{
+    int64_t descriptor;
+    int64_t child;
+
+    /* Create and write; the position advances, so two writes are one file. */
+    descriptor = OxysOpen(FileWrittenPath,
+                          SYSCALL_OPEN_WRITE | SYSCALL_OPEN_CREATE | SYSCALL_OPEN_TRUNCATE, 0644U);
+    FileRequire(descriptor >= 0, "a file could not be created for writing");
+
+    if (descriptor >= 0)
+    {
+        FileRequire(OxysWrite((int)descriptor, "abc", 3U) == 3, "a write of three bytes was short");
+        FileRequire(OxysWrite((int)descriptor, "def", 3U) == 3, "a second write was short");
+
+        /* A read of a descriptor opened for writing alone is refused. */
+        {
+            char one;
+
+            errno = 0;
+            FileRequire((OxysRead((int)descriptor, &one, 1U) < 0) && (errno == EINVAL),
+                        "a read of a write-only descriptor was not refused");
+        }
+
+        FileRequire(OxysClose((int)descriptor) >= 0, "the written file could not be closed");
+    }
+
+    FileRequire(FileHolds(FileWrittenPath, "abcdef"), "the file does not hold what was written");
+
+    /* Append goes to the end; truncate empties. */
+    descriptor = OxysOpen(FileWrittenPath, SYSCALL_OPEN_WRITE | SYSCALL_OPEN_APPEND, 0U);
+    FileRequire(descriptor >= 0, "the file could not be opened for appending");
+
+    if (descriptor >= 0)
+    {
+        (void)OxysWrite((int)descriptor, "ghi", 3U);
+        (void)OxysClose((int)descriptor);
+    }
+
+    FileRequire(FileHolds(FileWrittenPath, "abcdefghi"), "an append did not go to the end");
+
+    descriptor = OxysOpen(FileWrittenPath, SYSCALL_OPEN_WRITE | SYSCALL_OPEN_TRUNCATE, 0U);
+
+    if (descriptor >= 0)
+    {
+        (void)OxysClose((int)descriptor);
+    }
+
+    FileRequire(FileHolds(FileWrittenPath, ""), "a truncating open did not empty the file");
+
+    /* Duplication: two numbers, one file, one position; closing one leaves
+     * the other; a number below SYSCALL_DESCRIPTOR_FIRST may be given a file
+     * and reverts to the kernel's path when that file is closed. */
+    descriptor = OxysOpen(FileWrittenPath, SYSCALL_OPEN_WRITE, 0U);
+    FileRequire(descriptor >= 0, "the file could not be reopened for writing");
+
+    if (descriptor >= 0)
+    {
+        FileRequire(OxysDuplicate((int)descriptor, 7) == 0, "dup2 onto 7 failed");
+        FileRequire(OxysWrite((int)descriptor, "one", 3U) == 3, "a write through the original was short");
+        FileRequire(OxysWrite(7, "two", 3U) == 3, "a write through the duplicate was short");
+        FileRequire(OxysClose((int)descriptor) >= 0, "the original could not be closed");
+        FileRequire(OxysWrite(7, "three", 5U) == 5,
+                    "the duplicate did not survive the original's close");
+        FileRequire(OxysClose(7) >= 0, "the duplicate could not be closed");
+        errno = 0;
+        FileRequire((OxysWrite(7, "x", 1U) < 0) && (errno == EBADF),
+                    "a closed duplicate still accepted a write");
+    }
+
+    FileRequire(FileHolds(FileWrittenPath, "onetwothree"),
+                "the two numbers did not share one position");
+
+    /* A duplicate below SYSCALL_DESCRIPTOR_FIRST: what a redirection does. */
+    descriptor = OxysOpen(FileWrittenPath, SYSCALL_OPEN_WRITE | SYSCALL_OPEN_TRUNCATE, 0U);
+
+    if (descriptor >= 0)
+    {
+        FileRequire(OxysDuplicate((int)descriptor, 2) == 0, "dup2 onto 2 failed");
+        (void)OxysClose((int)descriptor);
+        FileRequire(OxysWrite(2, "diag", 4U) == 4, "a write to the redirected 2 was short");
+        FileRequire(OxysClose(2) >= 0, "the redirected 2 could not be closed");
+        FileRequire(OxysWrite(2, "\n", 1U) == 1, "2 did not revert to the diagnostic path when closed");
+    }
+
+    FileRequire(FileHolds(FileWrittenPath, "diag"), "the redirected 2 did not reach the file");
+
+    /* The kernel's own path cannot be moved above the three: EBADF. */
+    errno = 0;
+    FileRequire((OxysDuplicate(1, 9) < 0) && (errno == EBADF),
+                "the diagnostic path was duplicated onto a number above the three");
+    errno = 0;
+    FileRequire((OxysDuplicate(12, 13) < 0) && (errno == EBADF),
+                "an empty number was duplicated");
+
+    /* Inheritance across fork: the child writes through the parent's open
+     * file and moves its position, and the parent's write follows it. */
+    descriptor = OxysOpen(FileWrittenPath, SYSCALL_OPEN_WRITE | SYSCALL_OPEN_TRUNCATE, 0U);
+    FileRequire(descriptor >= 0, "the file could not be reopened for the fork");
+    child = OxysFork();
+
+    if (child == 0)
+    {
+        OxysExit((OxysWrite((int)descriptor, "child", 5U) == 5) ? 0 : 1);
+    }
+
+    if (child > 0)
+    {
+        int64_t status = -1;
+
+        FileRequire(OxysWait(&status) == child, "the child was not collected");
+        FileRequire(status == 0, "the child could not write through the inherited descriptor");
+        FileRequire(OxysWrite((int)descriptor, "parent", 6U) == 6, "the parent's write was short");
+        (void)OxysClose((int)descriptor);
+        FileRequire(FileHolds(FileWrittenPath, "childparent"),
+                    "the child's write and the parent's did not share one position");
+    }
+    else
+    {
+        FileRequire(false, "fork failed");
+    }
+
+    FileRequire(OxysUnlink(FileWrittenPath) >= 0, "the written file could not be removed");
+}
 int main(void)
 {
-    (void)printf("file-check: the six filesystem calls, from a program.\n");
+    (void)printf("file-check: the filesystem calls, from a program.\n");
 
     FileContents();
     FileDirectoryContents();
     FileRefusals();
     FileExhaustion();
+    FileWriting();
 
     (void)printf("file-check: %d assertion(s) failed.\n", FileFailures);
 

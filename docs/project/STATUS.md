@@ -28,7 +28,7 @@ call, may make a child of itself and collect what it ended with, and is ended
 when it faults or when it asks.
 
 **And it runs programs a person would recognise.** Since sub-task 7.6 the kernel
-carries fourteen system calls rather than eight (sixteen since sub-task 8.3) — `open`, `close`, `read`,
+carries fourteen system calls rather than eight (eighteen since sub-task 8.5) — `open`, `close`, `read`,
 `readdir`, `mkdir` and `unlink` joining them — each process holds a descriptor
 table of its own, and `execve` carries the argument and environment vectors it
 had refused since Phase 6. Above those stand `ls`, `cat`, `echo`, `mkdir` and
@@ -126,7 +126,7 @@ each refuses the options it does not implement rather than accepting them and
 doing nothing. [`../design/LIBC.md`](../design/LIBC.md), Section 12.3.
 
 **A program may now reach the filesystem, and may be given arguments.** The
-kernel carries **fourteen** system calls — sixteen since 8.3 — the eight it had, and `open`, `close`,
+kernel carries **fourteen** system calls — eighteen since 8.5 — the eight it had, and `open`, `close`,
 `read`, `readdir`, `mkdir` and `unlink`, each a validation of a caller's
 arguments and then a call of the filesystem layer that has existed since Phase 5.
 Each process holds a descriptor table of its own, so that the numbers a program
@@ -227,7 +227,7 @@ the GRUB entry that permits writing. See
   rather than one for all; and composites all of it over a back buffer, after
   which **nothing reads the framebuffer**.
 - A `SYSCALL` entry path swaps `GS`, loads a kernel stack from a per-processor
-  block, dispatches through a table of sixteen calls and validates a caller's
+  block, dispatches through a table of eighteen calls and validates a caller's
   arguments against both the canonical user limit and the paging hierarchy — and
   resolves a copy-on-write fault upon a page it is asked to write, rather than
   refusing an address a fork had protected.
@@ -572,6 +572,20 @@ saw it. It is restored from the per-thread frame now. What is still absent is
 rather than pretended. [`../design/SHELL.md`](../design/SHELL.md), Sections 16
 to 18.
 
+**Sub-task 8.5 is complete: redirection, and the writable file beneath it.**
+`open` takes WRITE, CREATE, TRUNCATE and APPEND and a mode; `write` reaches a
+file; an open file of the filesystem layer counts its holders, so a child of
+`fork` inherits every descriptor, `execve` keeps them, and `dup2` — the
+seventeenth call — makes two numbers of one file and one position; `rmdir` is
+the eighteenth. The shell performs a command's redirections in the child in
+the order written, every operator of Section 2.7 but the here-document, and
+`file-check` and a fourth session whose files the kernel reads back assert
+them. With the writable file came `touch`, `cp` and `rmdir` in `/bin`, `cat`
+copying its standard input, and the built-ins `help`, `true`, `false` and
+`unset`; the shell greets nobody, `help` being the built-in for that. A
+redirection upon a built-in is still named and not performed.
+[`../design/SHELL.md`](../design/SHELL.md), Sections 19 to 21.
+
 ## 3. Where it has been observed to work
 
 A sub-task marked *implemented* in [`PLAN.md`](PLAN.md) means the code exists and
@@ -605,6 +619,7 @@ The physical machine is one machine — the HP Laptop 14-dq0052dx specified in
 | 8.2 The tokeniser and the parser | Yes, and driven over the serial line | **Yes** | **Yes — 8.2**, to the prompt | — | **Not yet run** |
 | 8.3 The built-ins and the working directory | Yes, and driven over the serial line | **Yes** | **Yes — 8.3**, to the prompt | — | **Not yet run** |
 | 8.4 Programs run from the prompt | Yes, and driven over the serial line | **Yes** | **Yes — 8.4**, to the prompt | — | **Not yet run** |
+| 8.5 Redirection, and the writable file | Yes, and driven over the serial line | **Yes** | **Yes — 8.5**, to the prompt | — | **Not yet run** |
 
 **The rows marked "— 7.2" were all established by two boots of one image**,
 because a boot runs every self-test in the corpus and a clean one is therefore

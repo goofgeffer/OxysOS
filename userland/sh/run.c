@@ -5,8 +5,9 @@
  * Purpose: External program execution, of sub-task 8.4: the search for a
  *          command's program, the environment built from the exported
  *          variables, the `fork`, the `execve` in the child, and the `wait`
- *          that turns what the child ended with into a status.
- * Key functions: ShellRunProgram, ShellBuildEnvironment.
+ *          that turns what the child ended with into a status — and, of 8.5,
+ *          the redirections performed in the child between the two.
+ * Key functions: ShellRunProgram, ShellBuildEnvironment, ShellApplyRedirections.
  * References:
  *   - IEEE Std 1003.1-2017, Section 2.9.1.1 (Command Search and Execution):
  *     a name holding a slash is the pathname of the program; one without is
@@ -41,6 +42,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <syscall.h>
+#include <line.h>
 
 /* Where a program is sought when PATH is unset: the one directory this
  * system's programs stand in. */
@@ -140,7 +142,103 @@ static int ShellExecute(char **argv, char **envp)
     return 127;
 }
 
-int ShellRunProgram(char **argv)
+
+/*
+ * Performs a command's redirections, in the child, in the order written —
+ * IEEE Std 1003.1-2017, Section 2.7: each opens or duplicates, and then the
+ * number the operator names comes to name what was opened. A later one may
+ * undo an earlier, which is what `>out 2>&1` means and why the order is
+ * kept. Returns false, having said what could not be done, and the child
+ * then ends with 1 rather than running a program upon the wrong descriptors.
+ */
+static bool ShellApplyRedirections(const ShellCommand *command, ShellLookup lookup, void *context)
+{
+    for (size_t index = 0U; index < command->redirection_count; ++index)
+    {
+        const ShellRedirection *const io = &command->redirection[index];
+        char target[LINE_CAPACITY];
+        int64_t opened;
+        uint64_t flags;
+
+        if (!ShellExpandWord(io->target, target, sizeof target, lookup, context))
+        {
+            (void)fprintf(stderr, "sh: a redirection's target could not be expanded.\n");
+
+            return false;
+        }
+
+        /* 2.7.5 and 2.7.6: `[n]<&word` and `[n]>&word`, the word a digit or
+         * `-`, which closes. */
+        if ((io->kind == SHELL_REDIRECT_DUPLICATE_IN) || (io->kind == SHELL_REDIRECT_DUPLICATE_OUT))
+        {
+            if (strcmp(target, "-") == 0)
+            {
+                (void)OxysClose(io->descriptor);
+                continue;
+            }
+
+            if ((target[0] < '0') || (target[0] > '9') || (target[1] != '\0'))
+            {
+                (void)fprintf(stderr, "sh: %s: not a descriptor.\n", target);
+
+                return false;
+            }
+
+            if (OxysDuplicate(target[0] - '0', io->descriptor) < 0)
+            {
+                (void)fprintf(stderr, "sh: %d: %s.\n", target[0] - '0', strerror(errno));
+
+                return false;
+            }
+
+            continue;
+        }
+
+        switch (io->kind)
+        {
+        case SHELL_REDIRECT_INPUT:
+            flags = SYSCALL_OPEN_READ;
+            break;
+        case SHELL_REDIRECT_APPEND:
+            flags = SYSCALL_OPEN_WRITE | SYSCALL_OPEN_CREATE | SYSCALL_OPEN_APPEND;
+            break;
+        case SHELL_REDIRECT_READ_WRITE:
+            flags = SYSCALL_OPEN_READ | SYSCALL_OPEN_WRITE | SYSCALL_OPEN_CREATE;
+            break;
+        case SHELL_REDIRECT_OUTPUT:
+        case SHELL_REDIRECT_CLOBBER:
+        default:
+            /* 2.7.2: created or truncated. `>|` is the same, this shell having
+             * no `noclobber` to override. */
+            flags = SYSCALL_OPEN_WRITE | SYSCALL_OPEN_CREATE | SYSCALL_OPEN_TRUNCATE;
+            break;
+        }
+
+        opened = OxysOpen(target, flags, 0644U);
+
+        if (opened < 0)
+        {
+            (void)fprintf(stderr, "sh: %s: %s.\n", target, strerror(errno));
+
+            return false;
+        }
+
+        if ((int)opened != io->descriptor)
+        {
+            if (OxysDuplicate((int)opened, io->descriptor) < 0)
+            {
+                (void)fprintf(stderr, "sh: %s: %s.\n", target, strerror(errno));
+
+                return false;
+            }
+
+            (void)OxysClose((int)opened);
+        }
+    }
+
+    return true;
+}
+int ShellRunProgram(char **argv, const ShellCommand *command, ShellLookup lookup, void *context)
 {
     char **const envp = ShellBuildEnvironment();
     int64_t child;
@@ -161,6 +259,11 @@ int ShellRunProgram(char **argv)
     {
         /* The child. It ends here whatever happens: a return would carry on
          * reading the shell's input as a second shell. */
+        if (!ShellApplyRedirections(command, lookup, context))
+        {
+            OxysExit(1);
+        }
+
         OxysExit(ShellExecute(argv, envp));
     }
 

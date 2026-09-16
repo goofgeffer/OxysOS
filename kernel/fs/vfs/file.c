@@ -6,7 +6,7 @@
  *          path, the position that advances, the reading and writing of a
  *          file's bytes, the seek, and the traversal of a directory through a
  *          descriptor.
- * Key functions: VfsFileOf, VfsOpenFileCount, VfsOpen, VfsClose, VfsRead,
+ * Key functions: VfsFileOf, VfsOpenFileCount, VfsOpen, VfsHold, VfsClose, VfsRead,
  *          VfsWrite, VfsSeek, VfsTell, VfsReadDirectory, VfsFileAttributes.
  * References:
  *   - docs/storage/VFS.md, Sections 7 and 8: the open file, and why the position
@@ -235,10 +235,26 @@ int VfsOpen(const char *path, uint32_t flags, uint16_t permissions)
     file->position = 0U;
     file->flags = flags;
     file->open = true;
+    file->holders = 1U;
 
     ++VfsFilesOpenedCount;
     VfsSucceed();
     return descriptor;
+}
+
+bool VfsHold(int descriptor)
+{
+    VfsFile *const file = VfsFileOf(descriptor);
+
+    if (file == NULL)
+    {
+        return false;
+    }
+
+    ++file->holders;
+    VfsSucceed();
+
+    return true;
 }
 
 bool VfsClose(int descriptor)
@@ -248,6 +264,16 @@ bool VfsClose(int descriptor)
     if (file == NULL)
     {
         return false;
+    }
+
+    /* One holder fewer, and the file stays open for the rest: a close by the
+     * program's 4 must not pull the file from under its 1. */
+    if (file->holders > 1U)
+    {
+        --file->holders;
+        VfsSucceed();
+
+        return true;
     }
 
     VfsNodeRelease(file->node);

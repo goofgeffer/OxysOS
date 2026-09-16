@@ -5,14 +5,15 @@
  * Purpose: Writes the contents of each operand to the standard output in the
  *          order the operands are given — the first program upon this system
  *          that reads a file.
- * Key functions: main, CatFile, CatComplain.
+ * Key functions: main, CatFile, CatStandardInput, CatComplain.
  * References:
  *   - IEEE Std 1003.1-2017 (POSIX.1-2017), `cat`: "The standard output shall
  *     contain the sequence of bytes read from the input files. Nothing else
  *     shall be written to the standard output." The exit status is 0 where all
  *     input files were output successfully and greater than zero otherwise.
  *   - IEEE Std 1003.1-2017, `cat`, OPERANDS: an operand of `-` reads the
- *     standard input. This implementation does not, for the reason below.
+ *     standard input, and no operand does likewise. Both since sub-task 8.5,
+ *     for the reason below.
  *   - kernel/abi/oxys/syscall_abi.h: the calls beneath `OxysOpen`, `OxysRead`
  *     and `OxysClose`.
  *   - docs/design/LIBC.md, Section 12.3: the five utilities and what each is
@@ -20,19 +21,14 @@
  *
  * What this does not do, and why each is a property of the system.
  *
- *   **No operand means a failure and not the standard input.** POSIX has `cat`
- *   with no operand copy standard input to standard output. When this was
- *   written this kernel had no call that reads a stream — `stdin` was
- *   permanently at its end — so such a run would have copied nothing and exited
- *   successfully, which is a program that appears to have worked and did not.
- *   Since sub-task 8.1 `stdin` is the terminal, and it is *raw*: a copy of it
- *   would deliver keystrokes, control sequences and all, unechoed, with no
- *   line discipline to assemble them and no end-of-file until control-D. That
- *   is not what a person means by `cat` with no operand, so it still reports
- *   the absence; docs/design/SHELL.md, Section 6, limitation 1.
- *
- *   **An operand of `-` is a path and not the standard input**, for the same
- *   reason. It will name no file, and the diagnostic will say so.
+ *   **No operand, or the operand `-`, copies the standard input — since
+ *   sub-task 8.5.** POSIX has it so, and until then this program refused: this
+ *   kernel had no call that read a stream when it was written, and from 8.1
+ *   to 8.4 the standard input was a raw terminal that no line discipline
+ *   stood in front of, so a copy of it would have delivered keystrokes with
+ *   no end. Since 8.5 the shell redirects it — `cat <file` — and a copy of
+ *   the terminal ends at a control-D, which CatStandardInput records the
+ *   reason for.
  *
  *   **`-u` is not recognised.** POSIX has it mean that the output is not to be
  *   buffered; this writes through the C library's buffered stream either way,
@@ -77,7 +73,7 @@ static bool CatFile(const char *path)
     static char buffer[CAT_BUFFER_BYTES];
     int64_t descriptor;
 
-    descriptor = OxysOpen(path, SYSCALL_OPEN_READ);
+    descriptor = OxysOpen(path, SYSCALL_OPEN_READ, 0U);
 
     if (descriptor < 0)
     {
@@ -133,17 +129,76 @@ static bool CatFile(const char *path)
     return true;
 }
 
+/*
+ * Copies the standard input, since sub-task 8.5, for no operand and for the
+ * operand `-`.
+ *
+ * The standard input is a file the shell redirected, which ends, or the
+ * terminal, which does not: the terminal is raw and delivers keystrokes with
+ * no end until 8.7's job control gives a person a way to interrupt. So a
+ * control-D — the byte a terminal sends for the key every shell treats as
+ * the end of input — ends the copy where it stands in what a read delivered,
+ * the bytes before it copied. That is what a canonical line discipline would
+ * do for every program at once; this kernel has none, and `cat` is the one
+ * program a person will run against the terminal by mistake.
+ */
+static bool CatStandardInput(void)
+{
+    static char buffer[CAT_BUFFER_BYTES];
+
+    for (;;)
+    {
+        int64_t read = OxysRead(SYSCALL_DESCRIPTOR_INPUT, buffer, sizeof buffer);
+        bool ended = false;
+
+        if (read < 0)
+        {
+            CatComplain("-");
+
+            return false;
+        }
+
+        if (read == 0)
+        {
+            break;
+        }
+
+        /* The control-D may arrive with bytes before it in one read; those
+         * are copied and the copy ends there. */
+        for (int64_t index = 0; index < read; ++index)
+        {
+            if (buffer[index] == '\x04')
+            {
+                read = index;
+                ended = true;
+                break;
+            }
+        }
+
+        if ((read > 0) && (fwrite(buffer, 1U, (size_t)read, stdout) != (size_t)read))
+        {
+            (void)fprintf(stderr, "cat: the standard output could not be written: %s\n",
+                          strerror(errno));
+
+            return false;
+        }
+
+        if (ended)
+        {
+            break;
+        }
+    }
+
+    return true;
+}
+
 int main(int argc, char *argv[])
 {
     bool succeeded = true;
 
     if (argc < 2)
     {
-        (void)fprintf(stderr,
-                      "cat: no file was named, and this system has no standard input "
-                      "to read instead\n");
-
-        return EXIT_FAILURE;
+        return (CatStandardInput() && (fflush(stdout) == 0)) ? EXIT_SUCCESS : EXIT_FAILURE;
     }
 
     /*
@@ -155,7 +210,10 @@ int main(int argc, char *argv[])
      */
     for (int index = 1; index < argc; ++index)
     {
-        if (!CatFile(argv[index]))
+        const bool copied = (strcmp(argv[index], "-") == 0) ? CatStandardInput()
+                                                             : CatFile(argv[index]);
+
+        if (!copied)
         {
             succeeded = false;
         }

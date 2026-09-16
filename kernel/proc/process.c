@@ -1631,8 +1631,7 @@ int ProcessDescriptorFile(const Process *process, int64_t descriptor)
         return VFS_NO_DESCRIPTOR;
     }
 
-    if ((descriptor < (int64_t)SYSCALL_DESCRIPTOR_FIRST) ||
-        (descriptor >= (int64_t)PROCESS_DESCRIPTOR_CAPACITY))
+    if ((descriptor < 0) || (descriptor >= (int64_t)PROCESS_DESCRIPTOR_CAPACITY))
     {
         return VFS_NO_DESCRIPTOR;
     }
@@ -1652,6 +1651,54 @@ bool ProcessReleaseDescriptor(Process *process, int64_t descriptor)
     process->descriptors[descriptor] = PROCESS_DESCRIPTOR_FREE;
 
     return VfsClose(file);
+}
+
+int64_t ProcessPlaceDescriptor(Process *process, int64_t from, int64_t to)
+{
+    int file;
+
+    if ((process == NULL) || !process->used || (from < 0) || (to < 0) ||
+        (from >= (int64_t)PROCESS_DESCRIPTOR_CAPACITY) ||
+        (to >= (int64_t)PROCESS_DESCRIPTOR_CAPACITY))
+    {
+        return SYSCALL_EBADF;
+    }
+
+    if (from == to)
+    {
+        return SYSCALL_OK;
+    }
+
+    file = process->descriptors[from];
+
+    /*
+     * A number below SYSCALL_DESCRIPTOR_FIRST that holds no file names the
+     * kernel's own path — the terminal for 0, the diagnostic path for 1 and
+     * 2 — and that path may be given to another of the three, which is
+     * `2>&1` with nothing redirected, but not to a number above them: the
+     * table holds files of the filesystem layer and the kernel's paths are
+     * not files. An empty number above them is simply nothing to duplicate.
+     */
+    if (file == PROCESS_DESCRIPTOR_FREE)
+    {
+        if ((from >= (int64_t)SYSCALL_DESCRIPTOR_FIRST) || (to >= (int64_t)SYSCALL_DESCRIPTOR_FIRST))
+        {
+            return SYSCALL_EBADF;
+        }
+    }
+    else if (!VfsHold(file))
+    {
+        return SYSCALL_EBADF;
+    }
+
+    if (process->descriptors[to] != PROCESS_DESCRIPTOR_FREE)
+    {
+        (void)VfsClose(process->descriptors[to]);
+    }
+
+    process->descriptors[to] = file;
+
+    return SYSCALL_OK;
 }
 
 /* ------------------------------------------------------- sub-task 6.11 */
@@ -1721,6 +1768,24 @@ Process *ProcessFork(Process *parent, const SyscallFrame *frame)
     for (size_t index = 0U; index <= PROCESS_PATH_MAXIMUM; ++index)
     {
         child->working_directory[index] = parent->working_directory[index];
+    }
+
+    /*
+     * The descriptors come across too, of sub-task 8.5, each open file gaining
+     * a holder: IEEE Std 1003.1-2017 has a child share its parent's open files
+     * and their positions, and since VfsHold exists that is what happens. Until
+     * this sub-task a child inherited nothing, the filesystem layer having no
+     * count of holders and a shared file closed by either being closed for
+     * both; docs/design/PROCESS.md, Section 14, records the interval.
+     */
+    for (size_t index = 0U; index < PROCESS_DESCRIPTOR_CAPACITY; ++index)
+    {
+        const int file = parent->descriptors[index];
+
+        if ((file != PROCESS_DESCRIPTOR_FREE) && VfsHold(file))
+        {
+            child->descriptors[index] = file;
+        }
     }
 
     /*
@@ -1821,17 +1886,16 @@ int64_t ProcessExecute(Process *process, const char *path,
     ProcessEstablishBreak(process);
 
     /*
-     * The descriptors the old program held are closed, of sub-task 7.6.
-     *
-     * They are the *machine's* descriptors — the filesystem layer has one table
-     * for all of them — so forgetting the table here would leak every entry the
-     * replaced program had open, and a machine that had executed enough programs
-     * would be one where nothing could open anything. POSIX would have them
-     * inherited across `execve` unless marked close-on-exec; this kernel has no
-     * such mark, so it does the safe half of that rule and none of the other.
-     * docs/design/PROCESS.md, Section 14.
+     * The descriptors the old program held are kept, since sub-task 8.5, as
+     * IEEE Std 1003.1-2017 has them unless marked close-on-exec — which this
+     * kernel has no mark for. They were closed here from 7.6 to 8.4, the safe
+     * half of the rule, because a descriptor kept was a descriptor nothing
+     * could have meant to keep; the shell's redirection is what means to: it
+     * opens the file in the child, places it at 0 or 1, and the program it
+     * then becomes must find it there. The table is the process's own and
+     * the process is the same one, so nothing leaks: what it holds it holds
+     * until it closes or ends. docs/design/PROCESS.md, Section 14.
      */
-    ProcessCloseDescriptors(process);
 
     stack = ProcessCreateUserStack(process, arguments);
 

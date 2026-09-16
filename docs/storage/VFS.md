@@ -594,13 +594,15 @@ the mount count, so the field is now written as well.
    layer, so the numbers a program sees are its own and it cannot reach another
    process's open file by guessing one — and one program's share of this layer's
    thirty-two descriptors is bounded. What that does **not** do is make an open
-   file a description that may be *shared*: this layer has no reference count
-   upon one, so a child of `fork` inherits nothing and `execve` closes
-   everything. Two processes sharing one open file and one file position is what
-   the shell's redirection at sub-task 8.5 will need, and it is a reference count
-   here rather than anything in the process control block.
-   [`../design/LIBC.md`](../design/LIBC.md), Sections 12.1.2 and 12.7,
-   limitation 8.
+   file a description that may be *shared*. **Sub-task 8.5 joined the other
+   half**: an open file counts its holders, `VfsHold` adds one and `VfsClose`
+   takes one, and the file is released by the last. A child of `fork` now
+   inherits every descriptor, `execve` keeps them, and `dup2` makes two
+   numbers of one file and one position — which is what the shell's
+   redirection needed and what `open` for writing gave it something to
+   redirect to. [`../design/LIBC.md`](../design/LIBC.md), Section 12.7,
+   limitation 8, is closed; [`../design/SHELL.md`](../design/SHELL.md),
+   Section 19.
 3. **Nothing is cached between one use and the next.** A node whose last
    reference goes is released, so opening the same file twice reads its inode
    twice. See Section 6.1: it is the right trade for a kernel with no

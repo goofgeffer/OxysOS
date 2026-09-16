@@ -76,7 +76,7 @@ int main(void)
     DirectoryRequire(OxysChangeDirectory("/bin") == 0, "chdir to /bin failed");
     DirectoryRequire(DirectoryIs("/bin"), "getcwd did not report /bin after chdir");
 
-    descriptor = OxysOpen("echo", SYSCALL_OPEN_READ);
+    descriptor = OxysOpen("echo", SYSCALL_OPEN_READ, 0U);
     DirectoryRequire(descriptor >= 0, "a relative path was not resolved against the working "
                                       "directory by open");
 

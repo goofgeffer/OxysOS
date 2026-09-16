@@ -94,6 +94,12 @@ extern const uint8_t KernelProgramMakeDirBegin[];
 extern const uint8_t KernelProgramMakeDirEnd[];
 extern const uint8_t KernelProgramRemoveBegin[];
 extern const uint8_t KernelProgramRemoveEnd[];
+extern const uint8_t KernelProgramTouchBegin[];
+extern const uint8_t KernelProgramTouchEnd[];
+extern const uint8_t KernelProgramCopyBegin[];
+extern const uint8_t KernelProgramCopyEnd[];
+extern const uint8_t KernelProgramRemoveDirBegin[];
+extern const uint8_t KernelProgramRemoveDirEnd[];
 extern const uint8_t KernelProgramShellBegin[];
 extern const uint8_t KernelProgramShellEnd[];
 
@@ -113,6 +119,9 @@ static const KernelInitrdUtility KernelInitrdUtilities[] = {
     { KERNEL_INITRD_BIN "/ls", KernelProgramListBegin, KernelProgramListEnd },
     { KERNEL_INITRD_BIN "/mkdir", KernelProgramMakeDirBegin, KernelProgramMakeDirEnd },
     { KERNEL_INITRD_BIN "/rm", KernelProgramRemoveBegin, KernelProgramRemoveEnd },
+    { KERNEL_INITRD_BIN "/touch", KernelProgramTouchBegin, KernelProgramTouchEnd },
+    { KERNEL_INITRD_BIN "/cp", KernelProgramCopyBegin, KernelProgramCopyEnd },
+    { KERNEL_INITRD_BIN "/rmdir", KernelProgramRemoveDirBegin, KernelProgramRemoveDirEnd },
     { KERNEL_INITRD_BIN "/sh", KernelProgramShellBegin, KernelProgramShellEnd },
 };
 

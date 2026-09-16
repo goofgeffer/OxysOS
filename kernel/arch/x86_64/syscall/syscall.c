@@ -460,8 +460,12 @@ void SyscallEstablishUserGsBase(void)
  * docs/design/LIBC.md, Section 12.7, limitation 2.
  */
 
+/* Defined with the filesystem calls below, and used by the write above them. */
+static int64_t SyscallFilesystemRefusal(void);
+
 /*
- * Writes a caller's bytes to the diagnostic path.
+ * Writes a caller's bytes to the diagnostic path, or — since sub-task 8.5 —
+ * to the open file the descriptor names.
  *
  * The bytes are copied into the kernel's own buffer before any of them is used,
  * and that is not a convenience. A kernel that read the caller's memory
@@ -474,8 +478,18 @@ static int64_t SyscallDoWrite(uint64_t descriptor, uint64_t address, uint64_t le
 {
     char buffer[SYSCALL_TRANSFER_MAXIMUM + 1U];
     const char *const source = (const char *)(uintptr_t)address;
+    const Process *const process = ProcessCurrent();
+    const int file = ProcessDescriptorFile(process, (int64_t)descriptor);
 
-    if ((descriptor != SYSCALL_DESCRIPTOR_OUTPUT) && (descriptor != SYSCALL_DESCRIPTOR_ERROR))
+    /*
+     * Where the number names an open file — since sub-task 8.5, whether a
+     * file the program opened or one the shell placed at 1 or 2 by `dup2` —
+     * the bytes go to the filesystem layer; where it is 1 or 2 and names
+     * nothing, they go to the diagnostic path as they always have. Any other
+     * number is nobody's.
+     */
+    if ((file == VFS_NO_DESCRIPTOR) && (descriptor != SYSCALL_DESCRIPTOR_OUTPUT) &&
+        (descriptor != SYSCALL_DESCRIPTOR_ERROR))
     {
         return SYSCALL_EBADF;
     }
@@ -497,6 +511,19 @@ static int64_t SyscallDoWrite(uint64_t descriptor, uint64_t address, uint64_t le
     }
 
     buffer[length] = '\0';
+
+    if (file != VFS_NO_DESCRIPTOR)
+    {
+        uint64_t written = 0U;
+
+        if (!VfsWrite(file, buffer, length, &written))
+        {
+            return SyscallFilesystemRefusal();
+        }
+
+        return (int64_t)written;
+    }
+
     KernelWriteString(buffer);
 
     return (int64_t)length;
@@ -1111,10 +1138,19 @@ _Static_assert((int)SYSCALL_OPEN_READ == (int)VFS_OPEN_READ,
 _Static_assert((int)SYSCALL_OPEN_DIRECTORY == (int)VFS_OPEN_DIRECTORY,
                "SYSCALL_OPEN_DIRECTORY is not the layer's VFS_OPEN_DIRECTORY.");
 
+_Static_assert((int)SYSCALL_OPEN_WRITE == (int)VFS_OPEN_WRITE,
+               "SYSCALL_OPEN_WRITE is not the layer's VFS_OPEN_WRITE.");
+_Static_assert((int)SYSCALL_OPEN_CREATE == (int)VFS_OPEN_CREATE,
+               "SYSCALL_OPEN_CREATE is not the layer's VFS_OPEN_CREATE.");
+_Static_assert((int)SYSCALL_OPEN_TRUNCATE == (int)VFS_OPEN_TRUNCATE,
+               "SYSCALL_OPEN_TRUNCATE is not the layer's VFS_OPEN_TRUNCATE.");
+_Static_assert((int)SYSCALL_OPEN_APPEND == (int)VFS_OPEN_APPEND,
+               "SYSCALL_OPEN_APPEND is not the layer's VFS_OPEN_APPEND.");
 /*
- * Opens a file for reading and returns a descriptor of the calling process.
+ * Opens a file — for reading since 7.6, for writing, creation, truncation and
+ * appending since 8.5 — and returns a descriptor of the calling process.
  *
- * The flags are checked against the pair the interface offers and any other bit
+ * The flags are checked against the six the interface offers and any other bit
  * is refused, rather than masked away. A program that asked to create a file and
  * silently received one opened for reading would find out at its first write, in
  * a call reporting something about a descriptor and nothing about what it asked
@@ -1126,7 +1162,7 @@ _Static_assert((int)SYSCALL_OPEN_DIRECTORY == (int)VFS_OPEN_DIRECTORY,
  * an open file nobody holds a number for is a descriptor of the machine's that
  * nothing can ever close.
  */
-static int64_t SyscallDoOpen(uint64_t path_address, uint64_t flags)
+static int64_t SyscallDoOpen(uint64_t path_address, uint64_t flags, uint64_t permissions)
 {
     Process *const process = ProcessCurrent();
     char path[SYSCALL_PATH_MAXIMUM + 1U];
@@ -1139,12 +1175,22 @@ static int64_t SyscallDoOpen(uint64_t path_address, uint64_t flags)
         return SYSCALL_EINVAL;
     }
 
-    if ((flags & ~(SYSCALL_OPEN_READ | SYSCALL_OPEN_DIRECTORY)) != 0U)
+    if ((flags & ~(SYSCALL_OPEN_READ | SYSCALL_OPEN_WRITE | SYSCALL_OPEN_CREATE |
+                   SYSCALL_OPEN_TRUNCATE | SYSCALL_OPEN_APPEND | SYSCALL_OPEN_DIRECTORY)) != 0U)
     {
         return SYSCALL_EINVAL;
     }
 
-    if ((flags & SYSCALL_OPEN_READ) == 0U)
+    /* Neither reading nor writing could do nothing; and creating, truncating
+     * or appending without writing is a request to change a file without
+     * opening it for change. */
+    if ((flags & (SYSCALL_OPEN_READ | SYSCALL_OPEN_WRITE)) == 0U)
+    {
+        return SYSCALL_EINVAL;
+    }
+
+    if (((flags & (SYSCALL_OPEN_CREATE | SYSCALL_OPEN_TRUNCATE | SYSCALL_OPEN_APPEND)) != 0U) &&
+        ((flags & SYSCALL_OPEN_WRITE) == 0U))
     {
         return SYSCALL_EINVAL;
     }
@@ -1156,7 +1202,9 @@ static int64_t SyscallDoOpen(uint64_t path_address, uint64_t flags)
         return copied;
     }
 
-    file = VfsOpen(path, (uint32_t)flags, 0U);
+    /* The permission bits are recorded and not enforced, as 7.6 recorded of
+     * mkdir; a program asking for 0644 gets a file that says 0644. */
+    file = VfsOpen(path, (uint32_t)flags, (uint16_t)(permissions & 0xFFFU));
 
     if (file == VFS_NO_DESCRIPTOR)
     {
@@ -1247,7 +1295,10 @@ static int64_t SyscallDoRead(uint64_t descriptor, uint64_t address, uint64_t len
         length = SYSCALL_TRANSFER_MAXIMUM;
     }
 
-    if (descriptor == SYSCALL_DESCRIPTOR_INPUT)
+    /* Since 8.5 the number 0 may name a file the shell placed there; the
+     * terminal is what it names when it names nothing. */
+    if ((descriptor == SYSCALL_DESCRIPTOR_INPUT) &&
+        (ProcessDescriptorFile(process, (int64_t)descriptor) == VFS_NO_DESCRIPTOR))
     {
         if (!SyscallUserRangeIsWritable(address, length))
         {
@@ -1539,6 +1590,55 @@ static int64_t SyscallDoGetWorkingDirectory(uint64_t address, uint64_t capacity)
     return (int64_t)length;
 }
 
+/*
+ * Makes one descriptor name what another names, of sub-task 8.5: IEEE Std
+ * 1003.1-2017's `dup2`, by which the shell's child places the file it opened
+ * at 0, 1 or 2 before it becomes the program. The decisions are the process
+ * table's; docs/design/SHELL.md, Section 19.
+ */
+static int64_t SyscallDoDuplicate(uint64_t from, uint64_t to)
+{
+    Process *const process = ProcessCurrent();
+
+    if (process == NULL)
+    {
+        return SYSCALL_EINVAL;
+    }
+
+    if ((from >= PROCESS_DESCRIPTOR_CAPACITY) || (to >= PROCESS_DESCRIPTOR_CAPACITY))
+    {
+        return SYSCALL_EBADF;
+    }
+
+    return ProcessPlaceDescriptor(process, (int64_t)from, (int64_t)to);
+}
+
+/*
+ * Removes an empty directory, of sub-task 8.5 — the call `rm` had no `-d` for
+ * since 7.6, exposed now that a directory made from the prompt is a thing a
+ * person will want gone. The refusals are the filesystem layer's, ENOTEMPTY
+ * among them, carried out one for one.
+ */
+static int64_t SyscallDoRemoveDirectory(uint64_t path_address)
+{
+    char path[SYSCALL_PATH_MAXIMUM + 1U];
+    int64_t copied;
+
+    copied = SyscallCopyUserPath(path_address, path, sizeof path);
+
+    if (copied != SYSCALL_OK)
+    {
+        return copied;
+    }
+
+    if (!VfsRemoveDirectory(path))
+    {
+        return SyscallFilesystemRefusal();
+    }
+
+    return SYSCALL_OK;
+}
+
 /* ------------------------------------------------------------- the dispatch */
 
 /* A call: what it is named, and how many arguments it reads. The count is
@@ -1559,14 +1659,16 @@ static const SyscallEntryDescriptor SyscallTable[SYSCALL_COUNT] = {
     { "exit", 1U },
     { "wait", 1U },
     { "brk", 1U },
-    { "open", 2U },
+    { "open", 3U },
     { "close", 1U },
     { "read", 3U },
     { "readdir", 2U },
     { "mkdir", 2U },
     { "unlink", 1U },
     { "chdir", 1U },
-    { "getcwd", 2U }
+    { "getcwd", 2U },
+    { "dup2", 2U },
+    { "rmdir", 1U }
 };
 
 bool SyscallNumberIsValid(uint64_t number)
@@ -1636,7 +1738,7 @@ void SyscallDispatch(SyscallFrame *frame)
         break;
 
     case SYSCALL_OPEN:
-        frame->rax = (uint64_t)SyscallDoOpen(frame->rdi, frame->rsi);
+        frame->rax = (uint64_t)SyscallDoOpen(frame->rdi, frame->rsi, frame->rdx);
         break;
 
     case SYSCALL_CLOSE:
@@ -1665,6 +1767,14 @@ void SyscallDispatch(SyscallFrame *frame)
 
     case SYSCALL_GETCWD:
         frame->rax = (uint64_t)SyscallDoGetWorkingDirectory(frame->rdi, frame->rsi);
+        break;
+
+    case SYSCALL_DUP2:
+        frame->rax = (uint64_t)SyscallDoDuplicate(frame->rdi, frame->rsi);
+        break;
+
+    case SYSCALL_RMDIR:
+        frame->rax = (uint64_t)SyscallDoRemoveDirectory(frame->rdi);
         break;
 
     default:

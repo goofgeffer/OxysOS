@@ -2,7 +2,8 @@
 ; SPDX-License-Identifier: LGPL-3.0-or-later
 ;
 ; File: kernel/test/libc/utilities_image.asm
-; Purpose: Carries the eight programs of sub-task 7.6 inside the kernel image,
+; Purpose: Carries the eight programs of sub-task 7.6, and the three utilities of
+;          8.5, inside the kernel image,
 ;          so that the self-test which runs them has an ELF file for each.
 ; Key definitions: KernelProgramArgCheckBegin, KernelProgramArgCheckEnd,
 ;          KernelProgramExecCheckBegin, KernelProgramExecCheckEnd,
@@ -10,7 +11,9 @@
 ;          KernelProgramEchoBegin, KernelProgramEchoEnd, KernelProgramCatBegin,
 ;          KernelProgramCatEnd, KernelProgramListBegin, KernelProgramListEnd,
 ;          KernelProgramMakeDirBegin, KernelProgramMakeDirEnd,
-;          KernelProgramRemoveBegin, KernelProgramRemoveEnd.
+;          KernelProgramRemoveBegin, KernelProgramRemoveEnd, KernelProgramTouchBegin,
+;          KernelProgramTouchEnd, KernelProgramCopyBegin, KernelProgramCopyEnd,
+;          KernelProgramRemoveDirBegin, KernelProgramRemoveDirEnd.
 ; References:
 ;   - kernel/test/libc/utilities.c: the self-test that loads these and runs them.
 ;   - kernel/test/libc/startup_image.asm: the same technique at sub-task 7.5,
@@ -95,3 +98,28 @@ align 8
 KernelProgramRemoveBegin:
     incbin "build/user/rm.embed.elf"
 KernelProgramRemoveEnd:
+
+; The three utilities of sub-task 8.5 — the first that write a file, and the
+; one that removes a directory — carried here for the ramdisk self-test's
+; byte-for-byte comparison, as the five above are.
+align 8
+global KernelProgramTouchBegin
+global KernelProgramTouchEnd
+global KernelProgramCopyBegin
+global KernelProgramCopyEnd
+global KernelProgramRemoveDirBegin
+global KernelProgramRemoveDirEnd
+
+KernelProgramTouchBegin:
+    incbin "build/user/touch.embed.elf"
+KernelProgramTouchEnd:
+
+align 8
+KernelProgramCopyBegin:
+    incbin "build/user/cp.embed.elf"
+KernelProgramCopyEnd:
+
+align 8
+KernelProgramRemoveDirBegin:
+    incbin "build/user/rmdir.embed.elf"
+KernelProgramRemoveDirEnd:

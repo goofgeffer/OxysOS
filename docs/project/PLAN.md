@@ -202,10 +202,19 @@ which a child's `SYSCALL` inside the parent's `wait` overwrote. It is restored
 from the per-thread frame now. [`../design/SHELL.md`](../design/SHELL.md),
 Sections 16 to 18.
 
-**Next: sub-task 8.5** — input and output redirection, which needs the two
-things [`../design/LIBC.md`](../design/LIBC.md), Section 12.7, has held for it
-since 7.6: a call that creates or writes a file, and a descriptor a child
-inherits.
+**Sub-task 8.5 is complete**: redirection. `ls >out`, `cat <in`, `>>`,
+`2>&1` and the rest are performed in the child between `fork` and `execve`,
+in the order written; beneath them the kernel gained a writable `open` and
+`write`, a count of holders upon an open file — so that a child inherits its
+parent's descriptors, `execve` keeps them, and `dup2` shares a position — and
+`rmdir`. With the writable file came `touch`, `cp` and `rmdir`, `cat` reading
+its standard input, and the built-ins `help`, `true`, `false` and `unset`.
+The shell greets nobody now; `help` is the built-in for that.
+[`../design/SHELL.md`](../design/SHELL.md), Sections 19 to 21.
+
+**Next: sub-task 8.6** — pipelines, which need the one thing this kernel has
+never had: two programs running at once, and a pipe between them.
+
 
 
 
@@ -764,11 +773,12 @@ characters standing entirely within its own memory, and was told the address was
 one it may not use. The cause was corrected rather than the assertion. Section
 12.2.2.
 
-**Ten limitations are recorded and two of them are Phase 8's.** No program may
-create or write a file, and no child inherits a descriptor; both are what the
-shell's output redirection at sub-task 8.5 will need, and neither is invented
-before something calls it. There is also **no working directory**, which is
-8.3's `cd`, and the reason `ls` with no operand lists the root rather than `.`.
+**Ten limitations were recorded and three of them were Phase 8's.** No program
+could create or write a file, and no child inherited a descriptor — both what
+the shell's redirection at sub-task 8.5 needed, and neither invented before
+something called it; both closed there. There was also **no working directory**,
+which was 8.3's `cd`, and the reason `ls` with no operand listed the root
+rather than `.`; closed there.
 Section 12.7.
 
 **(g)** Sub-task 7.7 is the first thing in this project that a person could
@@ -840,7 +850,7 @@ system's — and the first of those is sub-task 8.3's.
 | 8.2 | Implement the tokeniser and the command parser. | Implemented | `KernelVerifyShell` |
 | 8.3 | Implement built-in commands (`cd`, `exit`, `export`, `pwd`). | Implemented | `KernelVerifyDirectory`, `KernelVerifyShell` |
 | 8.4 | Implement external program execution by `fork()` and `execve()`. | Implemented | `KernelVerifyShell`, `KernelVerifyDirectory` |
-| 8.5 | Implement input and output redirection. | Planned | — |
+| 8.5 | Implement input and output redirection. | Implemented | `KernelVerifyUtilities`, `KernelVerifyShell` |
 | 8.6 | Implement pipelines. | Planned | — |
 | 8.7 | Implement job control, process groups and terminal signal delivery. **`Oxys 1 Alpha` is cut here.** | Planned | — |
 
@@ -966,6 +976,31 @@ an assertion — and the shell's session ends with 168 only if the vector, the
 environment, a program's failure, a not-found and a `PATH` search all behaved;
 `dir-check` asserts that a parent's stack survives a child's `execve`. Two
 negative tests were caught. Section 18.
+
+**(e)** Sub-task 8.5 is redirection, and it closes the two limitations
+[`../design/LIBC.md`](../design/LIBC.md), Section 12.7, held for it since 7.6.
+**A call that creates or writes a file**: `open` takes WRITE, CREATE, TRUNCATE
+and APPEND and a mode, and `write` reaches a file. **A descriptor a child
+inherits**, and its cause: an open file of the filesystem layer counts its
+holders, so `dup2` and inheritance are both two numbers of one file and one
+position, a child of `fork` inherits everything, and `execve` keeps it — it
+closed everything from 7.6 to 8.4, the safe half of the rule while nothing
+could mean to keep a descriptor, and the redirection is what means to. The
+redirections are performed in the child between `fork` and `execve`, in the
+order written, so that `>out 2>&1` and `2>&1 >out` differ as they should.
+`rmdir` arrives beside them, and with the writable file the utilities
+`touch`, `cp` and `rmdir`, the built-ins `help`, `true`, `false` and `unset`,
+and `cat` copying its standard input at last.
+[`../design/SHELL.md`](../design/SHELL.md), Section 19.
+
+**The evidence is what the files hold.** `file-check` asserts the four
+flags, the shared position of two numbers and of a parent and its child, and
+the rule that the kernel's own paths may not be duplicated above the three;
+the shell's fourth session uses every operator and the kernel reads each file
+back. Two negative tests were caught, one of them — a close releasing a file
+from under its other holder — six times over. Section 20. **Five limitations
+are recorded**, the first that a redirection upon a built-in is named and not
+performed. Section 21.
 
 **Sub-task 8.7 closes Phase 8 and is where the first release is cut.** `Oxys 1
 Alpha` is the first image worth handing to somebody, because it is the first one

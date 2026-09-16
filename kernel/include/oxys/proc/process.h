@@ -574,6 +574,16 @@ int ProcessDescriptorFile(const Process *process, int64_t descriptor);
  */
 bool ProcessReleaseDescriptor(Process *process, int64_t descriptor);
 
+/*
+ * Makes the number `to` name what the number `from` names, of sub-task 8.5 —
+ * IEEE Std 1003.1-2017's `dup2`. Whatever `to` named is closed first; the
+ * open file gains a holder, so the two numbers share one file and one
+ * position until both are closed. A number below SYSCALL_DESCRIPTOR_FIRST
+ * holding no file is the kernel's own path, which may be given to another of
+ * the three and to nothing above them. Returns SYSCALL_OK or SYSCALL_EBADF.
+ */
+int64_t ProcessPlaceDescriptor(Process *process, int64_t from, int64_t to);
+
 /* The tables, for a report and a self-test. */
 Process *ProcessById(uint64_t id);
 Thread *ThreadById(uint64_t id);

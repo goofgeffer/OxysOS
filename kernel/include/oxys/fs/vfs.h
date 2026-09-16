@@ -11,7 +11,7 @@
  *          VfsNode, VfsMount, VfsFilesystemOperations, VfsRegisterFilesystem,
  *          VfsMountVolume, VfsUnmount, VfsMountRoot, VfsResolve,
  *          VfsResolveNoFollow, VfsNodeRelease, VfsOpen, VfsClose, VfsRead,
- *          VfsWrite, VfsSeek, VfsReadDirectory, VfsStat, VfsStatLink,
+ *          VfsHold, VfsWrite, VfsSeek, VfsReadDirectory, VfsStat, VfsStatLink,
  *          VfsTruncate, VfsCreateDirectory, VfsRemoveDirectory, VfsUnlink,
  *          VfsLink, VfsReadLink, VfsSync, VfsSetError, VfsLastError,
  *          VfsLastErrorCode, VfsErrorName, VfsNodeTypeName, VfsReport,
@@ -494,6 +494,15 @@ int VfsOpen(const char *path, uint32_t flags, uint16_t permissions);
  * a defect in the caller and is refused rather than ignored.
  */
 bool VfsClose(int descriptor);
+
+/*
+ * Adds a holder to an open file, of sub-task 8.5: the file is then released
+ * by the last of its holders' VfsClose and not the first. A descriptor
+ * inherited across `fork` or duplicated by `dup2` is a second holder of one
+ * open file and one position, which is what both of those mean. Returns false
+ * where the descriptor names nothing.
+ */
+bool VfsHold(int descriptor);
 
 /*
  * Reads from, and writes to, the position of an open file, advancing it by what

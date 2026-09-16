@@ -10,7 +10,9 @@
  *          SYSCALL_VERSION, SYSCALL_FORK, SYSCALL_EXECVE, SYSCALL_EXIT,
  *          SYSCALL_WAIT, SYSCALL_BRK, SYSCALL_OPEN, SYSCALL_CLOSE,
  *          SYSCALL_READ, SYSCALL_READDIR, SYSCALL_MKDIR, SYSCALL_UNLINK,
- *          SYSCALL_CHDIR, SYSCALL_GETCWD,
+ *          SYSCALL_CHDIR, SYSCALL_GETCWD, SYSCALL_DUP2, SYSCALL_RMDIR,
+ *          SYSCALL_OPEN_WRITE, SYSCALL_OPEN_CREATE, SYSCALL_OPEN_TRUNCATE,
+ *          SYSCALL_OPEN_APPEND,
  *          SYSCALL_COUNT, SYSCALL_OK, SYSCALL_ENOSYS, SYSCALL_EFAULT,
  *          SYSCALL_EINVAL, SYSCALL_EBADF, SYSCALL_ECHILD, SYSCALL_ENOENT,
  *          SYSCALL_ENOMEM, SYSCALL_EEXIST, SYSCALL_ENOTDIR, SYSCALL_EISDIR,
@@ -180,7 +182,17 @@
  */
 #define SYSCALL_CHDIR   14U
 #define SYSCALL_GETCWD  15U
-#define SYSCALL_COUNT   16U
+
+/*
+ * The two calls of sub-task 8.5. `dup2` makes one descriptor name what another
+ * names — IEEE Std 1003.1-2017's — which is how a redirection reaches a
+ * program: the shell opens the file in the child and places it at 0 or 1
+ * before `execve`. `rmdir` removes an empty directory, which nothing could do
+ * since 7.6. Numbered seventeenth and eighteenth for the reason recorded above.
+ */
+#define SYSCALL_DUP2    16U
+#define SYSCALL_RMDIR   17U
+#define SYSCALL_COUNT   18U
 
 /*
  * The argument that asks where the break stands rather than moving it.
@@ -239,18 +251,26 @@
 #define SYSCALL_EIO            INT64_C(-20) /* The volume or the device beneath it failed. */
 
 /*
- * How a program opens a file, which is two flags and not the eight the
- * filesystem layer offers.
+ * How a program opens a file: six of the flags the filesystem layer offers,
+ * two of them since sub-task 7.6 and four since 8.5, when the shell's
+ * redirection became the first thing that needed to create or write a file.
  *
- * The kernel refuses any bit outside this pair rather than masking it away. A
- * program that asked to create a file and was given one opened for reading
- * would discover the difference at its first write, in a call that reports a
- * bad descriptor for a reason having nothing to do with the descriptor.
+ * The kernel refuses any bit outside this set rather than masking it away. A
+ * program that asked for a flag this kernel does not carry and was given a
+ * file opened without it would discover the difference at some later call,
+ * for a reason having nothing to do with that call.
  *
- * READ must be given: an open that asked for neither reading nor writing could
- * do nothing, and this interface offers no way to ask for writing.
+ * READ or WRITE must be given: an open that asked for neither could do
+ * nothing. CREATE without WRITE, and TRUNCATE or APPEND without WRITE, are
+ * refused as EINVAL, being requests to change a file without opening it for
+ * change. The values are the filesystem layer's own, asserted equal to them
+ * in kernel/arch/x86_64/syscall/syscall.c.
  */
 #define SYSCALL_OPEN_READ      UINT64_C(0x0001)
+#define SYSCALL_OPEN_WRITE     UINT64_C(0x0002) /* Since 8.5: writing, and the position advances. */
+#define SYSCALL_OPEN_CREATE    UINT64_C(0x0004) /* Since 8.5: create the file if it is absent. */
+#define SYSCALL_OPEN_TRUNCATE  UINT64_C(0x0010) /* Since 8.5: discard the contents upon opening. */
+#define SYSCALL_OPEN_APPEND    UINT64_C(0x0020) /* Since 8.5: every write goes to the end. */
 #define SYSCALL_OPEN_DIRECTORY UINT64_C(0x0040) /* Refuse anything but a directory. */
 
 /*

@@ -42,10 +42,13 @@ which is what makes the boundary worth having somewhere a person can see.
 | ---- | ----------- |
 | [`startup-check/main.c`](startup-check/main.c) | Sub-task 7.5: the first program in this project built from source rather than composed byte by byte, and the thing that asserts the runtime startup object and the link procedure. It makes its own assertions and ends with the number that failed; `kernel/test/libc/startup.c` runs it and checks that number. |
 | [`echo/main.c`](echo/main.c) | Sub-task 7.6: writes its operands separated by one space and followed by one newline. `-n` is an operand and a backslash is an ordinary character, both cases being implementation-defined in IEEE Std 1003.1-2017. |
-| [`cat/main.c`](cat/main.c) | Sub-task 7.6: copies each operand to the standard output. No operand is a diagnostic rather than a copy of the standard input: there was no call that read one when it was written, and since sub-task 8.1 the standard input is a raw terminal that no line discipline stands in front of, so a copy of it would deliver keystrokes. |
+| [`cat/main.c`](cat/main.c) | Sub-task 7.6: copies each operand to the standard output — and, since 8.5, the standard input for no operand or `-`: a file the shell redirected ends, and the terminal ends at a control-D, `cat` treating it as the end because no line discipline does. |
 | [`ls/main.c`](ls/main.c) | Sub-task 7.6: lists each directory operand — or, with none, the working directory, since sub-task 8.3 gave it one — one entry to a line, with `-a`. It does not sort, this system having no locale and no heap sized by a directory it has not finished reading. |
 | [`mkdir/main.c`](mkdir/main.c) | Sub-task 7.6: creates each operand, with `-p`. No file mode creation mask is applied, this system having none. |
 | [`rm/main.c`](rm/main.c) | Sub-task 7.6: removes each operand, with `-f`. A directory is refused, there being no call that removes one. |
+| [`touch/main.c`](touch/main.c) | Sub-task 8.5: creates each operand that does not exist — the first utility here to make a file. No timestamps, this system keeping no clock. |
+| [`cp/main.c`](cp/main.c) | Sub-task 8.5: copies one file to another, created or truncated — the first utility here to write what it read. One source and one target. |
+| [`rmdir/main.c`](rmdir/main.c) | Sub-task 8.5: removes each empty directory operand, by the call `rm` could not stand in for since 7.6. |
 | [`arg-check/main.c`](arg-check/main.c) | Sub-task 7.6: compares the argument vector it was given against the vector it expects, and ends with the number of comparisons that failed. It exists because nothing in this kernel can read what a program printed. |
 | [`exec-check/main.c`](exec-check/main.c) | Sub-task 7.6: becomes `arg-check` through `execve`, so that a vector crosses an address space that is destroyed. It has no assertions of its own — upon success it no longer exists, and the status the kernel collects is `arg-check`'s. |
 | [`file-check/main.c`](file-check/main.c) | Sub-task 7.6: asserts the six filesystem calls by comparison — a file of known contents read byte for byte, a directory of known entries listed, and twenty refusals asserted by the **name** of the failure rather than by its sign. It was written because a negative test showed that a `read` delivering no bytes at all was reported by nothing. |
@@ -55,8 +58,8 @@ which is what makes the boundary worth having somewhere a person can see.
 | [`sh/parser.c`](sh/parser.c) | Sub-task 8.2: the subset of Section 2.10's grammar this shell implements, and the remainder refused by name. Compiled into the kernel image as well. |
 | [`sh/expand.c`](sh/expand.c) | Sub-task 8.3: parameter expansion — `$NAME`, `${NAME}`, `$?` — and quote removal in one pass, so that a value's characters are never quoting characters. Takes a lookup function, so the kernel asserts it against a table of its own. Compiled into the kernel image as well. |
 | [`sh/variables.c`](sh/variables.c) | Sub-task 8.3: the variable table, fixed at sixty-four, each marked exported or not; what a name is; what an assignment word is. Compiled into the kernel image as well. |
-| [`sh/builtins.c`](sh/builtins.c) | Sub-task 8.3: `cd`, `pwd`, `export` and `exit` — the one unit of the shell's that reaches a system call, and therefore the one not compiled into the kernel image. |
-| [`sh/run.c`](sh/run.c) | Sub-task 8.4: the search upon `PATH`, the environment built from the exported variables, the `fork`, the `execve` tried upon each candidate in the child, and the `wait` that turns what the child ended with into a status. Reaches system calls, so not compiled into the kernel image. |
+| [`sh/builtins.c`](sh/builtins.c) | Sub-task 8.3: `cd`, `pwd`, `export` and `exit`, and since 8.5 `help`, `true`, `false` and `unset` — the one unit of the shell's that reaches a system call, and therefore the one not compiled into the kernel image. |
+| [`sh/run.c`](sh/run.c) | Sub-task 8.4: the search upon `PATH`, the environment built from the exported variables, the `fork`, the `execve` tried upon each candidate in the child, and the `wait` that turns what the child ended with into a status; since 8.5, the redirections performed in the child between the two, in the order written. Reaches system calls, so not compiled into the kernel image. |
 | [`line-check/main.c`](line-check/main.c) | Sub-task 8.1: reads an editing session the kernel's self-test placed upon the terminal, through the same `LineRead` the shell uses, and ends with the number of lines that were not what the session should have edited into. It asserts the half of the sub-task the kernel cannot: the `read` of descriptor 0 and the editor's output reaching descriptor 1, both of which execute `SYSCALL`. |
 | [`dir-check/main.c`](dir-check/main.c) | Sub-task 8.3: asserts the working directory from the only place it can be asserted — a program — and ends with the number of assertions that failed: that a process begins at the root, that `chdir` moves it and `getcwd` reports it canonically, that a relative path is resolved against it by `open`, that a child of `fork` inherits it, and that each refusal is the named one. |
 | [`env-check/main.c`](env-check/main.c) | Sub-task 8.4: asserts what the shell gives a program it runs — the argument vector as typed with its quotes removed, the exported variables in the environment and the assigned ones absent — and ends with the number that failed. The self-test writes it to `/verify/env-check` for the session and removes it, a check program not being shipped in `/bin`. |
@@ -131,19 +134,21 @@ of `<stdlib.h>` searches them; `_start` records where they stand. A program
 the kernel starts — the shell itself, and the check programs — still finds
 `envp[0]` a null pointer, nothing in the kernel setting an environment.
 
-**A program may open, read and list a file, and may not create or write one.**
-The kernel had fourteen system calls at 7.6 and has sixteen since 8.3; `OxysOpen` accepts `SYSCALL_OPEN_READ` and
-`SYSCALL_OPEN_DIRECTORY` and refuses every other bit, and `OxysWrite` still
-reaches the two diagnostic descriptors alone. `fopen` is accordingly still absent
-from `<stdio.h>`, a program reaching a file through `<syscall.h>` and a
-descriptor instead. **And since sub-task 8.1 `stdin` is the terminal**: a `read`
+**A program may open, read, list, create, write, truncate and append a file,
+and remove a directory** — the last five since sub-task 8.5. The kernel had
+fourteen system calls at 7.6 and has eighteen since 8.5; `OxysOpen` accepts
+READ, WRITE, CREATE, TRUNCATE, APPEND and DIRECTORY and refuses every other
+bit, `OxysWrite` reaches a file or the diagnostic path, `OxysDuplicate` is
+`dup2`, and a child of `fork` inherits every descriptor. `fopen` is still
+absent from `<stdio.h>`, a program reaching a file through `<syscall.h>` and a
+descriptor instead. **Since sub-task 8.1 `stdin` is the terminal** — a `read`
 of descriptor 0 waits until something has been typed and delivers it raw,
 unechoed and unedited, which is what the shell's line editor wants and what
 `fgets` upon `stdin` does not; [`../docs/design/SHELL.md`](../docs/design/SHELL.md),
-Section 2.1, records why there is no canonical mode. The rest is recorded at
-the head of the header that would otherwise declare it, and the reasoning is
+Section 2.1, records why there is no canonical mode — **or, since 8.5, the
+file the shell redirected it from.** The rest is recorded at the head of the
+header that would otherwise declare it, and the reasoning is
 [`../docs/design/LIBC.md`](../docs/design/LIBC.md), Section 12.7.
-
 **Since sub-task 8.3 there is a working directory**: every process holds one,
 `OxysChangeDirectory` moves it, `OxysGetWorkingDirectory` reports it, and the
 kernel resolves every relative path against it — so `ls` with no operand lists

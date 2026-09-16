@@ -362,7 +362,7 @@ it and the reasoning for each part.
 **This is also where a process acquires its descriptor table**, which is emptied
 at creation and is a field of the process control block rather than of the
 address space: a descriptor outlives an `execve` in every system that has one,
-and in this one it does not — Section 14. [`LIBC.md`](LIBC.md), Section 12.1.2.
+and since sub-task 8.5 in this one too — Section 14. [`LIBC.md`](LIBC.md), Section 12.1.2.
 ### 10.1 How the kernel gets back
 
 Three ways, and this sub-task implements two of them.
@@ -616,14 +616,18 @@ writes them onto the new stack. Both bounds are published in
 `<oxys/syscall_abi.h>` and both refusals happen before the point of no return,
 so a program that exceeds one keeps running.
 
-**The descriptors the old program held are closed, of sub-task 7.6.** They are
-the machine's and not the process's — the filesystem layer has one table for all
-of them — so forgetting the table here would leak every entry the replaced
-program had open, and a machine that had executed enough programs would be one
-where nothing could open anything. IEEE Std 1003.1-2017 would have a descriptor
-survive an `execve` unless it is marked close-on-exec; this kernel has no such
-mark and does the safe half of the rule. [`LIBC.md`](LIBC.md), Section 12.1.2,
-and limitation 10 below.
+**The descriptors the old program held are kept, since sub-task 8.5, and were
+closed from 7.6 until then.** They are the machine's and not the process's —
+the filesystem layer has one table for all of them — and closing them was the
+safe half of IEEE Std 1003.1-2017's rule, which keeps a descriptor across
+`execve` unless it is marked close-on-exec: a descriptor kept was, until the
+shell's redirection, a descriptor nothing could have meant to keep. The
+redirection is what means to. It opens the file in the child after `fork`,
+places it at 0, 1 or 2 by `dup2`, and the program the child then becomes must
+find it there; so `execve` keeps the table, which is the process's own and the
+process the same one, and what it holds it holds until it closes or ends.
+Nothing leaks by that: `ProcessDestroy` closes what remains.
+[`LIBC.md`](LIBC.md), Section 12.1.2, and [`SHELL.md`](SHELL.md), Section 19.
 
 ## 15. `exit` and `wait`
 
@@ -842,11 +846,12 @@ part of the kernel wrote.
     Both vectors are accepted, bounded by
     `SYSCALL_ARGUMENT_COUNT_MAXIMUM` and `SYSCALL_ARGUMENT_BYTES_MAXIMUM`, and
     both bounds are published so that a program can know what it will be refused
-    against. **What replaces it is narrower**: a child of `fork` inherits no
-    descriptor and `execve` closes every one, because sharing an open file
+    against. **What replaced it was narrower until sub-task 8.5**: a child of `fork` inherited no
+    descriptor and `execve` closed every one, because sharing an open file
     between two processes needs a reference count upon it that the filesystem
-    layer does not have. That is `LIBC.md`, Section 12.7, limitation 8, and the
-    shell's redirection at sub-task 8.5 is what will need it.
+    layer did not have. `LIBC.md`, Section 12.7, limitation 8, recorded it, and the
+    shell's redirection at 8.5 is what needed it: the layer counts holders since
+    then, a child inherits every descriptor, and `execve` keeps them. Section 14.
 11. **A status is a quadword and nothing more.** `wait` reports what the program
     passed to `exit`, or the negated vector where a fault ended it, and there is
     no encoding distinguishing the two beyond the sign. A program cannot ask

@@ -59,6 +59,16 @@ typedef struct VfsFile
     VfsNode *node;
     uint64_t position;
     uint32_t flags;
+
+    /*
+     * How many descriptors name this open file, of sub-task 8.5: one at
+     * VfsOpen, one more per VfsHold, one fewer per VfsClose, and the file is
+     * released at zero. It is what lets two numbers — a parent's and its
+     * child's, or a program's 1 and the 4 it was duplicated from — share one
+     * open file and one position, which is what `fork` inheriting a descriptor
+     * and `dup2` both mean.
+     */
+    uint32_t holders;
     bool open;
 } VfsFile;
 
