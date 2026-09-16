@@ -134,7 +134,8 @@ typedef enum VfsError
     VFS_ERROR_BUSY,           /* Something is held that the operation would destroy. */
     VFS_ERROR_CROSSES_MOUNT,  /* An operation confined to one volume was not. */
     VFS_ERROR_UNSUPPORTED,    /* The filesystem does not offer the operation. */
-    VFS_ERROR_MEDIUM          /* The volume or the device beneath it failed. */
+    VFS_ERROR_MEDIUM,         /* The volume or the device beneath it failed. */
+    VFS_ERROR_BROKEN_PIPE     /* A pipe written that nobody holds open for reading. */
 } VfsError;
 
 /*

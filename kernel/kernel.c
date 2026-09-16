@@ -101,6 +101,7 @@
 #include <oxys/proc/process.h>
 #include <oxys/fs/ext2.h>
 #include <oxys/fs/vfs.h>
+#include <oxys/fs/pipe.h>
 #include <oxys/fs/ext2_vfs.h>
 
 /*
@@ -1708,10 +1709,15 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
 
     /*
      * Sub-tasks 8.2 and 8.3: the shell's grammar, asserted in this kernel, and
-     * then the shell itself run upon two sessions — after the root for the
+     * then the shell itself run upon its sessions — after the root for the
      * reason the test above is, the second session changing into /bin.
      */
     KernelVerifyShell();
+
+    /* Sub-task 8.6: the pipes the sessions above made, and the scheduler the
+     * pipelines ran upon, which the shell is the first thing to sleep in. */
+    VfsPipeReport();
+    SchedulerReport();
 
     IrqReport();
     LocalApicReport();
@@ -1727,16 +1733,17 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
      * than faulting, hanging or resetting on the way. What follows them says
      * which sub-task the boot got as far as, and must be revised with the boot.
      */
-    KernelWriteString("Phase 8 initialisation complete: the shell of sub-task 8.1 is "
+    KernelWriteString("Phase 8 initialisation complete: the shell of sub-task 8.6 is "
                       "about to be read off the root\nfilesystem and entered at privilege "
-                      "level 3, where it prompts, edits a line with a\nhistory, and reads "
-                      "the terminal through descriptor 0 — the first thing upon this\n"
-                      "system a person can type at and be answered by; beneath it, "
-                      "everything Phase 7\nbuilt: a program loaded from a volume, "
-                      "entered with an argument vector, making a\nchild of itself and "
-                      "collecting it, above a C library whose streams, heap and\n"
-                      "wrappers were asserted by the kernel before a userland existed "
-                      "to assert them in.\n");
+                      "level 3, where it prompts, edits a line with a\nhistory, reads the "
+                      "terminal through descriptor 0, and runs what is typed: built-ins,\n"
+                      "programs sought upon PATH, their redirections, and pipelines of them "
+                      "— two programs\nalive at once with a pipe between, the first this "
+                      "system has run; beneath it,\neverything Phase 7 built: a program "
+                      "loaded from a volume, entered with an argument\nvector, making a "
+                      "child of itself and collecting it, above a C library whose streams,\n"
+                      "heap and wrappers were asserted by the kernel before a userland "
+                      "existed to assert\nthem in.\n");
 
     VgaSetColour(VGA_COLOUR_LIGHT_GREY, VGA_COLOUR_BLACK);
 

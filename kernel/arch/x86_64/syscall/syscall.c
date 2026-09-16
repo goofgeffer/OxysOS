@@ -43,6 +43,7 @@
 #include <oxys/arch/cpu/tss.h>
 #include <oxys/proc/process.h>
 #include <oxys/fs/vfs.h>
+#include <oxys/fs/pipe.h>
 #include <oxys/terminal/terminal.h>
 
 /* Defined in kernel/arch/x86_64/syscall/syscall_entry.asm. */
@@ -940,10 +941,11 @@ static int64_t SyscallDoExit(uint64_t status)
 }
 
 /*
- * Collects a child that has ended, running it first if it has not yet run.
+ * Collects a child that has ended, sleeping until one does — since sub-task 8.6;
+ * until then the child was run here, upon the caller's own flow of control.
  *
- * The caller's buffer is validated before the child is run and not afterwards.
- * Running the child is what produces the status, and a status produced and then
+ * The caller's buffer is validated before the wait and not afterwards.
+ * The wait is what produces the status, and a status produced and then
  * found to have nowhere to go would be a child collected and its outcome
  * discarded — the one loss in this call that nothing could recover from.
  */
@@ -1084,6 +1086,8 @@ static int64_t SyscallFromVfsError(VfsError error)
         return SYSCALL_ENOTSUP;
     case VFS_ERROR_MEDIUM:
         return SYSCALL_EIO;
+    case VFS_ERROR_BROKEN_PIPE:
+        return SYSCALL_EPIPE;
     }
 
     /*
@@ -1639,6 +1643,81 @@ static int64_t SyscallDoRemoveDirectory(uint64_t path_address)
     return SYSCALL_OK;
 }
 
+/* ------------------------------------------------- the call of sub-task 8.6 */
+
+/*
+ * Makes a pipe and places its two ends in the caller's table, the read end
+ * first, writing both numbers into the caller's array of two.
+ *
+ * The array is judged before the pipe is made and not after, for the reason
+ * `wait` judges its buffer first: a pipe made and then found to have nowhere
+ * to report its ends would be two open files the program could never close.
+ * Where the second end cannot be placed — the table full but for one slot —
+ * the first is released again, so that a refused call leaves the table as it
+ * found it.
+ */
+static int64_t SyscallDoPipe(uint64_t address)
+{
+    Process *const process = ProcessCurrent();
+    int read_end;
+    int write_end;
+    int64_t reader;
+    int64_t writer;
+
+    if (process == NULL)
+    {
+        return SYSCALL_EINVAL;
+    }
+
+    if (!SyscallUserRangeIsWritable(address, 2U * (uint64_t)sizeof(int32_t)))
+    {
+        ++SyscallFaults;
+
+        return SYSCALL_EFAULT;
+    }
+
+    if (!VfsPipeCreate(&read_end, &write_end))
+    {
+        return SyscallFilesystemRefusal();
+    }
+
+    reader = ProcessAdoptDescriptor(process, read_end);
+
+    if (reader < 0)
+    {
+        (void)VfsClose(read_end);
+        (void)VfsClose(write_end);
+
+        return reader;
+    }
+
+    writer = ProcessAdoptDescriptor(process, write_end);
+
+    if (writer < 0)
+    {
+        (void)ProcessReleaseDescriptor(process, reader);
+        (void)VfsClose(write_end);
+
+        return writer;
+    }
+
+    /* The two numbers are stored as the C library's `int`, four bytes each,
+     * which is what `pipe()`'s array of two holds; written byte by byte so
+     * that nothing depends upon the array's alignment. */
+    for (uint64_t index = 0U; index < 2U; ++index)
+    {
+        const uint32_t value = (index == 0U) ? (uint32_t)reader : (uint32_t)writer;
+        uint8_t *const bytes = (uint8_t *)(uintptr_t)(address + (index * sizeof(int32_t)));
+
+        for (uint64_t byte = 0U; byte < sizeof(int32_t); ++byte)
+        {
+            bytes[byte] = (uint8_t)((value >> (byte * 8U)) & 0xFFU);
+        }
+    }
+
+    return SYSCALL_OK;
+}
+
 /* ------------------------------------------------------------- the dispatch */
 
 /* A call: what it is named, and how many arguments it reads. The count is
@@ -1668,7 +1747,8 @@ static const SyscallEntryDescriptor SyscallTable[SYSCALL_COUNT] = {
     { "chdir", 1U },
     { "getcwd", 2U },
     { "dup2", 2U },
-    { "rmdir", 1U }
+    { "rmdir", 1U },
+    { "pipe", 1U }
 };
 
 bool SyscallNumberIsValid(uint64_t number)
@@ -1771,6 +1851,10 @@ void SyscallDispatch(SyscallFrame *frame)
 
     case SYSCALL_DUP2:
         frame->rax = (uint64_t)SyscallDoDuplicate(frame->rdi, frame->rsi);
+        break;
+
+    case SYSCALL_PIPE:
+        frame->rax = (uint64_t)SyscallDoPipe(frame->rdi);
         break;
 
     case SYSCALL_RMDIR:

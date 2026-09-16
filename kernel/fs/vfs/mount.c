@@ -335,7 +335,8 @@ bool VfsMountIsBusy(const VfsMount *mount)
 {
     for (size_t index = 0U; index < VFS_FILE_CAPACITY; ++index)
     {
-        if (VfsFiles[index].open && (VfsFiles[index].node->mount == mount))
+        if (VfsFiles[index].open && (VfsFiles[index].node != NULL) &&
+            (VfsFiles[index].node->mount == mount))
         {
             return true;
         }

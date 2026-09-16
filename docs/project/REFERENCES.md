@@ -1334,7 +1334,24 @@ and `io_number` — and **2.10.2**, rule 1, that a reserved word is recognised
 only where the grammar permits one, and rule 2, the `io_number`. The chapter
 was read from the online edition on 2026-09-15 for this sub-task.
 
-Used by: `kernel/fs/vfs/`, `kernel/include/oxys/fs/vfs.h`, `libc/line/line.c`,
+For sub-task 8.6, read from the online edition on 2026-09-16: **Section 2.9.2**,
+Pipelines — "the standard output of *command1* shall be connected to the
+standard input of *command2*", each command in a subshell environment, the
+shell waiting for the last command and the status the last command's, or its
+inverse after `!`; **`pipe()`** — "data can be written to the file descriptor
+fildes[1] and read from the file descriptor fildes[0]", both with `O_NONBLOCK`
+and `FD_CLOEXEC` clear, `EMFILE` and `ENFILE`; **`write()`** upon a pipe —
+"write requests of {PIPE_BUF} bytes or less shall not be interleaved with data
+from other processes doing writes on the same pipe", a write that blocks when
+the pipe is full, and `EPIPE` with `SIGPIPE` for a pipe "not open for reading
+by any process"; **`read()`** upon a pipe — zero when it is empty and no
+process holds it open for writing, blocking when it is empty and one does; and
+**`wc`** — the counts "of <newline> characters, words, and bytes" in that order
+by `"%d %d %d %s\n"`, a word "a non-zero-length string of characters delimited
+by white space", the `total` line, and the standard input for no operand.
+
+Used by: `kernel/fs/vfs/`, `kernel/include/oxys/fs/vfs.h`, `kernel/include/oxys/fs/pipe.h`,
+`libc/line/line.c`, `userland/wc/main.c`,
 `userland/sh/`.
 
 ### The UNIX Time-Sharing System

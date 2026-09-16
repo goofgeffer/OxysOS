@@ -6,7 +6,8 @@
 Phase 8's, as [`LIBC.md`](LIBC.md) is Phase 7's: one section per sub-task, in
 order, each recording what that sub-task built and why, and each revised as the
 design is. Sub-tasks 8.1 (Sections 1 to 7), 8.2 (Sections 8 to 10), 8.3
-(Sections 11 to 15), 8.4 (Sections 16 to 18) and 8.5 (Sections 19 to 21) are
+(Sections 11 to 15), 8.4 (Sections 16 to 18), 8.5 (Sections 19 to 21) and 8.6
+(Sections 22 to 24) are
 here so far.
 
 **Authority**: `PROJECT_GUIDELINES.md`, Sections 2, 3 and 6. Every control
@@ -141,8 +142,8 @@ one program at a time. So the processor that halts has nothing else to do, and
 the interrupt that wakes it is the one the program was waiting for. When there
 are two programs, a `read` that halts the processor stops both; the right shape
 then is a wait queue the scheduler can block a thread upon, which
-[`SCHEDULER.md`](SCHEDULER.md), Section 9, limitation 8, already records as
-absent. Section 6 counts it.
+[`SCHEDULER.md`](SCHEDULER.md), Section 10, limitation 8, already records as
+absent. Section 6 counts it, and Section 22.3 records what 8.6 did about it.
 
 **The queue is bounded and the bound discards the newest.** For the reason the
 keyboard driver gives: the first bytes typed are the beginning of a line, and a
@@ -365,11 +366,13 @@ reverted.
    and delivery by the line — is what would close it, and `tcgetattr` and
    `tcsetattr` of IEEE Std 1003.1-2017, Section 11, are the interface a program
    would switch it with. Nothing yet wants it; the shell wants raw.
-2. **A `read` of the terminal halts the processor.** Correct while one program
-   runs at a time upon the bootstrap processor's own flow of control, and wrong
-   the moment there are two; Section 2.3. It needs the wait queue
-   [`SCHEDULER.md`](SCHEDULER.md), Section 9, limitation 8, records as absent,
-   and it is the first thing in this project that would use one.
+2. ~~**A `read` of the terminal halts the processor.**~~ **Amended at sub-task
+   8.6**, Section 22.3: a read of the terminal yields to whatever the run queue
+   holds and halts only when it holds nothing, so a pipeline's children run
+   while the shell — or `cat` at the head of a pipeline — waits for a key. It
+   does not sleep upon the wait queue of [`SCHEDULER.md`](SCHEDULER.md),
+   Section 9, because the bytes arrive through an interrupt handler and nothing
+   yet wakes a thread from one; 8.7's signals are what will.
 3. **A line longer than the display is wide is drawn wrongly once it wraps.**
    Section 3.2. The line itself is right; the display of it is not, upon a
    serial terminal, and is right upon this kernel's own two consoles only
@@ -889,7 +892,8 @@ of two commands is refused** (8.6); **`&` is recorded and not honoured** and
 sixteen variables** by the kernel's vector bound; **a program is run upon the
 shell's own flow of control** — `wait` runs the child synchronously, as
 [`PROCESS.md`](PROCESS.md), Section 13.2, records — so nothing runs beside
-the shell until the scheduler carries a user thread of its own.
+the shell until the scheduler carries a user thread of its own — which it does
+since 8.6, Section 22.3.
 
 ## 19. Sub-task 8.5: input and output redirection
 
@@ -1011,4 +1015,197 @@ caught by `/verify/both` holding nothing.
 4. **`cat` upon the terminal ends at a control-D by its own reading**, there
    being no line discipline; every other program reading the terminal reads
    keystrokes without end until 8.7.
-5. **Pipelines and `&`** are 8.6's and 8.7's, as before.
+5. ~~**Pipelines and `&`** are 8.6's and 8.7's, as before.~~ Pipelines arrived
+   at 8.6, Section 22; `&` is 8.7's still.
+
+## 22. Sub-task 8.6: pipelines
+
+**Implementation**: `ShellRunPipeline` and `ShellExecuteProgram` in
+[`../../userland/sh/run.c`](../../userland/sh/run.c), `ShellRunStage` and the
+`in_child` mode of `ShellRunCommand` in
+[`../../userland/sh/main.c`](../../userland/sh/main.c); in the kernel, the pipe
+of [`../../kernel/fs/vfs/pipe.c`](../../kernel/fs/vfs/pipe.c) behind
+[`../../kernel/include/oxys/fs/pipe.h`](../../kernel/include/oxys/fs/pipe.h),
+the `pipe` call in
+[`../../kernel/arch/x86_64/syscall/syscall.c`](../../kernel/arch/x86_64/syscall/syscall.c),
+and — the larger half — a child of `fork` that runs beside its parent,
+[`PROCESS.md`](PROCESS.md), Section 17, upon the wait channel of
+[`SCHEDULER.md`](SCHEDULER.md), Section 9. `OxysPipe` in
+[`../../libc/syscall/calls.c`](../../libc/syscall/calls.c) and `EPIPE` in
+[`../../libc/include/errno.h`](../../libc/include/errno.h); `wc` in
+[`../../userland/wc/main.c`](../../userland/wc/main.c). Asserted by
+[`../../userland/file-check/main.c`](../../userland/file-check/main.c),
+`KernelVerifyVfsPipes` in
+[`../../kernel/test/storage/vfs.c`](../../kernel/test/storage/vfs.c), and the
+fifth session of
+[`../../kernel/test/shell/parser.c`](../../kernel/test/shell/parser.c).
+
+### 22.1 What a pipeline is, and where its children are made
+
+IEEE Std 1003.1-2017, Section 2.9.2: "the standard output of *command1* shall be
+connected to the standard input of *command2*", each command in a subshell
+environment, the shell waiting for the last and the status the last command's
+— or, after `!`, its inverse. The parser of 8.2 has held a pipeline as a list of
+commands since it was written, and until this sub-task the shell answered any
+list longer than one with a statement that it could not run it.
+
+`ShellRunPipeline` makes one child per command, each before the next, with a
+pipe between each pair. In the child the read end of the pipe before it is
+placed at 0 and the write end of the pipe after it at 1, by `dup2`, **before the
+command's own redirections** — so that `a 2>&1 | b` sends `a`'s diagnostics
+down the pipe, the standard's order — and every end the child does not need is
+closed there. In the shell, every end is closed the moment the children that
+need it exist: the write end after the child that writes it is made, the read
+end after the child that reads it is. That order is the whole of what makes a
+pipeline end. A pipe's reader sees the end of the file only when the *last*
+write end is closed, and a write end left open in the shell — which holds it
+only to hand to a child — would keep every reader waiting for a writer that had
+already gone. Section 23 records the negative test that showed it.
+
+**A built-in in a pipeline runs in the child**, which is what "a subshell
+environment" means and what makes `help | wc -l` count something. It is also
+the surprise every shell of this lineage offers — `cd /bin | true` moves the
+child and not the shell — and it is kept rather than avoided because the
+alternative, running the built-in in the shell with its output somehow
+captured, is a pipe the shell would have to read itself while the next command
+wrote it. The child runs the command by the same `ShellRunCommand` the shell
+does, told it is in a child: a program is become by `execve` rather than forked
+for, and a built-in's status is the child's, with `exit` flushing whatever it
+printed into the pipe before the write end goes with the process.
+
+The shell then waits for every child, collecting them in whatever order they
+end, and the status kept is the last command's, matched by number; 126 where the
+last command was never made. A pipeline of one command is not brought here at
+all: it runs in the shell itself, where a built-in must run to have any effect.
+
+### 22.2 The pipe
+
+A bounded queue of bytes between two open files, one that reads it and one
+that writes it, upon which a reader sleeps while it is empty and a writer
+sleeps while it is full. It is an open file of the filesystem layer with no
+node beneath it, for the reason [`../storage/VFS.md`](../storage/VFS.md),
+Section 11.3, gives: everything a descriptor does was built at 8.5 upon the
+open file, and a pipe end that was not one would have needed all of it twice.
+
+| Rule | What it prevents |
+| ---- | ---------------- |
+| A read of an empty pipe sleeps until a write, or until the last writer closes, upon which it reports zero. | A reader that saw the end before the writer had finished — `wc` counting half a file. |
+| A write to a full pipe sleeps until a reader makes room, and waits for room for the *whole* of what remains where that fits the buffer. | Bytes dropped, or two writers' bytes interleaved; every write a program can make is a page or less, and the buffer is a page, so every write is one piece. |
+| A write to a pipe held open for reading by nobody is `EPIPE`. | A writer told its bytes went somewhere; the signal the standard sends beside it is 8.7's. |
+| Readers and writers are counted as open files, not descriptors. | A child's inherited write end closing the pipe from under its parent — one open file with two holders is one writer. |
+| One channel for both, woken by every write, read and close. | A close that woke the reader and not the writer, or the reverse; each sleeper re-tests and sleeps again if it was not the one meant. |
+| A caller that cannot sleep is refused as busy. | The kernel's own flow of control, reading an empty pipe in a self-test, waiting for ever for a writer that is itself. |
+
+### 22.3 What the kernel had to become
+
+A pipeline is two programs alive at once, and this kernel had never had two:
+a child ran upon its parent's flow of control, inside the parent's `wait`. So
+the sub-task's larger half is not the pipe but the scheduler beneath it, and
+four documents hold it. A child of `fork` is admitted to the run queue at the
+fork and runs when its parent sleeps or is pre-empted at privilege level 3;
+`wait` sleeps upon the parent's process and is woken when a child ends; the
+thread to return to is a field of the started thread rather than one pointer
+per processor, which a sleeping shell made wrong; and the counted
+interrupt-disable travels with the thread across a switch, which the first
+sleeper resumed from the idle thread made necessary.
+[`PROCESS.md`](PROCESS.md), Section 17; [`SCHEDULER.md`](SCHEDULER.md),
+Section 9; [`CONCURRENCY.md`](CONCURRENCY.md), Section 4.1.
+
+**A user thread is pre-empted at privilege level 3 and nowhere else.** The
+kernel beneath a system call is not written to be entered by two threads, and
+a user thread therefore keeps the processor inside the kernel until it gives it
+up — asleep in `wait`, upon a pipe, or at the terminal — which is where it
+holds nothing. That is what keeps the list of unsynchronised structures in
+`CONCURRENCY.md` a list about a second processor and not about this sub-task.
+
+**The terminal's reader yields rather than sleeps.** A `read` of the terminal
+halted the processor until an interrupt, which stopped every program with it;
+it now gives the processor to whatever the run queue holds and halts only when
+the queue is empty, so `cat` reading the terminal at the head of a pipeline
+feeds the command after it. It does not sleep upon the wait channel, because
+the bytes arrive through an interrupt handler and nothing yet wakes a thread
+from one — 8.7 pays that cost, when a signal must interrupt a read.
+Section 6, limitation 2.
+
+### 22.4 `wc`, and the other things that arrived
+
+`wc` joins `/bin` — IEEE Std 1003.1-2017's, counting newlines, words and bytes
+in that order, `-c`, `-l` and `-w` selecting one, a `total` line for more than
+one operand, and the standard input for none — because it is what a person puts
+at the end of a pipeline to learn how much came through it. Unlike `cat` it
+reads the standard input to its end and not to a control-D: it is what a pipe
+feeds, and a pipe ends when its writer does.
+
+`help` is a list now, one command to a line — the name, its arguments, a comma
+and one sentence — the built-ins first and then the programs of `/bin`, at the
+project owner's direction on 2026-09-16: a person who typed `help` wanted to
+find a command, not to read about the shell, and the paragraph that described
+the operators was removed. The first session of the self-test, which the shell
+had answered by refusing its pipelines, now runs them, and was amended so that
+it names no file: a session run at every boot must leave nothing upon the root.
+
+## 23. Verification of sub-task 8.6
+
+### 23.1 `file-check`, extended
+
+| Property asserted | The silent failure it catches |
+| ----------------- | ----------------------------- |
+| `pipe` gives two new numbers above the three; three bytes in are three bytes out. | A pipe made of one open file, or bytes delivered to the end that wrote them. |
+| A read of the write end and a write to the read end are both `EINVAL`. | An end that did both, which a program would discover as its own output. |
+| Bytes written before the close are read after it, and the read after those is zero. | The end of the file arriving early, or never. |
+| A write with no reader is `EPIPE`. | A writer told its bytes went somewhere. |
+| Twelve kibibytes from a child cross a four-kibibyte pipe intact and in order, and the child ends with zero. | A writer that did not sleep when the pipe was full; a reader that did not sleep when it was empty; a close that woke nobody, which this program would report by never ending. |
+
+### 23.2 The kernel's own assertions
+
+`KernelVerifyVfsPipes` asserts the pipe from the kernel's flow of control, which
+cannot sleep: the table accounting, the ordered bytes, each end's one direction,
+the refusal of a seek, the busy refusal of a read that would block, the second
+holder that keeps the pipe open through the first close, and the broken pipe.
+[`../storage/VFS.md`](../storage/VFS.md), Section 11.3, has the table.
+
+### 23.3 The shell, upon a session the files and the status answer for
+
+A fifth session: `echo one two three | wc -w`, `cat | cat | cat` of a file the
+session made, `help | wc -l`, `cat /verify/nonexistent 2>&1 | wc -l`, and
+`cat /bin/sh | wc -c` — the whole of the shell, some thirty-three kibibytes,
+eight times the pipe's buffer — each into a file the kernel reads back; and
+`false | true`, `true | false` and `! true | false`, whose statuses compose
+`exit $T$F$N` into 010, which is 10, only if the last command's status is the
+pipeline's and `!` inverts it. The size of `/bin/sh` is asked of the layer and
+not written into the test, the shell upon the ramdisk being a build product.
+The session leaves no pipe behind, and at least one byte crossed one.
+
+**Two negative tests**, each caught and reverted. The pipe's writer was made to
+take what fitted and claim the rest was written, waiting for a byte's room
+rather than for room for all of it; `file-check` did not catch it — its chunks
+are the buffer's own size, so nothing was ever partly written — and
+`/verify/p5` did, holding a count short of the file. And the shell was made to
+keep a pipe's write end open after making the child that writes it; the first
+pipeline of the first session never ended, and the verification timed out with
+the prompt still waiting for `wc`.
+
+**One defect this sub-task met in its own change**, recorded in
+[`PROCESS.md`](PROCESS.md), Section 17.2: a child admitted at the fork without
+its kernel stack prepared, which faulted in the switch at a stack pointer with
+no stack beneath it. The first program to fork after the change found it.
+
+## 24. Limitations of sub-task 8.6
+
+1. **No `SIGPIPE`.** A writer whose reader has gone is told `EPIPE` and nothing
+   more; a program that ignores the result — `cat` does not — runs on. The
+   signal arrives with 8.7.
+2. **`&` is still recorded and not honoured**, and nothing interrupts a program;
+   both are 8.7's. A pipeline that reads the terminal and never ends can be
+   ended only by the terminal's control-D reaching a `cat`.
+3. **Eight pipes**, each of a page, drawn from a fixed table; a ninth is refused
+   as `EMFILE`. A pipeline of nine commands is therefore refused at its eighth
+   pipe, which is one more than `SHELL_COMMAND_MAXIMUM` allows anyway.
+4. **A wake walks the thread table**, and the terminal's reader polls rather
+   than sleeps; [`SCHEDULER.md`](SCHEDULER.md), Section 10, limitations 8 and 9.
+5. **A built-in in a pipeline affects the child alone**, which is the
+   standard's subshell and a surprise all the same; and a redirection upon a
+   built-in outside a pipeline is still named and not performed, Section 21,
+   limitation 1.
+6. **The here-document, the environment's bound and the terminal's line
+   discipline** are as Section 21 left them.

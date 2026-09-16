@@ -12,7 +12,8 @@ here rather than in [`LIBC.md`](LIBC.md) because it is the kernel's half of a
 contract that document holds the other half of: what stands upon a stack before a
 program's first instruction. **Section 14 is amended by sub-task 7.6**, which is
 where `execve` stopped refusing the two vectors and began closing the
-descriptors a replaced program held.
+descriptors a replaced program held. **Section 17 is sub-task 8.6**, where a
+child of `fork` first ran beside its parent rather than inside its `wait`.
 
 **Authority**: `PROJECT_GUIDELINES.md`, Sections 2, 3 and 6.
 
@@ -557,17 +558,23 @@ stack, so every register of the frame is restored in the same way as every other
 
 ### 13.2 When a child runs
 
-**A child runs when its parent waits for it**, and this is the sub-task's one
-substantial departure from the call it is named after.
+**A child ran when its parent waited for it, from sub-task 6.11 to 8.5**, and
+that was the sub-task's one substantial departure from the call it is named
+after. The bootstrap processor had one thread of control, so a forked child was
+created `READY` and left standing; `wait` started it upon the parent's own
+thread of control and returned when it ended. Everything a program could observe
+of the *ordering* was preserved — a child ran after the fork that made it and
+before the wait that collected it — and concurrency was not. A parent that never
+waited was therefore a child that never ran, which limitation 9 recorded.
 
-The bootstrap processor has one thread of control, so a forked
-child is created `READY` and left standing; `wait` starts it upon the parent's
-own thread of control and returns when it ends. Everything a program can observe
-of the *ordering* is preserved — a child runs after the fork that made it and
-before the wait that collects it — and concurrency is not.
-
-A parent that never waits is therefore a child that never runs, which is the one
-observable difference and is recorded as limitation 9.
+**Since sub-task 8.6 a child runs beside its parent.** `ProcessFork` prepares
+the child's kernel stack for the trampoline and admits its thread to the
+bootstrap processor's run queue, and the child runs when the parent sleeps in
+`wait`, sleeps upon a pipe, or is pre-empted at privilege level 3 — whichever is
+first. Section 17 records what that required, and
+[`SCHEDULER.md`](SCHEDULER.md), Section 9, the scheduler's half of it. The
+departure is closed: the ordering a program can observe is the ordering the
+standard promises, and a child of a parent that never waits runs all the same.
 
 ## 14. `execve`
 
@@ -640,7 +647,8 @@ between those is a status somebody chose and a vector the processor raised.
 
 `wait` prefers a child that has already ended to one that has not. Both are
 children and either may be collected, but collecting one that has ended costs
-nothing where collecting one that has not means running it first — so taking the
+nothing where collecting one that has not means running it first — sleeping
+until it ends, since 8.6 — so taking the
 finished one first is what makes a parent with several children collect them as
 they finish rather than in the order the table happens to hold them.
 
@@ -796,7 +804,96 @@ address after its parent's `SYSCALL`, which is where it resumed. And `RDX`,
 left in them before forking — the inheritance of Section 13.1, in registers no
 part of the kernel wrote.
 
-## 17. Present limitations
+## 17. Sub-task 8.6: the child that runs beside its parent
+
+**Implementation**: `ProcessFork`, `ProcessWait`, `ThreadStart`,
+`ThreadTerminateCurrent`, `ThreadSwitchTo` and `ThreadDestroy` in
+[`../../kernel/proc/process.c`](../../kernel/proc/process.c), with the fields
+`return_to`, `wait_channel`, `critical_depth`, `interrupts_were_enabled` and
+`adopted` of `Thread` in
+[`../../kernel/include/oxys/proc/process.h`](../../kernel/include/oxys/proc/process.h).
+The scheduler's half is [`SCHEDULER.md`](SCHEDULER.md), Section 9; what it was
+all for is [`SHELL.md`](SHELL.md), Section 22.
+
+The pipeline needed two programs alive at once, and this kernel had never had
+two: a child ran upon its parent's flow of control, inside the parent's `wait`,
+and the chain of who-started-whom lived upon the kernel stacks of the calls that
+made it. Four things had to change, and each is recorded by the failure it
+would otherwise have been.
+
+### 17.1 The thread to return to is the started thread's own
+
+`ThreadStart` recorded its caller in one pointer per processor, saved and put
+back around the switch, and `ThreadTerminateCurrent` switched to whatever that
+pointer held. That was the shape of a stack of callers, and it was correct
+while a program ran to its end before its starter resumed. The moment the shell
+could sleep in `wait` while a child ran, the pointer named the shell's starter —
+the boot flow — and a child that ended would have returned to it, with the
+shell asleep for ever and the boot flow resuming in the middle of `KernelRunShell`
+as though the shell had ended. The pointer is now `return_to`, a field of the
+started thread; a thread the scheduler runs has none, and
+`ThreadTerminateCurrent` takes the other path: it wakes the parent, upon the
+parent's own process as the channel, and calls `SchedulerExitCurrent`.
+`ThreadDestroy` walks the table and clears every `return_to` that named the
+thread destroyed, for the reason the per-processor pointer was cleared.
+
+### 17.2 The child is admitted at the fork, with its stack prepared
+
+`ProcessFork` admits the child's thread to the run queue, and prepares its
+kernel stack for the trampoline first. `ThreadStart` had always done the
+preparing, so a fork that admitted without it produced the first defect of the
+sub-task: the first switch into the child returned through a stack pointer
+standing at the very top of the stack, into the unmapped page above, and the
+kernel reported a page fault in the switch at an address with no stack beneath
+it. The child runs when its parent gives up the processor — `wait`, a pipe, the
+terminal — or is pre-empted at privilege level 3, and a parent that never waits
+has a child that runs all the same. Where the scheduler was never prepared — a
+local timer that could not be calibrated — the child is left standing and
+`wait` runs it as it did before, so that a machine which cannot pre-empt still
+runs programs, one at a time.
+
+### 17.3 `wait` sleeps, and a caller that cannot sleep still collects
+
+`ProcessWait` scans for a child, prefers one that has ended, and — where none
+has and the caller is a thread the scheduler can put to sleep — sleeps upon its
+own process and scans again when woken. The scan and the sleep are one masked
+section, the discipline `SCHEDULER.md`, Section 9.1, sets out. A caller with no
+thread to sleep upon is the kernel's own flow of control inside the fork
+self-test, and it takes the path `wait` always took: the child is withdrawn from
+the queue the fork put it upon — a queued thread started by a call would be
+dequeued and switched to a second time — and started by `ThreadStart`, or, where
+that cannot be done, ended with `EINVAL` and collected, as Section 15 had it.
+The self-test's assertion that a child which never ran is collected rather than
+left in the table is unchanged and passes by that path.
+
+### 17.4 The interrupt state travels with the thread
+
+A thread sleeps from inside its own masked section and is resumed by whichever
+thread pushed next, and the idle thread's push records that interrupts were
+enabled; the sleeper's pop, restoring what the processor recorded, would have
+enabled interrupts inside a system call. `ThreadSwitchTo` saves the depth and the
+flag into the outgoing thread and loads the incoming thread's.
+[`CONCURRENCY.md`](CONCURRENCY.md), Section 4.1, holds the whole of the
+reasoning and the window it closes.
+
+### 17.5 Verification
+
+No test of this section stands alone: what asserts it is every program that
+forks now running its child beside itself, and the pipe's transfers in
+`file-check` and the shell's fifth session — twelve kibibytes and thirty-three —
+crossing intact. The fork self-test asserts the path of Section 17.3, and every
+earlier self-test of `fork`, `execve`, `exit` and `wait` passes unchanged, which
+is the assertion that the ordering a program can observe did not change when
+the concurrency beneath it did.
+
+| Property asserted | The silent failure it catches |
+| ----------------- | ----------------------------- |
+| `env-check`, `dir-check` and the shell's sessions end with the statuses they ended with at 8.5. | A child that ran too early, too late, or twice; a parent resumed with the child's stack pointer. |
+| The fork self-test collects a child that never ran, and the tables return to what they held. | A queued thread destroyed and later dequeued. |
+| A parent that forks and waits is resumed after the child ends, with the child's status. | A parent woken by nobody, or returned to the boot flow. |
+| Every self-test after the first sleep still passes. | Interrupts enabled inside a system call after a resume from idle. |
+
+## 18. Present limitations
 
 1. ~~**Nothing has run.**~~ A program has: see Section 10.2. What has not
    happened is pre-emption — nothing takes a processor away from a thread that
@@ -807,11 +904,12 @@ part of the kernel wrote.
    a hundred and twenty-eight threads, found by walking. Nothing here is on a
    path that runs often, and a hash of identifiers is worth writing when
    something is.
-3. **One thread of control.** `ThreadStart` records the thread to return to in a
-   single variable, so one program runs at a time and it runs to its end. A
-   scheduler is what makes that a queue. Sub-task 6.11 made the variable
-   *nestable* — it is saved and put back, so a program may start another — which
-   is a stack of callers and still not a queue; see Section 15.2.
+3. ~~**One thread of control.**~~ **Closed at sub-task 8.6.** `ThreadStart`
+   records the thread to return to upon the started thread rather than in a
+   single variable, a child of `fork` is admitted to the scheduler at the fork,
+   and `wait` sleeps: two programs run at once, upon the bootstrap processor,
+   and the queue that Section 15.2's stack of callers was not is the
+   scheduler's. Section 17.
 4. **A process's state is not derived from its threads'.** A process with one
    blocked thread and one running thread is running, and deciding that is the
    scheduler's business at sub-task 6.15.
@@ -834,11 +932,12 @@ part of the kernel wrote.
    heap of sub-task 7.3 does grow**, and it is the counter-example that shows why
    the stack does not: a heap grows because a program *asks*, by a system call
    naming exactly how far, and nothing has to guess what a fault meant.
-9. **A child runs only when its parent waits for it.** Section 13.2. A parent
-   that forks and never waits is a child that never runs, and a parent that ends
+9. ~~**A child runs only when its parent waits for it.**~~ **Closed at sub-task
+   8.6**, Sections 13.2 and 17.2: a child runs beside its parent from the fork.
+   What remains of this limitation is its second half — a parent that ends
    before waiting leaves its child in the table with a parent identifier naming
-   nobody. There is no `init` to reparent an orphan to and no scheduler to run
-   one; both arrive at sub-task 6.15 and Phase 9 respectively.
+   nobody, and the child, when it ends, wakes nobody and stays there. There is
+   no `init` to reparent an orphan to until Phase 9.
 10. ~~**`execve` takes no arguments and no environment.**~~ **Closed at sub-task
     7.6.** The convention it was waiting for is the System V ABI's own, and
     [`LIBC.md`](LIBC.md), Section 12.2, holds it: the strings at the top of the
@@ -866,6 +965,7 @@ part of the kernel wrote.
     former without the latter; `Thread` will then depend upon whichever half
     `SyscallFrame` lands in, and it is the kernel's half.
 13. **`wait` cannot name which child to wait for, and cannot decline to block.**
-    It collects whichever child is ready and otherwise runs one. Both refinements
-    require a caller that could do something else meanwhile, which is the
-    scheduler's.
+    It collects whichever child is ready and otherwise sleeps until one ends.
+    Both refinements are now a matter of an argument — the caller can do
+    something else meanwhile, since 8.6 — and neither is wanted until 8.7's job
+    control, which is the first thing that will ask for a particular child.

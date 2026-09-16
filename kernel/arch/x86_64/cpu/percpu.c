@@ -8,7 +8,8 @@
  *          that every critical section in the kernel is built upon.
  * Key functions: PerCpuInitialise, PerCpuAt, PerCpuOnlineCount,
  *          PerCpuIsEstablished, PerCpuPushInterruptState,
- *          PerCpuPopInterruptState, PerCpuResetInterruptState, PerCpuReport.
+ *          PerCpuPopInterruptState, PerCpuResetInterruptState,
+ *          PerCpuSaveInterruptState, PerCpuLoadInterruptState, PerCpuReport.
  * References:
  *   - Intel SDM, Volume 3A, Section 3.4.4: the FS and GS bases in 64-bit mode.
  *   - Intel SDM, Volume 3A, Table 2-1: IA32_GS_BASE at 0xC0000101 and
@@ -334,6 +335,40 @@ void PerCpuResetInterruptState(void)
     area->interrupts_were_enabled = true;
 
     __asm__ __volatile__("sti" : : : "memory");
+}
+
+void PerCpuSaveInterruptState(uint32_t *depth, bool *interrupts_were_enabled)
+{
+    const PerCpu *const area = PerCpuCurrent();
+
+    if ((depth == NULL) || (interrupts_were_enabled == NULL))
+    {
+        return;
+    }
+
+    if (area == NULL)
+    {
+        *depth = 0U;
+        *interrupts_were_enabled = false;
+
+        return;
+    }
+
+    *depth = area->critical_depth;
+    *interrupts_were_enabled = area->interrupts_were_enabled;
+}
+
+void PerCpuLoadInterruptState(uint32_t depth, bool interrupts_were_enabled)
+{
+    PerCpu *const area = PerCpuCurrent();
+
+    if (area == NULL)
+    {
+        return;
+    }
+
+    area->critical_depth = depth;
+    area->interrupts_were_enabled = interrupts_were_enabled;
 }
 
 uint32_t PerCpuCriticalDepth(void)

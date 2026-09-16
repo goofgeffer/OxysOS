@@ -2,14 +2,14 @@
 /* SPDX-License-Identifier: MIT */
 /*
  * File: libc/syscall/calls.c
- * Purpose: The eighteen system-call wrappers, one for each call
+ * Purpose: The nineteen system-call wrappers, one for each call
  *          <oxys/syscall_abi.h> numbers: the arguments named rather than
  *          numbered, and the result translated into the convention a C program
  *          expects.
  * Key functions: OxysWrite, OxysTicks, OxysVersion, OxysFork, OxysExecve,
  *          OxysOpen, OxysClose, OxysRead, OxysReadDirectory,
  *          OxysMakeDirectory, OxysUnlink, OxysChangeDirectory,
- *          OxysGetWorkingDirectory,
+ *          OxysGetWorkingDirectory, OxysDuplicate, OxysRemoveDirectory, OxysPipe,
  *          OxysExit, OxysWait, OxysBrk, OxysSbrk.
  * References:
  *   - kernel/abi/oxys/syscall_abi.h: the call numbers and what each call means.
@@ -291,4 +291,10 @@ int64_t OxysRemoveDirectory(const char *path)
 {
     return OxysSyscallResult(OxysSyscallInvoke1(SYSCALL_RMDIR,
                                                 (uint64_t)(uintptr_t)path));
+}
+
+int64_t OxysPipe(int descriptors[2])
+{
+    return OxysSyscallResult(OxysSyscallInvoke1(SYSCALL_PIPE,
+                                                (uint64_t)(uintptr_t)descriptors));
 }

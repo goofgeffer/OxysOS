@@ -7,7 +7,8 @@
  *          whose tokens and structure are known; and then runs the shell
  *          itself at privilege level 3 upon a session placed upon the
  *          terminal, so that the same code is seen to parse, continue and
- *          refuse where a program reads it.
+ *          refuse where a program reads it — and, session by session since,
+ *          to run built-ins, programs, redirections and pipelines.
  * Key functions: KernelVerifyShell.
  * References:
  *   - docs/design/SHELL.md, Section 9: the table pairing every property
@@ -34,6 +35,7 @@
 
 #include <oxys/exec/elf.h>
 #include <oxys/fs/vfs.h>
+#include <oxys/fs/pipe.h>
 #include <oxys/proc/process.h>
 #include <oxys/terminal/terminal.h>
 
@@ -522,12 +524,14 @@ static void VerifyShellExpansion(void)
 /*
  * What the shell is given. A command, a command continued across two lines by
  * an open quote and one by a trailing pipe, a syntax error, a refusal, a
- * comment, and the end. The shell's answers are read by a person in the log;
+ * comment, and the end. Since 8.6 the pipelines run rather than being refused,
+ * so the first names no file: a session run at every boot must leave nothing
+ * upon the root. The shell's answers are read by a person in the log;
  * what is asserted is that it consumed the whole session, ended at the end of
  * its input with status zero, and left nothing open.
  */
 static const char VerifyShellSession[] =
-    "echo hello world >out 2>&1 | wc -l ;\n"
+    "echo hello world 2>&1 | wc -l ;\n"
     "echo \"two\n"
     "lines\"\n"
     "ls |\n"
@@ -676,6 +680,109 @@ static void VerifyShellRedirections(void)
         VerifyShellRequire(!VfsStat("/verify/d", &attributes),
                            "the directory rmdir removed is still there");
     }
+}
+
+
+/*
+ * A fifth session, of sub-task 8.6, whose evidence is what the files hold and
+ * the status: pipelines of two and three commands, a built-in run in a
+ * pipeline's child, a diagnostic sent down a pipe by `2>&1`, the whole of
+ * `/bin/sh` carried through a pipe a page at a time — many times the pipe's
+ * buffer, so that the writer and the reader must take turns — and the
+ * statuses Section 2.9.2 assigns: the last command's, and `!` inverting it.
+ * `exit $T$F$N` is 010, which is 10, only if `false | true` was 0, `true |
+ * false` was 1, and `! true | false` was 0.
+ */
+static const char VerifyShellPipelineSession[] =
+    "echo one two three | wc -w >/verify/p1\n"
+    "echo alpha >/verify/pa\n"
+    "cat /verify/pa | cat | cat >/verify/p2\n"
+    "help | wc -l >/verify/p3\n"
+    "cat /verify/nonexistent 2>&1 | wc -l >/verify/p4\n"
+    "cat /bin/sh | wc -c >/verify/p5\n"
+    "false | true; T=$?\n"
+    "true | false; F=$?\n"
+    "! true | false; N=$?\n"
+    "exit $T$F$N\n";
+
+#define VERIFY_SHELL_PIPELINE_STATUS 10
+
+/* How many lines `help` prints: one per command, built-ins and programs. */
+#define VERIFY_SHELL_HELP_LINES "17"
+
+static const VerifyShellFile VerifyShellPipelineFiles[] = {
+    { "/verify/p1", "3\n" },
+    { "/verify/pa", "alpha\n" },
+    { "/verify/p2", "alpha\n" },
+    { "/verify/p3", VERIFY_SHELL_HELP_LINES "\n" },
+    { "/verify/p4", "1\n" },
+};
+
+#define VERIFY_SHELL_PIPELINE_FILE_COUNT \
+    (sizeof VerifyShellPipelineFiles / sizeof VerifyShellPipelineFiles[0])
+
+/* `/verify/p5` holds the size of `/bin/sh` in decimal, which the layer is
+ * asked for rather than written here: the shell upon the ramdisk is a build
+ * product and its size is nobody's to remember. */
+static void VerifyShellPipedSize(void)
+{
+    VfsAttributes attributes;
+    char expected[24];
+    size_t length = 0U;
+    uint64_t size;
+    VerifyShellFile file;
+
+    if (!VfsStat("/bin/sh", &attributes))
+    {
+        VerifyShellRequire(false, "the size of /bin/sh could not be asked for");
+
+        return;
+    }
+
+    size = attributes.size;
+
+    /* Decimal, most significant digit first, by writing the digits backwards
+     * and reversing them. */
+    do
+    {
+        expected[length] = (char)('0' + (int)(size % 10U));
+        ++length;
+        size /= 10U;
+    } while (size > 0U);
+
+    for (size_t index = 0U; index < length / 2U; ++index)
+    {
+        const char swap = expected[index];
+
+        expected[index] = expected[length - 1U - index];
+        expected[length - 1U - index] = swap;
+    }
+
+    expected[length] = '\n';
+    expected[length + 1U] = '\0';
+
+    file.path = "/verify/p5";
+    file.contents = expected;
+    VerifyShellFileHolds(&file);
+}
+
+static void VerifyShellPipelines(void)
+{
+    const size_t pipes_before = VfsPipeCount();
+
+    VerifyShellProgram(VerifyShellPipelineSession, sizeof VerifyShellPipelineSession - 1U,
+                       VERIFY_SHELL_PIPELINE_STATUS, "upon the pipelines' session");
+
+    for (size_t index = 0U; index < VERIFY_SHELL_PIPELINE_FILE_COUNT; ++index)
+    {
+        VerifyShellFileHolds(&VerifyShellPipelineFiles[index]);
+    }
+
+    VerifyShellPipedSize();
+
+    VerifyShellRequire(VfsPipeCount() == pipes_before,
+                       "the session left a pipe behind it");
+    VerifyShellRequire(VfsPipeBytesCarried() > 0U, "no bytes were carried by any pipe");
 }
 
 /* Writes env-check onto the root. Returns false having said why. */
@@ -858,6 +965,7 @@ void KernelVerifyShell(void)
         VerifyShellProgram(VerifyShellProgramSession, sizeof VerifyShellProgramSession - 1U,
                            VERIFY_SHELL_PROGRAM_STATUS, "upon the programs' session");
         VerifyShellRedirections();
+        VerifyShellPipelines();
         VerifyShellRemoveProgram();
     }
 
@@ -869,11 +977,13 @@ void KernelVerifyShell(void)
         KernelWriteDecimal((uint64_t)(sizeof VerifyShellSession - 1U));
         KernelWriteString(", ");
         KernelWriteDecimal((uint64_t)(sizeof VerifyShellBuiltinSession - 1U));
-        KernelWriteString(" and ");
+        KernelWriteString(", ");
         KernelWriteDecimal((uint64_t)(sizeof VerifyShellProgramSession - 1U));
-        KernelWriteString(" and ");
+        KernelWriteString(", ");
         KernelWriteDecimal((uint64_t)(sizeof VerifyShellRedirectSession - 1U));
-        KernelWriteString(" bytes at privilege level 3, ending with zero, with the status its built-ins composed, with the status the programs it ran composed, and with every redirection's file holding what was written.\n");
+        KernelWriteString(" and ");
+        KernelWriteDecimal((uint64_t)(sizeof VerifyShellPipelineSession - 1U));
+        KernelWriteString(" bytes at privilege level 3, ending with zero, with the status its built-ins composed, with the status the programs it ran composed, with every redirection's file holding what was written, and with every pipeline's file holding what came through the pipe.\n");
     }
     else
     {

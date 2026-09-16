@@ -10,6 +10,7 @@
  * Key definitions: PerCpu, PER_CPU_MAXIMUM, PerCpuInitialise, PerCpuCurrent,
  *          PerCpuIndex, PerCpuAt, PerCpuOnlineCount, PerCpuIsEstablished,
  *          PerCpuPushInterruptState, PerCpuPopInterruptState,
+ *          PerCpuSaveInterruptState, PerCpuLoadInterruptState,
  *          PerCpuCriticalDepth, PerCpuReport.
  * References:
  *   - Intel 64 and IA-32 Architectures Software Developer's Manual, Volume 3A,
@@ -267,6 +268,31 @@ void PerCpuPopInterruptState(void);
  * time a thread is scheduled.
  */
 void PerCpuResetInterruptState(void);
+
+/*
+ * Reads out, and puts back, the counted interrupt state — the depth and the
+ * recorded flag — so that a thread switch of sub-task 8.6 can carry them with
+ * the thread rather than leave them with the processor.
+ *
+ * The counted disable belongs to the processor, and until 8.6 that was
+ * harmless: the scheduler switched kernel threads that never slept inside a
+ * section, and a thread that had never run was given a fresh count by
+ * PerCpuResetInterruptState. A user thread that *sleeps* — inside `wait`, or
+ * upon a pipe — sleeps from inside its own push, and is resumed by whichever
+ * thread happens to push next. Were the state left with the processor, the
+ * sleeper's pop would restore the flag the *other* thread recorded: the idle
+ * thread's push records that interrupts were enabled, and a program resumed
+ * from it would leave its system call with interrupts enabled in the kernel,
+ * where the exit path's SWAPGS and SYSRET assume they are not. Saving the
+ * state into the outgoing thread and loading the incoming thread's makes each
+ * thread's pop answer its own push, whoever ran in between.
+ *
+ * Neither touches the interrupt flag itself. The flag at a switch is the
+ * caller's business, and the flag a resumed thread wants is restored by its own
+ * pop, from the state these two carry.
+ */
+void PerCpuSaveInterruptState(uint32_t *depth, bool *interrupts_were_enabled);
+void PerCpuLoadInterruptState(uint32_t depth, bool interrupts_were_enabled);
 
 /* The nesting depth of the executing processor's critical section, and the
  * number of spinlocks it holds. Both exist for the self-test and the report. */

@@ -79,7 +79,7 @@ static PhysicalAddress PagingRootTable;
  * upon the kernel root, and a user thread's affinity mask names the bootstrap
  * processor alone — so every writer writes the same value. It becomes wrong the
  * moment a user thread may run elsewhere, and must become per processor in the
- * same change that widens that mask. docs/design/SCHEDULER.md, Section 9,
+ * same change that widens that mask. docs/design/SCHEDULER.md, Section 10,
  * limitation 7, records it so that the two cannot be separated.
  */
 static PhysicalAddress PagingActiveTable;

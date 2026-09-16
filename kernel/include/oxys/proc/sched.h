@@ -2,7 +2,8 @@
 /* SPDX-License-Identifier: LGPL-3.0-or-later */
 /*
  * File: kernel/include/oxys/proc/sched.h
- * Purpose: Declares the multiprocessor round-robin scheduler of sub-task 6.15:
+ * Purpose: Declares the multiprocessor round-robin scheduler of sub-task 6.15,
+ *          and the wait channel of sub-task 8.6 that lets a thread sleep upon it:
  *          the per-processor run queues, the affinity mask that decides which
  *          queue a thread may join, the quantum the local timer measures, and
  *          the idle thread each processor falls back to when its queue is empty.
@@ -10,6 +11,8 @@
  *          SCHED_AFFINITY_OF, SCHED_QUANTUM_MILLISECONDS, SCHED_TICK_VECTOR,
  *          SchedulerInitialise, SchedulerPrepareProcessor, SchedulerEnterIdle,
  *          SchedulerAdmit, SchedulerYield, SchedulerBlockCurrent,
+ *          SchedulerCanSleep, SchedulerSleep, SchedulerWake,
+ *          SchedulerExitCurrent, SchedulerWithdraw,
  *          SchedulerDetachThisProcessor,
  *          SchedulerSetAffinity,
  *          SchedulerAffinity, SchedulerQueueLength, SchedulerIsRunning,
@@ -180,11 +183,65 @@ void SchedulerYield(void);
  * its processor for the whole of the remaining boot, and every self-test after
  * it would be running against a machine that was quietly switching threads
  * underneath it. There is no reaper, so the thread's table slot is not
- * reclaimed; docs/design/SCHEDULER.md, Section 8, limitation 4, records that.
+ * reclaimed; docs/design/SCHEDULER.md, Section 10, limitation 4, records that.
  *
  * It returns only if the caller is an idle thread, which has nowhere to go.
  */
 void SchedulerBlockCurrent(void);
+
+/*
+ * The wait channel, of sub-task 8.6: the first thing in this kernel a thread
+ * can sleep upon and be woken from.
+ *
+ * SchedulerSleep takes the calling thread out of the rotation until something
+ * calls SchedulerWake with the same channel. The channel is an address and
+ * nothing more — the process a parent waits upon, the pipe a reader or writer
+ * waits upon — and carries no meaning of its own; what it identifies is the
+ * condition the caller tested and found false. The caller tests again upon
+ * waking, in a loop, because a wake is broadcast to every sleeper upon the
+ * channel and says only that the condition may have changed.
+ *
+ * The discipline the caller must follow is the one every sleep-and-wakeup
+ * kernel has had since the first: test the condition and call SchedulerSleep
+ * within one masked section, so that no wake can fall between the test and the
+ * sleep. SchedulerSleep enters its own masked section as well, so a caller
+ * that has already entered one nests it and nothing is lost.
+ *
+ * SchedulerSleep returns at once, doing nothing, where the caller cannot
+ * sleep: where no thread is current, where the caller is the idle thread, or
+ * where the scheduler was never prepared. SchedulerCanSleep is that test,
+ * exposed so that a caller with no way to wait — the kernel's own flow of
+ * control inside a self-test — can refuse an operation that would block
+ * rather than spin upon it.
+ *
+ * SchedulerWake returns how many threads it made runnable.
+ */
+bool SchedulerCanSleep(void);
+void SchedulerSleep(const void *channel);
+size_t SchedulerWake(const void *channel);
+
+/*
+ * Gives the processor up for good, of sub-task 8.6, on behalf of a thread that
+ * has ended.
+ *
+ * The caller has marked its own state THREAD_EXITED; this function merely
+ * reschedules, and a thread whose state is not running is not put back upon a
+ * queue. It does not return: a thread that has ended has nothing to run on to,
+ * and it panics rather than returning where the processor had neither another
+ * thread nor an idle one, which upon a prepared scheduler cannot happen.
+ */
+_Noreturn void SchedulerExitCurrent(void);
+
+/*
+ * Takes a thread off the queue it is upon, of sub-task 8.6.
+ *
+ * It exists for a thread that was admitted and is being destroyed before it
+ * ran — a child of `fork` collected by a caller with no thread to sleep upon,
+ * which the fork self-test arranges — because a destroyed thread left linked
+ * into a queue would be dequeued later and switched to, and its stack is by
+ * then somebody else's. Returns false where the thread was not queued.
+ */
+bool SchedulerWithdraw(Thread *thread);
 
 /*
  * Sets a thread's affinity, and refuses a mask that names no online processor.

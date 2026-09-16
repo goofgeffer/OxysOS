@@ -284,6 +284,33 @@ is the point — what is being recorded is the state the caller was in. Reaching
 the area afterwards costs nothing now and will matter when there is a scheduler
 that could move the flow of control between the load and its use.
 
+### 4.1 The count travels with the thread, since sub-task 8.6
+
+The count belongs to the processor, and until 8.6 that was the whole of the
+design. The scheduler switches threads from inside a masked section, and a
+thread that is *resumed* continues inside its own push and executes the matching
+pop — against whatever depth the resuming processor holds, which was the same
+depth, there being nothing between. Sub-task 6.15 met the one exception, a
+thread that had never run and had no pop, and answered it with
+`PerCpuResetInterruptState`.
+
+Sub-task 8.6 met the other. A user thread that **sleeps** — in `wait`, or upon a
+pipe — sleeps from inside its own push and is resumed by whichever thread
+pushes next, and that thread may be the idle thread, whose push records that
+interrupts were enabled. The sleeper's pop, restoring what the processor
+recorded, would then execute `STI` inside a system call: the thread would leave
+the kernel through an exit path whose `SWAPGS` and `SYSRET` assume the flag is
+clear, and an interrupt arriving between the two would run with the user's
+segment base — the window limitation 5 records for the non-maskable interrupt,
+opened to every interrupt.
+
+So `ThreadSwitchTo` saves the depth and the recorded flag into the outgoing
+thread and loads the incoming thread's — `PerCpuSaveInterruptState` and
+`PerCpuLoadInterruptState`, which touch the count and not the flag itself — and
+every pop answers its own push whoever ran between. The two conditions above
+still panic, and the reset for a thread that has never run is still made; what
+changed is that the count a thread sees is the count it left.
+
 ## 5. The inter-processor interrupt
 
 One processor interrupts another by writing the interrupt command register of its
@@ -618,6 +645,16 @@ kept, this section describing what the kernel does now.
    safe, and the queue is counted here because that is a property of today.
    [`SHELL.md`](SHELL.md), Section 2.3.
 
+   **Sub-task 8.6 added the pipe** (`kernel/fs/vfs/pipe.c`), and it is the first
+   entry here that two user threads *do* reach at once in the only sense this
+   kernel has: a reader asleep upon it and a writer filling it take turns upon
+   the bootstrap processor, and neither is ever inside the file while the other
+   is, because a user thread is never pre-empted inside the kernel —
+   [`SCHEDULER.md`](SCHEDULER.md), Section 10.2. The masked sections in that
+   file are the sleep discipline of the wait channel and not a lock, and they
+   say so. What would break it is the same thing that breaks everything above:
+   a user thread upon a second processor.
+
    **None of that is unsafe today, and the reason has changed twice.** It used to
    be that there was one flow of control. Then sub-task 6.14 started the other
    processors, and the reason became that a started processor had nothing to run.
@@ -655,8 +692,12 @@ kept, this section describing what the kernel does now.
    process may be running upon one processor and reaped upon another.
 4. **There is no reader-writer lock and no lock that may be slept upon.** Every
    critical section in this kernel is short enough that spinning is cheaper than
-   the alternative, and there is no scheduler to sleep against until sub-task
-   6.15. The buffer cache is the first structure that will genuinely want one.
+   the alternative. ~~There is no scheduler to sleep against until sub-task
+   6.15.~~ **Since sub-task 8.6 there is something to sleep against**: the wait
+   channel of [`SCHEDULER.md`](SCHEDULER.md), Section 10, upon which `wait` and
+   the pipe sleep. A lock built upon it — taken by sleeping rather than by
+   spinning — is now a matter of writing one, and the buffer cache is still the
+   first structure that will genuinely want it.
 5. **`SWAPGS` has a window against the non-maskable interrupt.** Between the
    `SWAPGS` and the `SYSRET` of the system-call return path, and between the
    conditional `SWAPGS` and the `IRETQ` of the interrupt path, the code segment

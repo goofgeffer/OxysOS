@@ -1802,6 +1802,11 @@ number already handed to a program is a number that must not change.
 | `mkdir` | path, permissions | Zero, or a refusal. |
 | `unlink` | path | Zero, or a refusal. |
 
+Later sub-tasks added to the table by the same rule: `chdir` and `getcwd` at
+8.3, `dup2` and `rmdir` at 8.5, and at 8.6 `pipe` — nineteenth, taking an
+array of two `int` and placing a read end and a write end in it, `OxysPipe` in
+the C library — whose semantics are [`SHELL.md`](SHELL.md), Section 22.2.
+
 Each is a validation of the caller's arguments and then a call of the filesystem
 layer of [`../storage/VFS.md`](../storage/VFS.md). None of them reimplements
 anything: `VfsOpen`, `VfsClose`, `VfsRead`, `VfsReadDirectory`,
@@ -1827,7 +1832,9 @@ limitation 2.
 program under a name of its own, by `SyscallFromVfsError`, and the thirteen that
 had no name acquired one — `EEXIST`, `ENOTDIR`, `EISDIR`, `ENOTEMPTY`, `EROFS`,
 `ENAMETOOLONG`, `ELOOP`, `ENOSPC`, `EMFILE`, `EBUSY`, `EXDEV`, `ENOTSUP` and
-`EIO`.
+`EIO`. Sub-task 8.6 added a sixteenth, `VFS_ERROR_BROKEN_PIPE`, carried out as
+`EPIPE`: a pipe written that nobody holds open for reading, the one refusal a
+program at the end of a pipeline can cause in the one before it.
 
 **They are not collapsed into `ENOENT` and `EINVAL`**, and the reason is that a
 program acts upon `errno` and not upon the sign of a result. `ls` prints an

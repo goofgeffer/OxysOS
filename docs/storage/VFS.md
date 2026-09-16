@@ -5,13 +5,14 @@
 **Corresponding phase**: 5, sub-task 5.8, which completes the phase.
 **Authority**: `PROJECT_GUIDELINES.md`, Sections 2 and 4.
 **Implemented by**: [`../../kernel/fs/vfs/`](../../kernel/fs/vfs/), which holds
-six translation units and the private header between them:
+seven translation units and the private header between them:
 [`vfs.c`](../../kernel/fs/vfs/vfs.c) (the state, the refusals and the
 accounting), [`node.c`](../../kernel/fs/vfs/node.c) (Section 6),
 [`path.c`](../../kernel/fs/vfs/path.c) (Sections 4 and 5),
 [`mount.c`](../../kernel/fs/vfs/mount.c) (Sections 3 and 5),
 [`file.c`](../../kernel/fs/vfs/file.c) (Sections 7 and 8),
-[`namespace.c`](../../kernel/fs/vfs/namespace.c) (Sections 9 and 10), and
+[`namespace.c`](../../kernel/fs/vfs/namespace.c) (Sections 9 and 10),
+[`pipe.c`](../../kernel/fs/vfs/pipe.c) (Section 11.3, of sub-task 8.6), and
 [`internal.h`](../../kernel/fs/vfs/internal.h). It was one file of 2,355 lines
 until the review that followed sub-task 6.10; the sections of this document
 corresponded to those units already, which is why the division needed nothing
@@ -542,7 +543,7 @@ write before the banner is printed — in every environment, upon every machine,
 without anybody remembering to build one.
 [`INITRD.md`](INITRD.md), Section 3.2.
 
-## 11. Corrections this sub-task made elsewhere
+## 11. Corrections this sub-task made elsewhere, and what later ones added
 
 ### 11.1 The deletion time was read as an orphan-list link
 
@@ -574,6 +575,39 @@ only a tool that knew what the field meant could see it.
 `Ext2WriteSuperblock` wrote the free counts, the state and the write time, those
 being everything sub-task 5.6 altered. The mount is the first thing that alters
 the mount count, so the field is now written as well.
+
+### 11.3 The pipe, of sub-task 8.6
+
+The pipe is an open file of Section 7 with no node beneath it. That is a
+decision and not a convenience: everything a descriptor does — the count of
+holders that lets a child inherit one, the `dup2` that places one at 0 or 1, the
+close at a process's end that releases it — was built at 8.5 upon the open file,
+and a pipe end that was not one would have needed all of it written a second
+time, with the two copies parting the first time one was corrected. So `VfsFile`
+carries a `pipe` beside its `node`, exactly one of the two set, and `VfsRead`,
+`VfsWrite`, `VfsClose`, `VfsSeek`, `VfsTell`, `VfsReadDirectory` and
+`VfsFileAttributes` ask which before they touch the node; the mount's busy scan
+skips a file with no node, because a pipe holds no volume open.
+
+`VfsPipeCreate` makes the pipe and two open files upon it, finding both slots
+before claiming either, so that a table with one slot left refuses the pipe
+rather than making half of one — a read end with no write end is a pipe at its
+end before anything was written. The buffer is one page, drawn from a fixed
+array of eight pipes for the reason every table of this layer is fixed; the
+pipe's own design — who sleeps, who wakes whom, why a writer waits for room for
+the whole of what remains — is in the header of
+[`../../kernel/fs/vfs/pipe.c`](../../kernel/fs/vfs/pipe.c) and in
+[`../design/SHELL.md`](../design/SHELL.md), Section 22.2. `VFS_ERROR_BROKEN_PIPE`
+is the sixteenth refusal, carried to a program as `EPIPE`.
+
+| Property asserted, from the kernel | The silent failure it catches |
+| ---------------------------------- | ----------------------------- |
+| A pipe is two open files and one pipe, released together at the last close. | A leaked open file, or a pipe slot never returned. |
+| Bytes cross in order, a partial read leaving the rest. | A read index that skipped or repeated. |
+| Each end does one thing; a seek is refused. | A write end read as a file at its end, or a seek that moved a position a pipe has not got. |
+| An empty pipe with a writer, read by a caller that cannot sleep, is refused as busy. | A machine that waits for ever for a writer that is the same flow of control. |
+| A second holder keeps the pipe open through the first close. | A child's inherited write end closing the pipe from under the parent. |
+| A write with no reader is refused as a broken pipe. | A writer told its bytes went somewhere. |
 
 ## 12. Limitations
 
@@ -642,7 +676,8 @@ the mount count, so the field is now written as well.
     device carrying a volume it can mount. A `root=` parameter and an initial
     ramdisk to fall back upon both belong to Phase 7.
 11. **The tables are fixed**: four filesystem types, four mounts, sixty-four
-    nodes, thirty-two descriptors. A layer that drew its own structures from the
+    nodes, thirty-two descriptors, and since 8.6 eight pipes of a page each. A
+    layer that drew its own structures from the
     heap could exhaust it, and would do so at exactly the moment something needed
     to write a diagnostic to a file. Only the filesystems' private descriptions —
     a superblock, an inode — are allocated, and those are bounded by these
@@ -654,4 +689,8 @@ the mount count, so the field is now written as well.
     6.14 is parked and opens nothing, and 6.15 pinned every user thread to the
     bootstrap processor; **the change that widens that affinity mask is what makes
     these tables
-    contended**.
+    contended**. The pipe of 8.6 is the first structure here that two user
+    threads reach in turn — never at once, a user thread being pre-empted at
+    privilege level 3 alone — and it joins the list
+    [`../design/CONCURRENCY.md`](../design/CONCURRENCY.md), Section 10,
+    limitation 1, keeps.

@@ -3,14 +3,14 @@
 /*
  * File: libc/include/syscall.h
  * Purpose: Declares the C library's system-call wrappers — one for each of the
- *          eighteen calls <oxys/syscall_abi.h> numbers — together with the raw
+ *          nineteen calls <oxys/syscall_abi.h> numbers — together with the raw
  *          invocation they are built upon and the translation that turns a
  *          kernel result into a library result and an errno.
  * Key definitions: OxysSyscallInvoke0, OxysSyscallInvoke1, OxysSyscallInvoke2,
  *          OxysSyscallInvoke3, OxysSyscallResult, OxysOpen, OxysClose,
  *          OxysRead, OxysReadDirectory, OxysMakeDirectory, OxysUnlink,
  *          OxysChangeDirectory, OxysGetWorkingDirectory, OxysDuplicate,
- *          OxysRemoveDirectory,
+ *          OxysRemoveDirectory, OxysPipe,
  *          OxysWrite, OxysTicks,
  *          OxysVersion, OxysFork, OxysExecve, OxysExit, OxysWait, OxysBrk,
  *          OxysSbrk.
@@ -364,5 +364,17 @@ int64_t OxysDuplicate(int from, int to);
  * written.
  */
 int64_t OxysRemoveDirectory(const char *path);
+
+/*
+ * Makes a pipe, of sub-task 8.6 — `pipe()` of IEEE Std 1003.1-2017: the read
+ * end at `descriptors[0]` and the write end at `descriptors[1]`, both new
+ * numbers above the three. A read of an empty pipe waits for a write or for
+ * the last write end to close, upon which it returns 0; a write to a full pipe
+ * waits for a read; a write to a pipe held open for reading by nobody fails
+ * with EPIPE. Returns -1 with errno set to EMFILE where every pipe, every open
+ * file or every descriptor of the caller's is in use, and EFAULT where the
+ * array may not be written.
+ */
+int64_t OxysPipe(int descriptors[2]);
 
 #endif /* OXYS_LIBC_SYSCALL_H */

@@ -5,7 +5,8 @@
  * Purpose: Implements the open file: the descriptor table, the opening of a
  *          path, the position that advances, the reading and writing of a
  *          file's bytes, the seek, and the traversal of a directory through a
- *          descriptor.
+ *          descriptor — and, since sub-task 8.6, the branch each of those
+ *          takes where the open file is an end of a pipe.
  * Key functions: VfsFileOf, VfsOpenFileCount, VfsOpen, VfsHold, VfsClose, VfsRead,
  *          VfsWrite, VfsSeek, VfsTell, VfsReadDirectory, VfsFileAttributes.
  * References:
@@ -276,7 +277,17 @@ bool VfsClose(int descriptor)
         return true;
     }
 
-    VfsNodeRelease(file->node);
+    /* An end of a pipe has no node to release; the pipe is told the end has
+     * gone, which is what wakes whoever was waiting for it. */
+    if (file->pipe != NULL)
+    {
+        VfsPipeReleaseEnd(file);
+    }
+    else
+    {
+        VfsNodeRelease(file->node);
+    }
+
     *file = (VfsFile){ 0 };
 
     VfsSucceed();
@@ -306,6 +317,13 @@ bool VfsRead(int descriptor, void *buffer, uint64_t length, uint64_t *read)
     if ((file->flags & VFS_OPEN_READ) == 0U)
     {
         return VfsRefuse(VFS_ERROR_INVALID, "the file was not opened for reading");
+    }
+
+    /* An end of a pipe, since sub-task 8.6: the bytes come from the pipe and
+     * the read may sleep; nothing below concerns it. */
+    if (file->pipe != NULL)
+    {
+        return VfsPipeRead(file, buffer, length, read);
     }
 
     if (file->node->type == VFS_NODE_DIRECTORY)
@@ -362,6 +380,17 @@ bool VfsWrite(int descriptor, const void *buffer, uint64_t length, uint64_t *wri
         return VfsRefuse(VFS_ERROR_INVALID, "the file was not opened for writing");
     }
 
+    /* An end of a pipe, since sub-task 8.6: the bytes go to the pipe and the
+     * write may sleep; no volume is written and no position advances. */
+    if (file->pipe != NULL)
+    {
+        const bool delivered = VfsPipeWrite(file, buffer, length, written);
+
+        VfsBytesWrittenCount += *written;
+
+        return delivered;
+    }
+
     if (!VfsWritable(file->node))
     {
         return false;
@@ -406,6 +435,12 @@ bool VfsSeek(int descriptor, int64_t offset, VfsSeekOrigin origin, uint64_t *pos
     if (file == NULL)
     {
         return false;
+    }
+
+    if (file->pipe != NULL)
+    {
+        return VfsRefuse(VFS_ERROR_INVALID,
+                         "an end of a pipe has no position, no entries and no attributes");
     }
 
     switch (origin)
@@ -477,6 +512,12 @@ bool VfsTell(int descriptor, uint64_t *position)
         return false;
     }
 
+    if (file->pipe != NULL)
+    {
+        return VfsRefuse(VFS_ERROR_INVALID,
+                         "an end of a pipe has no position, no entries and no attributes");
+    }
+
     if (position == NULL)
     {
         return VfsRefuse(VFS_ERROR_INVALID, "there is nowhere to report the position");
@@ -500,6 +541,12 @@ bool VfsReadDirectory(int descriptor, VfsDirectoryEntry *entry, bool *end)
     if (file == NULL)
     {
         return false;
+    }
+
+    if (file->pipe != NULL)
+    {
+        return VfsRefuse(VFS_ERROR_INVALID,
+                         "an end of a pipe has no position, no entries and no attributes");
     }
 
     if ((entry == NULL) || (end == NULL))
@@ -545,6 +592,12 @@ bool VfsFileAttributes(int descriptor, VfsAttributes *attributes)
     if (file == NULL)
     {
         return false;
+    }
+
+    if (file->pipe != NULL)
+    {
+        return VfsRefuse(VFS_ERROR_INVALID,
+                         "an end of a pipe has no position, no entries and no attributes");
     }
 
     if (attributes == NULL)

@@ -16,7 +16,9 @@
  *          8.3, ShellLookup, ShellExpandWord, ShellIsName,
  *          ShellIsAssignmentWord, ShellVariableSet, ShellVariableGet,
  *          ShellVariableExport, ShellVariableIsExported, ShellVariableCount,
- *          ShellVariableAt, ShellVariablesInitialise.
+ *          ShellVariableAt, ShellVariablesInitialise; of 8.4, ShellRunProgram
+ *          and ShellBuildEnvironment; and of 8.6, ShellStageRunner,
+ *          ShellExecuteProgram and ShellRunPipeline.
  * References:
  *   - IEEE Std 1003.1-2017, Section 2.2 (Quoting): the escape character, single
  *     quotes and double quotes, and which five characters a backslash escapes
@@ -308,9 +310,27 @@ int ShellRunBuiltin(int argc, char **argv, int last_status, bool *exit_requested
  * composes from the exported variables, waits, and returns the status: the
  * program's, 127 where it could not be found, 126 where it was found and
  * could not run, or 128 plus the vector where it ended by a fault.
+ * ShellExecuteProgram is the child's half alone — the redirections and the
+ * search, in the calling process, which it replaces upon success — for a
+ * caller that has already forked, which the pipeline is.
  */
 int ShellRunProgram(char **argv, const ShellCommand *command, ShellLookup lookup,
                     void *context);
+int ShellExecuteProgram(char **argv, const ShellCommand *command, ShellLookup lookup,
+                        void *context);
 char **ShellBuildEnvironment(void);
+
+/*
+ * The pipeline, of sub-task 8.6, in the same unit. ShellRunPipeline makes one
+ * child per command with a pipe between each pair, runs each command in its
+ * child by `run_stage` — which runs a built-in there or becomes the program,
+ * and whose result is the child's status — waits for every child, and returns
+ * the last command's status, as IEEE Std 1003.1-2017, Section 2.9.2, has it.
+ * A pipeline of one command is not brought here: it runs in the shell itself,
+ * where a built-in must run to have any effect.
+ */
+typedef int (*ShellStageRunner)(const ShellCommand *command, void *context);
+
+int ShellRunPipeline(const ShellPipeline *pipeline, ShellStageRunner run_stage, void *context);
 
 #endif /* OXYS_SHELL_H */

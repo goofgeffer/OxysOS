@@ -45,8 +45,8 @@ simply there.
 
 ## 2. What is upon it
 
-Nine files and two directories: the five utilities of sub-task 7.6, the three
-of 8.5, and since sub-task 8.1 the shell.
+Ten files and two directories: the five utilities of sub-task 7.6, the three
+of 8.5, the one of 8.6, and since sub-task 8.1 the shell.
 
 | Path | What it is |
 | ---- | ---------- |
@@ -58,6 +58,7 @@ of 8.5, and since sub-task 8.1 the shell.
 | `/bin/touch` | Sub-task 8.5: creates a file. |
 | `/bin/cp` | Sub-task 8.5: copies a file. |
 | `/bin/rmdir` | Sub-task 8.5: removes an empty directory. |
+| `/bin/wc` | Sub-task 8.6: counts lines, words and bytes, of a file or of what a pipe delivers. |
 | `/bin/sh` | The shell of sub-task 8.1, which the kernel reads off this filesystem and starts when the boot finishes. [`../design/SHELL.md`](../design/SHELL.md), Section 4. |
 | `/mnt` | Empty. Where a volume the machine carries is mounted; Section 6.3. |
 | `/lost+found` | `mke2fs` makes it. Nothing here uses it. |

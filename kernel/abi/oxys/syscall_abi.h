@@ -10,7 +10,7 @@
  *          SYSCALL_VERSION, SYSCALL_FORK, SYSCALL_EXECVE, SYSCALL_EXIT,
  *          SYSCALL_WAIT, SYSCALL_BRK, SYSCALL_OPEN, SYSCALL_CLOSE,
  *          SYSCALL_READ, SYSCALL_READDIR, SYSCALL_MKDIR, SYSCALL_UNLINK,
- *          SYSCALL_CHDIR, SYSCALL_GETCWD, SYSCALL_DUP2, SYSCALL_RMDIR,
+ *          SYSCALL_CHDIR, SYSCALL_GETCWD, SYSCALL_DUP2, SYSCALL_RMDIR, SYSCALL_PIPE,
  *          SYSCALL_OPEN_WRITE, SYSCALL_OPEN_CREATE, SYSCALL_OPEN_TRUNCATE,
  *          SYSCALL_OPEN_APPEND,
  *          SYSCALL_COUNT, SYSCALL_OK, SYSCALL_ENOSYS, SYSCALL_EFAULT,
@@ -18,7 +18,8 @@
  *          SYSCALL_ENOMEM, SYSCALL_EEXIST, SYSCALL_ENOTDIR, SYSCALL_EISDIR,
  *          SYSCALL_ENOTEMPTY, SYSCALL_EROFS, SYSCALL_ENAMETOOLONG,
  *          SYSCALL_ELOOP, SYSCALL_ENOSPC, SYSCALL_EMFILE, SYSCALL_EBUSY,
- *          SYSCALL_EXDEV, SYSCALL_ENOTSUP, SYSCALL_EIO, SYSCALL_PATH_MAXIMUM,
+ *          SYSCALL_EXDEV, SYSCALL_ENOTSUP, SYSCALL_EIO, SYSCALL_EPIPE,
+ *          SYSCALL_PATH_MAXIMUM,
  *          SYSCALL_USER_LIMIT, SYSCALL_BREAK_QUERY, SYSCALL_OPEN_READ,
  *          SYSCALL_OPEN_DIRECTORY, SYSCALL_NAME_MAXIMUM, SyscallEntryType,
  *          SyscallDirectoryEntry, SYSCALL_DESCRIPTOR_INPUT,
@@ -192,7 +193,23 @@
  */
 #define SYSCALL_DUP2    16U
 #define SYSCALL_RMDIR   17U
-#define SYSCALL_COUNT   18U
+
+/*
+ * The one call of sub-task 8.6. `pipe` makes a bounded byte queue with an end
+ * that reads and an end that writes — IEEE Std 1003.1-2017's `pipe()`, the
+ * read end at `descriptors[0]` and the write end at `descriptors[1]` — and
+ * is what the shell's `|` is made of: the writer's 1 and the reader's 0 are
+ * the two ends, placed by `dup2` in each child before `execve`. Numbered
+ * nineteenth for the reason recorded above.
+ *
+ * A read of an empty pipe sleeps until a writer writes or the last writer
+ * closes, upon which it reports zero; a write to a full pipe sleeps until a
+ * reader reads; and a write to a pipe held open for reading by nobody is
+ * EPIPE. Every write a program can make — SYSCALL_TRANSFER_MAXIMUM bytes at
+ * most — is delivered in one piece.
+ */
+#define SYSCALL_PIPE    18U
+#define SYSCALL_COUNT   19U
 
 /*
  * The argument that asks where the break stands rather than moving it.
@@ -227,7 +244,8 @@
  * makes, carried out to a program one for one.
  *
  * They are not reduced to the seven above, and that is the whole reason there
- * are thirteen of them. `VfsError` distinguishes fifteen causes; a kernel that
+ * are thirteen of them, and a fourteenth at 8.6. `VfsError` distinguishes
+ * sixteen causes; a kernel that
  * collapsed them into `ENOENT` and `EINVAL` would tell a program that a
  * directory it could not remove was not there, and a person reading that
  * diagnostic would look for the file rather than for the entries still within
@@ -249,6 +267,11 @@
 #define SYSCALL_EXDEV          INT64_C(-18) /* An operation confined to one volume was not. */
 #define SYSCALL_ENOTSUP        INT64_C(-19) /* The filesystem does not offer the operation. */
 #define SYSCALL_EIO            INT64_C(-20) /* The volume or the device beneath it failed. */
+
+/* The one of sub-task 8.6: a pipe written that nobody holds open for reading.
+ * IEEE Std 1003.1-2017 sends SIGPIPE as well, which arrives with the signals of
+ * 8.7; until then the result is the whole of what a writer is told. */
+#define SYSCALL_EPIPE          INT64_C(-21) /* The pipe is open for reading by nobody. */
 
 /*
  * How a program opens a file: six of the flags the filesystem layer offers,

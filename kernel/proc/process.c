@@ -124,9 +124,9 @@ static uint64_t ProcessTerminations;
 static Spinlock ProcessTableLock = SPINLOCK_INITIALISER("process and thread tables");
 
 /*
- * The thread each processor is running, and the thread each will return to.
+ * The thread each processor is running.
  *
- * **These were single variables until sub-task 6.15, and that was the whole of
+ * **This was a single variable until sub-task 6.15, and that was the whole of
  * what made this kernel single-threaded.** A second processor executing kernel
  * code against one `ProcessCurrentThreads[ProcessProcessorIndex()]` would not race for it occasionally: it
  * would overwrite it on every switch, and the loser would find `rsp0` naming
@@ -135,7 +135,7 @@ static Spinlock ProcessTableLock = SPINLOCK_INITIALISER("process and thread tabl
  * corruption of the kernel's own state by two programs that never touched each
  * other.
  *
- * They are indexed by the dense processor index of kernel/include/oxys/percpu.h
+ * It is indexed by the dense processor index of kernel/include/oxys/percpu.h
  * rather than held inside the PerCpu area itself. The area's first three fields
  * are addressed by displacement from `GS` in kernel/arch/x86_64/syscall/syscall_entry.asm, and a
  * pointer added to it would be a fourth thing whose offset the assembly and the
@@ -143,11 +143,15 @@ static Spinlock ProcessTableLock = SPINLOCK_INITIALISER("process and thread tabl
  * instruction, and an array subscripted by it is per processor in exactly the
  * same sense.
  *
- * No lock guards either array. Each processor writes only its own element, and
+ * The thread each will *return to* stood beside it until sub-task 8.6, one per
+ * processor, and is a field of the started thread since: `return_to`, of
+ * <oxys/proc/process.h>, whose comment records why one per processor stopped
+ * being enough the day a program could sleep while another ran.
+ *
+ * No lock guards the array. Each processor writes only its own element, and
  * reads another's only in the report, where a torn read costs a diagnostic.
  */
 static Thread *ProcessCurrentThreads[PER_CPU_MAXIMUM];
-static Thread *ProcessReturnThreads[PER_CPU_MAXIMUM];
 
 /*
  * The index of the executing processor, or zero before there is an area to ask.
@@ -187,6 +191,15 @@ static void ThreadInitialiseScheduling(Thread *thread, uint64_t affinity)
     thread->queued = false;
     thread->slices = 0U;
     thread->preemptions = 0U;
+
+    /* The fields of sub-task 8.6, cleared here for the same reason: a thread
+     * that began with a stale `return_to` would end by switching to a thread
+     * that had long since been released. */
+    thread->return_to = NULL;
+    thread->wait_channel = NULL;
+    thread->critical_depth = 0U;
+    thread->interrupts_were_enabled = false;
+    thread->adopted = false;
 }
 
 /* ------------------------------------------------------------------ helpers */
@@ -624,16 +637,32 @@ void ThreadDestroy(Thread *thread)
      * And a thread that was the one to return to is that no longer, for the same
      * reason and with a worse consequence.
      *
-     * ProcessReturnThreads is what ThreadTerminateCurrent switches to when a
-     * program ends. Left naming a destroyed thread, that switch would load a
-     * stack pointer out of a context structure belonging to a released slot and
+     * `return_to` is what ThreadTerminateCurrent switches to when a program
+     * ends. Left naming a destroyed thread, that switch would load a stack
+     * pointer out of a context structure belonging to a released slot and
      * resume execution upon a kernel stack the arena has given to somebody else
      * — which is not a fault but a machine that continues, wrongly, with no
-     * indication that anything happened.
+     * indication that anything happened. The pointer is per thread since
+     * sub-task 8.6, so every thread that named this one is walked.
      */
-    if (ProcessReturnThreads[ProcessProcessorIndex()] == thread)
+    for (size_t index = 0U; index < THREAD_CAPACITY; ++index)
     {
-        ProcessReturnThreads[ProcessProcessorIndex()] = NULL;
+        if (ThreadTable[index].used && (ThreadTable[index].return_to == thread))
+        {
+            ThreadTable[index].return_to = NULL;
+        }
+    }
+
+    /*
+     * A thread still upon a run queue is taken off it, of sub-task 8.6. A child
+     * of `fork` is admitted at the fork and may be collected before it has run
+     * — by a caller with no thread to sleep upon, which the fork self-test is —
+     * and a queue link left naming a released slot would be dequeued at the
+     * next reschedule and switched to.
+     */
+    if (thread->queued)
+    {
+        (void)SchedulerWithdraw(thread);
     }
 
     /*
@@ -944,7 +973,7 @@ static void ThreadScheduledEntry(void)
      * A kernel thread that returns has nowhere to go: nothing called it, so
      * there is no caller to return to, and this kernel has no reaper. It stops
      * rather than falling off the prepared frame into whatever lies beneath it.
-     * docs/design/SCHEDULER.md, Section 8, limitation 4, records what that
+     * docs/design/SCHEDULER.md, Section 10, limitation 4, records what that
      * costs.
      */
     for (;;)
@@ -1032,6 +1061,7 @@ Thread *ThreadAdoptCurrent(const char *name)
     thread->user_stack = 0U;
     thread->owns_stack = false;
     ThreadInitialiseScheduling(thread, SCHED_AFFINITY_ANY);
+    thread->adopted = true;
 
     ProcessCurrentThreads[ProcessProcessorIndex()] = thread;
 
@@ -1093,6 +1123,22 @@ void ThreadSwitchTo(Thread *from, Thread *to)
      */
     SyscallEstablishKernelGsBase();
 
+    /*
+     * The counted interrupt-disable goes with the thread, since sub-task 8.6.
+     *
+     * It belongs to the processor, and a thread that sleeps from inside its own
+     * critical section — every sleeper does; the reschedule is entered under
+     * one — is resumed by whichever thread pushes next. Left with the
+     * processor, the sleeper's pop would restore what that other thread
+     * recorded, and the idle thread records that interrupts were enabled: a
+     * program woken from idle would leave its system call with interrupts
+     * enabled inside the kernel, where the exit path's SWAPGS and SYSRET
+     * assume they are not. Saved into the outgoing thread and loaded from the
+     * incoming one, each pop answers its own push, whoever ran between.
+     */
+    PerCpuSaveInterruptState(&from->critical_depth, &from->interrupts_were_enabled);
+    PerCpuLoadInterruptState(to->critical_depth, to->interrupts_were_enabled);
+
     /* rsp0 follows the incoming thread, so that its next entry from privilege
      * level 3 arrives upon its own stack. */
     ThreadSetCurrent(to);
@@ -1152,25 +1198,6 @@ bool ThreadStart(Thread *thread)
 {
     Thread *const caller = ProcessCurrentThreads[ProcessProcessorIndex()];
 
-    /*
-     * Whoever the caller was itself started by, of sub-task 6.11.
-     *
-     * A program may now start another — a parent that calls `wait` starts its
-     * child from within its own system call — so the per-processor variable that
-     * names the thread to return to must be saved and put back rather than
-     * cleared. The chain of them lives upon the kernel stacks of the calls that
-     * made it, one to a stack — the shape a stack of callers takes. It is per
-     * processor from sub-task 6.15, because the chain belongs to the processor
-     * walking it: two processors each starting a program have two chains, and
-     * one variable between them would return each to the other's caller.
-     *
-     * Clearing it instead was correct while nothing nested and would be a
-     * particular kind of silent failure now: the parent would end with nobody
-     * recorded to return to, and ThreadTerminateCurrent would refuse — leaving
-     * the exception path to panic about a program the kernel had itself started.
-     */
-    Thread *const previous = ProcessReturnThreads[ProcessProcessorIndex()];
-
     if ((thread == NULL) || !thread->used || (caller == NULL) || (thread == caller))
     {
         return false;
@@ -1185,17 +1212,25 @@ bool ThreadStart(Thread *thread)
 
     /*
      * The thread that starts another is the one it will be returned to when the
-     * program ends. There is one such at a time *upon this processor*, which is
-     * what makes a single pointer per processor sufficient; recording it here is
-     * what makes a program's death a return rather than a halt.
+     * program ends, and it is recorded upon the started thread.
+     *
+     * It was one pointer per processor from sub-task 6.10 to 8.5, saved and put
+     * back around the switch so that a program could start another — a parent
+     * that called `wait` started its child from within its own system call,
+     * and the chain of them lived upon the kernel stacks of the calls. That
+     * was the shape of a stack of callers, and it stopped being the shape of
+     * anything at 8.6: a child is admitted to the scheduler at the fork, the
+     * shell sleeps in `wait` while its children run, and a child that ended
+     * while the processor's one pointer still named the shell's starter would
+     * have returned to the boot flow with the shell asleep for ever. Upon the
+     * thread, the pointer names the caller of this thread and no other.
      */
-    ProcessReturnThreads[ProcessProcessorIndex()] = caller;
+    thread->return_to = caller;
 
     ThreadSwitchTo(caller, thread);
 
     /* Reached when the started thread — or the kernel acting for it — switches
      * back. */
-    ProcessReturnThreads[ProcessProcessorIndex()] = previous;
     ThreadSetCurrent(caller);
 
     return true;
@@ -1204,9 +1239,25 @@ bool ThreadStart(Thread *thread)
 bool ThreadTerminateCurrent(int64_t status)
 {
     Thread *const thread = ProcessCurrentThreads[ProcessProcessorIndex()];
-    Thread *const back = ProcessReturnThreads[ProcessProcessorIndex()];
+    Thread *back;
+    Process *parent = NULL;
 
-    if ((thread == NULL) || (back == NULL) || (thread == back))
+    if (thread == NULL)
+    {
+        return false;
+    }
+
+    back = thread->return_to;
+
+    /* A thread started by a call returns to its caller; one the scheduler
+     * runs has no caller and gives the processor to the scheduler below. A
+     * caller that is this very thread is a corruption and not a case. */
+    if (thread == back)
+    {
+        return false;
+    }
+
+    if ((back == NULL) && !SchedulerIsRunning())
     {
         return false;
     }
@@ -1217,6 +1268,7 @@ bool ThreadTerminateCurrent(int64_t status)
     {
         thread->owner->state = PROCESS_EXITED;
         thread->owner->exit_status = status;
+        parent = ProcessById(thread->owner->parent_id);
     }
 
     ++ProcessTerminations;
@@ -1231,9 +1283,28 @@ bool ThreadTerminateCurrent(int64_t status)
      * structure that will shortly be released — which is harmless precisely
      * because nothing will ever switch back to it.
      */
-    ThreadSwitchTo(thread, back);
+    if (back != NULL)
+    {
+        ThreadSwitchTo(thread, back);
 
-    return true;
+        return true;
+    }
+
+    /*
+     * A thread the scheduler ran, of sub-task 8.6: a child of `fork`. Its
+     * parent may be asleep in `wait` upon its own process, and is woken before
+     * the processor is given up so that the reschedule finds it upon the queue;
+     * woken after would be woken by nobody, this thread being gone. A parent
+     * that is not asleep finds the ended child at its next `wait`, and a
+     * parent that has itself ended leaves the child in the table for the
+     * `init` of Phase 9 to collect.
+     */
+    if (parent != NULL)
+    {
+        (void)SchedulerWake(parent);
+    }
+
+    SchedulerExitCurrent();
 }
 
 uint64_t ProcessTerminationCount(void)
@@ -1810,6 +1881,43 @@ Process *ProcessFork(Process *parent, const SyscallFrame *frame)
     child->state = PROCESS_READY;
     ++ProcessForks;
 
+    /*
+     * And the child joins the rotation, since sub-task 8.6.
+     *
+     * Until then a child ran when its parent waited for it, upon the parent's
+     * own flow of control, which docs/design/PROCESS.md, Section 13.2, recorded
+     * as the one departure from the call it is named after. A pipeline cannot
+     * be run that way: the writer must sleep when the pipe is full and the
+     * reader must run meanwhile, which is two threads the scheduler switches
+     * between and not one that starts the other. The child is therefore
+     * admitted here and runs when the parent sleeps or is pre-empted at
+     * privilege level 3, whichever is first — and a parent that never waits
+     * no longer has a child that never runs.
+     *
+     * The kernel stack is prepared here, as ThreadStart prepares it for a
+     * thread it starts by a call: the first switch to the child returns into
+     * the trampoline, and a stack left as ThreadCreate made it — the pointer
+     * at its very top — would have that return read the unmapped page above
+     * it. That is the first defect this sub-task met, and it presented as a
+     * page fault in the switch at a stack pointer with no stack beneath it.
+     * The thread was created THREAD_CREATED, which SchedulerAdmit accepts,
+     * and the resume is carried in the frame above. Where the scheduler was not
+     * prepared — a local timer that could not be calibrated — the child is
+     * left standing and `wait` runs it as it did before, so a machine that
+     * cannot pre-empt still runs programs, one at a time.
+     */
+    if (SchedulerIsRunning())
+    {
+        ThreadPrepareStart(thread);
+    }
+
+    if (SchedulerIsRunning() && !SchedulerAdmit(thread))
+    {
+        ProcessDestroy(child);
+
+        return NULL;
+    }
+
     return child;
 }
 
@@ -1953,34 +2061,68 @@ uint64_t ProcessWait(Process *parent, int64_t *status)
         return 0U;
     }
 
-    /*
-     * A child that has ended is preferred to one that has not.
-     *
-     * Both are children and either may be collected, but collecting one that has
-     * already ended costs nothing, where collecting one that has not means
-     * running it to its end first. Taking the finished one first is therefore
-     * what makes a parent with several children collect them as they finish
-     * rather than in the order the table happens to hold them.
-     */
-    for (size_t index = 0U; index < PROCESS_CAPACITY; ++index)
+    for (;;)
     {
-        Process *const candidate = &ProcessTable[index];
+        child = NULL;
 
-        if (!candidate->used || (candidate->parent_id != parent->id))
+        /*
+         * A child that has ended is preferred to one that has not.
+         *
+         * Both are children and either may be collected, but collecting one
+         * that has already ended costs nothing, where collecting one that has
+         * not means waiting for it. Taking the finished one first is therefore
+         * what makes a parent with several children collect them as they
+         * finish rather than in the order the table happens to hold them.
+         *
+         * The scan and the sleep below are one masked section, which is the
+         * discipline <oxys/proc/sched.h> sets out: a child that ends between
+         * the scan and the sleep would otherwise wake a parent not yet asleep,
+         * and the parent would then sleep for a wake that had already
+         * happened.
+         */
+        PerCpuPushInterruptState();
+
+        for (size_t index = 0U; index < PROCESS_CAPACITY; ++index)
         {
+            Process *const candidate = &ProcessTable[index];
+
+            if (!candidate->used || (candidate->parent_id != parent->id))
+            {
+                continue;
+            }
+
+            if (candidate->state == PROCESS_EXITED)
+            {
+                child = candidate;
+                break;
+            }
+
+            if (child == NULL)
+            {
+                child = candidate;
+            }
+        }
+
+        if ((child != NULL) && (child->state != PROCESS_EXITED) && SchedulerCanSleep())
+        {
+            /*
+             * A child that has not ended is waited for, since sub-task 8.6: the
+             * parent sleeps upon its own process, which is the channel every
+             * child of it wakes when it ends, and looks again when woken. The
+             * child was admitted to the rotation at the fork and runs while
+             * the parent sleeps — or ran already, pre-empting the parent at
+             * privilege level 3, in which case the scan above found it ended
+             * and this branch was not taken.
+             */
+            SchedulerSleep(parent);
+            PerCpuPopInterruptState();
+
             continue;
         }
 
-        if (candidate->state == PROCESS_EXITED)
-        {
-            child = candidate;
-            break;
-        }
+        PerCpuPopInterruptState();
 
-        if (child == NULL)
-        {
-            child = candidate;
-        }
+        break;
     }
 
     if (child == NULL)
@@ -1989,20 +2131,25 @@ uint64_t ProcessWait(Process *parent, int64_t *status)
     }
 
     /*
-     * A child that has not run is run now, here, by its parent's own thread of
-     * control — which is what `wait` means while there is no scheduler.
+     * A child that has not run and cannot be waited for is run now, here, by
+     * the caller's own thread of control — which is what `wait` meant until
+     * sub-task 8.6, and still means where the scheduler was not prepared or
+     * where the caller has no thread to sleep upon, which is the kernel's own
+     * flow of control inside a self-test. docs/design/PROCESS.md, Section
+     * 13.2, records the interval in which this was the only path.
      *
-     * This is the sub-task's one substantial departure from the call it is named
-     * after, and it is recorded as such rather than disguised: elsewhere a child
-     * runs concurrently and `wait` blocks until it finishes, and here the two are
-     * the same act. What is preserved is everything a program can observe of the
-     * ordering — a child runs after the fork that made it and before the wait
-     * that collects it — and what is not is concurrency, which sub-task 6.15
-     * supplies. See docs/design/PROCESS.md, Section 13.2.
+     * The child is withdrawn from the queue first where the fork admitted it:
+     * a thread started by a call while still linked into a queue would be
+     * dequeued and switched to a second time.
      */
     if (child->state != PROCESS_EXITED)
     {
         Thread *const thread = (child->thread_count > 0U) ? child->threads[0] : NULL;
+
+        if ((thread != NULL) && thread->queued)
+        {
+            (void)SchedulerWithdraw(thread);
+        }
 
         if ((thread == NULL) || !ThreadStart(thread))
         {

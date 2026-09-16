@@ -308,22 +308,40 @@ static int ShellBuiltinUnset(int argc, char **argv)
     return status;
 }
 
-/* `help`: what is built in, and where the rest is. It is here because a
- * person at a prompt with no manual has nothing else to ask. */
+/*
+ * `help`: every command a person can type, one to a line, as name, arguments,
+ * a comma, and one sentence. It is here because a person at a prompt with no
+ * manual has nothing else to ask, and it is a list and not a description
+ * because a person who typed `help` wanted to find a command and not to read
+ * about the shell — the project owner said so on 2026-09-16, and the paragraph
+ * that stood here until then was removed at that request. The built-ins come
+ * first, then the programs of /bin.
+ */
 static int ShellBuiltinHelp(void)
 {
-    (void)printf("The Oxys-OS shell. Built in:\n"
-                 "  cd [dir | -]       change the working directory; HOME with no operand\n"
-                 "  pwd                print the working directory\n"
-                 "  export [NAME[=v]]  mark a variable for the environment; alone, list them\n"
-                 "  unset NAME...      remove a variable\n"
-                 "  exit [n]           end the shell with status n, or the last status\n"
-                 "  true, false        succeed, fail\n"
-                 "  help               this\n"
-                 "Programs are sought upon PATH, which is /bin when unset: ls, cat, echo,\n"
-                 "mkdir, rmdir, rm, touch, cp. NAME=value sets a variable and $NAME reads it;\n"
-                 "$? is the last status. ; && || ! and < > >> <> <& >& are honoured; a\n"
-                 "pipeline, & and control-C are not yet. Arrow keys edit and recall.\n");
+    (void)printf("cd [dir | -], changes the working directory; to HOME with no operand, "
+                 "back with -.\n"
+                 "pwd, prints the working directory.\n"
+                 "export [NAME[=value]]..., marks a variable for the environment of every "
+                 "program run; alone, lists the exported ones.\n"
+                 "unset NAME..., removes a variable.\n"
+                 "exit [n], ends the shell with status n, or the last status.\n"
+                 "true, succeeds.\n"
+                 "false, fails.\n"
+                 "help, prints this list.\n"
+                 "ls [-a] [dir]..., lists a directory, the working directory with no "
+                 "operand; -a includes the entries that begin with a dot.\n"
+                 "cat [file | -]..., copies each file to the standard output; the standard "
+                 "input for no operand or -, which the terminal ends at control-D.\n"
+                 "echo [word]..., prints its operands separated by spaces.\n"
+                 "mkdir [-p] dir..., creates each directory; -p creates the parents too.\n"
+                 "rmdir dir..., removes each empty directory.\n"
+                 "rm [-f] file..., removes each file; -f is silent about one that is "
+                 "not there.\n"
+                 "touch file..., creates each file that does not exist.\n"
+                 "cp source target, copies one file to another, created or truncated.\n"
+                 "wc [-c] [-l] [-w] [file]..., counts the lines, words and bytes of each "
+                 "file, or of the standard input.\n");
 
     return 0;
 }

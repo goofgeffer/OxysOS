@@ -9,6 +9,7 @@
  * Key definitions: errno, OxysErrnoAddress, ENOSYS, EFAULT, EINVAL, EBADF,
  *          ECHILD, ENOENT, ENOMEM, EEXIST, ENOTDIR, EISDIR, ENOTEMPTY, EROFS,
  *          ENAMETOOLONG, ELOOP, ENOSPC, EMFILE, EBUSY, EXDEV, ENOTSUP, EIO,
+ *          EPIPE,
  *          EDOM, EILSEQ, ERANGE,
  *          OXYS_ERRNO_SYSCALL_LIMIT.
  * References:
@@ -130,6 +131,11 @@ int *OxysErrnoAddress(void);
 #define ENOTSUP      19 /* The filesystem does not offer the operation. */
 #define EIO          20 /* The volume or the device beneath it failed. */
 
+/* The one of sub-task 8.6, the pipe's refusal: written, and held open for
+ * reading by nobody. IEEE Std 1003.1-2017 sends SIGPIPE beside it, which
+ * arrives with the signals of 8.7. */
+#define EPIPE        21 /* The pipe is open for reading by nobody. */
+
 /* The three ISO/IEC 9899:2011, Section 7.5, paragraph 2, requires, above the
  * reserved range for the reason given at the head of this file. Nothing in this
  * system sets any of them yet: there is no mathematical library to report a
@@ -170,10 +176,11 @@ _Static_assert(EBUSY == -SYSCALL_EBUSY, "EBUSY does not name SYSCALL_EBUSY.");
 _Static_assert(EXDEV == -SYSCALL_EXDEV, "EXDEV does not name SYSCALL_EXDEV.");
 _Static_assert(ENOTSUP == -SYSCALL_ENOTSUP, "ENOTSUP does not name SYSCALL_ENOTSUP.");
 _Static_assert(EIO == -SYSCALL_EIO, "EIO does not name SYSCALL_EIO.");
+_Static_assert(EPIPE == -SYSCALL_EPIPE, "EPIPE does not name SYSCALL_EPIPE.");
 
 /* And that the reservation still holds. A failure result more negative than the
  * limit would be translated to ENOSYS rather than to its own name, silently. */
-_Static_assert(-SYSCALL_EIO <= OXYS_ERRNO_SYSCALL_LIMIT,
+_Static_assert(-SYSCALL_EPIPE <= OXYS_ERRNO_SYSCALL_LIMIT,
                "A failure result lies beyond the range reserved for one.");
 _Static_assert(EDOM > OXYS_ERRNO_SYSCALL_LIMIT,
                "The numbers ISO C requires overlap the kernel's failure results.");

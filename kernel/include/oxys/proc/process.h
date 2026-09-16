@@ -43,8 +43,15 @@
  *   one: ProcessFork clones a process upon the copy-on-write substrate of Phase
  *   2, ProcessExecute replaces the program a process is running, ProcessExit
  *   ends one on its own request, and ProcessWait collects what a child ended
- *   with. Nothing runs concurrently: a child runs when its parent waits for it,
- *   upon the bootstrap processor, which is where every user thread runs.
+ *   with. Until sub-task 8.6 nothing ran concurrently: a child ran when its
+ *   parent waited for it, upon the parent's own flow of control.
+ *
+ *   Sub-task 8.6 admits a child of `fork` to the scheduler's run queue at the
+ *   fork, so that it runs beside its parent — upon the bootstrap processor,
+ *   which is where every user thread runs — and `wait` sleeps until a child
+ *   ends rather than running one. That is what a pipeline needs: two programs
+ *   alive at once, one filling a pipe and the other draining it, each asleep
+ *   while the other has the processor.
  */
 
 #ifndef OXYS_PROC_PROCESS_H
@@ -357,6 +364,42 @@ typedef struct Thread
     uint32_t processor;
     bool queued;
 
+    /*
+     * Where the thread returns to when it ends, and what it sleeps upon, of
+     * sub-task 8.6.
+     *
+     * `return_to` is the thread that called ThreadStart upon this one — the
+     * kernel's own flow of control, adopted for the purpose — and is null for
+     * a thread the scheduler runs: a child of `fork`, which is admitted to a
+     * run queue at the fork and is nobody's to return to. Until 8.6 it was one
+     * pointer per processor, which was sufficient while a program ran to its
+     * end upon its starter's flow of control; it is per thread now because the
+     * shell sleeps in `wait` while its children run, and a child that ended
+     * while the processor's pointer still named the shell's starter would have
+     * returned to the boot flow, with the shell left asleep for ever.
+     *
+     * `wait_channel` is the object a sleeping thread waits upon — its own
+     * process for `wait`, the pipe for a read or a write that cannot proceed
+     * — and is what SchedulerWake matches against. A blocked thread whose
+     * channel is null is blocked for good, which is what the scheduler's own
+     * fixture threads are.
+     *
+     * The two interrupt-state fields carry the processor's counted disable
+     * across a switch, so that a thread which slept from inside its own
+     * critical section is resumed inside it and not inside whichever one the
+     * thread that ran between had entered; <oxys/arch/cpu/percpu.h> records
+     * the failure that occurs otherwise.
+     */
+    struct Thread *return_to;
+    const void *wait_channel;
+    uint32_t critical_depth;
+    bool interrupts_were_enabled;
+
+    /* Whether this thread was adopted by ThreadAdoptCurrent rather than made
+     * — the kernel's own flow of control, which the timer must not take the
+     * processor from while it stands inside a self-test. */
+    bool adopted;
+
     /* How many times this thread has been given a processor, and how many of
      * those ended because its quantum expired rather than because it gave the
      * processor up. The difference is what distinguishes a thread that yields
@@ -652,23 +695,25 @@ void ThreadSwitchTo(Thread *from, Thread *to);
  * whether it ends by asking or by faulting. Returns false where the thread has
  * no entry point or no stack, and true once the program has ended.
  *
- * There is one such caller at a time upon each processor, which is why the
- * thread to return to is one pointer per processor rather than one for the
- * machine.
+ * The thread to return to is recorded upon the started thread, since sub-task
+ * 8.6; it was one pointer per processor until then, which sufficed while a
+ * program ran to its end upon its starter's flow of control and stopped
+ * sufficing when a program could sleep while another ran.
  */
 bool ThreadStart(Thread *thread);
 
 /*
- * Ends the running thread and returns to whoever started it.
+ * Ends the running thread: returns to whoever started it, or — for a thread
+ * the scheduler runs, since sub-task 8.6 — wakes the parent that may be
+ * waiting for it and gives the processor to the scheduler.
  *
- * Does not return. Its one caller is the exception path, where a program is
+ * Does not return. Its callers are the exception path, where a program is
  * ended for it — which is what `docs/design/INTERRUPTS.md` has called
- * terminating the program since the dispositions were written, and what could
- * not be done until there was somewhere to return to. There is no `exit` system
- * call by which a program may ask to end; the table holds `write`, `ticks` and
- * `version` alone until sub-task 6.11.
+ * terminating the program since the dispositions were written — and the `exit`
+ * call of sub-task 6.11.
  *
- * Returns false, having done nothing, where there is nobody to return to.
+ * Returns false, having done nothing, where the thread was started by a call
+ * and there is nobody to return to.
  */
 bool ThreadTerminateCurrent(int64_t status);
 

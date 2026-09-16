@@ -6,7 +6,9 @@
 Section 2 is the run queue; Section 3 is the timer that measures a quantum;
 Section 4 is affinity, which is a safety boundary before it is a policy;
 Section 5 is placement; Section 6 is the critical section a switch is made
-inside, which is where this sub-task's one real defect lived.
+inside, which is where this sub-task's one real defect lived. Section 9 is
+sub-task 8.6's: the wait channel, the first thing a thread could sleep upon and
+be woken from, and what the first sleeping thread required of the rest.
 
 **Authority**: `PROJECT_GUIDELINES.md`, Sections 2, 3 and 6.
 
@@ -389,26 +391,151 @@ The slices very nearly equal the rounds, and that is the rotation visible in the
 accounting: four threads sharing two queues, each losing the processor about once
 per round of work.
 
-## 9. Limitations
+## 9. Sub-task 8.6: the wait channel, and the first thread to sleep
+
+**Implementation**: `SchedulerSleep`, `SchedulerWake`, `SchedulerCanSleep`,
+`SchedulerExitCurrent` and `SchedulerWithdraw` in
+[`../../kernel/proc/sched.c`](../../kernel/proc/sched.c); the callers are
+`ProcessWait` and `ThreadTerminateCurrent` in
+[`../../kernel/proc/process.c`](../../kernel/proc/process.c) and the pipe of
+[`../../kernel/fs/vfs/pipe.c`](../../kernel/fs/vfs/pipe.c). Asserted by the
+pipe's transfer in `file-check` and the shell's fifth session,
+[`SHELL.md`](SHELL.md), Section 23.
+
+Limitation 8 of Section 10 said that nothing blocked on anything, and sub-task 8.6 is
+where something had to: a pipeline is two programs alive at once, one asleep
+while the other has the processor, and `SchedulerBlockCurrent` — which takes a
+thread out of the rotation for good — was a way to sleep with no way to wake.
+
+### 9.1 A channel is an address
+
+`SchedulerSleep(channel)` sets the thread's `wait_channel`, marks it blocked and
+reschedules; `SchedulerWake(channel)` walks the thread table and admits every
+blocked thread whose channel matches. The channel is the address of the thing
+waited upon — a parent's own process for `wait`, the pipe for a reader or a
+writer — and carries no meaning beyond identity. That is the sleep-and-wakeup
+of the first Unix kernels, and it is chosen over a queue per condition because
+the two things it costs are both cheap today: the walk is a hundred and
+twenty-eight slots, and a wake is broadcast to every sleeper upon the channel,
+each of which re-tests its condition and sleeps again if it was not the one
+meant. A list of sleepers per channel is worth its two pointers when the walk
+is measured to matter, and nothing has measured it.
+
+**The discipline is the caller's**: test the condition and sleep within one
+masked section. `SchedulerSleep` enters its own masked section as well, so the
+caller's nests it, and a wake that arrives after the test finds the thread
+blocked and enqueues it — there is no moment between the test and the sleep at
+which a wake is lost. Every wake in this kernel today comes from another thread
+upon the same processor, which cannot run until the sleeper has switched away,
+so the discipline is kept for the wake that will one day come from an
+interrupt handler rather than for one that can happen now.
+
+### 9.2 What sleeps, what is pre-empted, and what neither
+
+`wait` sleeps, upon the parent's process, and is woken by `ThreadTerminateCurrent`
+when a child ends. A pipe's reader and writer sleep upon the pipe, and are woken
+by every write, read and close upon it. The terminal's reader does neither: it
+yields to whatever is queued and halts only when nothing is, because its bytes
+arrive through an interrupt handler and a wake performed there would be the
+first enqueue from one — a cost 8.7 pays, when a signal must interrupt a read,
+and not before. [`SHELL.md`](SHELL.md), Section 22.3.
+
+**A user thread is pre-empted at privilege level 3 and nowhere else.** The tick
+handler now returns without rescheduling where the interrupted frame is the
+kernel's and the current thread is a user thread or the adopted boot flow. The
+kernel beneath a system call is not written to be pre-empted —
+[`CONCURRENCY.md`](CONCURRENCY.md), Section 10, limitation 1, is the list of
+what a second thread entering it would race for — and a user thread therefore
+holds the processor inside the kernel until it gives it up at one of the sleeps
+above, which is where it holds nothing. A kernel thread the scheduler made is
+pre-empted wherever it stands, as the fixture threads of Section 7 require.
+
+### 9.3 A child joins the rotation at the fork
+
+`ProcessFork` admits the child's thread to the bootstrap processor's queue — its
+kernel stack prepared for the trampoline first, which `ThreadStart` had always
+done and which admission at the fork did not, the first defect this sub-task met:
+a switch into a child whose stack pointer stood at the very top of its stack
+returned into the unmapped page above it. The child runs when the parent sleeps
+in `wait` or is pre-empted at privilege level 3, whichever is first. A thread
+the scheduler runs has no thread to return to, so `ThreadTerminateCurrent` wakes
+the parent and calls `SchedulerExitCurrent` rather than switching back; and the
+thread to return to is a field of the started thread rather than one pointer
+per processor, [`PROCESS.md`](PROCESS.md), Section 17.
+
+A child collected before it ran — which the fork self-test arranges, from a
+caller with no thread to sleep upon — is withdrawn from its queue by
+`SchedulerWithdraw` before it is destroyed. That is the removal from the middle
+limitation 3 of Section 10 said nothing needed: a walk of a singly linked list under its
+lock, on no path that runs often.
+
+### 9.4 The bootstrap processor's idle thread
+
+Until 8.6 the bootstrap processor had an idle thread only inside the scheduler's
+own self-test, which adopted one and released it, and did not need one
+otherwise: no thread upon it ever gave up the processor with nothing else to
+run. The shell now sleeps in `wait` while a child that sleeps upon a pipe waits
+for its reader, and a processor with two sleepers and no idle thread has
+nothing to switch to — a reschedule with no idle thread returns to the sleeper,
+which then runs while asleep. `SchedulerStartOnThisProcessor` therefore makes
+one by `ThreadCreateScheduled` where nothing is current to adopt, and
+`SchedulerDetachThisProcessor` forgets only an idle thread that is the caller's
+own execution, so the self-test's adoption no longer discards it.
+
+### 9.5 The interrupt state travels with the thread
+
+A thread that sleeps does so from inside its own masked section and is resumed
+by whichever thread pushed next, and the idle thread's push records that
+interrupts were enabled. Left with the processor, the sleeper's pop would
+execute `STI` inside a system call. `ThreadSwitchTo` saves the depth and the
+recorded flag into the outgoing thread and loads the incoming thread's;
+[`CONCURRENCY.md`](CONCURRENCY.md), Section 4.1, has the whole of it.
+
+### 9.6 Verification, and a negative test
+
+There is no new self-test: what asserts this section is that programs which
+sleep run to completion. `file-check` sends three buffers' worth through a pipe
+from a child and reads them back in the parent, which is the writer and the
+reader taking turns at least twice; the shell's fifth session carries the whole
+of `/bin/sh` — some thirty-three kibibytes, eight buffers — through `cat | wc
+-c`, and the count comes back equal to the file's size; and every session that
+forks now runs its children beside the shell. A negative test made the pipe's
+writer drop what did not fit rather than sleep, and the size came back short,
+[`SHELL.md`](SHELL.md), Section 23.
+
+| Property asserted | The silent failure it catches |
+| ----------------- | ----------------------------- |
+| A parent's `wait` returns the child's status after the child has run beside it. | A parent woken before its child ended, or never woken. |
+| Twelve kibibytes cross a four-kibibyte pipe intact and in order. | A writer that did not sleep when the pipe was full, or a reader that saw the end before the writer finished. |
+| The fork self-test collects a child that never ran, from a caller with no thread. | A queued thread destroyed and later dequeued — a switch onto a released stack. |
+| Every other self-test still passes, and the scheduler's fixture threads are still pre-empted. | A tick filter that stopped pre-empting kernel threads, or the boot flow taken from a self-test. |
+
+## 10. Limitations
 
 1. **The bootstrap processor is not itself a scheduled thread.** It executes
    `KernelMain`, which is a flow of control and not a thread, and the scheduler
    does not adopt one for it — doing so would change whether `ThreadStart`
    succeeds, which a later self-test asserts upon. It joins the rotation only
-   while something has given it a thread to join as, which today is the
-   scheduler's own self-test. Phase 7 is where the boot path becomes a thread
-   like any other.
+   while something has given it a thread to join as, which is the scheduler's
+   own self-test and, since 8.1, the adoption every self-test that starts a
+   program makes. **Since sub-task 8.6 it has an idle thread of its own**,
+   Section 9.4, made rather than adopted; the boot flow itself is still not a
+   thread the scheduler rotates, and the tick leaves it alone by the rule of
+   Section 9.2. Phase 9's `init` is where the boot path ends and a scheduled
+   thread takes over.
 2. **A thread never migrates.** Placement is at admission and final; there is no
    work stealing and no rebalancing. Section 5 says why, and what it would cost
    to add.
-3. **A thread cannot be removed from a queue it is already upon.** The list is
-   singly linked, so there is no way to unlink from the middle. Nothing needs it
-   yet: a thread leaves a queue by being dequeued, and `SchedulerBlockCurrent`
-   works by not being re-enqueued rather than by removal.
+3. ~~**A thread cannot be removed from a queue it is already upon.**~~ **Closed
+   at sub-task 8.6**: `SchedulerWithdraw` walks the list, Section 9.3. The list
+   is still singly linked, the walk being on no path that runs often.
 4. **There is no reaper.** A kernel thread that finishes cannot free its own
    stack — it is standing on it — and nothing else does. Its table slot and its
    four pages are held until the machine stops. The self-test's four fixture
-   threads are exactly that cost, paid once per boot.
+   threads are exactly that cost, paid once per boot. A user thread's stack is
+   released by the `wait` that collects its process, which is a reaper of a
+   kind since 8.6: the ended thread has switched away by then and stands on
+   nothing.
 5. **There is one priority.** Round-robin between equals, with no notion of a
    thread that should run sooner. Nothing in this kernel yet has a reason to be
    preferred.
@@ -418,11 +545,24 @@ per round of work.
 7. **`PagingActiveTable` is a global written by every processor.** It records
    which paging hierarchy was last activated, and every processor writes it on
    every switch. It is a diagnostic, and it is presently harmless for a reason
-   rather than by luck: every kernel thread runs upon the kernel root, and a user
-   thread is pinned to the bootstrap processor by Section 4 — so the writers all
-   write the same value. It becomes wrong the moment a user thread may run
+   rather than by luck: every kernel thread runs upon the kernel root, and a
+   user thread is pinned to the bootstrap processor by Section 4 — so the writers
+   all write the same value. It becomes wrong the moment a user thread may run
    elsewhere, and must become per-processor in the same change.
-8. **Nothing blocks on anything.** `SchedulerBlockCurrent` takes a thread out of
-   the rotation for good; there is no wait queue and nothing to wake it. A lock
-   that may be slept upon is still what the buffer cache will first want, as
-   [`CONCURRENCY.md`](CONCURRENCY.md), Section 10, limitation 4, records.
+8. ~~**Nothing blocks on anything.**~~ **Closed at sub-task 8.6**: the wait
+   channel of Section 9. `SchedulerBlockCurrent` still takes a thread out of the
+   rotation for good, and the fixture threads still use it. What remains open
+   is a lock that may be slept upon, which
+   [`CONCURRENCY.md`](CONCURRENCY.md), Section 10, limitation 4, records, and
+   a wake from an interrupt handler, which nothing performs yet — the terminal's
+   reader polls and yields rather than sleeping, Section 9.2.
+9. **A wake walks the thread table.** A hundred and twenty-eight slots, under a
+   masked section, at every write, read and close upon a pipe and every ending
+   of a child. It is the cost of a channel that is an address and nothing more,
+   and it is paid knowingly until something measures it; a list of sleepers per
+   channel is the remedy, and it is two pointers and a discipline.
+10. **A user thread is never pre-empted inside the kernel.** Section 9.2. A
+   system call that ran for a long time — none does — would hold the bootstrap
+   processor for its duration, and every other user thread with it. The
+   remedy is the locks of `CONCURRENCY.md`, Section 10, limitation 1, and not
+   a change to the scheduler.

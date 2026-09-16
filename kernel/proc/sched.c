@@ -7,9 +7,13 @@
  *          affinity that decides which queue a thread may join, the choice of
  *          the shortest eligible queue at admission, the local timer that takes
  *          a processor back when a quantum expires, and the idle thread each
- *          processor falls back to.
+ *          processor falls back to; and, since sub-task 8.6, the wait channel a
+ *          thread sleeps upon and is woken from, the withdrawal of a thread from
+ *          a queue, and the idle thread the bootstrap processor is made.
  * Key functions: SchedulerInitialise, SchedulerStartOnThisProcessor,
  *          SchedulerEnterIdle, SchedulerAdmit, SchedulerYield,
+ *          SchedulerBlockCurrent, SchedulerCanSleep, SchedulerSleep,
+ *          SchedulerWake, SchedulerExitCurrent, SchedulerWithdraw,
  *          SchedulerSetAffinity, SchedulerAffinity, SchedulerQueueLength,
  *          SchedulerRunningOn, SchedulerIsRunning, SchedulerReport.
  * References:
@@ -61,12 +65,12 @@
 /*
  * A processor's run queue.
  *
- * Singly linked, with a tail pointer, because the two operations are "take from
- * the front" and "put at the back" and nothing else: round-robin needs no
+ * Singly linked, with a tail pointer, because the two operations that run
+ * often are "take from the front" and "put at the back": round-robin needs no
  * removal from the middle, and a doubly linked list would be two pointers to
- * keep consistent where one suffices. A thread that must leave a queue it is
- * already upon does not exist in this sub-task — see docs/design/SCHEDULER.md,
- * Section 5, limitation 3.
+ * keep consistent where one suffices. The one removal from the middle —
+ * SchedulerWithdraw, of sub-task 8.6, for a thread destroyed before it ran —
+ * walks the list instead, being on no path that runs often.
  */
 typedef struct SchedulerQueue
 {
@@ -88,7 +92,9 @@ static SchedulerQueue SchedulerQueues[PER_CPU_MAXIMUM];
  * Each is the execution that processor was already performing, described by a
  * thread structure rather than created as a new one — the bootstrap processor's
  * by ThreadAdoptCurrent at sub-task 6.9, and every other processor's by
- * SchedulerEnterIdle below. Neither takes a stack from the arena, which is what
+ * SchedulerEnterIdle below — or, since sub-task 8.6, made for the bootstrap
+ * processor by ThreadCreateScheduled where nothing was current to adopt.
+ * An application processor's takes no stack from the arena, which is what
  * lets a started processor have one at all: the arena admits one processor, and
  * a processor that had to allocate its own idle stack could not be started
  * safely. Its element is written by the processor it belongs to.
@@ -364,8 +370,6 @@ static _Noreturn void SchedulerIdleLoop(void)
  */
 static void SchedulerHandleTick(TrapFrame *frame)
 {
-    (void)frame;
-
     LocalApicSignalEndOfInterrupt();
 
     if (!SchedulerPrepared)
@@ -387,6 +391,33 @@ static void SchedulerHandleTick(TrapFrame *frame)
     if (PerCpuLocksHeld() != 0U)
     {
         return;
+    }
+
+    /*
+     * A tick that arrives while a user thread — or the kernel's own adopted
+     * flow of control — is inside the kernel is counted and otherwise ignored,
+     * since sub-task 8.6.
+     *
+     * The kernel beneath a system call is not written to be pre-empted: the
+     * allocators, the filesystem layer and the process tables are
+     * unsynchronised against a second thread entering them upon the same
+     * processor, and docs/design/CONCURRENCY.md, Section 10, limitation 1,
+     * enumerates them. A user thread is therefore taken from the processor only
+     * at privilege level 3 — where it holds nothing of the kernel's — or where
+     * it gives the processor up itself, asleep in `wait`, upon a pipe, or at
+     * the terminal. The adopted thread is the boot flow standing inside a
+     * self-test, which the same reasoning covers. A kernel thread the scheduler
+     * made is pre-empted wherever it stands, as the fixture threads of the
+     * scheduler's own self-test require.
+     */
+    {
+        const Thread *const current = ThreadCurrent();
+
+        if ((current != NULL) && ((frame->cs & 3U) == 0U) &&
+            ((current->owner != NULL) || current->adopted))
+        {
+            return;
+        }
     }
 
     PerCpuPushInterruptState();
@@ -450,12 +481,32 @@ bool SchedulerStartOnThisProcessor(void)
      * ThreadStart succeeds or fails according to whether a thread is current,
      * and kernel/test/verify_lifecycle.c asserts the failing branch — so the
      * bootstrap processor joins the rotation only when something has given it a
-     * thread to join as. docs/design/SCHEDULER.md, Section 8, limitation 1,
+     * thread to join as. docs/design/SCHEDULER.md, Section 10, limitation 1,
      * records what that costs.
      */
     if (SchedulerIdleThreads[index] == NULL)
     {
-        Thread *const idle = ThreadCurrent();
+        Thread *idle = ThreadCurrent();
+
+        /*
+         * The bootstrap processor reaches here with no thread current, since
+         * sub-task 8.6, and is given an idle thread made for the purpose.
+         *
+         * Until 8.6 the bootstrap processor had no idle thread outside the
+         * scheduler's own self-test, and did not need one: no thread upon it
+         * ever gave the processor up with nothing else to run. The shell now
+         * sleeps in `wait` while its children run, and a child that sleeps upon
+         * a pipe while the shell sleeps leaves the processor with nothing to
+         * switch to — and a reschedule with no idle thread returns to the
+         * sleeper, which then runs while asleep. This processor may take a
+         * stack from the arena, being the one that built it; an application
+         * processor may not, and adopts its own execution instead, which is
+         * why the two paths differ.
+         */
+        if (idle == NULL)
+        {
+            idle = ThreadCreateScheduled(SchedulerIdleLoop);
+        }
 
         if (idle != NULL)
         {
@@ -519,7 +570,16 @@ void SchedulerDetachThisProcessor(void)
     const uint32_t index = SchedulerIndex();
 
     PerCpuPushInterruptState();
-    SchedulerIdleThreads[index] = NULL;
+
+    /* Only an idle thread that is the caller's own execution is forgotten:
+     * the one the scheduler made for this processor at 8.6 outlives every
+     * adoption, and forgetting it would leave the processor with nothing to
+     * run when its last thread sleeps. */
+    if (SchedulerIdleThreads[index] == ThreadCurrent())
+    {
+        SchedulerIdleThreads[index] = NULL;
+    }
+
     PerCpuPopInterruptState();
 }
 bool SchedulerAdmit(Thread *thread)
@@ -589,6 +649,171 @@ void SchedulerBlockCurrent(void)
 
     PerCpuPopInterruptState();
 }
+
+bool SchedulerWithdraw(Thread *thread)
+{
+    SchedulerQueue *queue;
+    Thread *previous = NULL;
+    Thread *walk;
+    bool found = false;
+
+    if ((thread == NULL) || !thread->queued || (thread->processor >= PER_CPU_MAXIMUM))
+    {
+        return false;
+    }
+
+    queue = &SchedulerQueues[thread->processor];
+
+    SpinlockAcquire(&queue->lock);
+
+    /*
+     * A walk, because the list is singly linked and this is the one operation
+     * that removes from the middle. It is not on a path that runs often — a
+     * thread is withdrawn when its process is destroyed before it ran — and a
+     * second link kept consistent upon every enqueue would be a cost paid on
+     * the path that does.
+     */
+    for (walk = queue->head; walk != NULL; previous = walk, walk = walk->queue_next)
+    {
+        if (walk != thread)
+        {
+            continue;
+        }
+
+        if (previous == NULL)
+        {
+            queue->head = walk->queue_next;
+        }
+        else
+        {
+            previous->queue_next = walk->queue_next;
+        }
+
+        if (queue->tail == walk)
+        {
+            queue->tail = previous;
+        }
+
+        walk->queue_next = NULL;
+        walk->queued = false;
+        --queue->count;
+        found = true;
+        break;
+    }
+
+    SpinlockRelease(&queue->lock);
+
+    return found;
+}
+
+bool SchedulerCanSleep(void)
+{
+    const Thread *const current = ThreadCurrent();
+
+    return SchedulerPrepared && (current != NULL) &&
+           (current != SchedulerIdleThreads[SchedulerIndex()]);
+}
+
+void SchedulerSleep(const void *channel)
+{
+    Thread *current;
+
+    if (!SchedulerCanSleep())
+    {
+        return;
+    }
+
+    PerCpuPushInterruptState();
+
+    current = ThreadCurrent();
+
+    /*
+     * The channel and the state are written before the reschedule, under the
+     * masked section, and the caller has tested its condition under the same
+     * section: a wake that arrives after this point finds the thread blocked
+     * upon the channel and enqueues it, and one that arrived before it found
+     * the condition the caller is about to re-test. There is no moment
+     * between the test and the sleep at which a wake can be lost, which is
+     * the whole of what makes a wait channel correct.
+     */
+    current->wait_channel = channel;
+    current->state = THREAD_BLOCKED;
+    SchedulerRescheduleLocked(false);
+
+    /*
+     * Reached when something woke this thread — or, upon a processor with no
+     * idle thread and nothing else to run, at once. The state is set back
+     * either way so that the caller, which re-tests its condition in a loop,
+     * is running while it does.
+     */
+    current->wait_channel = NULL;
+    current->state = THREAD_RUNNING;
+
+    PerCpuPopInterruptState();
+}
+
+size_t SchedulerWake(const void *channel)
+{
+    size_t woken = 0U;
+
+    if (channel == NULL)
+    {
+        return 0U;
+    }
+
+    PerCpuPushInterruptState();
+
+    /*
+     * Every thread asleep upon the channel is woken, and not the first found:
+     * a pipe with two readers asleep and one writer that closed must let both
+     * readers see the end, and which of several sleepers a wake was meant for
+     * is not a question the channel can answer. Each re-tests its condition
+     * and sleeps again if it was not the one. The table is walked because the
+     * sleepers are not linked; docs/design/SCHEDULER.md, Section 9, records
+     * what a list would buy and when it is worth having.
+     */
+    for (size_t index = 0U; index < THREAD_CAPACITY; ++index)
+    {
+        Thread *const thread = ThreadAt(index);
+
+        if ((thread == NULL) || !thread->used || (thread->state != THREAD_BLOCKED) ||
+            (thread->wait_channel != channel))
+        {
+            continue;
+        }
+
+        thread->wait_channel = NULL;
+
+        if (SchedulerAdmit(thread))
+        {
+            ++woken;
+        }
+    }
+
+    PerCpuPopInterruptState();
+
+    return woken;
+}
+
+_Noreturn void SchedulerExitCurrent(void)
+{
+    PerCpuPushInterruptState();
+    SchedulerRescheduleLocked(false);
+    PerCpuPopInterruptState();
+
+    /* Reached only where there was nothing to switch to and no idle thread,
+     * which upon a prepared scheduler is a processor that was never started
+     * under it. A thread that has ended cannot run on, and KernelPanic is not
+     * declared as never returning, so the halt below is what makes this
+     * function keep its word. */
+    KernelPanic("A thread ended with nothing to give the processor to.");
+
+    for (;;)
+    {
+        __asm__ __volatile__("cli; hlt");
+    }
+}
+
 bool SchedulerSetAffinity(Thread *thread, uint64_t mask)
 {
     if ((thread == NULL) || !thread->used)

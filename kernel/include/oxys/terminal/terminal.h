@@ -114,15 +114,17 @@ size_t TerminalPoll(void);
 size_t TerminalRead(char *buffer, size_t capacity);
 
 /*
- * Halts the processor until at least one byte is available, with interrupts
- * enabled for the duration and masked again upon return.
+ * Waits until at least one byte is available: yielding the processor to any
+ * thread the run queue holds, and halting it — with interrupts enabled for the
+ * duration and masked again upon return — only when the queue is empty.
  *
- * The wait is `sti; hlt` in a loop and not a spin, for the reason the kernel's
+ * The halt is `sti; hlt` in a loop and not a spin, for the reason the kernel's
  * echo loop records: the two instructions together are the one idiom under
- * which an interrupt cannot arrive between the enable and the halt. The caller
- * is the `read` system call, executing upon the bootstrap processor on behalf of
- * the one program this system runs at a time; docs/design/SHELL.md, Section 2.3,
- * says why that is enough for now and what changes when it is not.
+ * which an interrupt cannot arrive between the enable and the halt. The yield
+ * before it is sub-task 8.6's: the caller is the `read` system call upon the
+ * bootstrap processor, and since a pipeline's children share that processor a
+ * reader that halted would halt them too. docs/design/SHELL.md, Sections 2.3
+ * and 22.3, say why the reader yields rather than sleeping upon a channel.
  */
 void TerminalWaitForInput(void);
 

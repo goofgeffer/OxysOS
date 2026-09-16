@@ -6,9 +6,11 @@
  *          resolution of a path across mount points and through symbolic links,
  *          the identity of a file reached by two routes, the open file and its
  *          position, the mount and the withdrawal, and the refusals that keep a
- *          volume from being withdrawn while something still holds it. Probes
+ *          volume from being withdrawn while something still holds it, and,
+ *          since sub-task 8.6, the pipe. Probes
  *          whatever volume the machine actually carries.
- * Key functions: KernelVerifyVfs, KernelVfsProbeVolume, KernelVfsMountedDevice.
+ * Key functions: KernelVerifyVfs, KernelVerifyVfsPipes, KernelVfsProbeVolume,
+ *          KernelVfsMountedDevice.
  * References:
  *   - docs/storage/VFS.md, Section 10: every assertion below, paired with the
  *     silent failure it catches.
@@ -31,6 +33,7 @@
 #include <oxys/test/verify.h>
 #include "../volume.h"
 #include <oxys/fs/vfs.h>
+#include <oxys/fs/pipe.h>
 #include <oxys/fs/ext2.h>
 #include <oxys/fs/ext2_vfs.h>
 #include <oxys/block/block.h>
@@ -771,6 +774,100 @@ static void KernelVerifyVfsMounts(void)
  * machine carries, for the reason every earlier write self-test is: the volumes
  * upon those belong to whoever booted this kernel.
  */
+/* Whether `count` bytes of a buffer are the bytes given; the test has no
+ * string library to ask. */
+static bool KernelVfsBytesAre(const char *buffer, const char *expected, size_t count)
+{
+    for (size_t index = 0U; index < count; ++index)
+    {
+        if (buffer[index] != expected[index])
+        {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+/*
+ * The pipe of sub-task 8.6, from the kernel's own flow of control — which
+ * cannot sleep, so what is asserted here is everything but the sleeping: the
+ * bytes cross in order, each end does one thing, the end of the file is the
+ * last writer's close, a write with no reader is refused by name, and a read
+ * that would block is refused rather than hung. The sleeping halves are
+ * asserted by file-check and the shell's fifth session, from programs.
+ */
+static void KernelVerifyVfsPipes(void)
+{
+    int read_end = -1;
+    int write_end = -1;
+    char buffer[8];
+    uint64_t count = 0U;
+    const size_t open_before = VfsOpenFileCount();
+    const size_t pipes_before = VfsPipeCount();
+
+    KernelVfsRequire(VfsPipeCreate(&read_end, &write_end), "a pipe could not be made");
+
+    if ((read_end < 0) || (write_end < 0))
+    {
+        return;
+    }
+
+    KernelVfsRequire(read_end != write_end, "a pipe's two ends are one open file");
+    KernelVfsRequire(VfsOpenFileCount() == open_before + 2U, "a pipe is not two open files");
+    KernelVfsRequire(VfsPipeCount() == pipes_before + 1U, "a pipe made was not counted");
+
+    KernelVfsRequire(VfsWrite(write_end, "hello", 5U, &count) && (count == 5U),
+                     "a write to the pipe was short");
+    KernelVfsRequire(VfsRead(read_end, buffer, 3U, &count) && (count == 3U) &&
+                         KernelVfsBytesAre(buffer, "hel", 3U),
+                     "a read of part of what was written did not deliver the first bytes");
+    KernelVfsRequire(VfsRead(read_end, buffer, sizeof buffer, &count) && (count == 2U) &&
+                         KernelVfsBytesAre(buffer, "lo", 2U),
+                     "a read of the rest did not deliver the last bytes");
+
+    KernelVfsRequire(!VfsRead(write_end, buffer, sizeof buffer, &count) &&
+                         (VfsLastErrorCode() == VFS_ERROR_INVALID),
+                     "a read of the write end was not refused as invalid");
+    KernelVfsRequire(!VfsWrite(read_end, "x", 1U, &count) &&
+                         (VfsLastErrorCode() == VFS_ERROR_INVALID),
+                     "a write to the read end was not refused as invalid");
+    KernelVfsRequire(!VfsSeek(read_end, 0, VFS_SEEK_SET, &count) &&
+                         (VfsLastErrorCode() == VFS_ERROR_INVALID),
+                     "a seek upon a pipe was not refused");
+
+    /* Empty, with a writer, from a caller that cannot sleep: refused, and
+     * refused as busy, rather than a machine that waits for ever for a
+     * writer that is this same flow of control. */
+    KernelVfsRequire(!VfsRead(read_end, buffer, sizeof buffer, &count) &&
+                         (VfsLastErrorCode() == VFS_ERROR_BUSY),
+                     "an empty pipe read by a caller that cannot sleep was not refused as busy");
+
+    /* A second holder of the write end keeps the pipe open through the first
+     * close, as a child's inherited descriptor would. */
+    KernelVfsRequire(VfsHold(write_end), "the write end could not be held");
+    KernelVfsRequire(VfsClose(write_end), "the held write end could not be closed once");
+    KernelVfsRequire(!VfsRead(read_end, buffer, sizeof buffer, &count) &&
+                         (VfsLastErrorCode() == VFS_ERROR_BUSY),
+                     "a close by one of two holders ended the pipe");
+    KernelVfsRequire(VfsClose(write_end), "the write end could not be closed the second time");
+
+    KernelVfsRequire(VfsRead(read_end, buffer, sizeof buffer, &count) && (count == 0U),
+                     "a pipe whose writer has gone did not read as the end of the file");
+    KernelVfsRequire(VfsClose(read_end), "the read end could not be closed");
+    KernelVfsRequire(VfsPipeCount() == pipes_before, "a closed pipe was not released");
+    KernelVfsRequire(VfsOpenFileCount() == open_before, "a closed pipe left an open file");
+
+    /* And the other refusal by name: a writer whose reader has gone. */
+    KernelVfsRequire(VfsPipeCreate(&read_end, &write_end), "a second pipe could not be made");
+    KernelVfsRequire(VfsClose(read_end), "the second pipe's read end could not be closed");
+    KernelVfsRequire(!VfsWrite(write_end, "x", 1U, &count) &&
+                         (VfsLastErrorCode() == VFS_ERROR_BROKEN_PIPE),
+                     "a write with no reader was not refused as a broken pipe");
+    KernelVfsRequire(VfsClose(write_end), "the second pipe's write end could not be closed");
+    KernelVfsRequire(VfsPipeCount() == pipes_before, "the second pipe was not released");
+}
+
 void KernelVerifyVfs(void)
 {
     BlockDevice *first;
@@ -878,6 +975,7 @@ void KernelVerifyVfs(void)
     KernelVerifyVfsDirectories();
     KernelVerifyVfsWrites();
     KernelVerifyVfsMounts();
+    KernelVerifyVfsPipes();
 
     /* The root is not withdrawn while a file upon it is open. */
     descriptor = VfsOpen("/file", VFS_OPEN_READ, 0U);

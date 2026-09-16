@@ -59,6 +59,8 @@
 #include <oxys/kernel.h>
 #include <oxys/dev/keyboard.h>
 #include <oxys/dev/serial.h>
+#include <oxys/proc/sched.h>
+#include <oxys/arch/cpu/percpu.h>
 
 /* The queue, and the two indices that are never reduced: their difference is the
  * number of bytes held, and each is reduced to a subscript by the mask. */
@@ -274,6 +276,27 @@ void TerminalWaitForInput(void)
 {
     while (!TerminalHasInput())
     {
+        /*
+         * Another thread that could run is given the processor first, since
+         * sub-task 8.6. A program reading the terminal used to halt the
+         * processor until an interrupt, which was right while it was the only
+         * program; with a pipeline's children admitted to the rotation, a
+         * shell that halted would halt them too, and `cat` reading the
+         * terminal at the head of a pipeline would starve the command it
+         * feeds. The yield returns at once where the queue is empty, and the
+         * halt is taken only then. The reader stays runnable rather than
+         * sleeping upon a channel, because the bytes arrive through an
+         * interrupt handler and a wake performed there would be the first
+         * thing in this kernel to enqueue from one — a cost paid at 8.7, when
+         * a signal must interrupt a read, and not before.
+         */
+        if (SchedulerQueueLength(PerCpuIsEstablished() ? PerCpuIndex() : 0U) > 0U)
+        {
+            SchedulerYield();
+
+            continue;
+        }
+
         /* The idiom the kernel's echo loop records: the enable takes effect
          * after the halt has been entered, so a keystroke cannot fall between
          * the two and leave the processor halted with nothing to wake it. */

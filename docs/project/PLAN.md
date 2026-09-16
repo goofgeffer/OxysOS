@@ -99,8 +99,8 @@ than the kernel's. [`../design/LIBC.md`](../design/LIBC.md), Section 11.
 `rm`, the **six system calls** by which a program reaches the filesystem, and the
 **argument vector** this kernel's `execve` had refused since Phase 6. It took
 more than its line names and had to: `echo` without a vector prints a blank line
-for ever. So the count of calls was fourteen (sixteen since 8.3), the count of failure results is
-twenty — three of the five utilities act upon `errno` and not upon the sign of a
+for ever. So the count of calls was fourteen (sixteen since 8.3, nineteen since 8.6), the count of failure results was
+twenty (twenty-one since 8.6) — three of the five utilities act upon `errno` and not upon the sign of a
 result — and each process now holds a descriptor table of its own, so that a
 program cannot reach another's open file by guessing a number.
 
@@ -212,8 +212,25 @@ its standard input, and the built-ins `help`, `true`, `false` and `unset`.
 The shell greets nobody now; `help` is the built-in for that.
 [`../design/SHELL.md`](../design/SHELL.md), Sections 19 to 21.
 
-**Next: sub-task 8.6** — pipelines, which need the one thing this kernel has
-never had: two programs running at once, and a pipe between them.
+**Sub-task 8.6 is complete**: pipelines, and beneath them the one thing this
+kernel had never had — two programs running at once. `a | b | c` is one child
+per command with a pipe between each pair, the ends placed by `dup2` before the
+command's own redirections and closed wherever they are not needed, every child
+collected and the status the last one's. The pipe is an open file of the
+filesystem layer with no node beneath it, so that inheritance, `dup2` and the
+close at exit needed nothing written twice; a reader sleeps while it is empty
+and a writer while it is full. What that required of the kernel is the larger
+half: a child of `fork` is admitted to the scheduler at the fork, `wait` sleeps
+upon a wait channel until a child ends, the thread to return to became a field
+of the thread, and the counted interrupt-disable travels with a thread across a
+switch. `wc` joins `/bin`; `help` is a list of every command. The shell's first
+session, which the shell had answered by refusing its pipelines, now runs them.
+[`../design/SHELL.md`](../design/SHELL.md), Sections 22 to 24;
+[`../design/PROCESS.md`](../design/PROCESS.md), Section 17;
+[`../design/SCHEDULER.md`](../design/SCHEDULER.md), Section 9.
+
+**Next: sub-task 8.7** — job control, process groups and terminal signal
+delivery, and the first release, `Oxys 1 Alpha`.
 
 
 
@@ -851,7 +868,7 @@ system's — and the first of those is sub-task 8.3's.
 | 8.3 | Implement built-in commands (`cd`, `exit`, `export`, `pwd`). | Implemented | `KernelVerifyDirectory`, `KernelVerifyShell` |
 | 8.4 | Implement external program execution by `fork()` and `execve()`. | Implemented | `KernelVerifyShell`, `KernelVerifyDirectory` |
 | 8.5 | Implement input and output redirection. | Implemented | `KernelVerifyUtilities`, `KernelVerifyShell` |
-| 8.6 | Implement pipelines. | Planned | — |
+| 8.6 | Implement pipelines. | Implemented | `KernelVerifyVfs`, `KernelVerifyUtilities`, `KernelVerifyShell` |
 | 8.7 | Implement job control, process groups and terminal signal delivery. **`Oxys 1 Alpha` is cut here.** | Planned | — |
 
 **Specifications**: IEEE Std 1003.1-2017, Section 11 (the terminal) and `sh`;
@@ -885,7 +902,7 @@ showed why it matters: `line-check`, reading the same session at privilege level
 terminal halts the processor, which is right while one program runs upon the
 bootstrap processor's own flow of control and wrong the moment there are two;
 it is the first thing here that would use the wait queue
-[`../design/SCHEDULER.md`](../design/SCHEDULER.md), Section 9, records as
+[`../design/SCHEDULER.md`](../design/SCHEDULER.md), Section 10, records as
 absent. And a line longer than the display is wide is drawn wrongly once it
 wraps upon a serial terminal, the editor being unable to move the cursor up.
 Section 6.
@@ -1001,6 +1018,46 @@ back. Two negative tests were caught, one of them — a close releasing a file
 from under its other holder — six times over. Section 20. **Five limitations
 are recorded**, the first that a redirection upon a built-in is named and not
 performed. Section 21.
+
+**(f)** Sub-task 8.6 is pipelines, and it is the sub-task in which this kernel
+first ran two programs at once. IEEE Std 1003.1-2017, Section 2.9.2: each
+command in a subshell, the output of each connected to the input of the next,
+the status the last command's or its inverse after `!`. The shell makes one
+child per command with a pipe between each pair, closes every end where it is
+not needed — a write end left open in the shell keeps every reader waiting for a
+writer that has gone, which the negative test showed — and a built-in in a
+pipeline runs in the child, which is what makes `help | wc -l` count something.
+The pipe is an open file of the filesystem layer with no node beneath it, a
+page of buffer, a reader that sleeps while it is empty and a writer that sleeps
+while it is full, and `EPIPE` for a writer whose reader has gone.
+[`../design/SHELL.md`](../design/SHELL.md), Sections 22.1 and 22.2.
+
+**The larger half is beneath the shell.** A child of `fork` had run upon its
+parent's flow of control inside the parent's `wait` since 6.11, and a pipeline
+cannot be run that way. So a child is admitted to the scheduler at the fork;
+`wait` sleeps upon a wait channel — the first thing in this kernel a thread
+could sleep upon and be woken from — and is woken when a child ends; a user
+thread is pre-empted at privilege level 3 and nowhere else, so that the kernel
+beneath a system call stays unentered by a second thread; the thread to return
+to became a field of the started thread, one pointer per processor having
+become wrong the day a program could sleep while another ran; and the counted
+interrupt-disable travels with a thread across a switch, the first sleeper
+resumed from the idle thread having otherwise left its system call with
+interrupts enabled. The bootstrap processor gained an idle thread of its own.
+[`../design/PROCESS.md`](../design/PROCESS.md), Section 17;
+[`../design/SCHEDULER.md`](../design/SCHEDULER.md), Section 9;
+[`../design/CONCURRENCY.md`](../design/CONCURRENCY.md), Section 4.1.
+
+**The evidence is what crossed the pipe.** `file-check` sends twelve kibibytes
+from a child through a four-kibibyte pipe and finds every byte in order; the
+kernel asserts the pipe from a caller that cannot sleep, including the refusal
+of a read that would block; and the shell's fifth session carries the whole of
+`/bin/sh` through `cat | wc -c` and composes `exit $T$F$N` from the statuses of
+`false | true`, `true | false` and `! true | false`. Two negative tests were
+caught, and one defect the change made — a child admitted with its stack
+unprepared — was found by the first program to fork after it. Section 23.
+**Six limitations are recorded**, the first that there is no `SIGPIPE` until
+8.7. Section 24.
 
 **Sub-task 8.7 closes Phase 8 and is where the first release is cut.** `Oxys 1
 Alpha` is the first image worth handing to somebody, because it is the first one

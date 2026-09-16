@@ -2,8 +2,8 @@
 ; SPDX-License-Identifier: LGPL-3.0-or-later
 ;
 ; File: kernel/test/libc/utilities_image.asm
-; Purpose: Carries the eight programs of sub-task 7.6, and the three utilities of
-;          8.5, inside the kernel image,
+; Purpose: Carries the eight programs of sub-task 7.6, the three utilities of
+;          8.5 and the one of 8.6, inside the kernel image,
 ;          so that the self-test which runs them has an ELF file for each.
 ; Key definitions: KernelProgramArgCheckBegin, KernelProgramArgCheckEnd,
 ;          KernelProgramExecCheckBegin, KernelProgramExecCheckEnd,
@@ -13,7 +13,8 @@
 ;          KernelProgramMakeDirBegin, KernelProgramMakeDirEnd,
 ;          KernelProgramRemoveBegin, KernelProgramRemoveEnd, KernelProgramTouchBegin,
 ;          KernelProgramTouchEnd, KernelProgramCopyBegin, KernelProgramCopyEnd,
-;          KernelProgramRemoveDirBegin, KernelProgramRemoveDirEnd.
+;          KernelProgramRemoveDirBegin, KernelProgramRemoveDirEnd,
+;          KernelProgramWordCountBegin, KernelProgramWordCountEnd.
 ; References:
 ;   - kernel/test/libc/utilities.c: the self-test that loads these and runs them.
 ;   - kernel/test/libc/startup_image.asm: the same technique at sub-task 7.5,
@@ -109,6 +110,8 @@ global KernelProgramCopyBegin
 global KernelProgramCopyEnd
 global KernelProgramRemoveDirBegin
 global KernelProgramRemoveDirEnd
+global KernelProgramWordCountBegin
+global KernelProgramWordCountEnd
 
 KernelProgramTouchBegin:
     incbin "build/user/touch.embed.elf"
@@ -123,3 +126,8 @@ align 8
 KernelProgramRemoveDirBegin:
     incbin "build/user/rmdir.embed.elf"
 KernelProgramRemoveDirEnd:
+
+align 8
+KernelProgramWordCountBegin:
+    incbin "build/user/wc.embed.elf"
+KernelProgramWordCountEnd:

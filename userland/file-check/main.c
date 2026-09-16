@@ -5,8 +5,11 @@
  * Purpose: Asserts the six filesystem system calls of sub-task 7.6 from the
  *          only side that can reach them — a program at privilege level 3 —
  *          comparing what each call returns against what it is required to
- *          return, and ending with the number of comparisons that failed.
- * Key functions: main, FileRequire, FileContents, FileDirectory, FileRefusals.
+ *          return, and ending with the number of comparisons that failed;
+ *          the writable file and the shared open file of 8.5, and the pipe of
+ *          8.6, are asserted here too.
+ * Key functions: main, FileRequire, FileContents, FileDirectory, FileRefusals,
+ *          FileWriting, FilePipes.
  * References:
  *   - kernel/abi/oxys/syscall_abi.h: the six calls, the two open flags, the
  *     failure results and the directory entry, all of which this compares
@@ -557,6 +560,142 @@ static void FileWriting(void)
 
     FileRequire(OxysUnlink(FileWrittenPath) >= 0, "the written file could not be removed");
 }
+
+/* ---------------------------------------------------------------------------
+ * Sub-task 8.6: the pipe.
+ * ------------------------------------------------------------------------- */
+
+/* How much the child of the fork below sends: three times the pipe's buffer,
+ * so that the writer must sleep for the reader at least twice, and the
+ * transfer is the two threads taking turns rather than one filling a buffer
+ * the other empties afterwards. */
+#define FILE_PIPE_CHUNK    4096U
+#define FILE_PIPE_CHUNKS   3U
+
+static char FilePipeChunk[FILE_PIPE_CHUNK];
+
+static void FilePipes(void)
+{
+    int ends[2] = { -1, -1 };
+    char buffer[16];
+    int64_t child;
+
+    FileRequire(OxysPipe(ends) == 0, "a pipe could not be made");
+
+    if ((ends[0] < 0) || (ends[1] < 0))
+    {
+        return;
+    }
+
+    FileRequire((ends[0] >= (int)SYSCALL_DESCRIPTOR_FIRST) &&
+                    (ends[1] >= (int)SYSCALL_DESCRIPTOR_FIRST) && (ends[0] != ends[1]),
+                "the pipe's ends are not two new numbers above the three");
+
+    /* Bytes go in one end and come out the other, in order. */
+    FileRequire(OxysWrite(ends[1], "abc", 3U) == 3, "a write to the pipe was short");
+    FileRequire(OxysRead(ends[0], buffer, sizeof buffer) == 3, "a read of the pipe was short");
+    FileRequire(memcmp(buffer, "abc", 3U) == 0, "the pipe did not deliver what was written");
+
+    /* Each end does one thing. */
+    FileRefused(OxysRead(ends[1], buffer, sizeof buffer), EINVAL,
+                "a read of the write end was accepted");
+    FileRefused(OxysWrite(ends[0], "x", 1U), EINVAL, "a write to the read end was accepted");
+
+    /* The end of the file is the last writer's close, and only then. */
+    FileRequire(OxysWrite(ends[1], "de", 2U) == 2, "a second write to the pipe was short");
+    FileRequire(OxysClose(ends[1]) >= 0, "the write end could not be closed");
+    FileRequire(OxysRead(ends[0], buffer, sizeof buffer) == 2,
+                "the bytes written before the close were not delivered after it");
+    FileRequire(OxysRead(ends[0], buffer, sizeof buffer) == 0,
+                "a pipe with no writer did not read as the end of the file");
+    FileRequire(OxysClose(ends[0]) >= 0, "the read end could not be closed");
+
+    /* A writer with no reader is refused by name. */
+    FileRequire(OxysPipe(ends) == 0, "a second pipe could not be made");
+    FileRequire(OxysClose(ends[0]) >= 0, "the second pipe's read end could not be closed");
+    FileRefused(OxysWrite(ends[1], "x", 1U), EPIPE, "a write with no reader was accepted");
+    FileRequire(OxysClose(ends[1]) >= 0, "the second pipe's write end could not be closed");
+
+    /*
+     * Two processes, taking turns. The child writes three buffers' worth and
+     * ends; the parent reads to the end of the file and must find every byte,
+     * in order, with the pattern each chunk carries. A writer that did not
+     * sleep when the pipe was full would lose bytes or overwrite them; a
+     * reader that did not sleep when it was empty would see the end before
+     * the writer had finished; and a close in the child that did not wake the
+     * parent would leave the parent asleep for ever, which this program would
+     * report by never ending.
+     */
+    FileRequire(OxysPipe(ends) == 0, "a third pipe could not be made");
+    child = OxysFork();
+
+    if (child == 0)
+    {
+        int status = 0;
+
+        (void)OxysClose(ends[0]);
+
+        for (unsigned chunk = 0U; chunk < FILE_PIPE_CHUNKS; ++chunk)
+        {
+            for (size_t index = 0U; index < FILE_PIPE_CHUNK; ++index)
+            {
+                FilePipeChunk[index] = (char)('a' + (int)chunk);
+            }
+
+            if (OxysWrite(ends[1], FilePipeChunk, FILE_PIPE_CHUNK) != (int64_t)FILE_PIPE_CHUNK)
+            {
+                status = 1;
+            }
+        }
+
+        (void)OxysClose(ends[1]);
+        OxysExit(status);
+    }
+
+    if (child > 0)
+    {
+        int64_t status = -1;
+        uint64_t total = 0U;
+        bool ordered = true;
+
+        (void)OxysClose(ends[1]);
+
+        for (;;)
+        {
+            const int64_t got = OxysRead(ends[0], FilePipeChunk, sizeof FilePipeChunk);
+
+            if (got <= 0)
+            {
+                FileRequire(got == 0, "a read of the pipe failed before its end");
+                break;
+            }
+
+            for (int64_t index = 0; index < got; ++index)
+            {
+                const char expected = (char)('a' + (int)((total + (uint64_t)index) / FILE_PIPE_CHUNK));
+
+                if (FilePipeChunk[index] != expected)
+                {
+                    ordered = false;
+                }
+            }
+
+            total += (uint64_t)got;
+        }
+
+        FileRequire(total == (uint64_t)FILE_PIPE_CHUNK * FILE_PIPE_CHUNKS,
+                    "the pipe did not deliver every byte the child wrote");
+        FileRequire(ordered, "the pipe delivered the child's bytes out of order");
+        (void)OxysClose(ends[0]);
+        FileRequire(OxysWait(&status) == child, "the writing child was not collected");
+        FileRequire(status == 0, "the child's writes to the pipe were not all delivered");
+    }
+    else
+    {
+        FileRequire(false, "fork failed for the pipe");
+    }
+}
+
 int main(void)
 {
     (void)printf("file-check: the filesystem calls, from a program.\n");
@@ -566,6 +705,7 @@ int main(void)
     FileRefusals();
     FileExhaustion();
     FileWriting();
+    FilePipes();
 
     (void)printf("file-check: %d assertion(s) failed.\n", FileFailures);
 

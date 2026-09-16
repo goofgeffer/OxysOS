@@ -53,7 +53,7 @@
  * be compared without the reader having to decide whether two phrasings are the
  * same thing.
  */
-static char OxysErrorSyscallMessages[EIO + 1][48] = {
+static char OxysErrorSyscallMessages[EPIPE + 1][48] = {
     "No error",                          /* 0 */
     "No such system call",               /* ENOSYS */
     "An address the program may not use", /* EFAULT */
@@ -74,7 +74,8 @@ static char OxysErrorSyscallMessages[EIO + 1][48] = {
     "Something is held that this would destroy", /* EBUSY */
     "The operation would cross a volume", /* EXDEV */
     "The filesystem does not offer this", /* ENOTSUP */
-    "The volume or its device failed"     /* EIO */
+    "The volume or its device failed",    /* EIO */
+    "The pipe is open for reading by nobody" /* EPIPE */
 };
 
 /*
@@ -105,7 +106,7 @@ static char OxysErrorUnknownMessage[] = "Unknown error";
 
 char *strerror(int errnum)
 {
-    if ((errnum >= 0) && (errnum <= EIO))
+    if ((errnum >= 0) && (errnum <= EPIPE))
     {
         return OxysErrorSyscallMessages[errnum];
     }

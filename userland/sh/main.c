@@ -2,13 +2,15 @@
 /* SPDX-License-Identifier: MIT */
 /*
  * File: userland/sh/main.c
- * Purpose: The shell of Phase 8, as far as sub-task 8.4 takes it: a prompt, a
+ * Purpose: The shell of Phase 8, as far as sub-task 8.6 takes it: a prompt, a
  *          line read through the editor with its history, the line tokenised
  *          and parsed — continued upon a second prompt where it is incomplete
  *          — its words expanded, and the built-ins `cd`, `pwd`, `export` and
  *          `exit` run, and every other command sought upon PATH, forked,
- *          executed with the exported environment, and waited for.
+ *          executed with the exported environment, and waited for — and, of
+ *          8.6, a pipeline of them run in children with a pipe between each.
  * Key functions: main, ShellReadCommand, ShellRunList, ShellRunCommand,
+ *          ShellRunStage,
  *          ShellLookupParameter, ShellComplain.
  * References:
  *   - IEEE Std 1003.1-2017, `sh`: the utility this will become, and its PS1
@@ -212,13 +214,20 @@ static bool ShellApplyAssignment(const char *word)
  * Runs one simple command, and returns its status.
  *
  * A command with no name is its assignments, applied to the shell (Section
+ * 2.9.1). A built-in runs in the shell, with its assignments applied where it is a
  * special built-in (Section 2.14) and not otherwise. Anything else is a
  * program, since 8.4: sought upon PATH, forked, executed with the exported
  * environment and waited for by run.c, with the 127 of Section 2.8.2 where
- * it could not be found. Redirections are named and not performed until 8.5.
- * Redirections are named and not performed until 8.5.
+ * it could not be found. A program's redirections are performed in the child
+ * since 8.5; a built-in's are named and not performed, which
+ * docs/design/SHELL.md, Section 21, records.
+ *
+ * `in_child` says the caller has already forked — this is one command of a
+ * pipeline, running in the child made for it, since 8.6 — so a program is
+ * become rather than forked for, and a built-in runs here, in the child,
+ * where its effect ends with the child.
  */
-static int ShellRunCommand(const ShellCommand *command, bool *exit_requested)
+static int ShellRunCommand(const ShellCommand *command, bool *exit_requested, bool in_child)
 {
     int argc = 0;
     bool special;
@@ -255,6 +264,11 @@ static int ShellRunCommand(const ShellCommand *command, bool *exit_requested)
     {
         /* A program, since sub-task 8.4, its redirections performed in the
          * child since 8.5: run.c. */
+        if (in_child)
+        {
+            return ShellExecuteProgram(ShellArgumentVector, command, ShellLookupParameter, NULL);
+        }
+
         return ShellRunProgram(ShellArgumentVector, command, ShellLookupParameter, NULL);
     }
 
@@ -270,7 +284,7 @@ static int ShellRunCommand(const ShellCommand *command, bool *exit_requested)
 
     if (command->redirection_count > 0U)
     {
-        (void)fprintf(stderr, "sh: %s: redirections are not performed until sub-task 8.5.\n",
+        (void)fprintf(stderr, "sh: %s: a redirection upon a built-in is not performed.\n",
                       ShellArgumentVector[0]);
     }
 
@@ -278,11 +292,27 @@ static int ShellRunCommand(const ShellCommand *command, bool *exit_requested)
 }
 
 /*
+ * One command of a pipeline, run in the child made for it, of sub-task 8.6:
+ * the function ShellRunPipeline calls after the fork and the placing of the
+ * pipe's ends. `exit` inside a pipeline ends the child alone, which is what
+ * a subshell means.
+ */
+static int ShellRunStage(const ShellCommand *command, void *context)
+{
+    bool exit_requested = false;
+
+    (void)context;
+
+    return ShellRunCommand(command, &exit_requested, true);
+}
+
+/*
  * Runs a list: each pipeline in order, subject to the condition that joins it
- * to the one before (Section 2.9.3), `!` inverting its status (2.9.2), and a
- * pipeline of more than one command reported as not runnable until 8.6. The
- * `&` separator is recorded and not honoured: nothing runs in the background
- * until there is something to run.
+ * to the one before (Section 2.9.3), and `!` inverting its status (2.9.2). A
+ * pipeline of one command runs in the shell; one of more runs in children,
+ * since 8.6, one to a command with a pipe between each pair. The `&`
+ * separator is recorded and not honoured: nothing runs in the background
+ * until 8.7.
  */
 static void ShellRunList(const ShellList *list, bool *exit_requested)
 {
@@ -303,13 +333,11 @@ static void ShellRunList(const ShellList *list, bool *exit_requested)
 
         if (pipeline->command_count > 1U)
         {
-            (void)printf("sh: a pipeline of %u commands cannot run until sub-task 8.6.\n",
-                         (unsigned)pipeline->command_count);
-            status = 127;
+            status = ShellRunPipeline(pipeline, ShellRunStage, NULL);
         }
         else
         {
-            status = ShellRunCommand(&pipeline->command[0], exit_requested);
+            status = ShellRunCommand(&pipeline->command[0], exit_requested, false);
         }
 
         if (pipeline->negated && !*exit_requested)

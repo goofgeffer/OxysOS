@@ -161,6 +161,8 @@ const char *VfsErrorName(VfsError error)
         return "crosses a mount";
     case VFS_ERROR_UNSUPPORTED:
         return "unsupported";
+    case VFS_ERROR_BROKEN_PIPE:
+        return "broken pipe";
     case VFS_ERROR_MEDIUM:
         return "the medium failed";
     default:

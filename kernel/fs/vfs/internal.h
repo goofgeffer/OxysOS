@@ -70,6 +70,16 @@ typedef struct VfsFile
      */
     uint32_t holders;
     bool open;
+
+    /*
+     * The pipe this open file is an end of, of sub-task 8.6, or null for a
+     * file with a node beneath it. Exactly one of `node` and `pipe` is set:
+     * an end of a pipe has no node, and `VfsRead`, `VfsWrite`, `VfsClose` and
+     * the rest ask which before they touch the node. `flags` says which end
+     * it is — VFS_OPEN_READ for the end that reads, VFS_OPEN_WRITE for the
+     * end that writes — and nothing else is set upon it.
+     */
+    struct VfsPipe *pipe;
 } VfsFile;
 
 /*
@@ -153,6 +163,13 @@ bool VfsWritable(const VfsNode *node);
 
 /* The open file a descriptor names, or null where it names none. In `file.c`. */
 VfsFile *VfsFileOf(int descriptor);
+
+/* The pipe's own half of the open-file operations, of sub-task 8.6, in
+ * pipe.c; each is reached from the function of the same name in file.c when
+ * the open file is an end of a pipe. */
+bool VfsPipeRead(VfsFile *file, void *buffer, uint64_t length, uint64_t *read);
+bool VfsPipeWrite(VfsFile *file, const void *buffer, uint64_t length, uint64_t *written);
+void VfsPipeReleaseEnd(VfsFile *file);
 
 /* Whether anything still holds a mount, in `mount.c`. */
 bool VfsMountIsBusy(const VfsMount *mount);

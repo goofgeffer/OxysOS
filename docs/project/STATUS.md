@@ -28,7 +28,7 @@ call, may make a child of itself and collect what it ended with, and is ended
 when it faults or when it asks.
 
 **And it runs programs a person would recognise.** Since sub-task 7.6 the kernel
-carries fourteen system calls rather than eight (eighteen since sub-task 8.5) — `open`, `close`, `read`,
+carries fourteen system calls rather than eight (eighteen since sub-task 8.5, nineteen since 8.6) — `open`, `close`, `read`,
 `readdir`, `mkdir` and `unlink` joining them — each process holds a descriptor
 table of its own, and `execve` carries the argument and environment vectors it
 had refused since Phase 6. Above those stand `ls`, `cat`, `echo`, `mkdir` and
@@ -51,6 +51,16 @@ each line with a statement that nothing runs it. Beneath it is the thing that ha
 to exist first: a terminal, one byte stream drawn from the keyboard and the
 serial line that a `read` of descriptor 0 waits upon, with the keyboard's keys
 translated to the sequences a terminal sends. `stdin` reads.
+
+**And since sub-task 8.6 it runs two programs at once.** `ls | wc` is two
+children of the shell with a pipe between them — a page of buffer inside the
+kernel, an open file with no node beneath it — the writer asleep while it is
+full and the reader asleep while it is empty, each woken by the other. A child
+of `fork` joins the scheduler's run queue at the fork and runs when its parent
+sleeps or is pre-empted at privilege level 3; `wait` sleeps until a child ends.
+The bootstrap processor is still the only one a user thread runs upon, and a
+user thread is never pre-empted inside the kernel, which is what keeps the
+unsynchronised structures beneath a system call unentered by two threads.
 
 **It pre-empts, and it schedules across processors.** Since sub-task 6.15 each
 processor holds a run queue of its own with a lock of its own, rotates
@@ -126,7 +136,7 @@ each refuses the options it does not implement rather than accepting them and
 doing nothing. [`../design/LIBC.md`](../design/LIBC.md), Section 12.3.
 
 **A program may now reach the filesystem, and may be given arguments.** The
-kernel carries **fourteen** system calls — eighteen since 8.5 — the eight it had, and `open`, `close`,
+kernel carries **fourteen** system calls — eighteen since 8.5, nineteen since 8.6 — the eight it had, and `open`, `close`,
 `read`, `readdir`, `mkdir` and `unlink`, each a validation of a caller's
 arguments and then a call of the filesystem layer that has existed since Phase 5.
 Each process holds a descriptor table of its own, so that the numbers a program
@@ -227,7 +237,7 @@ the GRUB entry that permits writing. See
   rather than one for all; and composites all of it over a back buffer, after
   which **nothing reads the framebuffer**.
 - A `SYSCALL` entry path swaps `GS`, loads a kernel stack from a per-processor
-  block, dispatches through a table of eighteen calls and validates a caller's
+  block, dispatches through a table of nineteen calls and validates a caller's
   arguments against both the canonical user limit and the paging hierarchy — and
   resolves a copy-on-write fault upon a page it is asked to write, rather than
   refusing an address a fork had protected.
@@ -568,8 +578,8 @@ pointer was saved in the per-processor block and restored from there, and a
 child's `SYSCALL` inside the parent's `wait` overwrote it; a child that exited
 from the cloned stack had the same pointer, which is why five sub-tasks never
 saw it. It is restored from the per-thread frame now. What is still absent is
-8.5's redirection, 8.6's pipeline and 8.7's job control, each refused or named
-rather than pretended. [`../design/SHELL.md`](../design/SHELL.md), Sections 16
+8.7's job control, refused or named rather than pretended — as 8.5's redirection
+and 8.6's pipeline were until they arrived. [`../design/SHELL.md`](../design/SHELL.md), Sections 16
 to 18.
 
 **Sub-task 8.5 is complete: redirection, and the writable file beneath it.**
@@ -585,6 +595,28 @@ copying its standard input, and the built-ins `help`, `true`, `false` and
 `unset`; the shell greets nobody, `help` being the built-in for that. A
 redirection upon a built-in is still named and not performed.
 [`../design/SHELL.md`](../design/SHELL.md), Sections 19 to 21.
+
+**Sub-task 8.6 is complete: pipelines, and two programs running at once.** The
+shell runs `a | b | c` as one child per command with a pipe between each pair,
+the ends placed by `dup2` before the command's own redirections and closed
+wherever they are not needed, every child collected and the status the last
+one's or its inverse after `!`; a built-in in a pipeline runs in the child. The
+pipe — the nineteenth call — is an open file of the filesystem layer with no
+node beneath it and a page of buffer: a reader sleeps while it is empty, a
+writer while it is full, a reader whose writers have gone reads the end of the
+file, and a writer whose readers have gone is told `EPIPE`, the twenty-first
+failure result. Beneath it a child of `fork` joins the run queue at the fork,
+`wait` sleeps upon a wait channel, the thread to return to is the started
+thread's own field, and the counted interrupt-disable travels with a thread
+across a switch; a user thread is pre-empted at privilege level 3 alone; and
+the bootstrap processor has an idle thread of its own. `wc` joins `/bin`, and
+`help` is a list of every command, one to a line. `file-check` sends twelve
+kibibytes through a pipe from a child, the kernel asserts the pipe from a
+caller that cannot sleep, and a fifth session of the shell carries `/bin/sh`
+through `cat | wc -c`. No `SIGPIPE` until 8.7.
+[`../design/SHELL.md`](../design/SHELL.md), Sections 22 to 24;
+[`../design/PROCESS.md`](../design/PROCESS.md), Section 17;
+[`../design/SCHEDULER.md`](../design/SCHEDULER.md), Section 9.
 
 ## 3. Where it has been observed to work
 
@@ -620,6 +652,7 @@ The physical machine is one machine — the HP Laptop 14-dq0052dx specified in
 | 8.3 The built-ins and the working directory | Yes, and driven over the serial line | **Yes** | **Yes — 8.3**, to the prompt | — | **Not yet run** |
 | 8.4 Programs run from the prompt | Yes, and driven over the serial line | **Yes** | **Yes — 8.4**, to the prompt | — | **Not yet run** |
 | 8.5 Redirection, and the writable file | Yes, and driven over the serial line | **Yes** | **Yes — 8.5**, to the prompt | — | **Not yet run** |
+| 8.6 Pipelines, and two programs at once | Yes, and driven over the serial line | **Yes, and driven at the PS/2 keyboard** | **Yes — 8.6**, to the prompt | — | **Not yet run** |
 
 **The rows marked "— 7.2" were all established by two boots of one image**,
 because a boot runs every self-test in the corpus and a clean one is therefore
@@ -848,8 +881,9 @@ design document ends with its particular ones.
 | Absent | Arrives at |
 | ------ | ---------- |
 | A user program upon anything but the bootstrap processor. Every user thread's affinity mask names processor 0 alone, because the allocators, the process tables and the filesystem layer its system calls reach are still unsynchronised. `SCHEDULER.md`, Section 4, and `CONCURRENCY.md`, Section 10, limitation 1. | Phase 7 |
-| More than one program at a time. The shell runs a program since sub-task 8.4, but `wait` runs the child upon the parent's own flow of control, so the two are never running at once; a user thread of the scheduler's own is what would change it. | Phase 8 |
-| A wait that yields the processor. A `read` of the terminal halts the bootstrap processor until a key arrives, which is right while one program runs upon its own flow of control and wrong the moment there are two; it is the first thing that would use the wait queue `SCHEDULER.md`, Section 9, limitation 8, records as absent. `SHELL.md`, Section 6. | Phase 8 |
+| ~~More than one program at a time.~~ **Arrived at 8.6**: a child of `fork` joins the run queue at the fork, `wait` sleeps until a child ends, and a pipeline's commands run beside one another. Upon the bootstrap processor alone, and never pre-empted inside the kernel. `PROCESS.md`, Section 17; `SCHEDULER.md`, Section 9. | — |
+| ~~A wait that yields the processor.~~ **Amended at 8.6**: `wait` and the pipe sleep upon the wait channel `SCHEDULER.md`, Section 9, added; a `read` of the terminal yields to whatever is runnable and halts only when nothing is, rather than sleeping, because its bytes arrive through an interrupt handler and nothing yet wakes a thread from one. `SHELL.md`, Section 22.3. | 8.7, for the wake from a handler |
+| A signal. A writer whose reader has gone is told `EPIPE` and nothing more; nothing interrupts a program; `&` is recorded and not honoured. | 8.7 |
 | A canonical terminal. `stdin` is raw: `fgets` delivers keystrokes and control sequences, unechoed, and `cat` with no operand still reports the absence. The shell wants raw; nothing yet wants the other. `SHELL.md`, Section 2.1. | When something wants it |
 | Synchronisation **applied**, beyond three structures. The diagnostic channel was locked at 6.14; the run queues and the process and thread tables at 6.15. Every other shared structure is still unsynchronised and still says so in its own file's header; `CONCURRENCY.md`, Section 10, limitation 1, enumerates them. | Phase 7 |
 | A reaper. A kernel thread that finishes cannot free its own stack — it is standing on it — and nothing else does. Its slot and its four pages are held until the machine stops. | Phase 7 |
