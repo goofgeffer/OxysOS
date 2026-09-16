@@ -7,8 +7,8 @@ Phase 8's, as [`LIBC.md`](LIBC.md) is Phase 7's: one section per sub-task, in
 order, each recording what that sub-task built and why, and each revised as the
 design is. Sub-tasks 8.1 (Sections 1 to 7), 8.2 (Sections 8 to 10), 8.3
 (Sections 11 to 15), 8.4 (Sections 16 to 18), 8.5 (Sections 19 to 21) and 8.6
-(Sections 22 to 24) are here so far, and Section 25 is `micro`, the line editor
-added beside 8.6.
+(Sections 22 to 24) are here so far; Section 25 is `micro`, the line editor
+added beside 8.6, and Section 26 is `clear`.
 
 **Authority**: `PROJECT_GUIDELINES.md`, Sections 2, 3 and 6. Every control
 sequence and every rule of the grammar named below carries a citation, and the
@@ -1261,3 +1261,36 @@ Limitations: **1,024 lines and 511 bytes to a line**, a longer line cut when
 loaded and said to be; **no search, no replace, no undo**; **a `w` that fails
 half way leaves the file short**, until there is a rename; **the history the
 arrow keys walk is shared** between commands and typed lines.
+
+## 26. `clear`, and the form feed
+
+**Implementation**: the built-in in
+[`../../userland/sh/builtins.c`](../../userland/sh/builtins.c); the form feed in
+`VgaPutCharacter` of [`../../drivers/vga/vga.c`](../../drivers/vga/vga.c) and
+`ConsoleClear` of [`../../graphics/console.c`](../../graphics/console.c); and
+`KernelSerialWriteTranslated` in [`../../kernel/kernel.c`](../../kernel/kernel.c).
+Added on 2026-09-16 at the project owner's request.
+
+`clear` writes one byte, the form feed (FF, 0x0C), and flushes it. ANSI X3.4
+makes a form feed a new page; upon a screen a new page is the screen cleared and
+the cursor at its top, and that is what the text-mode display and the console now
+do upon it, the erase limit reset with the cursor so that a backspace after a
+clear stops where the new page begins. A terminal upon the serial line does not
+treat a form feed so — most print nothing, a few print a glyph — so the
+diagnostic path, which is the one place that writes to all three, turns the byte
+into ECMA-48's `ED 2` and `CUP`, `ESC [ 2 J ESC [ H`, for the serial line alone.
+The translation is there and not in the serial driver, which carries bytes and
+gives them no meaning, nor in the display drivers, which do not know a terminal
+is listening.
+
+It is a byte and not a system call because a program that wants the screen
+cleared should be able to say so by writing, as it says everything else, and
+because a byte crosses a pipe and a file the way a call cannot. It is not the
+ECMA-48 sequence itself on the program's side, because nothing upon the display
+side parses sequences yet, and a parser written for one sequence would be the
+beginning of the terminal Section 25 says is not there.
+
+Observed on 2026-09-16: over the serial line under QEMU, `clear` produced exactly
+`ESC [ 2 J ESC [ H` between the prompts; typed at VirtualBox's keyboard, the
+screen went black and the next prompt stood at the top left.
+[`../project/TESTING-RECORD.md`](../project/TESTING-RECORD.md).

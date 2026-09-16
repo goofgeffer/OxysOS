@@ -3,7 +3,8 @@
 /*
  * File: userland/sh/builtins.c
  * Purpose: The built-in commands — `cd`, `pwd`, `export` and `exit` of sub-task
- *          8.3, and `unset`, `help`, `true` and `false` added at 8.5 —
+ *          8.3, `unset`, `help`, `true` and `false` added at 8.5, and `clear`
+ *          added on 2026-09-16 —
  *          which are the commands a shell must run itself because
  *          a child process could not do them on the shell's behalf: a
  *          directory changed in a child is changed for the child, and so is a
@@ -43,7 +44,7 @@
  * before a special built-in persists in the shell, and before a regular one
  * does not. */
 static const char *const ShellSpecialBuiltins[] = { "exit", "export", "unset" };
-static const char *const ShellRegularBuiltins[] = { "cd", "pwd", "help", "true", "false" };
+static const char *const ShellRegularBuiltins[] = { "cd", "pwd", "help", "true", "false", "clear" };
 
 static bool ShellNameIsAmong(const char *name, const char *const *names, size_t count)
 {
@@ -329,6 +330,7 @@ static int ShellBuiltinHelp(void)
                  "true, succeeds.\n"
                  "false, fails.\n"
                  "help, prints this list.\n"
+                 "clear, clears the screen.\n"
                  "ls [-a] [dir]..., lists a directory, the working directory with no "
                  "operand; -a includes the entries that begin with a dot.\n"
                  "cat [file | -]..., copies each file to the standard output; the standard "
@@ -381,6 +383,19 @@ int ShellRunBuiltin(int argc, char **argv, int last_status, bool *exit_requested
     if (strcmp(argv[0], "help") == 0)
     {
         return ShellBuiltinHelp();
+    }
+
+    if (strcmp(argv[0], "clear") == 0)
+    {
+        /* One form feed: the display drivers clear the screen upon it and the
+         * diagnostic path turns it into ECMA-48's erase-display and
+         * cursor-home for a terminal upon the serial line. Flushed at once,
+         * because a clear that arrived with the next prompt would clear the
+         * prompt too. */
+        (void)fputs("\f", stdout);
+        (void)fflush(stdout);
+
+        return 0;
     }
 
     if (strcmp(argv[0], "true") == 0)

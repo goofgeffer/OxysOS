@@ -41,7 +41,8 @@
  *     Section 4.5: the frame buffer is reachable at PhysicalToVirtual(0xB8000)
  *     because the boot-time paging hierarchy maps the first gibibyte of physical
  *     memory into the higher half.
- *   - ANSI X3.4-1986 (ISO/IEC 646), the control characters: BS (0x08) moves the
+ *   - ANSI X3.4-1986 (ISO/IEC 646), the control characters: FF (0x0C) is a new
+ *     page, which here is the screen cleared; BS (0x08) moves the
  *     active position one character position backward, LF (0x0A) moves it one
  *     line down and CR (0x0D) moves it to the first position of the line. None of
  *     the three erases anything.
@@ -513,6 +514,12 @@ void VgaPutCharacter(char character)
 
     case '\r':
         VgaCursorColumn = 0U;
+        break;
+
+    case '\f':
+        /* A form feed is a new page: the screen cleared and the cursor at its
+         * top, since 2026-09-16, for the shell's `clear`. */
+        VgaClear();
         break;
 
     case '\b':

@@ -8,7 +8,7 @@
  * Key definitions: ConsoleInitialise, ConsoleWriteCharacter, ConsoleWriteString,
  *          ConsoleIsActive, ConsoleSetColour, ConsoleColumns, ConsoleRows,
  *          ConsoleColumn, ConsoleRow, ConsoleSetEraseLimit, ConsoleSuspend,
- *          ConsoleReport.
+ *          ConsoleClear, ConsoleReport.
  * References:
  *   - ANSI X3.4-1986: the four control characters implemented, and the meaning
  *     each is given.
@@ -134,6 +134,13 @@ uint32_t ConsoleRow(void);
  * docs/devices/DISPLAY.md, Section 7.
  */
 void ConsoleSetEraseLimit(void);
+
+/*
+ * Clears the console to its background and puts the cursor at the top left,
+ * the erase limit with it: what a form feed written to the console does, since
+ * 2026-09-16, for the shell's `clear`. Nothing where the console is not active.
+ */
+void ConsoleClear(void);
 
 /*
  * Stops the console drawing, permanently, and gives the framebuffer to whoever

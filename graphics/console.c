@@ -7,9 +7,10 @@
  *          performed by blitting the surface upon itself, and a buffer that
  *          replays what was written before the console existed.
  * Key functions: ConsoleInitialise, ConsoleWriteCharacter, ConsoleWriteString,
- *          ConsoleSetColour, ConsoleSetEraseLimit, ConsoleSuspend, ConsoleReport.
+ *          ConsoleSetColour, ConsoleClear, ConsoleSetEraseLimit, ConsoleSuspend,
+ *          ConsoleReport.
  * References:
- *   - ANSI X3.4-1986: LF, CR, HT and BS, and the meaning each is given.
+ *   - ANSI X3.4-1986: LF, CR, HT, BS and FF, and the meaning each is given.
  *   - docs/devices/DISPLAY.md, Sections 6 and 7: the same four characters as the
  *     text-mode driver implements them, and the erase limit.
  *   - docs/design/CONSOLE.md, Sections 2 and 3.
@@ -37,6 +38,7 @@
 
 /* The control characters, named rather than written as numbers. */
 #define CONSOLE_BACKSPACE      0x08
+#define CONSOLE_FORM_FEED      0x0C
 #define CONSOLE_TAB            0x09
 #define CONSOLE_LINE_FEED      0x0A
 #define CONSOLE_CARRIAGE_RETURN 0x0D
@@ -313,6 +315,33 @@ uint32_t ConsoleRow(void)
     return ConsoleCursorRow;
 }
 
+void ConsoleClear(void)
+{
+    if (!ConsoleActive)
+    {
+        return;
+    }
+
+    GraphicsClear(&ConsoleSurface, ConsoleBackground);
+
+    ConsoleCursorColumn = 0U;
+    ConsoleCursorRow = 0U;
+    ConsoleLimitColumn = 0U;
+    ConsoleLimitRow = 0U;
+
+    for (uint32_t row = 0U; row < ConsoleRowCount; ++row)
+    {
+        ConsoleRowEnd[row] = 0U;
+    }
+
+    /* The whole surface changed, which is the one damage that cannot be
+     * narrowed — as a scroll's is. */
+    if (ConsoleComposited)
+    {
+        CompositorInvalidateAll();
+    }
+}
+
 void ConsoleSetEraseLimit(void)
 {
     ConsoleLimitColumn = ConsoleCursorColumn;
@@ -459,6 +488,12 @@ void ConsoleWriteCharacter(char character)
                 ConsoleCursorColumn = next;
             }
         }
+        return;
+
+    case CONSOLE_FORM_FEED:
+        /* A form feed is a new page — the screen cleared and the cursor at its
+         * top, since 2026-09-16, for the shell's `clear`. */
+        ConsoleClear();
         return;
 
     case CONSOLE_BACKSPACE:

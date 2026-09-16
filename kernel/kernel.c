@@ -14,7 +14,7 @@
  *          KernelCommandLineHasOption, KernelMountRootVolume,
  *          KernelMountMachineVolume,
  *          KernelAttachPointer, KernelRunShell, KernelEchoLoop, KernelEchoBackspace,
- *          KernelSerialCursorToColumn.
+ *          KernelSerialCursorToColumn, KernelSerialWriteTranslated.
  * References:
  *   - Multiboot2 Specification 2.0, Section 3.3 ("I386 machine state"): EAX
  *     contains 0x36D76289 and EBX the physical address of the Multiboot2
@@ -35,6 +35,9 @@
  *     sequence STI followed immediately by HLT free of the window in which a
  *     keyboard echo loop would otherwise service an interrupt and then halt with
  *     nothing left to wake it.
+ *   - ECMA-48, Section 8.3.39 (ED, erase in display, parameter 2: the whole
+ *     display) and Section 8.3.21 (CUP, cursor position, no parameters: the
+ *     first position): what a form feed becomes upon the serial line.
  *   - docs/design/ARCHITECTURE.md, Section 4: the dependency ordering that fixes
  *     the sequence of initialisation below, and with it the order of the phases.
  *
@@ -233,6 +236,38 @@ bool KernelDisplayIsQuiet(void)
     return KernelDisplayQuiet;
 }
 
+/*
+ * Writes a string to the serial line, with each form feed translated to the
+ * sequence a terminal at the far end clears its screen upon.
+ *
+ * A form feed clears the text-mode display and the console — a new page, which
+ * upon a screen is the screen cleared, since 2026-09-16 for the shell's
+ * `clear` — but a terminal emulator upon a serial line does not treat it so:
+ * most print nothing and a few print a glyph. ECMA-48 gives the two sequences
+ * every terminal of that lineage acts upon: ED with parameter 2, `CSI 2 J`,
+ * "erase all of the display" (Section 8.3.39), and CUP with no parameters,
+ * `CSI H`, the cursor to the first position (Section 8.3.21). The translation
+ * is made here and not in the serial driver, which carries bytes and gives
+ * them no meaning, and not in the display drivers, which do not know a
+ * terminal is listening; the diagnostic path is the one place that writes to
+ * all three and is therefore the one place that knows the same byte must mean
+ * the same thing upon each.
+ */
+static void KernelSerialWriteTranslated(const char *string)
+{
+    for (const char *at = string; *at != '\0'; ++at)
+    {
+        if (*at == '\f')
+        {
+            SerialWriteString("\x1B[2J\x1B[H");
+        }
+        else
+        {
+            SerialPutCharacter(*at);
+        }
+    }
+}
+
 void KernelWriteString(const char *string)
 {
     /*
@@ -298,7 +333,7 @@ void KernelWriteString(const char *string)
     /* The serial line is written whether or not the display is quiet: it is the
      * record, and the quiet is a courtesy to a person and not a change to what
      * the machine says of itself. */
-    SerialWriteString(string);
+    KernelSerialWriteTranslated(string);
 
     if (!KernelDisplayQuiet)
     {

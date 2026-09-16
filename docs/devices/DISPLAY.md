@@ -176,7 +176,8 @@ deprive the machine of its console to no purpose.
 
 ## 6. The control characters
 
-`VgaPutCharacter` implements four control characters, and implements them as
+`VgaPutCharacter` implements five control characters — four since Phase 4, and the
+form feed since 2026-09-16 — and implements them as
 ANSI X3.4-1986 defines them and not as a caller might wish they behaved:
 
 | Character | Effect |
@@ -185,6 +186,7 @@ ANSI X3.4-1986 defines them and not as a caller might wish they behaved:
 | CR (`0x0D`) | The active position moves to the first column of the current row. |
 | HT (`0x09`) | The active position advances to the next multiple of eight columns — to a multiple of eight, not by eight. |
 | BS (`0x08`) | The active position moves one position backward. It does not erase. |
+| FF (`0x0C`) | A new page: the screen is cleared, the active position and the erase limit return to the top left. Added for the shell's `clear`; the diagnostic path turns it into ECMA-48's `ED 2` and `CUP` for the serial line, [`../design/SHELL.md`](../design/SHELL.md), Section 26. |
 
 The last of these deserves its own section.
 

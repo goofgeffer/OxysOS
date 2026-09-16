@@ -136,7 +136,9 @@ and that is the only routine in the kernel permitted to name an output device.
 
 ### 2.2 The control characters
 
-The four of ANSI X3.4-1986 that the text-mode driver implements, given the same
+The four of ANSI X3.4-1986 that the text-mode driver implements — five since
+2026-09-16, the form feed clearing the console by `ConsoleClear` as it clears the
+text-mode display, for the shell's `clear` — given the same
 meanings deliberately, so that one diagnostic path does not behave differently
 upon two displays. `docs/devices/DISPLAY.md`, Sections 6 and 7, is the other half
 of this.
@@ -147,6 +149,7 @@ of this.
 | CR | to the first column of the current row |
 | HT | to the next multiple of eight columns — to a multiple, not by eight |
 | BS | one position backward; **does not erase**, and will not pass the erase limit |
+| FF | the console cleared, the cursor and the erase limit at the top left, the whole surface invalidated |
 
 The tabulation is the one worth stating twice. Columns of text separated by
 tabulations line up only if every one of them lands upon the same grid, whatever
