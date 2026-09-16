@@ -344,7 +344,8 @@ static int ShellBuiltinHelp(void)
                  "cp source target, copies one file to another, created or truncated.\n"
                  "wc [-c] [-l] [-w] [file]..., counts the lines, words and bytes of each "
                  "file, or of the standard input.\n"
-                 "micro file, edits a file a line at a time: p a i e d w q, h for the list.\n");
+                 "micro file, edits a file one line at a time; h at its prompt lists its "
+                 "commands.\n");
 
     return 0;
 }

@@ -551,6 +551,21 @@ static void KernelVerifyConsoleControl(void)
                              "a backspace crossing into a filled row did not stop upon "
                              "its final character");
 
+        /*
+         * The final character is under the cursor and not before it, so the
+         * erasures below — each of which erases the character before the
+         * cursor — would leave it standing. Until 2026-09-16 they did: the
+         * display is quiet for the rest of the boot and nothing scrolls this
+         * row away, so the shell's first prompt was printed upon it and a
+         * lone `x` stood at the right-hand edge of the prompt's row. A space
+         * written here erases it, wrapping the cursor to the next row, and
+         * the backspace crosses back to stand upon the erased column.
+         */
+        ConsoleWriteString(" \b");
+        KernelConsoleRequire(ConsoleColumn() == (columns - 1U),
+                             "erasing the final character of a filled row did not return "
+                             "to it");
+
         for (uint32_t index = 0U; index < columns; ++index)
         {
             ConsoleWriteString("\b \b");

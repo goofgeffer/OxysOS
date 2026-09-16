@@ -188,7 +188,9 @@ qemu-system-x86_64 -machine q35 -cpu qemu64 -smp cores=2 -m 512M \
     -serial chardev:s
 ```
 
-Then, from anything that can connect to a Unix socket, wait for `oxys$ ` and
+Then, from anything that can connect to a Unix socket, wait for the prompt —
+`> ` at the end of the output, the working directory before it since
+2026-09-16; `oxys$ ` until then — and
 send, for example, `wrold` `ESC [ H` `ESC [ C` `ESC [ 3 ~` `ESC [ C` `r`
 `ESC [ F` `CR` — which is Home, Right, Delete, Right, `r`, End, Return — and
 read back `sh: no tokeniser yet, so nothing runs: world`. `ESC [ A` recalls it;

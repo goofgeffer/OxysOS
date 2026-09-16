@@ -9,7 +9,7 @@
  *          `exit` run, and every other command sought upon PATH, forked,
  *          executed with the exported environment, and waited for — and, of
  *          8.6, a pipeline of them run in children with a pipe between each.
- * Key functions: main, ShellReadCommand, ShellRunList, ShellRunCommand,
+ * Key functions: main, ShellPrompt, ShellReadCommand, ShellRunList, ShellRunCommand,
  *          ShellRunStage,
  *          ShellLookupParameter, ShellComplain.
  * References:
@@ -62,8 +62,18 @@
 
 #include "shell.h"
 
-/* The prompts: PS1, and PS2 for the rest of a line that continues. */
-#define SHELL_PROMPT       "oxys$ "
+/*
+ * The prompts: PS1, composed of a fixed head, the working directory and a
+ * fixed tail — `oxys$/> ` at the root, `oxys$/bin> ` within it — and PS2 for
+ * the rest of a line that continues. The directory is in the prompt because a
+ * person who has changed it and then typed `ls` should not have to remember
+ * which of two directories the listing is of; the project owner asked for it on
+ * 2026-09-16. It is read from the kernel at every prompt rather than from PWD,
+ * so that the prompt is the truth and not the shell's record of it.
+ */
+#define SHELL_PROMPT_HEAD  "oxys$"
+#define SHELL_PROMPT_TAIL  "> "
+#define SHELL_PROMPT_BYTES (sizeof SHELL_PROMPT_HEAD + SHELL_VALUE_MAXIMUM + sizeof SHELL_PROMPT_TAIL)
 #define SHELL_CONTINUATION "> "
 
 /*
@@ -79,6 +89,27 @@ static char ShellCommandText[SHELL_COMMAND_BYTES];
 static ShellTokens ShellCommandTokens;
 static ShellList ShellCommandList;
 
+static char ShellPromptText[SHELL_PROMPT_BYTES];
+
+/* Composes PS1 from the working directory as the kernel reports it. A
+ * directory the kernel will not report — which cannot happen, a process
+ * always having one — is shown as `?` rather than as nothing, so that the
+ * prompt says something went wrong instead of looking like a root. */
+static const char *ShellPrompt(void)
+{
+    char directory[SHELL_VALUE_MAXIMUM + 1U];
+
+    if (OxysGetWorkingDirectory(directory, sizeof directory) < 0)
+    {
+        (void)strcpy(directory, "?");
+    }
+
+    (void)snprintf(ShellPromptText, sizeof ShellPromptText, "%s%s%s", SHELL_PROMPT_HEAD,
+                   directory, SHELL_PROMPT_TAIL);
+
+    return ShellPromptText;
+}
+
 /*
  * Reads one complete command into ShellCommandText, continuing across lines,
  * and leaves its tokens and structure in the two objects above. Returns the
@@ -89,7 +120,7 @@ static ShellList ShellCommandList;
 static ShellParseStatus ShellReadCommand(bool *ended)
 {
     size_t used = 0U;
-    const char *prompt = SHELL_PROMPT;
+    const char *prompt = ShellPrompt();
 
     *ended = false;
     ShellCommandText[0] = '\0';

@@ -8,7 +8,8 @@ order, each recording what that sub-task built and why, and each revised as the
 design is. Sub-tasks 8.1 (Sections 1 to 7), 8.2 (Sections 8 to 10), 8.3
 (Sections 11 to 15), 8.4 (Sections 16 to 18), 8.5 (Sections 19 to 21) and 8.6
 (Sections 22 to 24) are here so far; Section 25 is `micro`, the line editor
-added beside 8.6, and Section 26 is `clear`.
+added beside 8.6, Section 26 is `clear`, and Section 27 the prompt that names the
+working directory.
 
 **Authority**: `PROJECT_GUIDELINES.md`, Sections 2, 3 and 6. Every control
 sequence and every rule of the grammar named below carries a citation, and the
@@ -1294,3 +1295,21 @@ Observed on 2026-09-16: over the serial line under QEMU, `clear` produced exactl
 `ESC [ 2 J ESC [ H` between the prompts; typed at VirtualBox's keyboard, the
 screen went black and the next prompt stood at the top left.
 [`../project/TESTING-RECORD.md`](../project/TESTING-RECORD.md).
+
+## 27. The prompt names the working directory
+
+Since 2026-09-16, at the project owner's request, PS1 is `oxys$`, the working
+directory and `> ` — `oxys$/> ` at the root and `oxys$/bin> ` within it —
+rather than the fixed `oxys$ ` of Section 4. A person who has changed
+directory and then typed `ls` should not have to remember which of two
+directories the listing is of. The directory is asked of the kernel at every
+prompt, by `getcwd`, rather than read from `PWD`, so that the prompt is the
+truth and not the shell's record of it; the shell keeps `PWD` for programs, as
+Section 13 has it. The continuation prompt is `> ` still, and a person reading
+a session must tell the two apart by what precedes the arrow, which is nothing
+for a continuation. [`../../userland/sh/main.c`](../../userland/sh/main.c),
+`ShellPrompt`.
+
+Anything that waits for the prompt — the driver of
+[`../project/TESTING.md`](../project/TESTING.md), Section 2.1, was one — now
+waits for `> ` at the end of the output rather than for `oxys$ `.

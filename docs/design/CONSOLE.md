@@ -378,6 +378,7 @@ case that needs a character drawn was the one case never exercised.
 | Three erasures then return to column 0 | The landing was right and the erasure that follows it is not, which is the half a position assertion alone would not reach. |
 | BS crossing into a row filled to its last column stops upon that **final character** | The wrapped row treated as one that ended with a line feed. There is no separator there to consume, so the cursor would stop one position past the last character and the erasure would fall off the row. |
 | Erasing a filled row returns to column 0 | The same, over the whole width of the display rather than at one position. |
+| Erasing the final character of a filled row returns to it | **The `x` at the edge of the prompt.** The self-test filled a row with `x`, crossed back onto the last of them, and then erased the character *before* the cursor as many times as the row is wide — which left the one under the cursor standing. The display is quiet for the rest of the boot, so nothing scrolled the row away, and the shell's first prompt was printed upon it with a lone `x` at the right-hand edge of its row, every boot from 8.1 until 2026-09-16, when the project owner asked what it was. |
 
 ### 4.4 What a person judges
 
