@@ -59,8 +59,9 @@ sub-task 8.1 the shell.
 | `/mnt` | Empty. Where a volume the machine carries is mounted; Section 6.3. |
 | `/lost+found` | `mke2fs` makes it. Nothing here uses it. |
 
-**The check programs — four of sub-task 7.6, one of 8.1 — are deliberately not here.**
-`arg-check`, `exec-check`, `file-check`, `startup-check` and `line-check` are a test's
+**The check programs — four of sub-task 7.6, one of 8.1, one of 8.3 and one of 8.4 — are deliberately not here.**
+`arg-check`, `exec-check`, `file-check`, `startup-check`, `line-check`, `dir-check`
+and `env-check` are a test's
 apparatus: each exists to make a machine-readable statement about a system call,
 and each is embedded in the kernel image beside the self-test that runs it. A
 system that shipped them in `/bin` would be shipping its own test harness to

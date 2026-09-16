@@ -145,6 +145,47 @@ int main(void)
 
     DirectoryRequire(DirectoryIs("/bin"), "the child's chdir changed the parent's directory");
 
+    /* A child that becomes another program by execve, since sub-task 8.4:
+     * the parent's memory — its stack, this pattern upon it — must survive
+     * the release of the child's cloned address space. */
+    {
+        char pattern[64];
+        static char echo_name[] = "echo";
+        static char echo_operand[] = "from the child";
+        static char *const echo_vector[] = { echo_name, echo_operand, NULL };
+
+        memset(pattern, 0x5A, sizeof pattern);
+        child = OxysFork();
+
+        if (child == 0)
+        {
+            (void)OxysExecve("/bin/echo", echo_vector, NULL);
+            OxysExit(99);
+        }
+
+        DirectoryRequire(child > 0, "the second fork failed");
+
+        if (child > 0)
+        {
+            int64_t status = -1;
+            int intact = 1;
+
+            DirectoryRequire(OxysWait(&status) == child, "wait did not collect the child that "
+                                                         "became echo");
+            DirectoryRequire(status == 0, "the child that became echo did not end with zero");
+
+            for (size_t index = 0U; index < sizeof pattern; ++index)
+            {
+                if (pattern[index] != 0x5A)
+                {
+                    intact = 0;
+                }
+            }
+
+            DirectoryRequire(intact, "the parent's stack did not survive the child's execve");
+        }
+    }
+
     DirectoryRequire(OxysChangeDirectory("/") == 0, "chdir back to the root failed");
 
     (void)printf("dir-check: %d failure(s).\n", DirectoryFailures);

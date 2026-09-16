@@ -556,6 +556,77 @@ static const char VerifyShellBuiltinSession[] =
 
 #define VERIFY_SHELL_BUILTIN_STATUS 137
 
+/*
+ * A third session, of sub-task 8.4, whose evidence is again the status: the
+ * shell runs programs — `env-check`, written to /verify by this test and
+ * asserting what it was given; `cat` failing with 1; a name not found with
+ * 127; `echo` found upon the default PATH — and `exit $A$C$N$E` is 111272,
+ * which is 168 in the eight bits a status has, only if each of them behaved.
+ * The number is checked for what a wrong combination would produce, and none
+ * of the near ones coincides.
+ */
+static const char VerifyShellProgramSession[] =
+    "export MARK=abcd\n"
+    "HIDDEN=1\n"
+    "/verify/env-check alpha \"b c\" && A=1\n"
+    "/bin/cat /nope; C=$?\n"
+    "nothing; N=$?\n"
+    "echo hi && E=2\n"
+    "exit $A$C$N$E\n";
+
+#define VERIFY_SHELL_PROGRAM_STATUS (111272 & 0xFF)
+
+/* Where env-check is placed for the session, and removed after it. */
+#define VERIFY_SHELL_DIRECTORY "/verify"
+#define VERIFY_SHELL_PROGRAM_PATH "/verify/env-check"
+
+extern const uint8_t KernelProgramEnvCheckBegin[];
+extern const uint8_t KernelProgramEnvCheckEnd[];
+
+/* Writes env-check onto the root. Returns false having said why. */
+static bool VerifyShellPlaceProgram(void)
+{
+    const uint64_t length = (uint64_t)(KernelProgramEnvCheckEnd - KernelProgramEnvCheckBegin);
+    uint64_t written = 0U;
+    int descriptor;
+
+    if (!VfsCreateDirectory(VERIFY_SHELL_DIRECTORY, 0755U))
+    {
+        VerifyShellRequire(false, "the /verify directory could not be made");
+
+        return false;
+    }
+
+    descriptor = VfsOpen(VERIFY_SHELL_PROGRAM_PATH,
+                         VFS_OPEN_WRITE | VFS_OPEN_CREATE | VFS_OPEN_TRUNCATE, 0755U);
+
+    if (descriptor < 0)
+    {
+        VerifyShellRequire(false, "env-check could not be created upon the root");
+
+        return false;
+    }
+
+    if (!VfsWrite(descriptor, KernelProgramEnvCheckBegin, length, &written) || (written != length))
+    {
+        (void)VfsClose(descriptor);
+        VerifyShellRequire(false, "env-check could not be written whole");
+
+        return false;
+    }
+
+    (void)VfsClose(descriptor);
+
+    return true;
+}
+
+static void VerifyShellRemoveProgram(void)
+{
+    VerifyShellRequire(VfsUnlink(VERIFY_SHELL_PROGRAM_PATH), "env-check could not be removed");
+    VerifyShellRequire(VfsRemoveDirectory(VERIFY_SHELL_DIRECTORY),
+                       "the /verify directory could not be removed");
+}
+
 static Thread *VerifyShellBoot;
 
 static bool VerifyShellRun(int64_t *status)
@@ -687,15 +758,24 @@ void KernelVerifyShell(void)
     VerifyShellProgram(VerifyShellBuiltinSession, sizeof VerifyShellBuiltinSession - 1U,
                        VERIFY_SHELL_BUILTIN_STATUS, "upon the built-ins' session");
 
+    if (VerifyShellPlaceProgram())
+    {
+        VerifyShellProgram(VerifyShellProgramSession, sizeof VerifyShellProgramSession - 1U,
+                           VERIFY_SHELL_PROGRAM_STATUS, "upon the programs' session");
+        VerifyShellRemoveProgram();
+    }
+
     if (VerifyShellSucceeded)
     {
         KernelWriteString("Shell self-test passed: every operator, quote and io_number tokenised "
                           "as Section 2.3 requires, the grammar's subset parsed and its "
                           "remainder was refused by name, assignments and expansion behaved, and the shell read sessions of ");
         KernelWriteDecimal((uint64_t)(sizeof VerifyShellSession - 1U));
-        KernelWriteString(" and ");
+        KernelWriteString(", ");
         KernelWriteDecimal((uint64_t)(sizeof VerifyShellBuiltinSession - 1U));
-        KernelWriteString(" bytes at privilege level 3, ending with zero and with the status its built-ins composed.\n");
+        KernelWriteString(" and ");
+        KernelWriteDecimal((uint64_t)(sizeof VerifyShellProgramSession - 1U));
+        KernelWriteString(" bytes at privilege level 3, ending with zero, with the status its built-ins composed, and with the status the programs it ran composed.\n");
     }
     else
     {

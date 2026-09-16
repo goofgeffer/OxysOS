@@ -2,12 +2,12 @@
 /* SPDX-License-Identifier: MIT */
 /*
  * File: userland/sh/main.c
- * Purpose: The shell of Phase 8, as far as sub-task 8.3 takes it: a prompt, a
+ * Purpose: The shell of Phase 8, as far as sub-task 8.4 takes it: a prompt, a
  *          line read through the editor with its history, the line tokenised
  *          and parsed — continued upon a second prompt where it is incomplete
  *          — its words expanded, and the built-ins `cd`, `pwd`, `export` and
- *          `exit` run; every other command is reported as not found, nothing
- *          yet being able to find one.
+ *          `exit` run, and every other command sought upon PATH, forked,
+ *          executed with the exported environment, and waited for.
  * Key functions: main, ShellReadCommand, ShellRunList, ShellRunCommand,
  *          ShellLookupParameter, ShellComplain.
  * References:
@@ -26,15 +26,16 @@
  *     variables and the built-ins.
  *   - docs/design/SHELL.md, Sections 4, 8 and 11 to 15.
  *
- * What this program is at sub-task 8.3, stated plainly so that nobody mistakes
+ * What this program is at sub-task 8.4, stated plainly so that nobody mistakes
  * it for more.
  *
- *   It prompts, reads, parses, expands `$NAME` and `$?`, sets variables, and
- *   runs four built-ins. A command that is not one of the four is answered
- *   with the status 127 of Section 2.8.2 and a description of what would have
- *   run — which is the truth of it: nothing can find a program until 8.4.
- *   `&&` and `||` are honoured, `!` inverts, and `$?` reports, so that the
- *   built-ins can be composed and their statuses seen.
+ *   It prompts, reads, parses, expands `$NAME` and `$?`, sets variables, runs
+ *   four built-ins, and runs every other command as a program: sought upon
+ *   PATH, forked, executed with the exported variables as its environment,
+ *   and waited for. `&&` and `||` are honoured, `!` inverts, and `$?` reports.
+ *   Redirections are named and not performed, a pipeline of more than one
+ *   command is refused, `&` is recorded and not honoured, and nothing can be
+ *   interrupted: 8.5, 8.6 and 8.7 in turn.
  *
  * How a line continues.
  *
@@ -143,22 +144,6 @@ static ShellParseStatus ShellReadCommand(bool *ended)
     }
 }
 
-/* The text of a redirection operator, Section 2.7, for the description. */
-static const char *ShellRedirectionText(ShellRedirectionKind kind)
-{
-    switch (kind)
-    {
-    case SHELL_REDIRECT_INPUT:         return "<";
-    case SHELL_REDIRECT_OUTPUT:        return ">";
-    case SHELL_REDIRECT_CLOBBER:       return ">|";
-    case SHELL_REDIRECT_APPEND:        return ">>";
-    case SHELL_REDIRECT_DUPLICATE_IN:  return "<&";
-    case SHELL_REDIRECT_DUPLICATE_OUT: return ">&";
-    case SHELL_REDIRECT_READ_WRITE:    return "<>";
-    default:                           return "?";
-    }
-}
-
 /* ---------------------------------------------------------------------------
  * Execution, as far as sub-task 8.3 takes it: the built-ins run, and every
  * other command is described and reported as not found.
@@ -227,11 +212,10 @@ static bool ShellApplyAssignment(const char *word)
  * Runs one simple command, and returns its status.
  *
  * A command with no name is its assignments, applied to the shell (Section
- * 2.9.1). A built-in is run here, its assignments applied first where it is a
- * special built-in (Section 2.14) and not otherwise. Anything else is
- * described, as sub-task 8.2 described everything, and reported with the
- * status 127 that Section 2.8.2 gives a command that could not be found —
- * which is the truth of it: nothing here can find a program until 8.4.
+ * special built-in (Section 2.14) and not otherwise. Anything else is a
+ * program, since 8.4: sought upon PATH, forked, executed with the exported
+ * environment and waited for by run.c, with the 127 of Section 2.8.2 where
+ * it could not be found. Redirections are named and not performed until 8.5.
  * Redirections are named and not performed until 8.5.
  */
 static int ShellRunCommand(const ShellCommand *command, bool *exit_requested)
@@ -269,24 +253,19 @@ static int ShellRunCommand(const ShellCommand *command, bool *exit_requested)
 
     if (!ShellIsBuiltin(ShellArgumentVector[0]))
     {
-        (void)printf("sh: %s: not found; nothing runs a program until sub-task 8.4:",
-                     ShellArgumentVector[0]);
-
-        for (int index = 0; index < argc; ++index)
+        /*
+         * A program, since sub-task 8.4. Its redirections are still named and
+         * not performed, 8.5 being where a descriptor is redirected; the
+         * diagnostic says so rather than letting `ls > out` print to the
+         * screen with no word about the file that was not made.
+         */
+        if (command->redirection_count > 0U)
         {
-            (void)printf(" [%s]", ShellArgumentVector[index]);
+            (void)fprintf(stderr, "sh: %s: redirections are not performed until sub-task 8.5.\n",
+                          ShellArgumentVector[0]);
         }
 
-        for (size_t index = 0U; index < command->redirection_count; ++index)
-        {
-            const ShellRedirection *const io = &command->redirection[index];
-
-            (void)printf(" %d%s[%s]", io->descriptor, ShellRedirectionText(io->kind), io->target);
-        }
-
-        (void)printf("\n");
-
-        return 127;
+        return ShellRunProgram(ShellArgumentVector);
     }
 
     special = ShellIsSpecialBuiltin(ShellArgumentVector[0]);
@@ -412,9 +391,9 @@ int main(void)
         }
     }
 
-    (void)printf("The Oxys-OS shell, sub-task 8.3: a line editor, a parser, and the built-ins "
-                 "cd, pwd,\nexport and exit. Nothing else runs yet; `exit' or control-D ends "
-                 "the shell.\n");
+    (void)printf("The Oxys-OS shell, sub-task 8.4: programs run from /bin with the exported\n"
+                 "environment; cd, pwd, export and exit are built in; `exit' or control-D ends\n"
+                 "the shell. No redirection, no pipeline, no job control yet.\n");
 
     while (!exit_requested)
     {

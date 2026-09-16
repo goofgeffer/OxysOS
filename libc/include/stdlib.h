@@ -33,12 +33,12 @@
  * and the multibyte conversions of 7.22.7 and 7.22.8. Each arrives with the
  * sub-task that needs it.
  *
- * **getenv and system are the two of 7.22.4 that are not here**, and neither is
- * an oversight. `getenv` searches an environment, and this kernel's `execve`
- * refuses an environment vector — there being no convention yet fixed for where
- * a program finds its strings upon the stack — so a `getenv` here could only
- * ever return a null pointer, which is a function that can only fail. `system`
- * runs a command interpreter, and Phase 8 is where one is built.
+ * **system is the one of 7.22.4 that is not here**, and it is not an oversight:
+ * it runs a command interpreter, and Phase 8 is where one is built. `getenv` was
+ * absent until sub-task 8.4 for a reason of its own — this kernel's `execve`
+ * refused an environment vector until 7.6, and no program was given one until
+ * the shell of 8.4 exported its variables, so a `getenv` before then could only
+ * ever have returned a null pointer, which is a function that can only fail.
  *
  * The types <stdlib.h> is required to define — size_t, wchar_t, div_t, ldiv_t,
  * lldiv_t — are likewise not all here. size_t is obtained from <stddef.h>, which
@@ -161,6 +161,15 @@ void free(void *pointer);
  * down first, exactly as a stack unwinds.
  */
 int atexit(void (*function)(void));
+
+/*
+ * 7.22.4.6: the value of the environment variable `name`, or a null pointer
+ * where there is none. Present since sub-task 8.4, when the shell first gave a
+ * program an environment: the exported variables, as NAME=value strings upon
+ * the initial stack, which `_start` records for this to search. The pointer
+ * returned names the string itself and not a copy.
+ */
+char *getenv(const char *name);
 
 /*
  * 7.22.4.4: causes normal program termination.

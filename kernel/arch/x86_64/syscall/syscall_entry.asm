@@ -152,12 +152,25 @@ SyscallEntry:
     pop     rcx
     pop     rbx
     pop     rax
-    add     rsp, 8              ; The saved user stack, restored below instead.
 
-    ; The reverse of the entry, in the reverse order and for the same reasons:
-    ; the caller's stack is recovered while GS still names the kernel's block,
-    ; and GS is put back last, when nothing further needs it.
-    mov     rsp, [gs:BLOCK_USER_STACK]
+    ; The caller's stack is recovered from the frame and not from the block.
+    ;
+    ; It was recovered from the block until sub-task 8.4, and the block is per
+    ; processor where the frame is per thread. Nothing distinguished the two
+    ; while one thread at a time was inside a system call upon a processor;
+    ; but `wait` runs a child *within* the parent's call, and a child that
+    ; executes SYSCALL — `execve`, or `exit` upon a stack of its own — writes
+    ; its stack pointer over the parent's in the block. The parent's SYSRET
+    ; then returned it to the child's stack, where it popped whatever stood
+    ; there as a return address. A child that merely exited from the cloned
+    ; stack had the same pointer as its parent, so five sub-tasks of fork and
+    ; wait never saw it; the first child to become another program did.
+    ;
+    ; POP RSP loads the stack pointer with the eightbyte at the old top of the
+    ; stack, which is the saved user stack the entry pushed first; Intel SDM,
+    ; Volume 2B, "POP". GS still names the kernel's block for one instruction
+    ; more, and is put back last, when nothing further needs it.
+    pop     rsp
     swapgs
 
     ; SYSRET with the REX.W prefix, which is what returns to 64-bit mode; without

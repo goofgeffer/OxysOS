@@ -1716,10 +1716,12 @@ handed to `exit`.
    by exactly one link. Sub-task 7.6 is the first time it is used for something
    that is not about itself, and it is where a second program would find whatever
    this one's shape happens to depend upon.
-4. **`getenv` and `system` are absent from `<stdlib.h>`**, and a program has no
-   environment to search. Both wait upon the same thing: a convention for where a
-   program finds its strings, which `execve` refusing both vectors is the
-   placeholder for.
+4. **`getenv` and `system` were absent from `<stdlib.h>`**, a program having no
+   environment to search; both waited upon a convention for where a program
+   finds its strings, which `execve` refusing both vectors was the placeholder
+   for. The convention arrived at 7.6, and **`getenv` at 8.4**, when the shell
+   first gave a program an environment; `system` waits upon the shell being a
+   thing worth running from a program. [`SHELL.md`](SHELL.md), Section 17.
 5. **Nothing links dynamically, and nothing will for some time.** There is no
    loader, no `PLT`, no `.dynamic`, and the startup object ignores the finaliser
    the ABI offers it. A ported toolchain is what will first want any of that.

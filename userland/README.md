@@ -9,7 +9,7 @@ could find, in `/bin` upon the initial ramdisk the kernel mounts as its root; an
 sub-task 8.1 added the shell, which the kernel starts when the boot finishes, and
 the program that asserts its line editor. See
 [`../docs/storage/INITRD.md`](../docs/storage/INITRD.md), and Section 2 of it for
-why the five `-check` programs are **not** carried there: each exists to make a
+why the six `-check` programs are **not** carried there: each exists to make a
 machine-readable statement about a system call, so each is embedded in the kernel
 image beside the self-test that runs it, and a system that shipped them in `/bin`
 would be shipping its own test harness to somebody who asked for a shell.
@@ -49,15 +49,17 @@ which is what makes the boundary worth having somewhere a person can see.
 | [`arg-check/main.c`](arg-check/main.c) | Sub-task 7.6: compares the argument vector it was given against the vector it expects, and ends with the number of comparisons that failed. It exists because nothing in this kernel can read what a program printed. |
 | [`exec-check/main.c`](exec-check/main.c) | Sub-task 7.6: becomes `arg-check` through `execve`, so that a vector crosses an address space that is destroyed. It has no assertions of its own — upon success it no longer exists, and the status the kernel collects is `arg-check`'s. |
 | [`file-check/main.c`](file-check/main.c) | Sub-task 7.6: asserts the six filesystem calls by comparison — a file of known contents read byte for byte, a directory of known entries listed, and twenty refusals asserted by the **name** of the failure rather than by its sign. It was written because a negative test showed that a `read` delivering no bytes at all was reported by nothing. |
-| [`sh/main.c`](sh/main.c) | Sub-task 8.1, extended at 8.2 and 8.3: the shell, as far as a line editor, a parser and four built-ins take it. It prompts with `oxys$ `, reads a command through the C library's editor — continuing it upon a `> ` prompt where a quote or an operator is left open — parses it, expands `$NAME` and `$?`, applies assignments, runs `cd`, `pwd`, `export` and `exit`, honours `&&`, `||` and `!`, and answers every other command with the 127 of a command not found. A refused line is answered with the status and the token it stopped at. `exit` or control-D ends it. |
+| [`sh/main.c`](sh/main.c) | Sub-task 8.1, extended at 8.2, 8.3 and 8.4: the shell, as far as a line editor, a parser, four built-ins and `fork` and `execve` take it. It prompts with `oxys$ `, reads a command through the C library's editor — continuing it upon a `> ` prompt where a quote or an operator is left open — parses it, expands `$NAME` and `$?`, applies assignments, runs `cd`, `pwd`, `export` and `exit`, honours `&&`, `||` and `!`, and runs every other command as a program sought upon `PATH`, with the 127 of a command not found where there is none. A refused line is answered with the status and the token it stopped at. `exit` or control-D ends it. |
 | [`sh/shell.h`](sh/shell.h) | Sub-task 8.2: the token, the command structure the parser builds — pipelines of simple commands with their redirections, conditions and separators — the bounds upon both, and why the tokens keep their quotes. |
 | [`sh/lexer.c`](sh/lexer.c) | Sub-task 8.2: the tokeniser of IEEE Std 1003.1-2017, Section 2.3, the quoting of Section 2.2, and the quote removal of Section 2.6.7 applied last. Compiled into the kernel image as well, where the self-test asserts it. |
 | [`sh/parser.c`](sh/parser.c) | Sub-task 8.2: the subset of Section 2.10's grammar this shell implements, and the remainder refused by name. Compiled into the kernel image as well. |
 | [`sh/expand.c`](sh/expand.c) | Sub-task 8.3: parameter expansion — `$NAME`, `${NAME}`, `$?` — and quote removal in one pass, so that a value's characters are never quoting characters. Takes a lookup function, so the kernel asserts it against a table of its own. Compiled into the kernel image as well. |
 | [`sh/variables.c`](sh/variables.c) | Sub-task 8.3: the variable table, fixed at sixty-four, each marked exported or not; what a name is; what an assignment word is. Compiled into the kernel image as well. |
 | [`sh/builtins.c`](sh/builtins.c) | Sub-task 8.3: `cd`, `pwd`, `export` and `exit` — the one unit of the shell's that reaches a system call, and therefore the one not compiled into the kernel image. |
+| [`sh/run.c`](sh/run.c) | Sub-task 8.4: the search upon `PATH`, the environment built from the exported variables, the `fork`, the `execve` tried upon each candidate in the child, and the `wait` that turns what the child ended with into a status. Reaches system calls, so not compiled into the kernel image. |
 | [`line-check/main.c`](line-check/main.c) | Sub-task 8.1: reads an editing session the kernel's self-test placed upon the terminal, through the same `LineRead` the shell uses, and ends with the number of lines that were not what the session should have edited into. It asserts the half of the sub-task the kernel cannot: the `read` of descriptor 0 and the editor's output reaching descriptor 1, both of which execute `SYSCALL`. |
 | [`dir-check/main.c`](dir-check/main.c) | Sub-task 8.3: asserts the working directory from the only place it can be asserted — a program — and ends with the number of assertions that failed: that a process begins at the root, that `chdir` moves it and `getcwd` reports it canonically, that a relative path is resolved against it by `open`, that a child of `fork` inherits it, and that each refusal is the named one. |
+| [`env-check/main.c`](env-check/main.c) | Sub-task 8.4: asserts what the shell gives a program it runs — the argument vector as typed with its quotes removed, the exported variables in the environment and the assigned ones absent — and ends with the number that failed. The self-test writes it to `/verify/env-check` for the session and removes it, a check program not being shipped in `/bin`. |
 
 **The `-check` programs are not utilities and are not shipped as such.**
 They exist to assert what a utility cannot assert of itself, for the reason
@@ -97,7 +99,7 @@ symbol in whichever program was edited last. **A program is a directory under
 this one, every `.c` file in it is the program's, and the directory's name is the
 program's**, so adding one is adding a name to that list and a directory beside
 the others. It was `main.c` alone until sub-task 8.2, whose shell was three
-translation units and is six at 8.3; four of them — the tokeniser, the parser,
+translation units and is seven at 8.4; four of them — the tokeniser, the parser,
 the expansion and the variables — are also compiled
 into the kernel image under `SHELL_SOURCES`, where the self-test asserts the
 grammar without running the shell — the arrangement the C library has, and the
@@ -123,9 +125,11 @@ bounded at `SYSCALL_ARGUMENT_COUNT_MAXIMUM` strings per vector and
 `<oxys/syscall_abi.h>` because a program that will be refused is entitled to know
 what it will be refused against.
 
-**The environment vector exists and is empty.** `envp[0]` is a null pointer, not
-`envp` itself: nothing in this system sets an environment, so `getenv` remains
-absent from `<stdlib.h>` and the header records why.
+**The environment vector is real since sub-task 8.4.** A program the shell runs
+finds the variables the shell exported, as `NAME=value` strings, and `getenv`
+of `<stdlib.h>` searches them; `_start` records where they stand. A program
+the kernel starts — the shell itself, and the check programs — still finds
+`envp[0]` a null pointer, nothing in the kernel setting an environment.
 
 **A program may open, read and list a file, and may not create or write one.**
 The kernel had fourteen system calls at 7.6 and has sixteen since 8.3; `OxysOpen` accepts `SYSCALL_OPEN_READ` and

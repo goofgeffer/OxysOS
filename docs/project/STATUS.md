@@ -424,8 +424,9 @@ the wrappers, about `malloc` obtaining memory from the break, and about `exit`
 calling what `atexit` registered before it flushes — and ends with the number of
 them that failed, which the kernel checks independently of anything printed.
 
-**`getenv` is absent and a program has no environment**, this kernel's `execve`
-accepting neither vector; there is no dynamic linking of any kind; and the three
+**`getenv` was absent and a program had no environment** until sub-task 8.4, this
+kernel's `execve` having accepted neither vector until 7.6 and no program having
+exported one until the shell did; there is no dynamic linking of any kind; and the three
 segments' permissions are given by the linker script and asserted by nothing,
 because an address space still cannot be asked what it maps.
 
@@ -555,6 +556,22 @@ in a fixed table, the assignment word `NAME=value`, the expansion of `$NAME`,
 the shell, run upon a session, ends with the 137 that only every built-in
 working composes. [`../design/SHELL.md`](../design/SHELL.md), Sections 11 to 15.
 
+**Sub-task 8.4 is complete: programs run from the prompt.** A command that is
+not a built-in is sought upon `PATH` — `/bin` when unset — forked, executed
+with the exported variables as its environment, and waited for; `env-check`,
+written onto the root by the self-test, finds its arguments with their quotes
+removed and its exported variable and not the assigned one; `cat` of nothing
+is 1, a name not found is 127, and `echo` upon the default `PATH` is 0.
+`getenv` is in `<stdlib.h>`. **The first program the shell ran found a defect
+in the system-call entry path** that had stood since 6.7: the caller's stack
+pointer was saved in the per-processor block and restored from there, and a
+child's `SYSCALL` inside the parent's `wait` overwrote it; a child that exited
+from the cloned stack had the same pointer, which is why five sub-tasks never
+saw it. It is restored from the per-thread frame now. What is still absent is
+8.5's redirection, 8.6's pipeline and 8.7's job control, each refused or named
+rather than pretended. [`../design/SHELL.md`](../design/SHELL.md), Sections 16
+to 18.
+
 ## 3. Where it has been observed to work
 
 A sub-task marked *implemented* in [`PLAN.md`](PLAN.md) means the code exists and
@@ -587,6 +604,7 @@ The physical machine is one machine — the HP Laptop 14-dq0052dx specified in
 | 8.1 The terminal, the line editor and the shell | Yes, and driven over the serial line | **Yes, and driven at the PS/2 keyboard** | **Yes — 8.1**, to the prompt | — | **Not yet run** |
 | 8.2 The tokeniser and the parser | Yes, and driven over the serial line | **Yes** | **Yes — 8.2**, to the prompt | — | **Not yet run** |
 | 8.3 The built-ins and the working directory | Yes, and driven over the serial line | **Yes** | **Yes — 8.3**, to the prompt | — | **Not yet run** |
+| 8.4 Programs run from the prompt | Yes, and driven over the serial line | **Yes** | **Yes — 8.4**, to the prompt | — | **Not yet run** |
 
 **The rows marked "— 7.2" were all established by two boots of one image**,
 because a boot runs every self-test in the corpus and a clean one is therefore
@@ -815,7 +833,7 @@ design document ends with its particular ones.
 | Absent | Arrives at |
 | ------ | ---------- |
 | A user program upon anything but the bootstrap processor. Every user thread's affinity mask names processor 0 alone, because the allocators, the process tables and the filesystem layer its system calls reach are still unsynchronised. `SCHEDULER.md`, Section 4, and `CONCURRENCY.md`, Section 10, limitation 1. | Phase 7 |
-| More than one program at a time. The scheduler rotates threads, but nothing yet creates a second *program* that runs beside the first rather than in place of it. | Phase 7 |
+| More than one program at a time. The shell runs a program since sub-task 8.4, but `wait` runs the child upon the parent's own flow of control, so the two are never running at once; a user thread of the scheduler's own is what would change it. | Phase 8 |
 | A wait that yields the processor. A `read` of the terminal halts the bootstrap processor until a key arrives, which is right while one program runs upon its own flow of control and wrong the moment there are two; it is the first thing that would use the wait queue `SCHEDULER.md`, Section 9, limitation 8, records as absent. `SHELL.md`, Section 6. | Phase 8 |
 | A canonical terminal. `stdin` is raw: `fgets` delivers keystrokes and control sequences, unechoed, and `cat` with no operand still reports the absence. The shell wants raw; nothing yet wants the other. `SHELL.md`, Section 2.1. | When something wants it |
 | Synchronisation **applied**, beyond three structures. The diagnostic channel was locked at 6.14; the run queues and the process and thread tables at 6.15. Every other shared structure is still unsynchronised and still says so in its own file's header; `CONCURRENCY.md`, Section 10, limitation 1, enumerates them. | Phase 7 |

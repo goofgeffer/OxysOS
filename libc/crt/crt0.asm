@@ -60,6 +60,7 @@ section .text.entry progbits alloc exec nowrite align=16
 global _start
 extern main
 extern exit
+extern OxysEnvironment
 
 _start:
     ; The deepest stack frame is marked by a null frame pointer, which Section
@@ -81,6 +82,12 @@ _start:
     ; computation because that is what the arithmetic of Section 3.4.1 is:
     ; 8+8*argc+%rsp is the terminator, and the eightbyte after it is envp.
     lea     rdx, [rsi + rdi*8 + 8]
+
+    ; And recorded, since sub-task 8.4, for getenv to search: the vector is the
+    ; kernel's and never moves, so its address is the whole of what the library
+    ; needs to keep. Written through a RIP-relative address because the program
+    ; is linked at a fixed address and the assembler is told nothing else.
+    mov     [rel OxysEnvironment], rdx
 
     ; The stack pointer is already 16-byte aligned, Section 3.4.1 guaranteeing
     ; it and the kernel's frame being a multiple of sixteen. It is aligned again

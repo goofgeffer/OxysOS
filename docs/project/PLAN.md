@@ -191,9 +191,22 @@ and answers every command that is not a built-in with the 127 of a command not
 found — which is the truth of it until 8.4. `ls` with no operand lists `.` at
 last. [`../design/SHELL.md`](../design/SHELL.md), Sections 11 to 15.
 
-**Next: sub-task 8.4** — external program execution by `fork` and `execve`,
-which is where the exported variables become a program's environment and a
-command that is not a built-in is found in `/bin`.
+**Sub-task 8.4 is complete, and it is what the phase was for**: `ls`, `cat`,
+`echo`, `mkdir` and `rm` run from the prompt. A command that is not a built-in
+is sought upon `PATH`, forked, executed with the exported variables as its
+environment — `getenv` arriving with the first program that could use it —
+and waited for, with the statuses Section 2.8.2 assigns. The first program the
+shell ran found a defect that had stood in the system-call entry path since
+6.7: the caller's stack pointer was restored from the per-processor block,
+which a child's `SYSCALL` inside the parent's `wait` overwrote. It is restored
+from the per-thread frame now. [`../design/SHELL.md`](../design/SHELL.md),
+Sections 16 to 18.
+
+**Next: sub-task 8.5** — input and output redirection, which needs the two
+things [`../design/LIBC.md`](../design/LIBC.md), Section 12.7, has held for it
+since 7.6: a call that creates or writes a file, and a descriptor a child
+inherits.
+
 
 
 
@@ -826,7 +839,7 @@ system's — and the first of those is sub-task 8.3's.
 | 8.1 | Implement line editing with history. | Implemented | `KernelVerifyTerminal`, `KernelVerifyLine` |
 | 8.2 | Implement the tokeniser and the command parser. | Implemented | `KernelVerifyShell` |
 | 8.3 | Implement built-in commands (`cd`, `exit`, `export`, `pwd`). | Implemented | `KernelVerifyDirectory`, `KernelVerifyShell` |
-| 8.4 | Implement external program execution by `fork()` and `execve()`. | Planned | — |
+| 8.4 | Implement external program execution by `fork()` and `execve()`. | Implemented | `KernelVerifyShell`, `KernelVerifyDirectory` |
 | 8.5 | Implement input and output redirection. | Planned | — |
 | 8.6 | Implement pipelines. | Planned | — |
 | 8.7 | Implement job control, process groups and terminal signal delivery. **`Oxys 1 Alpha` is cut here.** | Planned | — |
@@ -927,6 +940,32 @@ were caught. Section 14. **Six limitations are recorded**, of which the first
 is that the working directory is a path reduced lexically and not a held
 node, and the third that no environment reaches a program until 8.4's
 `execve` carries it. Section 15.
+
+**(d)** Sub-task 8.4 is what the phase was for: a command that is not a
+built-in is sought upon `PATH` (`/bin` when unset), forked, executed with the
+exported variables as its environment, and waited for, with the statuses
+Section 2.8.2 assigns — 127 not found, 126 found and not runnable, the
+program's own otherwise. The search happens in the child by executing each
+candidate, this kernel having no call that asks whether a file exists short of
+opening it. `getenv` arrives in `<stdlib.h>` with the first program that could
+have used it. [`../design/SHELL.md`](../design/SHELL.md), Sections 16 and 17.
+
+**The first program the shell ran found a defect in the system-call entry
+path that had stood since 6.7.** The caller's stack pointer was saved in the
+per-processor block and restored from there at `SYSRET`; `wait` runs a child
+within the parent's call, and a child that executed `SYSCALL` overwrote it.
+Five sub-tasks of `fork` and `wait` never saw it because a child that exited
+from the cloned stack had the same pointer; the first child to become another
+program did, and the shell resumed upon the child's stack. The pointer is now
+restored from the per-thread frame. Section 16.3, and
+[`../design/PRIVILEGE.md`](../design/PRIVILEGE.md), Section 9.1.
+
+**The evidence is a status again.** `env-check` is written onto the root by
+the test — a program written there at run time being found and run is itself
+an assertion — and the shell's session ends with 168 only if the vector, the
+environment, a program's failure, a not-found and a `PATH` search all behaved;
+`dir-check` asserts that a parent's stack survives a child's `execve`. Two
+negative tests were caught. Section 18.
 
 **Sub-task 8.7 closes Phase 8 and is where the first release is cut.** `Oxys 1
 Alpha` is the first image worth handing to somebody, because it is the first one

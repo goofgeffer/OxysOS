@@ -299,4 +299,16 @@ bool ShellIsBuiltin(const char *name);
 bool ShellIsSpecialBuiltin(const char *name);
 int ShellRunBuiltin(int argc, char **argv, int last_status, bool *exit_requested);
 
+/*
+ * External program execution, of sub-task 8.4, in userland/sh/run.c — a unit
+ * that reaches system calls and is therefore, like builtins.c, not compiled
+ * into the kernel image. ShellRunProgram forks, seeks and executes the program
+ * argv[0] names in the child with the environment ShellBuildEnvironment
+ * composes from the exported variables, waits, and returns the status: the
+ * program's, 127 where it could not be found, 126 where it was found and
+ * could not run, or 128 plus the vector where it ended by a fault.
+ */
+int ShellRunProgram(char **argv);
+char **ShellBuildEnvironment(void);
+
 #endif /* OXYS_SHELL_H */

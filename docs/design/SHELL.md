@@ -5,8 +5,8 @@
 **Phase**: 8 of [`../project/PLAN.md`](../project/PLAN.md). This document is
 Phase 8's, as [`LIBC.md`](LIBC.md) is Phase 7's: one section per sub-task, in
 order, each recording what that sub-task built and why, and each revised as the
-design is. Sub-tasks 8.1 (Sections 1 to 7), 8.2 (Sections 8 to 10) and 8.3
-(Sections 11 to 15) are here so far.
+design is. Sub-tasks 8.1 (Sections 1 to 7), 8.2 (Sections 8 to 10), 8.3
+(Sections 11 to 15) and 8.4 (Sections 16 to 18) are here so far.
 
 **Authority**: `PROJECT_GUIDELINES.md`, Sections 2, 3 and 6. Every control
 sequence and every rule of the grammar named below carries a citation, and the
@@ -782,3 +782,110 @@ expand within single quotes: caught by the expansion's assertion.
 6. **`exit` in a `&&` chain ends the shell where the standard would too**, but
    `&` is still recorded and not honoured, and a pipeline of two built-ins is
    refused rather than run in a subshell.
+
+## 16. Sub-task 8.4: external program execution
+
+**Implementation**: [`../../userland/sh/run.c`](../../userland/sh/run.c),
+called from `ShellRunCommand` in [`../../userland/sh/main.c`](../../userland/sh/main.c);
+`getenv` in [`../../libc/stdlib/environment.c`](../../libc/stdlib/environment.c),
+its vector recorded by [`../../libc/crt/crt0.asm`](../../libc/crt/crt0.asm);
+asserted by [`../../userland/env-check/main.c`](../../userland/env-check/main.c)
+and the third session of [`../../kernel/test/shell/parser.c`](../../kernel/test/shell/parser.c),
+and by the assertion `dir-check` gained; and the correction to
+[`../../kernel/arch/x86_64/syscall/syscall_entry.asm`](../../kernel/arch/x86_64/syscall/syscall_entry.asm)
+the sub-task found necessary, Section 16.3.
+
+### 16.1 What runs, and how it is found
+
+A command that is not a built-in is a program, since this sub-task. Section
+2.9.1.1 of IEEE Std 1003.1-2017 gives the search: a name holding a slash is
+the pathname; one without is sought in each directory of `PATH` in turn, and
+`PATH` unset is `/bin`, the one directory this system's programs stand in.
+The shell forks, and **the search happens in the child by executing each
+candidate**: this kernel has no call that asks whether a file exists short of
+opening it, and a program found by `open` and then not executable would be a
+second call's failure to report. `execve` is tried upon each candidate, and
+`ENOENT` means the next directory; any other refusal is a program that is
+there and cannot run, which is Section 2.8.2's 126 and the end of the search.
+Nothing found at all is 127. The parent waits, and the status is the
+program's — or, for a program ended by a fault, 128 plus the vector, this
+system having no signals until 8.7 and the vector standing in for one.
+
+### 16.2 The environment
+
+The exported variables become the program's environment: one `NAME=value`
+string each, in a vector the shell builds before it forks, carried by the
+`execve` of 7.6 and laid upon the new program's stack after its arguments as
+the System V ABI, Section 3.4.1, has it. `_start` records where the vector
+stands, and `getenv` — present in `<stdlib.h>` from this sub-task, for the
+first program that could have used it — searches it. A variable assigned and
+not exported does not reach the program, which is what `export` was for.
+
+The bound is the kernel's: sixteen strings to a vector and two kibibytes for
+both, so a shell that exported more than sixteen variables would be refused
+by `execve` with `EINVAL` and the program reported as not runnable.
+[`LIBC.md`](LIBC.md), Section 12.7, limitation 9, records what enlarging it
+costs; Section 18 counts it here.
+
+### 16.3 The defect this sub-task found in the system-call entry path
+
+The first program the shell ran printed its line and the shell then faulted at
+an address made of the bytes of its own stack. `dir-check`, given a fork
+whose child became `echo`, reproduced it: after `wait` the parent resumed
+with the child's stack pointer.
+
+The entry path of sub-task 6.7 saved the caller's stack pointer in the
+per-processor block and restored it from there at `SYSRET`, though it had
+also pushed it into the frame. The block is per processor and the frame is
+per thread, and nothing distinguished the two while one thread at a time was
+inside a system call upon a processor. But `wait` runs a child *within* the
+parent's call, and a child that executes `SYSCALL` writes its own stack
+pointer over the parent's in the block. A child that merely exited from the
+cloned stack had the same pointer as its parent — which is why five sub-tasks
+of `fork` and `wait` never saw it — and the first child to become another
+program, whose stack is new, did. The stack pointer is now restored from the
+frame, by `POP RSP`, and the block's copy is used only for the push at entry.
+[`PRIVILEGE.md`](PRIVILEGE.md), Section 6, records the correction beside the
+path it corrects.
+
+## 17. What a program is given
+
+| Given | From | Since |
+| ----- | ---- | ----- |
+| `argv`, quotes removed and expansions made, `argv[0]` the name as typed | The shell's expansion of the command's words | 8.4 |
+| `envp`, one `NAME=value` per exported variable | `ShellBuildEnvironment` | 8.4 |
+| The working directory | Inherited across `fork` | 8.3 |
+| Descriptors 0, 1 and 2 | The kernel's own, the terminal and the diagnostic path | 8.1 |
+| An open file of the shell's | Nothing: a child inherits no descriptor | — until 8.5 |
+
+## 18. Verification of sub-task 8.4, and its limitations
+
+`env-check` is written by the self-test to `/verify/env-check` — a check
+program is not shipped in `/bin`, and a program written onto the root at run
+time being found and run is itself the assertion — and the shell is run upon
+a session: `export MARK=abcd`, `HIDDEN=1`, `/verify/env-check alpha "b c" &&
+A=1`, `/bin/cat /nope; C=$?`, `nothing; N=$?`, `echo hi && E=2`,
+`exit $A$C$N$E`. The status is 111272 in the eight bits a status has — 168 —
+only if `env-check` found its three arguments and its exported variable and
+not the hidden one, `cat` ended with 1, a name not found ended with 127, and
+`echo` was found upon the default `PATH`. `dir-check` gained the assertion of
+Section 16.3: a parent's stack survives a child's `execve`.
+
+| Property asserted | The silent failure it catches |
+| ----------------- | ----------------------------- |
+| `argc` is three, `argv[0]` the pathname typed, `argv[1]` `alpha`, `argv[2]` `b c` as one word. | Quotes reaching the program, or a quoted operand split in two. |
+| `MARK` reaches the environment, `HIDDEN` does not, `PWD` does, and `getenv` does not match a prefix. | An unexported variable leaking; `getenv("MAR")` answering for `MARK`. |
+| `cat /nope` is 1, `nothing` is 127, `echo` upon `PATH` is 0. | A program's status lost, or a not-found reported as a failure of a program. |
+| The parent's stack pattern survives a child's `execve`. | The defect of Section 16.3, which appeared as a fault at a return address made of the pattern. |
+
+**Two negative tests**, each caught and reverted: the environment vector built
+empty, caught by `env-check` and by the session's status; and the entry path's
+correction reverted, caught by `dir-check` and by the shell faulting.
+
+Limitations: **redirections are named and not performed** (8.5); **a pipeline
+of two commands is refused** (8.6); **`&` is recorded and not honoured** and
+**nothing interrupts a program** (8.7); **the environment is bounded at
+sixteen variables** by the kernel's vector bound; **a program is run upon the
+shell's own flow of control** — `wait` runs the child synchronously, as
+[`PROCESS.md`](PROCESS.md), Section 13.2, records — so nothing runs beside
+the shell until the scheduler carries a user thread of its own.

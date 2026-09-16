@@ -154,6 +154,7 @@ LIBC_SOURCES := libc/string/copying.c \
                 libc/stdio/format.c \
                 libc/stdio/system.c \
                 libc/stdlib/exit.c \
+                libc/stdlib/environment.c \
                 libc/line/line.c \
                 libc/line/system.c
 
@@ -312,6 +313,7 @@ ASM_SOURCES := boot/boot.asm \
                kernel/test/libc/utilities_image.asm \
                kernel/test/libc/line_image.asm \
                kernel/test/proc/directory_image.asm \
+               kernel/test/shell/programs_image.asm \
                $(LIBC_ASM_SOURCES)
 
 OBJECTS := $(patsubst %.c,$(BUILD_DIR)/%.c.o,$(C_SOURCES)) \
@@ -514,7 +516,7 @@ $(USER_CRT0): libc/crt/crt0.asm
 # Within the generated rule, the archive is named *after* the program's objects,
 # which is not a style choice: a linker resolves an archive's members against the
 # references it has already seen, so an archive named first contributes nothing.
-USER_PROGRAMS := startup-check arg-check exec-check file-check line-check dir-check echo cat ls mkdir rm sh
+USER_PROGRAMS := startup-check arg-check exec-check file-check line-check dir-check env-check echo cat ls mkdir rm sh
 
 USER_PROGRAM_SOURCES := $(foreach program,$(USER_PROGRAMS),$(wildcard userland/$(program)/*.c))
 USER_PROGRAM_IMAGES  := $(foreach program,$(USER_PROGRAMS),$(USER_DIR)/$(program).elf)
@@ -568,6 +570,7 @@ $(BUILD_DIR)/kernel/test/libc/startup_image.asm.o: $(USER_DIR)/startup-check.emb
 $(BUILD_DIR)/kernel/test/libc/utilities_image.asm.o: $(USER_PROGRAM_EMBEDS)
 $(BUILD_DIR)/kernel/test/libc/line_image.asm.o: $(USER_DIR)/line-check.embed.elf $(USER_DIR)/sh.embed.elf
 $(BUILD_DIR)/kernel/test/proc/directory_image.asm.o: $(USER_DIR)/dir-check.embed.elf
+$(BUILD_DIR)/kernel/test/shell/programs_image.asm.o: $(USER_DIR)/env-check.embed.elf
 $(BUILD_DIR)/%.asm.o: %.asm
 	@mkdir -p $(dir $@)
 	$(NASM) $(ASFLAGS) $< -o $@

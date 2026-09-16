@@ -531,6 +531,20 @@ call and an interrupt are both entries to the kernel from a user program, and a
 kernel using two stacks for them would have to say which was which at every point
 that examined one.
 
+**And the block's copy is used for the push that follows and for nothing
+else, since sub-task 8.4.** The caller's `RSP` is pushed from the block into
+the frame as its first eightbyte, and the exit path restored it *from the
+block* until that sub-task — which was correct while one thread at a time was
+inside a system call upon a processor, and wrong the moment `wait` ran a
+child within the parent's call: the child's own `SYSCALL` — `execve`, or
+`exit` from a stack of its own — wrote its stack pointer over the parent's in
+the per-processor block, and the parent's `SYSRET` returned it to the child's
+stack. A child that merely exited from the cloned stack had the same pointer,
+so five sub-tasks of `fork` and `wait` never saw it; the first child the
+shell replaced with `echo` did, as a fault at a return address made of the
+parent's own stack bytes. The exit path now restores `RSP` from the frame by
+`POP RSP`, the frame being per thread. [`SHELL.md`](SHELL.md), Section 16.3.
+
 ### 9.2 Where the arguments are
 
 | Register | Carries |
