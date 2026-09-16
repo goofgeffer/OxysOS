@@ -28,7 +28,7 @@ call, may make a child of itself and collect what it ended with, and is ended
 when it faults or when it asks.
 
 **And it runs programs a person would recognise.** Since sub-task 7.6 the kernel
-carries fourteen system calls rather than eight — `open`, `close`, `read`,
+carries fourteen system calls rather than eight (sixteen since sub-task 8.3) — `open`, `close`, `read`,
 `readdir`, `mkdir` and `unlink` joining them — each process holds a descriptor
 table of its own, and `execve` carries the argument and environment vectors it
 had refused since Phase 6. Above those stand `ls`, `cat`, `echo`, `mkdir` and
@@ -126,7 +126,7 @@ each refuses the options it does not implement rather than accepting them and
 doing nothing. [`../design/LIBC.md`](../design/LIBC.md), Section 12.3.
 
 **A program may now reach the filesystem, and may be given arguments.** The
-kernel carries **fourteen** system calls: the eight it had, and `open`, `close`,
+kernel carries **fourteen** system calls — sixteen since 8.3 — the eight it had, and `open`, `close`,
 `read`, `readdir`, `mkdir` and `unlink`, each a validation of a caller's
 arguments and then a call of the filesystem layer that has existed since Phase 5.
 Each process holds a descriptor table of its own, so that the numbers a program
@@ -227,7 +227,7 @@ the GRUB entry that permits writing. See
   rather than one for all; and composites all of it over a back buffer, after
   which **nothing reads the framebuffer**.
 - A `SYSCALL` entry path swaps `GS`, loads a kernel stack from a per-processor
-  block, dispatches through a table of fourteen calls and validates a caller's
+  block, dispatches through a table of sixteen calls and validates a caller's
   arguments against both the canonical user limit and the paging hierarchy — and
   resolves a copy-on-write fault upon a page it is asked to write, rather than
   refusing an address a fork had protected.
@@ -539,6 +539,22 @@ image and asserted there against fifty lines, the shell then being run upon a
 session at privilege level 3. [`../design/SHELL.md`](../design/SHELL.md),
 Sections 8 to 10.
 
+**Sub-task 8.3 is complete: the built-ins, and the working directory beneath
+them.** Every process now holds a working directory — `/` at creation,
+inherited across `fork`, kept across `execve` — and two calls, `chdir` and
+`getcwd`, move and report it; every path-taking call resolves a relative path
+against it in `SyscallCopyUserPath`, the one function they all copy through.
+`chdir` stores the canonical form and refuses a file. The shell has variables
+in a fixed table, the assignment word `NAME=value`, the expansion of `$NAME`,
+`${NAME}` and `$?` in one pass with quote removal, and the four built-ins:
+`cd` (with `-`, `HOME`, `PWD` and `OLDPWD`), `pwd`, `export` (listing as
+`export NAME=value`) and `exit [n]`. `exit` and `export` are special, `cd` and
+`pwd` are not. A command that is not a built-in is answered with 127; `&&`,
+`||`, `!` and `$?` act upon the statuses. `ls` with no operand lists `.`.
+**The evidence is a status**: `dir-check` ends with its count of failures, and
+the shell, run upon a session, ends with the 137 that only every built-in
+working composes. [`../design/SHELL.md`](../design/SHELL.md), Sections 11 to 15.
+
 ## 3. Where it has been observed to work
 
 A sub-task marked *implemented* in [`PLAN.md`](PLAN.md) means the code exists and
@@ -570,6 +586,7 @@ The physical machine is one machine — the HP Laptop 14-dq0052dx specified in
 | 7.7 The initial ramdisk | Yes | **Yes** | **No** — the `bochs` upon the `PATH` had reverted to a default build for the fifth sub-task running and cannot execute long mode | — | **Not yet run** |
 | 8.1 The terminal, the line editor and the shell | Yes, and driven over the serial line | **Yes, and driven at the PS/2 keyboard** | **Yes — 8.1**, to the prompt | — | **Not yet run** |
 | 8.2 The tokeniser and the parser | Yes, and driven over the serial line | **Yes** | **Yes — 8.2**, to the prompt | — | **Not yet run** |
+| 8.3 The built-ins and the working directory | Yes, and driven over the serial line | **Yes** | **Yes — 8.3**, to the prompt | — | **Not yet run** |
 
 **The rows marked "— 7.2" were all established by two boots of one image**,
 because a boot runs every self-test in the corpus and a clean one is therefore
@@ -774,7 +791,7 @@ functional. [`TESTING.md`](TESTING.md), Section 3.
 There is no test harness and there will be none before Phase 7, there being no
 userland to run one in. The kernel therefore asserts its own properties at boot,
 in the order the subsystems are initialised, and `make verify` fails if any of
-them reports a failure. Sixty-four assertions presently report passed or sound.
+them reports a failure. Sixty-five assertions presently report passed or sound.
 
 Those tests are in [`../../kernel/test/`](../../kernel/test/), one file per
 subsystem. Each subsystem's design document carries a table pairing every

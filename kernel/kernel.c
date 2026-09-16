@@ -1687,14 +1687,6 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
      */
     KernelVerifyLine();
 
-    /*
-     * Sub-task 8.2, which runs after it because the shell it runs reads the
-     * terminal through the editor 8.1 asserts. The tokeniser and the parser
-     * are asserted here first, compiled into this image as the C library is;
-     * the shell is then run upon a session of eight lines.
-     */
-    KernelVerifyShell();
-
     KernelMountRootVolume();
 
     /*
@@ -1709,6 +1701,17 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
      * one.
      */
     KernelVerifyInitrd();
+
+    /* Sub-task 8.3, after the root for the same reason: the working directory
+     * is asserted by a program that changes into /bin. */
+    KernelVerifyDirectory();
+
+    /*
+     * Sub-tasks 8.2 and 8.3: the shell's grammar, asserted in this kernel, and
+     * then the shell itself run upon two sessions — after the root for the
+     * reason the test above is, the second session changing into /bin.
+     */
+    KernelVerifyShell();
 
     IrqReport();
     LocalApicReport();
@@ -1780,18 +1783,22 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
                 break;
             }
 
-            if (status != 0)
+            if (status < 0)
             {
-                /* A shell that faulted, or ended saying something went wrong,
-                 * is not started again: a shell that failed at once would be
-                 * started at once, for ever, and the log would be that. */
-                KernelWriteString("The shell ended with status ");
+                /* A shell that faulted — a negative status is the negated
+                 * vector — is not started again: a shell that faulted at once
+                 * would be started at once, for ever, and the log would be
+                 * that. A status the shell chose, since 8.3's `exit [n]`, is
+                 * an ending and not a failure, whatever the number. */
+                KernelWriteString("The shell ended by a fault, status ");
                 KernelWriteHexadecimal((uint64_t)status);
-                KernelWriteString(" and is not started again.\n");
+                KernelWriteString(", and is not started again.\n");
                 break;
             }
 
-            KernelWriteString("The shell ended at the end of its input; starting it again.\n");
+            KernelWriteString("The shell ended with status ");
+            KernelWriteHexadecimal((uint64_t)status);
+            KernelWriteString("; starting it again.\n");
         }
     }
 

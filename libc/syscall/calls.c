@@ -2,13 +2,14 @@
 /* SPDX-License-Identifier: MIT */
 /*
  * File: libc/syscall/calls.c
- * Purpose: The fourteen system-call wrappers, one for each call
+ * Purpose: The sixteen system-call wrappers, one for each call
  *          <oxys/syscall_abi.h> numbers: the arguments named rather than
  *          numbered, and the result translated into the convention a C program
  *          expects.
  * Key functions: OxysWrite, OxysTicks, OxysVersion, OxysFork, OxysExecve,
  *          OxysOpen, OxysClose, OxysRead, OxysReadDirectory,
- *          OxysMakeDirectory, OxysUnlink,
+ *          OxysMakeDirectory, OxysUnlink, OxysChangeDirectory,
+ *          OxysGetWorkingDirectory,
  *          OxysExit, OxysWait, OxysBrk, OxysSbrk.
  * References:
  *   - kernel/abi/oxys/syscall_abi.h: the call numbers and what each call means.
@@ -254,4 +255,29 @@ int64_t OxysUnlink(const char *path)
 {
     return OxysSyscallResult(OxysSyscallInvoke1(SYSCALL_UNLINK,
                                                 (uint64_t)(uintptr_t)path));
+}
+
+int64_t OxysChangeDirectory(const char *path)
+{
+    return OxysSyscallResult(OxysSyscallInvoke1(SYSCALL_CHDIR,
+                                                (uint64_t)(uintptr_t)path));
+}
+
+int64_t OxysGetWorkingDirectory(char *buffer, size_t capacity)
+{
+    const int64_t result = OxysSyscallInvoke2(SYSCALL_GETCWD,
+                                              (uint64_t)(uintptr_t)buffer,
+                                              (uint64_t)capacity);
+
+    /* The one translation this file makes, for the reason the header gives:
+     * the standard names ERANGE for a buffer too small, and the kernel has no
+     * such result. */
+    if (result == SYSCALL_ENAMETOOLONG)
+    {
+        errno = ERANGE;
+
+        return -1;
+    }
+
+    return OxysSyscallResult(result);
 }

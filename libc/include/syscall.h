@@ -3,12 +3,13 @@
 /*
  * File: libc/include/syscall.h
  * Purpose: Declares the C library's system-call wrappers — one for each of the
- *          fourteen calls <oxys/syscall_abi.h> numbers — together with the raw
+ *          sixteen calls <oxys/syscall_abi.h> numbers — together with the raw
  *          invocation they are built upon and the translation that turns a
  *          kernel result into a library result and an errno.
  * Key definitions: OxysSyscallInvoke0, OxysSyscallInvoke1, OxysSyscallInvoke2,
  *          OxysSyscallInvoke3, OxysSyscallResult, OxysOpen, OxysClose,
  *          OxysRead, OxysReadDirectory, OxysMakeDirectory, OxysUnlink,
+ *          OxysChangeDirectory, OxysGetWorkingDirectory,
  *          OxysWrite, OxysTicks,
  *          OxysVersion, OxysFork, OxysExecve, OxysExit, OxysWait, OxysBrk,
  *          OxysSbrk.
@@ -314,5 +315,28 @@ int64_t OxysMakeDirectory(const char *path, uint16_t permissions);
  * EROFS for a volume that may not be written.
  */
 int64_t OxysUnlink(const char *path);
+
+/*
+ * Changes the working directory, of sub-task 8.3 — the directory every
+ * relative path this program names is resolved against, by the kernel, in
+ * every call that takes a path.
+ *
+ * Returns -1 with errno set to ENOENT where the path names nothing, ENOTDIR
+ * where it names something that is not a directory, and ENAMETOOLONG where
+ * the path, made absolute, exceeds SYSCALL_PATH_MAXIMUM.
+ */
+int64_t OxysChangeDirectory(const char *path);
+
+/*
+ * Copies the working directory, terminated, into `buffer`, and returns its
+ * length excluding the terminator.
+ *
+ * Returns -1 with errno set to ERANGE where the buffer cannot hold it. The
+ * kernel reports that as ENAMETOOLONG, having no ERANGE among its results, and
+ * this is the one wrapper that translates a result rather than passing it
+ * through: IEEE Std 1003.1-2017 names ERANGE for exactly this, and a program
+ * written to the standard should be told what the standard says.
+ */
+int64_t OxysGetWorkingDirectory(char *buffer, size_t capacity);
 
 #endif /* OXYS_LIBC_SYSCALL_H */

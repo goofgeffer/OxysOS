@@ -583,22 +583,96 @@ static int64_t SyscallDoFork(const SyscallFrame *frame)
 }
 
 /*
- * Replaces the calling program with one loaded from a file.
+ * Reduces an absolute path to its canonical form, in place: no `.` component,
+ * no `..` component, no repeated or trailing separator, and `/` for the root.
+ * `..` at the root stays at the root, as IEEE Std 1003.1-2017, Section 4.13,
+ * has it. Lexical, and therefore what every shell's `pwd -L` reports; a
+ * symbolic link in the path is not followed, which Section 8 of
+ * docs/design/SHELL.md records.
  *
- * The path is copied into the kernel before anything else happens, and that is
- * not merely tidiness: the address space the string stands in is released part
- * way through this call, so a kernel that read the path from the caller's memory
- * as it went would be reading memory it had already given back.
- *
- * The vectors of arguments and of environment variables are refused rather than
- * ignored. There is no C library and no convention yet fixed for where a program
- * finds them upon its stack, so accepting them would mean discarding them
- * silently — and a program that passed arguments and found none would have no
- * way to tell that the kernel had thrown them away.
+ * It is applied to the working directory alone. A path a call is given is
+ * resolved by the filesystem layer, which reads `.` and `..` off the volume
+ * and follows a link where one stands; the working directory is stored and
+ * reported, and a stored `/bin/../bin/.` would be reported as typed.
  */
+static void SyscallCanonicalisePath(char *path)
+{
+    size_t read = 0U;
+    size_t write = 0U;
+
+    while (path[read] != '\0')
+    {
+        size_t length = 0U;
+
+        /* Skip the separators before a component. */
+        while (path[read] == '/')
+        {
+            ++read;
+        }
+
+        while ((path[read + length] != '\0') && (path[read + length] != '/'))
+        {
+            ++length;
+        }
+
+        if (length == 0U)
+        {
+            break;
+        }
+
+        if ((length == 1U) && (path[read] == '.'))
+        {
+            read += length;
+            continue;
+        }
+
+        if ((length == 2U) && (path[read] == '.') && (path[read + 1U] == '.'))
+        {
+            /* Back over the last component written, if any. */
+            while ((write > 0U) && (path[write - 1U] != '/'))
+            {
+                --write;
+            }
+
+            if (write > 0U)
+            {
+                --write;
+            }
+
+            read += length;
+            continue;
+        }
+
+        path[write++] = '/';
+
+        for (size_t index = 0U; index < length; ++index)
+        {
+            path[write++] = path[read + index];
+        }
+
+        read += length;
+    }
+
+    if (write == 0U)
+    {
+        path[write++] = '/';
+    }
+
+    path[write] = '\0';
+}
+
 /*
- * Copies a path out of a caller's memory and says which of the two things went
- * wrong where something did.
+ * Copies a path out of a caller's memory and makes it absolute.
+ *
+ * A path that does not begin with `/` is the caller's working directory, a
+ * separator, and the path — since sub-task 8.3, and here, in the one function
+ * every call that takes a path copies through, so that no call resolves a
+ * relative path differently from another or forgets to. The bound is upon the
+ * absolute result and not upon what was typed: a relative path that fits the
+ * copy and does not fit once joined is ENAMETOOLONG, which is the same
+ * refusal an absolute path of that length receives.
+ *
+ * And it says which of the two things went wrong where something did.
  *
  * `SyscallCopyUserString` returns one `false` for two causes — memory the caller
  * may not read, and a string longer than the room given — and every call that
@@ -612,23 +686,71 @@ static int64_t SyscallDoFork(const SyscallFrame *frame)
  * was if the refusal was about length. That is one extra page walk upon a path
  * that has already failed, and it buys the difference between "this address is
  * not yours" and "this path is too long" — which are the only two things the
- * caller can do anything about.
  */
 static int64_t SyscallCopyUserPath(uint64_t address, char *destination, size_t capacity)
 {
-    if (SyscallCopyUserString(address, destination, capacity))
+    const Process *const process = ProcessCurrent();
+
+    if (!SyscallCopyUserString(address, destination, capacity))
     {
-        return SYSCALL_OK;
+        if (SyscallUserRangeIsReadable(address, 1U))
+        {
+            return SYSCALL_ENAMETOOLONG;
+        }
+
+        ++SyscallFaults;
+
+        return SYSCALL_EFAULT;
     }
 
-    if (SyscallUserRangeIsReadable(address, 1U))
+    if ((destination[0] != '/') && (process != NULL))
     {
-        return SYSCALL_ENAMETOOLONG;
+        char joined[SYSCALL_PATH_MAXIMUM + 1U];
+        size_t used = 0U;
+        const char *const directory = process->working_directory;
+
+        while (directory[used] != '\0')
+        {
+            joined[used] = directory[used];
+            ++used;
+        }
+
+        /* The root already ends in its separator; every other directory needs
+         * one before the path. */
+        if ((used == 0U) || (joined[used - 1U] != '/'))
+        {
+            if (used >= SYSCALL_PATH_MAXIMUM)
+            {
+                return SYSCALL_ENAMETOOLONG;
+            }
+
+            joined[used++] = '/';
+        }
+
+        for (size_t index = 0U; destination[index] != '\0'; ++index)
+        {
+            if (used >= SYSCALL_PATH_MAXIMUM)
+            {
+                return SYSCALL_ENAMETOOLONG;
+            }
+
+            joined[used++] = destination[index];
+        }
+
+        joined[used] = '\0';
+
+        if (used >= capacity)
+        {
+            return SYSCALL_ENAMETOOLONG;
+        }
+
+        for (size_t index = 0U; index <= used; ++index)
+        {
+            destination[index] = joined[index];
+        }
     }
 
-    ++SyscallFaults;
-
-    return SYSCALL_EFAULT;
+    return SYSCALL_OK;
 }
 
 /*
@@ -1316,6 +1438,107 @@ static int64_t SyscallDoUnlink(uint64_t path_address)
     return SYSCALL_OK;
 }
 
+/*
+ * Changes the caller's working directory, of sub-task 8.3.
+ *
+ * The path is copied and made absolute by the copier above, reduced to its
+ * canonical form, and then established to name a directory before it is
+ * stored: a working directory that named a file would make every relative
+ * path fail with ENOTDIR at some later call, which is the wrong place for the
+ * refusal. ENOENT and ENOTDIR are the filesystem layer's own, carried out as
+ * every other refusal is.
+ */
+static int64_t SyscallDoChangeDirectory(uint64_t path_address)
+{
+    Process *const process = ProcessCurrent();
+    char path[SYSCALL_PATH_MAXIMUM + 1U];
+    VfsAttributes attributes;
+    int64_t copied;
+
+    if (process == NULL)
+    {
+        return SYSCALL_EINVAL;
+    }
+
+    copied = SyscallCopyUserPath(path_address, path, sizeof path);
+
+    if (copied != SYSCALL_OK)
+    {
+        return copied;
+    }
+
+    SyscallCanonicalisePath(path);
+
+    if (!VfsStat(path, &attributes))
+    {
+        return SyscallFilesystemRefusal();
+    }
+
+    if (attributes.type != VFS_NODE_DIRECTORY)
+    {
+        return SYSCALL_ENOTDIR;
+    }
+
+    for (size_t index = 0U; index <= PROCESS_PATH_MAXIMUM; ++index)
+    {
+        process->working_directory[index] = path[index];
+
+        if (path[index] == '\0')
+        {
+            break;
+        }
+    }
+
+    return SYSCALL_OK;
+}
+
+/*
+ * Copies the caller's working directory, terminated, into its buffer, and
+ * returns the length copied excluding the terminator. A buffer too small is
+ * ENAMETOOLONG, the interface header having no ERANGE; the C library reports
+ * it as ERANGE, which is what IEEE Std 1003.1-2017 names.
+ */
+static int64_t SyscallDoGetWorkingDirectory(uint64_t address, uint64_t capacity)
+{
+    const Process *const process = ProcessCurrent();
+    char *const destination = (char *)(uintptr_t)address;
+    size_t length = 0U;
+
+    if (process == NULL)
+    {
+        return SYSCALL_EINVAL;
+    }
+
+    while (process->working_directory[length] != '\0')
+    {
+        ++length;
+    }
+
+    if (capacity == 0U)
+    {
+        return SYSCALL_EINVAL;
+    }
+
+    if (capacity < length + 1U)
+    {
+        return SYSCALL_ENAMETOOLONG;
+    }
+
+    if (!SyscallUserRangeIsWritable(address, length + 1U))
+    {
+        ++SyscallFaults;
+
+        return SYSCALL_EFAULT;
+    }
+
+    for (size_t index = 0U; index <= length; ++index)
+    {
+        destination[index] = process->working_directory[index];
+    }
+
+    return (int64_t)length;
+}
+
 /* ------------------------------------------------------------- the dispatch */
 
 /* A call: what it is named, and how many arguments it reads. The count is
@@ -1341,7 +1564,9 @@ static const SyscallEntryDescriptor SyscallTable[SYSCALL_COUNT] = {
     { "read", 3U },
     { "readdir", 2U },
     { "mkdir", 2U },
-    { "unlink", 1U }
+    { "unlink", 1U },
+    { "chdir", 1U },
+    { "getcwd", 2U }
 };
 
 bool SyscallNumberIsValid(uint64_t number)
@@ -1432,6 +1657,14 @@ void SyscallDispatch(SyscallFrame *frame)
 
     case SYSCALL_UNLINK:
         frame->rax = (uint64_t)SyscallDoUnlink(frame->rdi);
+        break;
+
+    case SYSCALL_CHDIR:
+        frame->rax = (uint64_t)SyscallDoChangeDirectory(frame->rdi);
+        break;
+
+    case SYSCALL_GETCWD:
+        frame->rax = (uint64_t)SyscallDoGetWorkingDirectory(frame->rdi, frame->rsi);
         break;
 
     default:

@@ -2,31 +2,39 @@
 /* SPDX-License-Identifier: MIT */
 /*
  * File: userland/sh/main.c
- * Purpose: The shell of Phase 8, as far as sub-task 8.2 takes it: a prompt, a
+ * Purpose: The shell of Phase 8, as far as sub-task 8.3 takes it: a prompt, a
  *          line read through the editor with its history, the line tokenised
- *          and parsed into the command structure — continued upon a second
- *          prompt where it is incomplete — and, there being nothing yet that
- *          runs a command, the structure described back to the person who
- *          typed it.
- * Key functions: main, ShellReadCommand, ShellDescribe, ShellComplain.
+ *          and parsed — continued upon a second prompt where it is incomplete
+ *          — its words expanded, and the built-ins `cd`, `pwd`, `export` and
+ *          `exit` run; every other command is reported as not found, nothing
+ *          yet being able to find one.
+ * Key functions: main, ShellReadCommand, ShellRunList, ShellRunCommand,
+ *          ShellLookupParameter, ShellComplain.
  * References:
  *   - IEEE Std 1003.1-2017, `sh`: the utility this will become, and its PS1
  *     and PS2 — the prompt, and the prompt for a line that continues one.
  *   - IEEE Std 1003.1-2017, Section 2.3, rule 1 and Section 2.10: a line that
  *     ends inside a quote or after an operator is not a complete command, and
  *     an interactive shell asks for the rest.
+ *   - IEEE Std 1003.1-2017, Section 2.9.1 (Simple Commands): assignments
+ *     before a name apply to the shell where there is no name; Section 2.9.2,
+ *     `!`; Section 2.9.3, `&&` and `||`; Section 2.8.2, the status 127 of a
+ *     command that could not be found; Section 2.14, which built-ins are
+ *     special.
  *   - libc/include/line.h: the editor, and the table of what each key does.
- *   - userland/sh/shell.h: the tokeniser and the parser.
- *   - docs/design/SHELL.md, Sections 4 and 8.
+ *   - userland/sh/shell.h: the tokeniser, the parser, the expansion, the
+ *     variables and the built-ins.
+ *   - docs/design/SHELL.md, Sections 4, 8 and 11 to 15.
  *
- * What this program is at sub-task 8.2, stated plainly so that nobody mistakes
+ * What this program is at sub-task 8.3, stated plainly so that nobody mistakes
  * it for more.
  *
- *   It prompts, reads, parses and describes. Every word is unquoted and every
- *   redirection named, so that a person can see what the shell understood of
- *   the line; nothing is expanded and nothing is run. That is what a tokeniser
- *   and a parser can be seen to do before there is anything to hand the
- *   structure to, and it is shipped in this state for the reason 8.1's was.
+ *   It prompts, reads, parses, expands `$NAME` and `$?`, sets variables, and
+ *   runs four built-ins. A command that is not one of the four is answered
+ *   with the status 127 of Section 2.8.2 and a description of what would have
+ *   run — which is the truth of it: nothing can find a program until 8.4.
+ *   `&&` and `||` are honoured, `!` inverts, and `$?` reports, so that the
+ *   built-ins can be composed and their statuses seen.
  *
  * How a line continues.
  *
@@ -39,13 +47,14 @@
  *
  * How it ends.
  *
- *   Control-D upon an empty line. There is no `exit` word yet; that is a
- *   built-in of sub-task 8.3.
+ *   `exit [n]`, since 8.3, or control-D upon an empty line as before. The
+ *   status the shell ends with is `exit`'s operand, or the last command's.
  */
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <syscall.h>
 #include <line.h>
 
 #include "shell.h"
@@ -150,86 +159,196 @@ static const char *ShellRedirectionText(ShellRedirectionKind kind)
     }
 }
 
-/* Prints a word with its quotes removed, between brackets so that a word
- * holding a space, or an empty one, is seen for what it is. */
-static void ShellPrintWord(const char *word)
+/* ---------------------------------------------------------------------------
+ * Execution, as far as sub-task 8.3 takes it: the built-ins run, and every
+ * other command is described and reported as not found.
+ * ------------------------------------------------------------------------- */
+
+/* The status of the last command run, which `$?` expands to and `exit` with
+ * no operand ends with. Zero at the start, as Section 2.5.2 has it. */
+static int ShellLastStatus;
+
+/* What `$?` expands to: the last status, written into a buffer of this
+ * function's own, the lookup returning a pointer and not a copy. */
+static char ShellStatusText[8];
+
+static const char *ShellLookupParameter(void *context, const char *name)
 {
-    char unquoted[LINE_CAPACITY];
+    (void)context;
 
-    if (!ShellUnquote(word, unquoted, sizeof unquoted))
+    if (strcmp(name, "?") == 0)
     {
-        (void)printf("[?]");
+        (void)snprintf(ShellStatusText, sizeof ShellStatusText, "%d", ShellLastStatus);
 
-        return;
+        return ShellStatusText;
     }
 
-    (void)printf("[%s]", unquoted);
+    return ShellVariableGet(name);
 }
 
 /*
- * Describes what was parsed: one line per pipeline, its commands joined by
- * `|`, each command's words in brackets and its redirections after them,
- * and the condition before and the separator after, where there is one.
+ * The expanded words of one command, and the vector built over them. The
+ * words are bounded by the parser and each expansion by LINE_CAPACITY, so the
+ * storage is fixed, for the reason everything else in this program is.
  */
-static void ShellDescribe(const ShellList *list)
+static char ShellArguments[SHELL_WORD_MAXIMUM][LINE_CAPACITY];
+static char *ShellArgumentVector[SHELL_WORD_MAXIMUM + 1U];
+static char ShellAssignmentText[LINE_CAPACITY];
+
+/* Applies one assignment word to the shell's variables, after expanding its
+ * value. Returns false, having said why, where it cannot. */
+static bool ShellApplyAssignment(const char *word)
 {
-    (void)printf("sh: parsed %u pipeline(s); nothing runs until sub-task 8.4:\n",
-                 (unsigned)list->pipeline_count);
+    const size_t name_length = ShellIsAssignmentWord(word);
+    char name[SHELL_NAME_MAXIMUM + 1U];
 
-    for (size_t index = 0U; index < list->pipeline_count; ++index)
+    if (!ShellExpandWord(&word[name_length + 1U], ShellAssignmentText, sizeof ShellAssignmentText,
+                         ShellLookupParameter, NULL))
     {
-        const ShellPipeline *const pipeline = &list->pipeline[index];
+        (void)fprintf(stderr, "sh: an assignment's value could not be expanded.\n");
 
-        (void)printf("  %u:", (unsigned)(index + 1U));
+        return false;
+    }
 
-        if (pipeline->condition == SHELL_CONDITION_AND_IF)
+    memcpy(name, word, name_length);
+    name[name_length] = '\0';
+
+    if (!ShellVariableSet(name, ShellAssignmentText))
+    {
+        (void)fprintf(stderr, "sh: %s: cannot be set.\n", name);
+
+        return false;
+    }
+
+    return true;
+}
+
+/*
+ * Runs one simple command, and returns its status.
+ *
+ * A command with no name is its assignments, applied to the shell (Section
+ * 2.9.1). A built-in is run here, its assignments applied first where it is a
+ * special built-in (Section 2.14) and not otherwise. Anything else is
+ * described, as sub-task 8.2 described everything, and reported with the
+ * status 127 that Section 2.8.2 gives a command that could not be found —
+ * which is the truth of it: nothing here can find a program until 8.4.
+ * Redirections are named and not performed until 8.5.
+ */
+static int ShellRunCommand(const ShellCommand *command, bool *exit_requested)
+{
+    int argc = 0;
+    bool special;
+
+    if (command->word_count == 0U)
+    {
+        for (size_t index = 0U; index < command->assignment_count; ++index)
         {
-            (void)printf(" &&");
-        }
-        else if (pipeline->condition == SHELL_CONDITION_OR_IF)
-        {
-            (void)printf(" ||");
-        }
-
-        if (pipeline->negated)
-        {
-            (void)printf(" !");
-        }
-
-        for (size_t which = 0U; which < pipeline->command_count; ++which)
-        {
-            const ShellCommand *const command = &pipeline->command[which];
-
-            if (which > 0U)
+            if (!ShellApplyAssignment(command->assignment[index]))
             {
-                (void)printf(" |");
-            }
-
-            for (size_t word = 0U; word < command->word_count; ++word)
-            {
-                (void)printf(" ");
-                ShellPrintWord(command->word[word]);
-            }
-
-            for (size_t redirection = 0U; redirection < command->redirection_count; ++redirection)
-            {
-                const ShellRedirection *const io = &command->redirection[redirection];
-
-                (void)printf(" %d%s", io->descriptor, ShellRedirectionText(io->kind));
-                ShellPrintWord(io->target);
+                return 1;
             }
         }
 
-        if (pipeline->separator == SHELL_SEPARATOR_BACKGROUND)
+        return 0;
+    }
+
+    for (size_t index = 0U; index < command->word_count; ++index)
+    {
+        if (!ShellExpandWord(command->word[index], ShellArguments[index],
+                             sizeof ShellArguments[index], ShellLookupParameter, NULL))
         {
-            (void)printf(" &");
+            (void)fprintf(stderr, "sh: a word could not be expanded.\n");
+
+            return 1;
         }
-        else if (pipeline->separator == SHELL_SEPARATOR_SEQUENCE)
+
+        ShellArgumentVector[argc++] = ShellArguments[index];
+    }
+
+    ShellArgumentVector[argc] = NULL;
+
+    if (!ShellIsBuiltin(ShellArgumentVector[0]))
+    {
+        (void)printf("sh: %s: not found; nothing runs a program until sub-task 8.4:",
+                     ShellArgumentVector[0]);
+
+        for (int index = 0; index < argc; ++index)
         {
-            (void)printf(" ;");
+            (void)printf(" [%s]", ShellArgumentVector[index]);
+        }
+
+        for (size_t index = 0U; index < command->redirection_count; ++index)
+        {
+            const ShellRedirection *const io = &command->redirection[index];
+
+            (void)printf(" %d%s[%s]", io->descriptor, ShellRedirectionText(io->kind), io->target);
         }
 
         (void)printf("\n");
+
+        return 127;
+    }
+
+    special = ShellIsSpecialBuiltin(ShellArgumentVector[0]);
+
+    for (size_t index = 0U; special && (index < command->assignment_count); ++index)
+    {
+        if (!ShellApplyAssignment(command->assignment[index]))
+        {
+            return 1;
+        }
+    }
+
+    if (command->redirection_count > 0U)
+    {
+        (void)fprintf(stderr, "sh: %s: redirections are not performed until sub-task 8.5.\n",
+                      ShellArgumentVector[0]);
+    }
+
+    return ShellRunBuiltin(argc, ShellArgumentVector, ShellLastStatus, exit_requested);
+}
+
+/*
+ * Runs a list: each pipeline in order, subject to the condition that joins it
+ * to the one before (Section 2.9.3), `!` inverting its status (2.9.2), and a
+ * pipeline of more than one command reported as not runnable until 8.6. The
+ * `&` separator is recorded and not honoured: nothing runs in the background
+ * until there is something to run.
+ */
+static void ShellRunList(const ShellList *list, bool *exit_requested)
+{
+    for (size_t index = 0U; (index < list->pipeline_count) && !*exit_requested; ++index)
+    {
+        const ShellPipeline *const pipeline = &list->pipeline[index];
+        int status;
+
+        if ((pipeline->condition == SHELL_CONDITION_AND_IF) && (ShellLastStatus != 0))
+        {
+            continue;
+        }
+
+        if ((pipeline->condition == SHELL_CONDITION_OR_IF) && (ShellLastStatus == 0))
+        {
+            continue;
+        }
+
+        if (pipeline->command_count > 1U)
+        {
+            (void)printf("sh: a pipeline of %u commands cannot run until sub-task 8.6.\n",
+                         (unsigned)pipeline->command_count);
+            status = 127;
+        }
+        else
+        {
+            status = ShellRunCommand(&pipeline->command[0], exit_requested);
+        }
+
+        if (pipeline->negated && !*exit_requested)
+        {
+            status = (status == 0) ? 1 : 0;
+        }
+
+        ShellLastStatus = status;
     }
 }
 
@@ -276,30 +395,53 @@ static void ShellComplain(ShellParseStatus status)
 
 int main(void)
 {
+    bool exit_requested = false;
+
     LineInitialise(&ShellEditor, NULL, NULL);
+    ShellVariablesInitialise();
 
-    (void)printf("The Oxys-OS shell, sub-task 8.2: a line editor, a tokeniser and a parser. "
-                 "Arrow keys\nedit and recall; a line that continues is prompted for; "
-                 "control-D upon an empty\nline ends the shell.\n");
+    /* PWD is set from the kernel, which begins every program at the root, so
+     * that `$PWD` means something before the first `cd`. */
+    {
+        char directory[SHELL_VALUE_MAXIMUM + 1U];
 
-    for (;;)
+        if (OxysGetWorkingDirectory(directory, sizeof directory) >= 0)
+        {
+            (void)ShellVariableSet("PWD", directory);
+            (void)ShellVariableExport("PWD");
+        }
+    }
+
+    (void)printf("The Oxys-OS shell, sub-task 8.3: a line editor, a parser, and the built-ins "
+                 "cd, pwd,\nexport and exit. Nothing else runs yet; `exit' or control-D ends "
+                 "the shell.\n");
+
+    while (!exit_requested)
     {
         bool ended;
         const ShellParseStatus status = ShellReadCommand(&ended);
 
         if (status == SHELL_PARSE_OK)
         {
-            ShellDescribe(&ShellCommandList);
+            ShellRunList(&ShellCommandList, &exit_requested);
         }
         else if (status != SHELL_PARSE_EMPTY)
         {
             ShellComplain(status);
+            ShellLastStatus = 2;
         }
 
         if (ended)
         {
             break;
         }
+    }
+
+    if (exit_requested)
+    {
+        (void)fflush(stdout);
+
+        return ShellLastStatus;
     }
 
     (void)printf("sh: end of input.\n");

@@ -661,7 +661,7 @@ needing no validation performs none.
 is a promise the kernel does not keep. The process control block they act upon
 arrived at sub-task 6.9, and at 6.11 the four of them arrived in fact rather than
 as numbers — see [`PROCESS.md`](PROCESS.md), Sections 11 to 16, for what each
-does and why. The table holds fourteen since sub-task 7.6, and the four were **numbered 3 to 6
+does and why. The table holds fourteen since sub-task 7.6 and sixteen since 8.3, and the four were **numbered 3 to 6
 after the three above rather than interleaved among them**: a number handed to a
 program is a number that must not change, and `write` is call zero in machine
 code that was written before they existed.
@@ -682,6 +682,13 @@ whose subject is neither the processor's state nor the process's own memory but 
 **volume**, and each is a validation of the caller's arguments and then a call of
 the filesystem layer of [`../storage/VFS.md`](../storage/VFS.md); their design is
 [`LIBC.md`](LIBC.md), Section 12.1.
+
+**The fifteenth and sixteenth are `chdir` and `getcwd`, of sub-task 8.3** — and
+with them a change to every call above that takes a path: the copier every one
+of them reads its argument through joins a relative path to the caller's
+working directory, in that one place, so that no call resolves one differently
+from another. The bound is upon the joined path. [`SHELL.md`](SHELL.md),
+Section 11.
 
 Three things they add to the validation this section describes:
 

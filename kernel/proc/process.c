@@ -350,6 +350,14 @@ static Process *ProcessAllocate(const char *name, const Process *parent,
             process->descriptors[slot] = PROCESS_DESCRIPTOR_FREE;
         }
 
+
+
+        /* Every process begins at the root, of sub-task 8.3. A child of `fork`
+         * is given its parent's below, after this; a program started by the
+         * kernel begins here. */
+        process->working_directory[0] = '/';
+        process->working_directory[1] = '\0';
+
         ++ProcessCreations;
 
         return process;
@@ -1707,6 +1715,13 @@ Process *ProcessFork(Process *parent, const SyscallFrame *frame)
      */
     child->break_start = parent->break_start;
     child->break_current = parent->break_current;
+
+    /* The working directory of sub-task 8.3 comes across as IEEE Std 1003.1-2017
+     * has it: a child begins where its parent stood. */
+    for (size_t index = 0U; index <= PROCESS_PATH_MAXIMUM; ++index)
+    {
+        child->working_directory[index] = parent->working_directory[index];
+    }
 
     /*
      * The child begins where its parent will resume: at the address SYSCALL put

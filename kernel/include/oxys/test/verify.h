@@ -23,7 +23,7 @@
  *          KernelVerifyPit, KernelVerifyKeyboard, KernelVerifySerial,
  *          KernelVerifyVga, KernelVerifyPci, KernelVerifyAta, KernelVerifyBlock,
  *          KernelVerifyBuffer, KernelVerifyExt2, KernelVerifyVfs,
- *          KernelVerifyInitrd,
+ *          KernelVerifyInitrd, KernelVerifyDirectory,
  *          KernelReportVolumes, KernelVfsProbeVolume, KernelBootInformation,
  *          KernelCommandLineHasOption.
  * References:
@@ -405,6 +405,16 @@ void KernelVerifyVfs(void);
  *   upon it, read back and removed, which is what says so.
  */
 void KernelVerifyInitrd(void);
+
+/*
+ * Sub-task 8.3: the working directory, asserted by `dir-check` at privilege
+ * level 3 upon the root the machine booted with — that a process begins at
+ * the root, that `chdir` moves it and `getcwd` reports it canonically, that a
+ * relative path is resolved against it by a call that is neither, that a
+ * child of `fork` inherits it, and that each refusal is the named one. It
+ * runs after the root is mounted, for the reason KernelVerifyInitrd does.
+ */
+void KernelVerifyDirectory(void);
 
 /*
  * The diagnostic probes, which are not self-tests.

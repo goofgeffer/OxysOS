@@ -155,6 +155,11 @@
 #define PROCESS_ARGUMENT_COUNT_MAXIMUM SYSCALL_ARGUMENT_COUNT_MAXIMUM
 #define PROCESS_ARGUMENT_BYTES_MAXIMUM SYSCALL_ARGUMENT_BYTES_MAXIMUM
 
+/* The longest working directory a process may hold, which is the longest path a
+ * call accepts: a directory that could be entered but not named would be one a
+ * program could not report. Sub-task 8.3. */
+#define PROCESS_PATH_MAXIMUM SYSCALL_PATH_MAXIMUM
+
 typedef struct ProcessArguments
 {
     /*
@@ -408,6 +413,24 @@ struct Process
      */
     uint64_t break_start;
     uint64_t break_current;
+
+    /*
+     * The working directory, of sub-task 8.3: an absolute path, terminated,
+     * with no `.` or `..` component and no trailing separator but for the root
+     * itself. Every relative path a system call is given is resolved against
+     * it — by the call's path copier, in one place, so that no call can forget
+     * — and `chdir` is the only thing that changes it, after establishing that
+     * what it names is a directory. It is inherited across `fork` and kept
+     * across `execve`, as IEEE Std 1003.1-2017 has both.
+     *
+     * It is a *path* and not a held node, which is the cheaper of the two
+     * shapes and the one with a consequence worth recording: a directory that
+     * is removed or renamed beneath a process leaves that process with a
+     * working directory that names nothing, and its next relative path fails
+     * with ENOENT rather than resolving from where it was. Holding the node
+     * would need the reference count the filesystem layer does not have.
+     */
+    char working_directory[PROCESS_PATH_MAXIMUM + 1U];
 
     /*
      * The descriptors the program holds open, of sub-task 7.6: each entry is a

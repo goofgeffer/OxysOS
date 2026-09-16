@@ -393,6 +393,129 @@ static void VerifyShellParser(void)
 }
 
 /* ---------------------------------------------------------------------------
+ * Sub-task 8.3: assignments, variables and expansion.
+ * ------------------------------------------------------------------------- */
+
+/* The table the expansion is asserted against, which is not the shell's own:
+ * `?` is answered here as the shell answers it, and the rest by name. */
+static const char *VerifyShellLookup(void *context, const char *name)
+{
+    (void)context;
+
+    if (strcmp(name, "HOME") == 0) { return "/bin"; }
+    if (strcmp(name, "EMPTY") == 0) { return ""; }
+    if (strcmp(name, "Q") == 0) { return "it's \"quoted\""; }
+    if (strcmp(name, "?") == 0) { return "3"; }
+
+    return NULL;
+}
+
+static bool VerifyShellExpandsTo(const char *word, const char *expected)
+{
+    char out[LINE_CAPACITY];
+
+    return ShellExpandWord(word, out, sizeof out, VerifyShellLookup, NULL) &&
+           (strcmp(out, expected) == 0);
+}
+
+static void VerifyShellAssignments(void)
+{
+    size_t offending = 0U;
+
+    /* Assignment words before the name are assignments; after it, words. */
+    VerifyShellRequire(VerifyShellParseLine("A=1 B='two words' cmd C=3", &offending) == SHELL_PARSE_OK,
+                       "a command with assignments did not parse");
+    {
+        const ShellCommand *const command = &VerifyShellList.pipeline[0].command[0];
+
+        VerifyShellRequire((command->assignment_count == 2U) &&
+                               (strcmp(command->assignment[0], "A=1") == 0) &&
+                               (strcmp(command->assignment[1], "B='two words'") == 0),
+                           "the two assignment words before the name were not recorded whole");
+        VerifyShellRequire((command->word_count == 2U) && VerifyShellWordIs(command->word[1], "C=3"),
+                           "an assignment-shaped word after the name was not a word");
+    }
+
+    /* A line of assignments alone is a command with no name. */
+    VerifyShellRequire((VerifyShellParseLine("X=5 Y=", &offending) == SHELL_PARSE_OK) &&
+                           (VerifyShellList.pipeline[0].command[0].word_count == 0U) &&
+                           (VerifyShellList.pipeline[0].command[0].assignment_count == 2U),
+                       "assignments alone did not parse as a command without a name");
+
+    /* What is and is not a name: Section 3.235. */
+    VerifyShellRequire(ShellIsAssignmentWord("_a1=x") == 3U, "_a1= is not an assignment");
+    VerifyShellRequire(ShellIsAssignmentWord("1a=x") == 0U, "1a= was taken for an assignment");
+    VerifyShellRequire(ShellIsAssignmentWord("a-b=x") == 0U, "a-b= was taken for an assignment");
+    VerifyShellRequire(ShellIsAssignmentWord("=x") == 0U, "=x was taken for an assignment");
+    VerifyShellRequire(ShellIsAssignmentWord("abc") == 0U, "a word with no = was an assignment");
+
+    /* Nine assignments are too many, by name. */
+    VerifyShellRequire(VerifyShellParseLine("a=1 b=1 c=1 d=1 e=1 f=1 g=1 h=1 i=1 x", &offending) ==
+                           SHELL_PARSE_TOO_MANY_ASSIGNMENTS,
+                       "nine assignments were not refused as too many");
+}
+
+static void VerifyShellExpansion(void)
+{
+    /* Parameter expansion, Section 2.6.2, in every position the quoting
+     * permits and none it forbids. */
+    VerifyShellRequire(VerifyShellExpandsTo("$HOME", "/bin"), "$HOME did not expand");
+    VerifyShellRequire(VerifyShellExpandsTo("${HOME}x", "/binx"), "${HOME} did not expand");
+    VerifyShellRequire(VerifyShellExpandsTo("$HOMEx", ""), "$HOMEx did not take the longest name");
+    VerifyShellRequire(VerifyShellExpandsTo("\"$HOME\"", "/bin"),
+                       "$HOME within double quotes did not expand");
+    VerifyShellRequire(VerifyShellExpandsTo("'$HOME'", "$HOME"),
+                       "$HOME within single quotes expanded");
+    VerifyShellRequire(VerifyShellExpandsTo("\\$HOME", "$HOME"), "an escaped $ expanded");
+    VerifyShellRequire(VerifyShellExpandsTo("\"\\$HOME\"", "$HOME"),
+                       "an escaped $ within double quotes expanded");
+    VerifyShellRequire(VerifyShellExpandsTo("$?", "3"), "$? did not expand");
+    VerifyShellRequire(VerifyShellExpandsTo("a$UNSET-b", "a-b"), "an unset variable was not empty");
+    VerifyShellRequire(VerifyShellExpandsTo("$EMPTY", ""), "an empty variable was not empty");
+    VerifyShellRequire(VerifyShellExpandsTo("$", "$"), "a lone $ was not literal");
+    VerifyShellRequire(VerifyShellExpandsTo("$1", "$1"),
+                       "a $ before a digit was not literal, there being no positional parameters");
+    VerifyShellRequire(VerifyShellExpandsTo("${HOME", "${HOME"), "an unclosed ${ was not literal");
+
+    /* The characters a value supplies are never quoting characters: a value
+     * holding quotes comes through as it is. Section 2.6.7. */
+    VerifyShellRequire(VerifyShellExpandsTo("$Q", "it's \"quoted\""),
+                       "quotes within a value were treated as quoting");
+    VerifyShellRequire(VerifyShellExpandsTo("\"$Q\"", "it's \"quoted\""),
+                       "quotes within a value expanded inside double quotes were treated as quoting");
+
+    /* And quote removal still holds around an expansion. */
+    VerifyShellRequire(VerifyShellExpandsTo("a'b'\"c$HOME\"d", "abc/bind"),
+                       "quote removal and expansion did not compose");
+
+    /* The variable table: set, get, export, and the two refusals. */
+    ShellVariablesInitialise();
+    VerifyShellRequire(ShellVariableSet("PATH", "/bin") && (strcmp(ShellVariableGet("PATH"), "/bin") == 0),
+                       "a variable set could not be read back");
+    VerifyShellRequire(ShellVariableSet("PATH", "/usr") && (strcmp(ShellVariableGet("PATH"), "/usr") == 0),
+                       "a variable set again did not take the new value");
+    VerifyShellRequire(ShellVariableGet("NOPE") == NULL, "an unset variable was not null");
+    VerifyShellRequire(!ShellVariableIsExported("PATH") && ShellVariableExport("PATH") &&
+                           ShellVariableIsExported("PATH"),
+                       "a variable was not marked exported by export");
+    VerifyShellRequire(ShellVariableExport("NEW") && (strcmp(ShellVariableGet("NEW"), "") == 0) &&
+                           ShellVariableIsExported("NEW"),
+                       "exporting an unset name did not create an empty exported variable");
+    VerifyShellRequire(!ShellVariableSet("1bad", "x"), "a name beginning with a digit was set");
+    VerifyShellRequire(ShellVariableCount() == 2U, "the table does not hold the two variables set");
+
+    {
+        char big[SHELL_VALUE_MAXIMUM + 2U];
+
+        memset(big, 'v', sizeof big - 1U);
+        big[sizeof big - 1U] = '\0';
+        VerifyShellRequire(!ShellVariableSet("BIG", big), "a value beyond the bound was set");
+    }
+
+    ShellVariablesInitialise();
+}
+
+/* ---------------------------------------------------------------------------
  * The shell itself, upon a session.
  * ------------------------------------------------------------------------- */
 
@@ -413,6 +536,25 @@ static const char VerifyShellSession[] =
     "if true\n"
     "# a comment\n"
     "\x04";
+
+/*
+ * A second session, of sub-task 8.3, whose evidence is the status the shell
+ * ends with: `exit $F$G$H$Y` is 137 only if the assignment, the export, the
+ * expansion, `cd` succeeding into a directory, `cd` failing into nothing and
+ * into a file, and `||` and `&&` acting upon those statuses all worked. `pwd`
+ * and `export` print, which a person reads; the status is what is asserted.
+ */
+static const char VerifyShellBuiltinSession[] =
+    "X=5\n"
+    "export Y=7\n"
+    "cd /bin && H=3\n"
+    "cd /nope || F=1\n"
+    "cd /bin/echo && G=2\n"
+    "cd .. ; pwd\n"
+    "export\n"
+    "exit $F$G$H$Y\n";
+
+#define VERIFY_SHELL_BUILTIN_STATUS 137
 
 static Thread *VerifyShellBoot;
 
@@ -485,7 +627,8 @@ static bool VerifyShellRun(int64_t *status)
     return true;
 }
 
-static void VerifyShellProgram(void)
+static void VerifyShellProgram(const char *session, size_t length, int64_t expected,
+                               const char *what)
 {
     int64_t status = 0;
     const uint64_t delivered_before = TerminalBytesDelivered();
@@ -500,20 +643,24 @@ static void VerifyShellProgram(void)
     }
 
     TerminalFlush();
-    TerminalInject(VerifyShellSession, sizeof VerifyShellSession - 1U);
+    TerminalInject(session, length);
 
     if (VerifyShellRun(&status))
     {
-        if (status != 0)
+        if (status != expected)
         {
-            KernelWriteString("  the shell FAILED: the status was ");
+            KernelWriteString("  the shell, ");
+            KernelWriteString(what);
+            KernelWriteString(", FAILED: the status was ");
             KernelWriteHexadecimal((uint64_t)status);
-            KernelWriteString(" and not zero.\n");
+            KernelWriteString(" and not ");
+            KernelWriteHexadecimal((uint64_t)expected);
+            KernelWriteString(".\n");
             VerifyShellSucceeded = false;
         }
 
         VerifyShellRequire(TerminalBytesDelivered() - delivered_before ==
-                               sizeof VerifyShellSession - 1U,
+                               length,
                            "the shell did not consume exactly the session");
         VerifyShellRequire(TerminalBytesQueued() == 0U,
                            "the shell left bytes of the session unread");
@@ -534,15 +681,21 @@ void KernelVerifyShell(void)
     VerifyShellTokeniser();
     VerifyShellUnquoting();
     VerifyShellParser();
-    VerifyShellProgram();
+    VerifyShellAssignments();
+    VerifyShellExpansion();
+    VerifyShellProgram(VerifyShellSession, sizeof VerifyShellSession - 1U, 0, "upon the parser's session");
+    VerifyShellProgram(VerifyShellBuiltinSession, sizeof VerifyShellBuiltinSession - 1U,
+                       VERIFY_SHELL_BUILTIN_STATUS, "upon the built-ins' session");
 
     if (VerifyShellSucceeded)
     {
         KernelWriteString("Shell self-test passed: every operator, quote and io_number tokenised "
                           "as Section 2.3 requires, the grammar's subset parsed and its "
-                          "remainder was refused by name, and the shell read a session of ");
+                          "remainder was refused by name, assignments and expansion behaved, and the shell read sessions of ");
         KernelWriteDecimal((uint64_t)(sizeof VerifyShellSession - 1U));
-        KernelWriteString(" bytes at privilege level 3 and ended with zero.\n");
+        KernelWriteString(" and ");
+        KernelWriteDecimal((uint64_t)(sizeof VerifyShellBuiltinSession - 1U));
+        KernelWriteString(" bytes at privilege level 3, ending with zero and with the status its built-ins composed.\n");
     }
     else
     {

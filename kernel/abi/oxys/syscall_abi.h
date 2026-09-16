@@ -10,6 +10,7 @@
  *          SYSCALL_VERSION, SYSCALL_FORK, SYSCALL_EXECVE, SYSCALL_EXIT,
  *          SYSCALL_WAIT, SYSCALL_BRK, SYSCALL_OPEN, SYSCALL_CLOSE,
  *          SYSCALL_READ, SYSCALL_READDIR, SYSCALL_MKDIR, SYSCALL_UNLINK,
+ *          SYSCALL_CHDIR, SYSCALL_GETCWD,
  *          SYSCALL_COUNT, SYSCALL_OK, SYSCALL_ENOSYS, SYSCALL_EFAULT,
  *          SYSCALL_EINVAL, SYSCALL_EBADF, SYSCALL_ECHILD, SYSCALL_ENOENT,
  *          SYSCALL_ENOMEM, SYSCALL_EEXIST, SYSCALL_ENOTDIR, SYSCALL_EISDIR,
@@ -157,7 +158,29 @@
 #define SYSCALL_READDIR 11U
 #define SYSCALL_MKDIR   12U
 #define SYSCALL_UNLINK  13U
-#define SYSCALL_COUNT   14U
+
+/*
+ * The two calls of sub-task 8.3, by which a program changes and asks its
+ * working directory. Numbered fifteenth and sixteenth, after the fourteen,
+ * for the reason recorded above.
+ *
+ * **Every relative path every call accepts is resolved against the working
+ * directory from this sub-task**, and not only these two: `open`, `mkdir`,
+ * `unlink`, `execve` and `chdir` itself. It is done in the one place a path
+ * is copied out of a program's memory, so that no call can forget. A path
+ * that is relative and, joined to the working directory, exceeds
+ * SYSCALL_PATH_MAXIMUM is refused as ENAMETOOLONG, the bound being upon the
+ * absolute path the kernel resolves and not upon what the program typed.
+ *
+ * `getcwd` copies the directory, terminated, into a buffer of the length
+ * given, and returns the length copied excluding the terminator; a buffer too
+ * small is ENAMETOOLONG, which is the nearest of this kernel's results to the
+ * ERANGE IEEE Std 1003.1-2017 names, and the C library's wrapper reports it
+ * as ERANGE.
+ */
+#define SYSCALL_CHDIR   14U
+#define SYSCALL_GETCWD  15U
+#define SYSCALL_COUNT   16U
 
 /*
  * The argument that asks where the break stands rather than moving it.

@@ -5,8 +5,8 @@
 **Phase**: 8 of [`../project/PLAN.md`](../project/PLAN.md). This document is
 Phase 8's, as [`LIBC.md`](LIBC.md) is Phase 7's: one section per sub-task, in
 order, each recording what that sub-task built and why, and each revised as the
-design is. Sub-tasks 8.1 (Sections 1 to 7) and 8.2 (Sections 8 to 10) are
-here so far.
+design is. Sub-tasks 8.1 (Sections 1 to 7), 8.2 (Sections 8 to 10) and 8.3
+(Sections 11 to 15) are here so far.
 
 **Authority**: `PROJECT_GUIDELINES.md`, Sections 2, 3 and 6. Every control
 sequence and every rule of the grammar named below carries a citation, and the
@@ -267,10 +267,13 @@ be the beginning of a parser written in the wrong file.
 
 **The kernel starts it** when the boot finishes, where there is a root to read
 it from and a keyboard or a serial adapter to type at. It is started again when
-it ends at the end of its input, because the alternative is a machine that
-halts the first time somebody presses control-D; it is *not* started again when
-it ends any other way, because a shell that failed at once would be started at
-once, for ever, and the log would be that. Where there is no root — a boot
+it ends by its own choice — control-D, or since 8.3 `exit [n]`, whatever the
+number — because the alternative is a machine that halts the first time
+somebody presses control-D; it is *not* started again when it ends by a fault,
+because a shell that faulted at once would be started at once, for ever, and
+the log would be that. (Until 8.3 any non-zero status stopped the restart,
+which `exit 9` showed to be wrong: a status the shell chose is an ending.)
+Where there is no root — a boot
 whose ramdisk was not found — the echo loop of Phase 3 remains, as the
 demonstration of the interrupt path it always was.
 
@@ -587,3 +590,195 @@ printed an empty pipeline and nothing asserts what it prints.
    [`LIBC.md`](LIBC.md), Section 12.7, limitation 9, describes.
 5. **Nothing runs.** The structure is built and described, and 8.3 and 8.4 are
    what act upon it.
+
+## 11. Sub-task 8.3: the working directory
+
+**Implementation**: `working_directory` in
+[`../../kernel/include/oxys/proc/process.h`](../../kernel/include/oxys/proc/process.h),
+set at creation and copied by `ProcessFork` in
+[`../../kernel/proc/process.c`](../../kernel/proc/process.c); `SyscallCopyUserPath`,
+`SyscallCanonicalisePath`, `SyscallDoChangeDirectory` and
+`SyscallDoGetWorkingDirectory` in
+[`../../kernel/arch/x86_64/syscall/syscall.c`](../../kernel/arch/x86_64/syscall/syscall.c);
+`SYSCALL_CHDIR` and `SYSCALL_GETCWD` in
+[`../../kernel/abi/oxys/syscall_abi.h`](../../kernel/abi/oxys/syscall_abi.h);
+`OxysChangeDirectory` and `OxysGetWorkingDirectory` in
+[`../../libc/syscall/calls.c`](../../libc/syscall/calls.c); asserted by
+[`../../userland/dir-check/main.c`](../../userland/dir-check/main.c), run by
+[`../../kernel/test/proc/directory.c`](../../kernel/test/proc/directory.c).
+
+`cd` is the first thing in the plan's line for 8.3, and it presumes something
+this kernel did not have: [`LIBC.md`](LIBC.md), Section 12.7, limitation 5,
+records that every path a program named was absolute in effect, a relative one
+resolving against the root. So the sub-task begins in the kernel.
+
+**It is a path in the process control block, and every call resolves against
+it in one place.** Each process holds its working directory as an absolute path
+of at most `SYSCALL_PATH_MAXIMUM` characters, `/` at creation, copied by `fork`
+and kept by `execve` — as IEEE Std 1003.1-2017 has both. A relative path given
+to *any* call is joined to it by `SyscallCopyUserPath`, the one function every
+path-taking call copies its argument through, so that `open`, `mkdir`,
+`unlink`, `execve` and `chdir` itself cannot resolve a relative path
+differently from one another or forget to. The bound is upon the joined path:
+a relative path that fits by itself and not once joined is `ENAMETOOLONG`,
+the same refusal an absolute path of that length receives.
+
+**`chdir` stores the canonical form and establishes it is a directory first.**
+The path is reduced lexically — no `.`, no `..`, no repeated or trailing
+separator, `..` at the root staying at the root as Section 4.13 has it — and
+`VfsStat` is asked what it names before it is stored: a working directory
+that named a file would make every later relative path fail with `ENOTDIR`
+at some later call, which is the wrong place for the refusal. The reduction is
+lexical, which is what every shell's `pwd -L` reports, and a symbolic link in
+the path is not followed; Section 15 counts it. `getcwd` copies the path out,
+and a buffer too small is `ENAMETOOLONG` from the kernel — which has no
+`ERANGE` among its results — and `ERANGE` from the C library's wrapper, which
+is the one wrapper that translates a result rather than passing it through,
+because the standard names `ERANGE` for exactly this.
+
+**A path and not a held node**, which is the cheaper of the two shapes and has
+a consequence recorded rather than hidden: a directory removed or renamed
+beneath a process leaves it with a working directory that names nothing, and
+its next relative path fails with `ENOENT` rather than resolving from where it
+was. Holding the node would need the reference count upon an open file that
+[`../storage/VFS.md`](../storage/VFS.md) records the filesystem layer as not
+having.
+
+## 12. Variables, assignments and expansion
+
+**Implementation**: [`../../userland/sh/variables.c`](../../userland/sh/variables.c)
+and [`../../userland/sh/expand.c`](../../userland/sh/expand.c), the assignment
+prefix in [`../../userland/sh/parser.c`](../../userland/sh/parser.c); both
+units compiled into the kernel image under `SHELL_SOURCES` and asserted by
+[`../../kernel/test/shell/parser.c`](../../kernel/test/shell/parser.c).
+
+`export` is the third thing in the plan's line, and an `export` with nothing
+to read a variable back is a word that does nothing observable. So the
+sub-task carries the smallest expansion that makes `export` mean something:
+`$NAME`, `${NAME}` and `$?`, and the assignment word `NAME=value` of Section
+2.10.2, rule 7, which the parser now records before a command's name and
+treats as a word after it.
+
+**The variables are a fixed table** — sixty-four names of sixty-four
+characters and values of two hundred and fifty-five — each marked exported or
+not, for the reason every other store in this shell is fixed: a shell that
+could not set a variable for want of memory could not say so. A name is
+Section 3.235's; `export NAME` of a name not yet set creates an empty exported
+variable, which is the simplest record of the standard's "exported once
+assigned".
+
+**Expansion and quote removal are one pass, and the reason is a rule of the
+standard.** Section 2.6 orders them as two steps, but the characters an
+expansion produces are never quoting characters; done as two passes, a value
+holding a quote would be scanned by quote removal as if it had been typed. One
+pass copies a value straight to the output, past the quote scan, and respects
+the three quotings on the way: `$` within single quotes is a character, within
+double quotes it expands, and a backslash escapes it in both the places
+Section 2.2 says it does. The expansion takes a *lookup function* rather than
+the table above, so that the kernel's self-test asserts it against a table of
+its own and so that `?` — which is no variable — is the shell's to answer.
+
+**The tokeniser did not change**, which is what Section 8.2 bought: the tokens
+kept their quotes, and the expansion reads them where they stand.
+
+## 13. The built-ins
+
+**Implementation**: [`../../userland/sh/builtins.c`](../../userland/sh/builtins.c),
+the one unit of the shell's that reaches a system call and is therefore not
+compiled into the kernel image; run from `ShellRunCommand` in
+[`../../userland/sh/main.c`](../../userland/sh/main.c).
+
+A built-in is a command the shell must run itself because a child could not
+do it on the shell's behalf: a directory changed in a child is changed for the
+child, and so is a variable set there. The four of the plan's line are the
+four this sub-task has.
+
+| Built-in | What it does | What it refuses |
+| -------- | ------------ | --------------- |
+| `cd [dir]` | `chdir`, then `OLDPWD` and `PWD` set and exported; no operand is `HOME`, `-` is `OLDPWD` and prints the new directory. | `-L` and `-P`, because the kernel keeps `-L`'s answer and has no way to give `-P`'s; `CDPATH` is not searched. |
+| `pwd` | `getcwd`, and a newline. | Any operand or option. |
+| `export [-p] [name[=value]...]` | Sets and marks; with no operand, or `-p`, writes `export NAME=value` for each exported variable. | A word that is not a name. |
+| `exit [n]` | Ends the shell with `n`, or with `$?`. It sets a flag the loop looks at rather than ending the process, so that what was printed is flushed. | An operand that is not a number, or more than one. |
+
+**Special and regular, Section 2.14.** `exit` and `export` are special
+built-ins, so an assignment before one persists in the shell; `cd` and `pwd`
+are regular, so an assignment before one does not, and the shell does not
+apply it at all — there being no environment to apply it to until 8.4.
+
+**Everything else is answered with 127.** A command that is not a built-in is
+described, as 8.2 described everything, and given the status Section 2.8.2
+assigns a command that could not be found — which is the truth of it: nothing
+can find a program until 8.4. `&&`, `||` and `!` are honoured upon that status
+and upon the built-ins' own, and `$?` reports it, so the built-ins can be
+composed and their statuses seen; a redirection upon a built-in is named and
+not performed until 8.5, and a pipeline of more than one command is refused
+until 8.6.
+
+## 14. Verification of sub-task 8.3
+
+### 14.1 The working directory, by `dir-check`
+
+| Property asserted | The silent failure it catches |
+| ----------------- | ----------------------------- |
+| A program begins at the root; the kernel asserts the field, the program asserts `getcwd`. | A process inheriting whatever its slot's last occupant left. |
+| `chdir /bin` moves it, `getcwd` reports it, and `open echo` — a call that is neither — resolves against it. | A working directory that `chdir` and `getcwd` agreed about and `open` ignored. |
+| `..`, `.`, `bin/../bin/./`, `../..` above the root and `//bin//` all reach the canonical path. | `pwd` printing `/bin/../bin/.`; `..` at the root leaving the root. |
+| `chdir` into a name that does not exist is `ENOENT` and into a file is `ENOTDIR`, and neither moves it. | The negative test below: a `chdir` into a file that succeeded, and every later relative path failing somewhere else. |
+| `getcwd` into a buffer too small is `ERANGE`. | A path truncated into a buffer and reported as complete. |
+| A relative path that fits alone and not once joined is `ENAMETOOLONG`. | A path silently truncated at the bound. |
+| A child of `fork` inherits it, and the child's `chdir` leaves the parent's alone. | The negative test below: a child that began at the root. |
+
+### 14.2 Assignments, variables and expansion, in the kernel
+
+| Property asserted | The silent failure it catches |
+| ----------------- | ----------------------------- |
+| Assignment words before the name are recorded whole and after it are words; assignments alone are a command without a name; nine are refused by name. | `C=3` after a command's name taken as an assignment and lost from the argument vector. |
+| What is and is not a name: `_a1=` is, and `1a=`, `a-b=` and `=x` are not. | A program named `a-b=x` run as an assignment. |
+| `$HOME`, `${HOME}x`, `$HOMEx` taking the longest name, `$?`, an unset variable as nothing, an empty one as nothing, a lone `$`, `$1` and an unclosed `${` as literal. | `$HOMEx` expanding `$HOME` and appending `x`. |
+| `$HOME` expands within double quotes and not within single, and an escaped `$` expands in neither. | The negative test below. |
+| A value holding quotes comes through as it is, unquoted and within double quotes. | A value of `it's` closing a quote the person opened. |
+| The table: set, set again, unset is null, export marks, exporting an unset name creates an empty exported variable, a bad name and a value beyond the bound are refused, and the count is right. | A variable set twice held twice. |
+
+### 14.3 The shell, upon a session whose evidence is its status
+
+A second session runs the shell at privilege level 3 after the root is
+mounted — `X=5`, `export Y=7`, `cd /bin && H=3`, `cd /nope || F=1`,
+`cd /bin/echo && G=2`, `cd .. ; pwd`, `export`, `exit $F$G$H$Y` — and the
+shell is asserted to end with **137**, which it does only if the assignment,
+the export, the expansion, `cd` succeeding into a directory and failing into
+nothing and into a file, and `&&` and `||` acting upon those statuses all
+worked. `pwd` and `export` print, which a person reads; the status is what is
+asserted, and it is the same device `startup-check` and `arg-check` use: a
+number the kernel checks independently of anything printed.
+
+### 14.4 The negative tests
+
+Three defects inserted, each caught, each reverted. `chdir` made to accept a
+file: caught by `dir-check` twice, and by the session — which ended with 213
+because `cd /bin/echo && G=2` had set `G`. `fork` made to copy only the first
+character of the working directory: caught by `dir-check` twice. A `$` made to
+expand within single quotes: caught by the expansion's assertion.
+
+## 15. Limitations of sub-task 8.3
+
+1. **The working directory is a path**, reduced lexically: a symbolic link in
+   it is not followed, and a directory removed beneath a process leaves it
+   with a name that resolves to nothing. Section 11.
+2. **The expansion is `$NAME`, `${NAME}` and `$?` and nothing else.** No
+   positional parameter — `$1` is literal, there being no way to give a script
+   arguments — no `${NAME:-word}` and its kin, no tilde, no command
+   substitution, no arithmetic, no field splitting and no pathname expansion.
+   Each arrives when something wants it; field splitting in particular changes
+   what a word *is* and is the first thing to decide before a script is ever
+   read.
+3. **No environment reaches a program yet.** The exported variables are marked
+   and listed, and 8.4's `execve` is what will carry them; until then `export`
+   is a promise the shell keeps to itself.
+4. **`cd` sets `PWD` and `OLDPWD` but `HOME` is nobody's to set.** No login
+   sets it, so `cd` with no operand fails until somebody exports one.
+5. **A regular built-in's assignment prefix is discarded** rather than applied
+   to an environment the built-in would see, there being no such environment
+   until 8.4.
+6. **`exit` in a `&&` chain ends the shell where the standard would too**, but
+   `&` is still recorded and not honoured, and a pipeline of two built-ins is
+   refused rather than run in a subshell.

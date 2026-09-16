@@ -136,6 +136,7 @@ static ShellParseStatus ShellParseSimpleCommand(ShellParser *parser, ShellComman
 {
     command->word_count = 0U;
     command->redirection_count = 0U;
+    command->assignment_count = 0U;
 
     for (;;)
     {
@@ -145,6 +146,23 @@ static ShellParseStatus ShellParseSimpleCommand(ShellParser *parser, ShellComman
 
         if (token->kind == SHELL_TOKEN_WORD)
         {
+            /*
+             * Rule 7 of 2.10.2, of sub-task 8.3: before the command's name, a
+             * word of the form NAME=value is an assignment. After the name it
+             * is a word, which is why the count of words is what decides.
+             */
+            if ((command->word_count == 0U) && (ShellIsAssignmentWord(token->text) > 0U))
+            {
+                if (command->assignment_count >= SHELL_ASSIGNMENT_MAXIMUM)
+                {
+                    return SHELL_PARSE_TOO_MANY_ASSIGNMENTS;
+                }
+
+                command->assignment[command->assignment_count++] = token->text;
+                ShellAdvance(parser);
+                continue;
+            }
+
             /* Rule 1 of 2.10.2: a reserved word is one only in command
              * position — the first word — and there it is refused. */
             if ((command->word_count == 0U) && ShellIsCompoundWord(token->text))
@@ -255,7 +273,8 @@ static ShellParseStatus ShellParseSimpleCommand(ShellParser *parser, ShellComman
 
         /* Anything else ends the command: an operator the pipeline or the list
          * acts upon, or the end of the line. */
-        return ((command->word_count == 0U) && (command->redirection_count == 0U))
+        return ((command->word_count == 0U) && (command->redirection_count == 0U) &&
+                (command->assignment_count == 0U))
                    ? SHELL_PARSE_UNEXPECTED_TOKEN
                    : SHELL_PARSE_OK;
     }
@@ -429,6 +448,7 @@ const char *ShellParseStatusName(ShellParseStatus status)
     case SHELL_PARSE_UNSUPPORTED:           return "not implemented by this shell";
     case SHELL_PARSE_TOO_MANY_TOKENS:       return "too many tokens";
     case SHELL_PARSE_TOO_MANY_WORDS:        return "too many words in one command";
+    case SHELL_PARSE_TOO_MANY_ASSIGNMENTS:  return "too many assignments before one command";
     case SHELL_PARSE_TOO_MANY_REDIRECTIONS: return "too many redirections in one command";
     case SHELL_PARSE_TOO_MANY_COMMANDS:     return "too many commands in one pipeline";
     case SHELL_PARSE_TOO_MANY_PIPELINES:    return "too many pipelines in one line";

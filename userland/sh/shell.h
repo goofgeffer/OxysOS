@@ -12,7 +12,11 @@
  *          ShellSeparator, ShellParseStatus, ShellTokenise, ShellParse,
  *          ShellUnquote, ShellParseStatusName, SHELL_TOKEN_MAXIMUM,
  *          SHELL_TEXT_MAXIMUM, SHELL_WORD_MAXIMUM, SHELL_REDIRECTION_MAXIMUM,
- *          SHELL_COMMAND_MAXIMUM, SHELL_PIPELINE_MAXIMUM.
+ *          SHELL_COMMAND_MAXIMUM, SHELL_PIPELINE_MAXIMUM — and, of sub-task
+ *          8.3, ShellLookup, ShellExpandWord, ShellIsName,
+ *          ShellIsAssignmentWord, ShellVariableSet, ShellVariableGet,
+ *          ShellVariableExport, ShellVariableIsExported, ShellVariableCount,
+ *          ShellVariableAt, ShellVariablesInitialise.
  * References:
  *   - IEEE Std 1003.1-2017, Section 2.2 (Quoting): the escape character, single
  *     quotes and double quotes, and which five characters a backslash escapes
@@ -64,6 +68,10 @@
 #define SHELL_REDIRECTION_MAXIMUM 8U   /* Redirections of one command. */
 #define SHELL_COMMAND_MAXIMUM     8U   /* Commands of one pipeline. */
 #define SHELL_PIPELINE_MAXIMUM    16U  /* Pipelines of one list. */
+#define SHELL_ASSIGNMENT_MAXIMUM  8U   /* Assignment words before a command's name. */
+#define SHELL_NAME_MAXIMUM        64U  /* A variable's name. */
+#define SHELL_VALUE_MAXIMUM       255U /* A variable's value. */
+#define SHELL_VARIABLE_MAXIMUM    64U  /* Variables held at once. */
 
 /*
  * What a token is. The operators are one kind each rather than one kind with
@@ -139,6 +147,17 @@ typedef struct ShellCommand
     size_t word_count;
     ShellRedirection redirection[SHELL_REDIRECTION_MAXIMUM];
     size_t redirection_count;
+
+    /*
+     * The assignment words before the name, of sub-task 8.3: Section 2.10.2,
+     * rule 7, has a word of the form `NAME=value` in that position be an
+     * assignment and not a word, and Section 2.9.1 has them applied to the
+     * command's environment — or, where there is no command name, to the
+     * shell's own variables. Each is the whole word, quotes kept, `NAME=`
+     * included; the shell splits it after expansion.
+     */
+    const char *assignment[SHELL_ASSIGNMENT_MAXIMUM];
+    size_t assignment_count;
 } ShellCommand;
 
 /* What joins one and_or to the next in a list, or ends it. */
@@ -196,6 +215,7 @@ typedef enum ShellParseStatus
     SHELL_PARSE_UNSUPPORTED,         /* A token the grammar names and this shell does not implement. */
     SHELL_PARSE_TOO_MANY_TOKENS,     /* A bound above was exceeded. */
     SHELL_PARSE_TOO_MANY_WORDS,
+    SHELL_PARSE_TOO_MANY_ASSIGNMENTS,
     SHELL_PARSE_TOO_MANY_REDIRECTIONS,
     SHELL_PARSE_TOO_MANY_COMMANDS,
     SHELL_PARSE_TOO_MANY_PIPELINES,
@@ -228,5 +248,55 @@ const char *ShellParseStatusName(ShellParseStatus status);
 
 /* The text of an operator token kind, for a diagnostic; a word's is its text. */
 const char *ShellTokenKindText(ShellTokenKind kind);
+
+/*
+ * Sub-task 8.3: names, variables and expansion.
+ *
+ * A name is Section 3.235's: letters, digits and underscores, not beginning
+ * with a digit. An assignment word is `NAME=` followed by anything, and
+ * ShellIsAssignmentWord returns the length of the name — the position of the
+ * `=` — or zero where the word is not one.
+ */
+bool ShellIsName(const char *text, size_t length);
+size_t ShellIsAssignmentWord(const char *word);
+
+/* The variable table: set, read, mark for export, and walk. A value that
+ * does not fit, a name that is not one, or a table that is full is refused. */
+void ShellVariablesInitialise(void);
+bool ShellVariableSet(const char *name, const char *value);
+const char *ShellVariableGet(const char *name);
+bool ShellVariableExport(const char *name);
+bool ShellVariableIsExported(const char *name);
+size_t ShellVariableCount(void);
+bool ShellVariableAt(size_t position, const char **name, const char **value, bool *exported);
+
+/*
+ * What an expansion asks of its caller: the value of a parameter by name, or
+ * a null pointer for one that is unset. It is a function and not the table
+ * above so that the expansion may be asserted with a table of the test's own,
+ * and so that `?` — which is no variable — is the caller's to answer.
+ */
+typedef const char *(*ShellLookup)(void *context, const char *name);
+
+/*
+ * Expands `$NAME`, `${NAME}` and `$?` within `word` — outside single quotes,
+ * and within double quotes — and removes the quotes, into `destination`.
+ * Section 2.6.2 and Section 2.6.7, in one pass; the characters a value
+ * supplies are never quoting characters. Returns false where the result does
+ * not fit or a name is too long.
+ */
+bool ShellExpandWord(const char *word, char *destination, size_t capacity,
+                     ShellLookup lookup, void *context);
+
+/*
+ * The built-in commands, of sub-task 8.3, in userland/sh/builtins.c — the one
+ * unit of the shell's that reaches a system call and is therefore not
+ * compiled into the kernel image. ShellRunBuiltin runs the command named by
+ * argv[0] and returns its status, or -1 where the name is no built-in;
+ * `exit` sets `exit_requested` rather than ending the process itself.
+ */
+bool ShellIsBuiltin(const char *name);
+bool ShellIsSpecialBuiltin(const char *name);
+int ShellRunBuiltin(int argc, char **argv, int last_status, bool *exit_requested);
 
 #endif /* OXYS_SHELL_H */

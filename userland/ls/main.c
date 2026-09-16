@@ -181,14 +181,14 @@ int main(int argc, char *argv[])
     if (operands <= 0)
     {
         /*
-         * POSIX has `ls` with no operand behave as if "." were given. This system
-         * has no working directory — there is no call that sets or reports one —
-         * so "." would resolve against nothing. The root is named instead, which
-         * is the one directory that certainly exists, and the difference is
-         * recorded rather than hidden: docs/design/LIBC.md, Section 12.7,
-         * limitation 5.
+         * POSIX has `ls` with no operand behave as if "." were given, and since
+         * sub-task 8.3 it does: every process holds a working directory and
+         * the kernel resolves a relative path against it. Until then this
+         * named the root, there being no call that set or reported one —
+         * docs/design/LIBC.md, Section 12.7, limitation 5, which that sub-task
+         * closed.
          */
-        return ListDirectory("/", all, false) ? EXIT_SUCCESS : EXIT_FAILURE;
+        return ListDirectory(".", all, false) ? EXIT_SUCCESS : EXIT_FAILURE;
     }
 
     for (int index = first; index < argc; ++index)

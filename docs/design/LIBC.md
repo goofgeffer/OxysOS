@@ -1974,7 +1974,7 @@ built by the procedure of Section 11 and linked against the same archive.
 | ------- | ------------ | ----------------------------- |
 | [`echo`](../../userland/echo/main.c) | Writes its operands separated by one space and followed by one newline. | `-n` is an operand and a backslash is an ordinary character. Both are implementation-defined in IEEE Std 1003.1-2017, and both alternatives make `echo` unable to print something. |
 | [`cat`](../../userland/cat/main.c) | Copies each operand to the standard output. | No operand is a diagnostic rather than a copy of the standard input, there being no call that read one when it was written and the standard input being a raw terminal since sub-task 8.1; `-` is a path; `-u` is not recognised. |
-| [`ls`](../../userland/ls/main.c) | Lists each directory operand, one entry to a line, with `-a`. | It does not sort and does not use columns. Limitations 4 and 5. |
+| [`ls`](../../userland/ls/main.c) | Lists each directory operand, one entry to a line, with `-a`. | It does not sort and does not use columns. Limitation 4; limitation 5 is closed. |
 | [`mkdir`](../../userland/mkdir/main.c) | Creates each operand, with `-p`. | `-m` is not implemented and no file mode creation mask is applied. Limitation 6. |
 | [`rm`](../../userland/rm/main.c) | Removes each operand, with `-f`. | `-i` cannot be implemented and `-r` is not, there being no call that removes a directory. Limitation 3. |
 
@@ -2143,10 +2143,11 @@ inherited.
    sized by a directory the program has not finished reading. The entries appear
    in the order the filesystem returns them, which for EXT2 is the order they
    stand in the directory's blocks.
-5. **There is no working directory.** No call sets or reports one, so `ls` with
-   no operand lists the root rather than `.`, and every path a program names is
-   absolute in effect. A relative path resolves against the root. This is the
-   shell's first requirement after a prompt, and is sub-task 8.3's `cd`.
+5. **There was no working directory until sub-task 8.3.** No call set or reported
+   one, so `ls` with no operand listed the root rather than `.`, and every path
+   a program named was absolute in effect. **Closed at 8.3**: each process holds
+   one, `chdir` and `getcwd` move and report it, every call resolves a relative
+   path against it, and `ls` lists `.`. [`SHELL.md`](SHELL.md), Section 11.
 6. **A directory `mkdir` creates is world-writable.** The mode is 0777, which is
    what POSIX names as the default, and it is not reduced because this system has
    no file mode creation mask — and no credentials for one to belong to. Nothing

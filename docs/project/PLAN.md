@@ -99,7 +99,7 @@ than the kernel's. [`../design/LIBC.md`](../design/LIBC.md), Section 11.
 `rm`, the **six system calls** by which a program reaches the filesystem, and the
 **argument vector** this kernel's `execve` had refused since Phase 6. It took
 more than its line names and had to: `echo` without a vector prints a blank line
-for ever. So the count of calls is fourteen, the count of failure results is
+for ever. So the count of calls was fourteen (sixteen since 8.3), the count of failure results is
 twenty — three of the five utilities act upon `errno` and not upon the sign of a
 result — and each process now holds a descriptor table of its own, so that a
 program cannot reach another's open file by guessing a number.
@@ -182,9 +182,19 @@ yet to run, describes what it understood. The grammar is compiled into the
 kernel image and asserted there, as the C library is.
 [`../design/SHELL.md`](../design/SHELL.md), Sections 8 to 10.
 
-**Next: sub-task 8.3** — the built-in commands `cd`, `exit`, `export` and
-`pwd`, and with them the working directory this kernel does not yet have and
-the environment nothing yet sets.
+**Sub-task 8.3 is complete**: `cd`, `pwd`, `export` and `exit`. The first of
+them reached the kernel, which until now had no working directory: every
+process holds one, two calls move and report it, and every path-taking call
+resolves a relative path against it in the one place they all copy their
+argument through. The shell sets variables, expands `$NAME` and `$?`, exports,
+and answers every command that is not a built-in with the 127 of a command not
+found — which is the truth of it until 8.4. `ls` with no operand lists `.` at
+last. [`../design/SHELL.md`](../design/SHELL.md), Sections 11 to 15.
+
+**Next: sub-task 8.4** — external program execution by `fork` and `execve`,
+which is where the exported variables become a program's environment and a
+command that is not a built-in is found in `/bin`.
+
 
 
 **Three releases are planned, and each is fixed to a sub-task below rather than
@@ -815,7 +825,7 @@ system's — and the first of those is sub-task 8.3's.
 | - | -------- | ----- | ----------- |
 | 8.1 | Implement line editing with history. | Implemented | `KernelVerifyTerminal`, `KernelVerifyLine` |
 | 8.2 | Implement the tokeniser and the command parser. | Implemented | `KernelVerifyShell` |
-| 8.3 | Implement built-in commands (`cd`, `exit`, `export`, `pwd`). | Planned | — |
+| 8.3 | Implement built-in commands (`cd`, `exit`, `export`, `pwd`). | Implemented | `KernelVerifyDirectory`, `KernelVerifyShell` |
 | 8.4 | Implement external program execution by `fork()` and `execve()`. | Planned | — |
 | 8.5 | Implement input and output redirection. | Planned | — |
 | 8.6 | Implement pipelines. | Planned | — |
@@ -886,6 +896,37 @@ character — and no assignment word, both arriving with the environment 8.3's
 `export` sets; no compound command, function or here-document; bounds of
 sixteen words, eight redirections, eight commands and sixteen pipelines; and
 nothing runs. Section 10.
+
+**(c)** Sub-task 8.3 is the four built-ins, and `cd` is the one that reaches
+the kernel: until this sub-task no process had a working directory and every
+relative path resolved against the root. Each process now holds one, `/` at
+creation, inherited across `fork` and kept across `execve`; two calls, `chdir`
+and `getcwd`, move and report it; and **every call that takes a path resolves
+a relative one against it in the one function they all copy their argument
+through**, so that none can differ or forget. `chdir` stores the canonical
+form and establishes it names a directory first, because a working directory
+that named a file would fail at the wrong call. The count of calls is sixteen.
+[`../design/SHELL.md`](../design/SHELL.md), Section 11.
+
+**`export` needed something to read a variable back, so the sub-task carries
+the smallest expansion that makes it mean something**: `$NAME`, `${NAME}` and
+`$?`, and the assignment word `NAME=value` of Section 2.10.2, rule 7. The
+tokens kept their quotes at 8.2 for exactly this, and the tokeniser did not
+change; expansion and quote removal are one pass, because the characters a
+value supplies are never quoting characters. `exit` and `export` are special
+built-ins and `cd` and `pwd` are not, as Section 2.14 divides them. A command
+that is not a built-in is answered with the 127 of a command not found, which
+is the truth of it until 8.4. Sections 12 and 13.
+
+**The evidence is a status.** `dir-check` asserts the working directory from
+the only place it can be asserted — a program — and ends with the number that
+failed; and the shell is run upon a session whose `exit $F$G$H$Y` is 137 only
+if assignment, export, expansion, `cd` into a directory, `cd` into nothing,
+`cd` into a file, `&&` and `||` all did what they should. Three negative tests
+were caught. Section 14. **Six limitations are recorded**, of which the first
+is that the working directory is a path reduced lexically and not a held
+node, and the third that no environment reaches a program until 8.4's
+`execve` carries it. Section 15.
 
 **Sub-task 8.7 closes Phase 8 and is where the first release is cut.** `Oxys 1
 Alpha` is the first image worth handing to somebody, because it is the first one

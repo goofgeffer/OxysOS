@@ -188,6 +188,8 @@ LIBC_ASM_SOURCES := libc/syscall/invoke.asm
 # ------------------------------------------------------------------------------
 
 SHELL_SOURCES := userland/sh/lexer.c \
+                 userland/sh/expand.c \
+                 userland/sh/variables.c \
                  userland/sh/parser.c
 
 C_SOURCES := kernel/kernel.c \
@@ -230,6 +232,7 @@ C_SOURCES := kernel/kernel.c \
              kernel/test/libc/line.c \
              kernel/test/terminal/terminal.c \
              kernel/test/shell/parser.c \
+             kernel/test/proc/directory.c \
              kernel/terminal/terminal.c \
              kernel/mm/pmm.c \
              kernel/mm/vmm.c \
@@ -308,6 +311,7 @@ ASM_SOURCES := boot/boot.asm \
                kernel/test/libc/startup_image.asm \
                kernel/test/libc/utilities_image.asm \
                kernel/test/libc/line_image.asm \
+               kernel/test/proc/directory_image.asm \
                $(LIBC_ASM_SOURCES)
 
 OBJECTS := $(patsubst %.c,$(BUILD_DIR)/%.c.o,$(C_SOURCES)) \
@@ -510,7 +514,7 @@ $(USER_CRT0): libc/crt/crt0.asm
 # Within the generated rule, the archive is named *after* the program's objects,
 # which is not a style choice: a linker resolves an archive's members against the
 # references it has already seen, so an archive named first contributes nothing.
-USER_PROGRAMS := startup-check arg-check exec-check file-check line-check echo cat ls mkdir rm sh
+USER_PROGRAMS := startup-check arg-check exec-check file-check line-check dir-check echo cat ls mkdir rm sh
 
 USER_PROGRAM_SOURCES := $(foreach program,$(USER_PROGRAMS),$(wildcard userland/$(program)/*.c))
 USER_PROGRAM_IMAGES  := $(foreach program,$(USER_PROGRAMS),$(USER_DIR)/$(program).elf)
@@ -563,6 +567,7 @@ USER_DEPENDENCIES := $(patsubst %.c,$(USER_DIR)/%.c.d,$(LIBC_SOURCES)) \
 $(BUILD_DIR)/kernel/test/libc/startup_image.asm.o: $(USER_DIR)/startup-check.embed.elf
 $(BUILD_DIR)/kernel/test/libc/utilities_image.asm.o: $(USER_PROGRAM_EMBEDS)
 $(BUILD_DIR)/kernel/test/libc/line_image.asm.o: $(USER_DIR)/line-check.embed.elf $(USER_DIR)/sh.embed.elf
+$(BUILD_DIR)/kernel/test/proc/directory_image.asm.o: $(USER_DIR)/dir-check.embed.elf
 $(BUILD_DIR)/%.asm.o: %.asm
 	@mkdir -p $(dir $@)
 	$(NASM) $(ASFLAGS) $< -o $@
