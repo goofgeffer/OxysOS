@@ -102,6 +102,8 @@ extern const uint8_t KernelProgramRemoveDirBegin[];
 extern const uint8_t KernelProgramRemoveDirEnd[];
 extern const uint8_t KernelProgramWordCountBegin[];
 extern const uint8_t KernelProgramWordCountEnd[];
+extern const uint8_t KernelProgramMicroBegin[];
+extern const uint8_t KernelProgramMicroEnd[];
 extern const uint8_t KernelProgramShellBegin[];
 extern const uint8_t KernelProgramShellEnd[];
 
@@ -125,6 +127,7 @@ static const KernelInitrdUtility KernelInitrdUtilities[] = {
     { KERNEL_INITRD_BIN "/cp", KernelProgramCopyBegin, KernelProgramCopyEnd },
     { KERNEL_INITRD_BIN "/rmdir", KernelProgramRemoveDirBegin, KernelProgramRemoveDirEnd },
     { KERNEL_INITRD_BIN "/wc", KernelProgramWordCountBegin, KernelProgramWordCountEnd },
+    { KERNEL_INITRD_BIN "/micro", KernelProgramMicroBegin, KernelProgramMicroEnd },
     { KERNEL_INITRD_BIN "/sh", KernelProgramShellBegin, KernelProgramShellEnd },
 };
 

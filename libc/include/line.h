@@ -11,7 +11,7 @@
  * Key definitions: LineEditor, LineResult, LineOutput, LINE_CAPACITY,
  *          LINE_HISTORY_DEPTH, LineInitialise, LineBegin, LineFeed, LineText,
  *          LineLength, LineCursor, LineRemember, LineHistoryCount, LineHistoryAt,
- *          LineRead.
+ *          LinePreset, LineRead, LineEdit.
  * References:
  *   - ECMA-48, 5th edition (1991), Section 5.4: a control sequence is CSI,
  *     parameter bytes in 0x30 to 0x3F, intermediate bytes in 0x20 to 0x2F, and
@@ -233,6 +233,16 @@ size_t LineHistoryCount(const LineEditor *editor);
 const char *LineHistoryAt(const LineEditor *editor, size_t position);
 
 /*
+ * Makes the current line `text`, drawn upon the display with the cursor at its
+ * end, so that the person edits it rather than types it afresh. It is what the
+ * history's recall does, offered to a caller: `micro`'s `e` command hands a
+ * line of a file back through it. Call it after LineBegin — or let LineEdit
+ * below do both — and before the first byte is fed; a text longer than the
+ * capacity is cut to fit.
+ */
+void LinePreset(LineEditor *editor, const char *text);
+
+/*
  * Writes `prompt` to the standard output, reads bytes from the standard input
  * until a line is complete, and returns it — or a null pointer at the end of
  * input, which is control-D upon an empty line, or a `read` that failed.
@@ -246,5 +256,14 @@ const char *LineHistoryAt(const LineEditor *editor, size_t position);
  * be, and before the next LineRead, which begins a new line.
  */
 char *LineRead(LineEditor *editor, const char *prompt);
+
+/*
+ * LineRead with the line begun as `initial` rather than empty — the text drawn
+ * after the prompt, the cursor at its end, and every edit the editor offers
+ * applied to it before Return completes it. A null `initial` is LineRead. The
+ * text returned is the editor's own line and is the edited text, which may be
+ * the initial one unchanged.
+ */
+char *LineEdit(LineEditor *editor, const char *prompt, const char *initial);
 
 #endif /* OXYS_LIBC_LINE_H */

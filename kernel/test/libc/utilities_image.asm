@@ -3,7 +3,7 @@
 ;
 ; File: kernel/test/libc/utilities_image.asm
 ; Purpose: Carries the eight programs of sub-task 7.6, the three utilities of
-;          8.5 and the one of 8.6, inside the kernel image,
+;          8.5, the one of 8.6 and the editor, inside the kernel image,
 ;          so that the self-test which runs them has an ELF file for each.
 ; Key definitions: KernelProgramArgCheckBegin, KernelProgramArgCheckEnd,
 ;          KernelProgramExecCheckBegin, KernelProgramExecCheckEnd,
@@ -14,7 +14,8 @@
 ;          KernelProgramRemoveBegin, KernelProgramRemoveEnd, KernelProgramTouchBegin,
 ;          KernelProgramTouchEnd, KernelProgramCopyBegin, KernelProgramCopyEnd,
 ;          KernelProgramRemoveDirBegin, KernelProgramRemoveDirEnd,
-;          KernelProgramWordCountBegin, KernelProgramWordCountEnd.
+;          KernelProgramWordCountBegin, KernelProgramWordCountEnd,
+;          KernelProgramMicroBegin, KernelProgramMicroEnd.
 ; References:
 ;   - kernel/test/libc/utilities.c: the self-test that loads these and runs them.
 ;   - kernel/test/libc/startup_image.asm: the same technique at sub-task 7.5,
@@ -112,6 +113,8 @@ global KernelProgramRemoveDirBegin
 global KernelProgramRemoveDirEnd
 global KernelProgramWordCountBegin
 global KernelProgramWordCountEnd
+global KernelProgramMicroBegin
+global KernelProgramMicroEnd
 
 KernelProgramTouchBegin:
     incbin "build/user/touch.embed.elf"
@@ -131,3 +134,8 @@ align 8
 KernelProgramWordCountBegin:
     incbin "build/user/wc.embed.elf"
 KernelProgramWordCountEnd:
+
+align 8
+KernelProgramMicroBegin:
+    incbin "build/user/micro.embed.elf"
+KernelProgramMicroEnd:

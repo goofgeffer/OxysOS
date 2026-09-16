@@ -7,8 +7,8 @@ Phase 8's, as [`LIBC.md`](LIBC.md) is Phase 7's: one section per sub-task, in
 order, each recording what that sub-task built and why, and each revised as the
 design is. Sub-tasks 8.1 (Sections 1 to 7), 8.2 (Sections 8 to 10), 8.3
 (Sections 11 to 15), 8.4 (Sections 16 to 18), 8.5 (Sections 19 to 21) and 8.6
-(Sections 22 to 24) are
-here so far.
+(Sections 22 to 24) are here so far, and Section 25 is `micro`, the line editor
+added beside 8.6.
 
 **Authority**: `PROJECT_GUIDELINES.md`, Sections 2, 3 and 6. Every control
 sequence and every rule of the grammar named below carries a citation, and the
@@ -1209,3 +1209,55 @@ no stack beneath it. The first program to fork after the change found it.
    limitation 1.
 6. **The here-document, the environment's bound and the terminal's line
    discipline** are as Section 21 left them.
+
+## 25. `micro`, the line editor
+
+**Implementation**: [`../../userland/micro/main.c`](../../userland/micro/main.c);
+`LinePreset` in [`../../libc/line/line.c`](../../libc/line/line.c) and
+`LineEdit` in [`../../libc/line/system.c`](../../libc/line/system.c). Added on
+2026-09-16 at the project owner's request, beside sub-task 8.6 and belonging
+to no sub-task: the smallest editor that can edit.
+
+Until it, a file could be written — `echo >f`, `>>f`, `cat >f`, `cp` — and not
+changed: no editor, and no `lseek` a program can reach. `micro FILE` loads the
+file whole, prints it with line numbers, and takes commands at a `micro> `
+prompt: `p` prints, `a` appends lines typed until a line holding only `.`,
+`i N` inserts them before line N, `d N` deletes line N, `e N` hands line N back
+to be changed, `w` writes the file whole over what it was, `q` quits and is
+refused while there are unsaved changes, `q!` discards them, `wq` writes and
+quits, `h` lists these. The letters and the manner are `ed`'s and nothing else
+of `ed` is here — no address, no regular expression, no `s`.
+
+**It is a line editor because the display can be nothing else yet.** Neither
+the text-mode display nor the framebuffer console interprets a cursor-positioning
+sequence, and the line editor beneath the shell draws with printable characters,
+spaces and backspaces alone so that it draws the same upon a serial line
+(Section 3). A screen editor needs the display to move the cursor up and clear a
+line, and a program to learn the screen's size, and an editor that assumed either
+would scroll the screen into nonsense. A line editor asks nothing of the display
+the shell does not already ask.
+
+**`e` is what makes it an editor.** The C library's `LineRead` began every line
+empty; `LineEdit` begins it as a given text, drawn after the prompt with the
+cursor at its end, so that a person changes the line with the arrow keys, Home,
+End and Delete rather than retyping it — `LinePreset` beneath it is the
+replacement the history's recall already performed, offered to a caller. Control-D
+upon the line abandons the edit, an edit abandoned not being an edit made.
+
+**The file is held whole and written whole**, and nothing touches it between the
+load and `w`: a person who quits with `q!` has the file exactly as it was, and a
+`w` that fails leaves a file that is at worst truncated — the one loss, recorded
+here rather than hidden, that a rename would close when there is one
+([`../storage/VFS.md`](../storage/VFS.md), limitation 5).
+
+Observed on 2026-09-16 under QEMU, driven over the serial line: a new file
+begun, three lines appended, `wrold` corrected to `world` by Home, Right, Delete,
+Right, `r`, End, Return; a line deleted and one inserted before the first; `q`
+refused with changes unsaved; `wq`; `cat` showing the three lines; the file
+reopened and shown; `cat hello.txt | wc` reporting `3 3 18`.
+[`../project/TESTING-RECORD.md`](../project/TESTING-RECORD.md).
+
+Limitations: **1,024 lines and 511 bytes to a line**, a longer line cut when
+loaded and said to be; **no search, no replace, no undo**; **a `w` that fails
+half way leaves the file short**, until there is a rename; **the history the
+arrow keys walk is shared** between commands and typed lines.

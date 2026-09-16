@@ -293,6 +293,7 @@ kernel/acpi/acpi.c	arch/mm/paging.h	Maps each firmware table for the duration of
 kernel/exec/elf.c	arch/mm/addrspace.h	Places an image's segments into an address space.
 kernel/exec/elf.c	arch/mm/paging.h	Reaches a target space's pages through the direct physical map.
 kernel/exec/elf.c	arch/syscall/syscall.h	Validates a caller-supplied path against the user limit.
+kernel/fs/vfs/pipe.c	arch/cpu/percpu.h	The masked section a reader or writer tests its condition and sleeps within, as the wait channel requires.
 kernel/mm/vmm.c	arch/mm/paging.h	Asks whether a range it is about to hand out is already mapped.
 kernel/proc/process.c	arch/cpu/gdt.h	The selectors a thread descends to privilege level 3 with.
 kernel/proc/process.c	arch/cpu/percpu.h	Records the current thread in the executing processor's area.

@@ -6,7 +6,7 @@
  *          system: the prompt written to the standard output, the bytes read
  *          from the standard input, and the editor's own output carried to the
  *          standard output between them.
- * Key functions: LineRead.
+ * Key functions: LineEdit, LineRead.
  * References:
  *   - libc/include/line.h: the seam this implements, and why the editing is
  *     apart from the descriptors it is used with.
@@ -64,7 +64,7 @@ static void LineWriteOutput(void *context, const char *bytes, size_t count)
     }
 }
 
-char *LineRead(LineEditor *editor, const char *prompt)
+char *LineEdit(LineEditor *editor, const char *prompt, const char *initial)
 {
     LineOutput previous_output;
     void *previous_context;
@@ -85,6 +85,11 @@ char *LineRead(LineEditor *editor, const char *prompt)
     if (prompt != NULL)
     {
         LineWriteOutput(NULL, prompt, strlen(prompt));
+    }
+
+    if (initial != NULL)
+    {
+        LinePreset(editor, initial);
     }
 
     while (result == LINE_PENDING)
@@ -108,4 +113,9 @@ char *LineRead(LineEditor *editor, const char *prompt)
     editor->context = previous_context;
 
     return (result == LINE_COMPLETE) ? editor->text : NULL;
+}
+
+char *LineRead(LineEditor *editor, const char *prompt)
+{
+    return LineEdit(editor, prompt, NULL);
 }

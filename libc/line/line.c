@@ -6,7 +6,7 @@
  *          the parsing of the terminal's control sequences, and the history —
  *          above an output function, and without naming a descriptor.
  * Key functions: LineInitialise, LineBegin, LineFeed, LineText, LineLength,
- *          LineCursor, LineRemember, LineHistoryCount, LineHistoryAt.
+ *          LineCursor, LineRemember, LineHistoryCount, LineHistoryAt, LinePreset.
  * References:
  *   - ECMA-48, 5th edition (1991), Section 5.4: the grammar of a control
  *     sequence, which LineFeed parses; Sections 8.3.18 to 8.3.22, the cursor
@@ -277,6 +277,24 @@ static void LineReplace(LineEditor *editor, const char *replacement)
         LineEmitRun(editor, ' ', previous - incoming);
         LineEmitRun(editor, LINE_BACKSPACE, previous - incoming);
     }
+}
+
+void LinePreset(LineEditor *editor, const char *text)
+{
+    if ((editor == NULL) || (text == NULL))
+    {
+        return;
+    }
+
+    /*
+     * The replacement the history recall performs, offered to a caller: the
+     * line becomes `text`, drawn, with the cursor at its end, and what the
+     * person then does to it is editing and not typing. It exists for the
+     * editor `micro`, whose `e` command hands a line back to be changed rather
+     * than retyped — the difference between an editor and a program that asks
+     * for a line again.
+     */
+    LineReplace(editor, text);
 }
 
 /* The subscript within the ring of the history's entry at `position`, 0 being

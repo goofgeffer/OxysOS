@@ -8,7 +8,8 @@ programs that assert them; and sub-task 7.7 put five of them somewhere a person
 could find, in `/bin` upon the initial ramdisk the kernel mounts as its root; and
 sub-task 8.1 added the shell, which the kernel starts when the boot finishes, and
 the program that asserts its line editor; 8.5 added `touch`, `cp` and `rmdir`, and 8.6
-`wc`, so that `/bin` holds ten. See
+`wc` and, at the project owner's request, the editor `micro`, so that `/bin` holds
+eleven. See
 [`../docs/storage/INITRD.md`](../docs/storage/INITRD.md), and Section 2 of it for
 why the six `-check` programs are **not** carried there: each exists to make a
 machine-readable statement about a system call, so each is embedded in the kernel
@@ -50,6 +51,7 @@ which is what makes the boundary worth having somewhere a person can see.
 | [`touch/main.c`](touch/main.c) | Sub-task 8.5: creates each operand that does not exist — the first utility here to make a file. No timestamps, this system keeping no clock. |
 | [`cp/main.c`](cp/main.c) | Sub-task 8.5: copies one file to another, created or truncated — the first utility here to write what it read. One source and one target. |
 | [`rmdir/main.c`](rmdir/main.c) | Sub-task 8.5: removes each empty directory operand, by the call `rm` could not stand in for since 7.6. |
+| [`micro/main.c`](micro/main.c) | Added on 2026-09-16 at the project owner's request, beside sub-task 8.6: the smallest editor that can edit. `micro FILE` loads the file, prints it numbered, and takes `p`, `a`, `i N`, `e N`, `d N`, `w`, `q`, `q!` and `wq`; `e` hands the line back through the C library's line editor to be changed with the arrow keys rather than retyped. A line editor and not a screen editor, because the display interprets no cursor-positioning sequence; the file is held whole and written whole, there being no `lseek`. |
 | [`wc/main.c`](wc/main.c) | Sub-task 8.6: counts the newlines, words and bytes of each operand, or of the standard input for none, with `-c`, `-l` and `-w` and a `total` line — the first utility whose reason to exist is the pipeline, being what a person puts at the end of one. It reads the standard input to its end and not to a control-D, a pipe ending when its writer does. |
 | [`arg-check/main.c`](arg-check/main.c) | Sub-task 7.6: compares the argument vector it was given against the vector it expects, and ends with the number of comparisons that failed. It exists because nothing in this kernel can read what a program printed. |
 | [`exec-check/main.c`](exec-check/main.c) | Sub-task 7.6: becomes `arg-check` through `execve`, so that a vector crosses an address space that is destroyed. It has no assertions of its own — upon success it no longer exists, and the status the kernel collects is `arg-check`'s. |

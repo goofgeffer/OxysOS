@@ -341,7 +341,8 @@ static int ShellBuiltinHelp(void)
                  "touch file..., creates each file that does not exist.\n"
                  "cp source target, copies one file to another, created or truncated.\n"
                  "wc [-c] [-l] [-w] [file]..., counts the lines, words and bytes of each "
-                 "file, or of the standard input.\n");
+                 "file, or of the standard input.\n"
+                 "micro file, edits a file a line at a time: p a i e d w q, h for the list.\n");
 
     return 0;
 }

@@ -223,7 +223,9 @@ and a writer while it is full. What that required of the kernel is the larger
 half: a child of `fork` is admitted to the scheduler at the fork, `wait` sleeps
 upon a wait channel until a child ends, the thread to return to became a field
 of the thread, and the counted interrupt-disable travels with a thread across a
-switch. `wc` joins `/bin`; `help` is a list of every command. The shell's first
+switch. `wc` joins `/bin`, and — beside the sub-task, at the project owner's
+request — `micro`, a line editor, the first thing that changes a file rather
+than writes one; `help` is a list of every command. The shell's first
 session, which the shell had answered by refusing its pipelines, now runs them.
 [`../design/SHELL.md`](../design/SHELL.md), Sections 22 to 24;
 [`../design/PROCESS.md`](../design/PROCESS.md), Section 17;
