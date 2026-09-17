@@ -28,7 +28,7 @@ call, may make a child of itself and collect what it ended with, and is ended
 when it faults or when it asks.
 
 **And it runs programs a person would recognise.** Since sub-task 7.6 the kernel
-carries fourteen system calls rather than eight (eighteen since sub-task 8.5, nineteen since 8.6, twenty-seven since 8.7) — `open`, `close`, `read`,
+carries fourteen system calls rather than eight (eighteen since sub-task 8.5, nineteen since 8.6, twenty-seven since 8.7, twenty-nine with `link` and `procinfo` added after it) — `open`, `close`, `read`,
 `readdir`, `mkdir` and `unlink` joining them — each process holds a descriptor
 table of its own, and `execve` carries the argument and environment vectors it
 had refused since Phase 6. Above those stand `ls`, `cat`, `echo`, `mkdir` and
@@ -144,7 +144,7 @@ each refuses the options it does not implement rather than accepting them and
 doing nothing. [`../design/LIBC.md`](../design/LIBC.md), Section 12.3.
 
 **A program may now reach the filesystem, and may be given arguments.** The
-kernel carries **fourteen** system calls — eighteen since 8.5, nineteen since 8.6, twenty-seven since 8.7 — the eight it had, and `open`, `close`,
+kernel carries **fourteen** system calls — eighteen since 8.5, nineteen since 8.6, twenty-seven since 8.7, twenty-nine after it — the eight it had, and `open`, `close`,
 `read`, `readdir`, `mkdir` and `unlink`, each a validation of a caller's
 arguments and then a call of the filesystem layer that has existed since Phase 5.
 Each process holds a descriptor table of its own, so that the numbers a program
@@ -245,7 +245,7 @@ the GRUB entry that permits writing. See
   rather than one for all; and composites all of it over a back buffer, after
   which **nothing reads the framebuffer**.
 - A `SYSCALL` entry path swaps `GS`, loads a kernel stack from a per-processor
-  block, dispatches through a table of twenty-seven calls and validates a caller's
+  block, dispatches through a table of twenty-nine calls and validates a caller's
   arguments against both the canonical user limit and the paging hierarchy — and
   resolves a copy-on-write fault upon a page it is asked to write, rather than
   refusing an address a fork had protected.
@@ -645,7 +645,8 @@ kind and number; a process's descriptors are released when it ends. The shell
 runs every pipeline as a job in a group of its own, `&` leaves one running,
 and `jobs`, `fg`, `bg` and `kill` govern them. `<signal.h>` in the C library;
 `signal-check` and a sixth shell session assert it. Eight calls, twenty-seven
-in all. [`../design/PROCESS.md`](../design/PROCESS.md), Section 18;
+in all, and after the sub-task `head`, `tail`, `grep`, `sort`, `mv` and `ps`
+with the `link` and `procinfo` calls, twenty-nine. [`../design/PROCESS.md`](../design/PROCESS.md), Section 18;
 [`../design/SHELL.md`](../design/SHELL.md), Sections 28 and 29;
 [`../design/LIBC.md`](../design/LIBC.md), Section 13.
 

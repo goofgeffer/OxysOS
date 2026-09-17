@@ -3,7 +3,7 @@
 /*
  * File: libc/include/syscall.h
  * Purpose: Declares the C library's system-call wrappers — one for each of the
- *          twenty-seven calls <oxys/syscall_abi.h> numbers — together with the raw
+ *          twenty-nine calls <oxys/syscall_abi.h> numbers — together with the raw
  *          invocation they are built upon and the translation that turns a
  *          kernel result into a library result and an errno.
  * Key definitions: OxysSyscallInvoke0, OxysSyscallInvoke1, OxysSyscallInvoke2,
@@ -12,7 +12,8 @@
  *          OxysChangeDirectory, OxysGetWorkingDirectory, OxysDuplicate,
  *          OxysRemoveDirectory, OxysPipe, OxysWaitFor, OxysKill,
  *          OxysSignalAction, OxysGetProcessId, OxysGetProcessGroup,
- *          OxysSetProcessGroup, OxysTerminalGroup, OxysSignalRestorer,
+ *          OxysSetProcessGroup, OxysTerminalGroup, OxysSignalRestorer, OxysLink,
+ *          OxysProcessInformation,
  *          OxysWrite, OxysTicks,
  *          OxysVersion, OxysFork, OxysExecve, OxysExit, OxysWait, OxysBrk,
  *          OxysSbrk.
@@ -408,5 +409,15 @@ int64_t OxysTerminalGroup(int64_t group);
 
 /* The restorer, of libc/syscall/invoke.asm: what a handler returns into. */
 void OxysSignalRestorer(void);
+
+/*
+ * The two of 2026-09-16, beside sub-task 8.7. OxysLink makes a second name
+ * for a file upon the same volume — `link()` — returning -1 with errno EEXIST,
+ * ENOENT, EXDEV or the rest. OxysProcessInformation fills `information` for
+ * the process at a slot of the table: 1 where the slot holds one, 0 where it
+ * is empty, -1 with EINVAL beyond the table; `ps` walks the slots from 0.
+ */
+int64_t OxysLink(const char *existing, const char *name);
+int64_t OxysProcessInformation(uint64_t index, SyscallProcessInformation *information);
 
 #endif /* OXYS_LIBC_SYSCALL_H */

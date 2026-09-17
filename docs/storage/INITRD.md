@@ -45,8 +45,9 @@ simply there.
 
 ## 2. What is upon it
 
-Eleven files and two directories: the five utilities of sub-task 7.6, the three
-of 8.5, the one of 8.6, the editor added beside it, and since sub-task 8.1 the shell.
+Seventeen files and two directories: the five utilities of sub-task 7.6, the three
+of 8.5, the one of 8.6, the editor and the six utilities added after 8.7, and since
+sub-task 8.1 the shell.
 
 | Path | What it is |
 | ---- | ---------- |
@@ -60,6 +61,7 @@ of 8.5, the one of 8.6, the editor added beside it, and since sub-task 8.1 the s
 | `/bin/rmdir` | Sub-task 8.5: removes an empty directory. |
 | `/bin/wc` | Sub-task 8.6: counts lines, words and bytes, of a file or of what a pipe delivers. |
 | `/bin/micro` | The line editor added on 2026-09-16: the first thing that changes a file rather than writes one. |
+| `/bin/head`, `/bin/tail`, `/bin/grep`, `/bin/sort`, `/bin/mv`, `/bin/ps` | The six of 2026-09-16, after sub-task 8.7: the first lines, the last, the lines holding a string, the lines in order, a rename, and the processes. [`../design/SHELL.md`](../design/SHELL.md), Section 30. |
 | `/bin/sh` | The shell of sub-task 8.1, which the kernel reads off this filesystem and starts when the boot finishes. [`../design/SHELL.md`](../design/SHELL.md), Section 4. |
 | `/mnt` | Empty. Where a volume the machine carries is mounted; Section 6.3. |
 | `/lost+found` | `mke2fs` makes it. Nothing here uses it. |

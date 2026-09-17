@@ -8,8 +8,9 @@ programs that assert them; and sub-task 7.7 put five of them somewhere a person
 could find, in `/bin` upon the initial ramdisk the kernel mounts as its root; and
 sub-task 8.1 added the shell, which the kernel starts when the boot finishes, and
 the program that asserts its line editor; 8.5 added `touch`, `cp` and `rmdir`, and 8.6
-`wc` and, at the project owner's request, the editor `micro`, so that `/bin` holds
-eleven. See
+`wc` and, at the project owner's request, the editor `micro` and then `head`, `tail`,
+`grep`, `sort`, `mv` and `ps`, so that `/bin` holds
+seventeen. See
 [`../docs/storage/INITRD.md`](../docs/storage/INITRD.md), and Section 2 of it for
 why the six `-check` programs are **not** carried there: each exists to make a
 machine-readable statement about a system call, so each is embedded in the kernel
@@ -52,6 +53,12 @@ which is what makes the boundary worth having somewhere a person can see.
 | [`cp/main.c`](cp/main.c) | Sub-task 8.5: copies one file to another, created or truncated — the first utility here to write what it read. One source and one target. |
 | [`rmdir/main.c`](rmdir/main.c) | Sub-task 8.5: removes each empty directory operand, by the call `rm` could not stand in for since 7.6. |
 | [`micro/main.c`](micro/main.c) | Added on 2026-09-16 at the project owner's request, beside sub-task 8.6: the smallest editor that can edit. `micro FILE` loads the file, prints it numbered, and takes `p`, `a`, `i N`, `e N`, `d N`, `w`, `q`, `q!` and `wq`; `e` hands the line back through the C library's line editor to be changed with the arrow keys rather than retyped. A line editor and not a screen editor, because the display interprets no cursor-positioning sequence; the file is held whole and written whole, there being no `lseek`. |
+| [`head/main.c`](head/main.c) | 2026-09-16: the first lines of each operand, or of the standard input; `-n N` or `-N`, ten by default. What makes SIGPIPE visible at the prompt. |
+| [`tail/main.c`](tail/main.c) | 2026-09-16: the last lines, likewise; the whole input read into a buffer that grows, there being no `lseek` a program can reach. |
+| [`grep/main.c`](grep/main.c) | 2026-09-16: the lines holding a string — `-F` is the only kind of pattern — with `-i`, `-v`, `-n` and `-c`, and the standard's statuses 0, 1 and 2. |
+| [`sort/main.c`](sort/main.c) | 2026-09-16: the lines in byte order, `-r` reversed, by a stable merge; `ls` does not sort and this is where it is done. |
+| [`mv/main.c`](mv/main.c) | 2026-09-16: a rename by `link` and `unlink`, or a move into a directory; not atomic, not lossy, not across volumes. |
+| [`ps/main.c`](ps/main.c) | 2026-09-16: the processes, one slot of the kernel's table per `procinfo` call — identifier, parent, group, state, pages, name. |
 | [`wc/main.c`](wc/main.c) | Sub-task 8.6: counts the newlines, words and bytes of each operand, or of the standard input for none, with `-c`, `-l` and `-w` and a `total` line — the first utility whose reason to exist is the pipeline, being what a person puts at the end of one. It reads the standard input to its end and not to a control-D, a pipe ending when its writer does. |
 | [`arg-check/main.c`](arg-check/main.c) | Sub-task 7.6: compares the argument vector it was given against the vector it expects, and ends with the number of comparisons that failed. It exists because nothing in this kernel can read what a program printed. |
 | [`exec-check/main.c`](exec-check/main.c) | Sub-task 7.6: becomes `arg-check` through `execve`, so that a vector crosses an address space that is destroyed. It has no assertions of its own — upon success it no longer exists, and the status the kernel collects is `arg-check`'s. |

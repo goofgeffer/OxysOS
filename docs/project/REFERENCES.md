@@ -1363,7 +1363,12 @@ a background group that reads the terminal is sent SIGTTIN; **Section 11.1.9**
 **Section 2.9.3.1** of the shell — a list ended by `&` is asynchronous; and
 the `sh` utility's Job Control, the `%n` identifier, `jobs`, `fg`, `bg` and
 `kill`. **ISO/IEC 9899:2011, Section 7.14**, `<signal.h>`: `signal`, `raise`,
-`sig_atomic_t`, and the six signals the language requires.
+`sig_atomic_t`, and the six signals the language requires. And for the six
+utilities of the same day: **`head`**, **`tail`**, **`grep`** (`-F`, `-i`, `-v`,
+`-n`, `-c`, and the statuses 0, 1 and greater), **`sort`** (`-r`), **`mv`**
+(the directory form, and that a rename across filesystems is a copy, which
+this does not do), **`ps`** (PID, PPID, PGID and the command name), and
+**`link()`**.
 
 Used by: `kernel/fs/vfs/`, `kernel/include/oxys/fs/vfs.h`, `kernel/include/oxys/fs/pipe.h`,
 `kernel/include/oxys/proc/signal.h`, `libc/line/line.c`, `libc/include/signal.h`,

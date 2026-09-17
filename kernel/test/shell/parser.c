@@ -708,7 +708,7 @@ static const char VerifyShellPipelineSession[] =
 #define VERIFY_SHELL_PIPELINE_STATUS 10
 
 /* How many lines `help` prints: one per command, built-ins and programs. */
-#define VERIFY_SHELL_HELP_LINES "23"
+#define VERIFY_SHELL_HELP_LINES "29"
 
 static const VerifyShellFile VerifyShellPipelineFiles[] = {
     { "/verify/p1", "3\n" },

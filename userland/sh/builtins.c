@@ -351,7 +351,15 @@ static int ShellBuiltinHelp(void)
                  "wc [-c] [-l] [-w] [file]..., counts the lines, words and bytes of each "
                  "file, or of the standard input.\n"
                  "micro file, edits a file one line at a time; h at its prompt lists its "
-                 "commands.\n");
+                 "commands.\n"
+                 "head [-n N] [file]..., prints the first N lines of each file, or of the "
+                 "standard input; ten by default.\n"
+                 "tail [-n N] [file]..., prints the last N lines, likewise.\n"
+                 "grep [-i] [-v] [-n] [-c] string [file]..., prints the lines holding the "
+                 "string; -i ignores case, -v inverts, -n numbers, -c counts.\n"
+                 "sort [-r] [file]..., prints the lines in order; -r reverses.\n"
+                 "mv source... target, renames a file, or moves files into a directory.\n"
+                 "ps, lists the processes.\n");
 
     return 0;
 }

@@ -9,7 +9,8 @@ design is. Sub-tasks 8.1 (Sections 1 to 7), 8.2 (Sections 8 to 10), 8.3
 (Sections 11 to 15), 8.4 (Sections 16 to 18), 8.5 (Sections 19 to 21) and 8.6
 (Sections 22 to 24) are here so far; Section 25 is `micro`, the line editor
 added beside 8.6, Section 26 is `clear`, Section 27 the prompt that names the
-working directory, and Sections 28 and 29 are sub-task 8.7.
+working directory, Sections 28 and 29 are sub-task 8.7, and Section 30 the six
+utilities added after it.
 
 **Authority**: `PROJECT_GUIDELINES.md`, Sections 2, 3 and 6. Every control
 sequence and every rule of the grammar named below carries a citation, and the
@@ -1470,3 +1471,44 @@ Limitations:
 6. **The alpha is not yet cut.** [`../project/PLAN.md`](../project/PLAN.md)
    fixes `Oxys 1 Alpha` at this sub-task; the project owner directed on
    2026-09-16 that the release wait, and the sub-task is complete without it.
+
+## 30. Six more utilities, and the two calls they needed
+
+Added on 2026-09-16 at the project owner's request, after sub-task 8.7:
+`head`, `tail`, `grep`, `sort`, `mv` and `ps`, in
+[`../../userland/`](../../userland/) under their names. Each is what a person
+reaches for the moment a pipe exists — `ls | sort`, `cat f | grep word`,
+`cat f | head` — and each is the standard's utility reduced to what this
+system can hold: no regular expression in `grep`, whose pattern is a string;
+no locale in `sort`, whose order is by byte; no `lseek`, so `tail` reads its
+whole input into a buffer that grows.
+
+`mv` needed a call the kernel did not offer a program: `link`, the
+twenty-eighth, IEEE Std 1003.1-2017's `link()` — the filesystem layer has
+linked since Phase 5 and nothing had asked it to from privilege level 3. A
+rename is a link and then an unlink, not atomic and not lossy: a machine that
+stopped between the two would hold the file under both names, which `ls` shows
+and `rm` mends. A rename across volumes is `EXDEV` and not a copy. `ps` needed
+`procinfo`, the twenty-ninth, which fills a `SyscallProcessInformation` for one
+slot of the process table so that a walk from 0 sees every process once: the
+identifier, the parent, the group, a state — the thread's, where the process
+is neither stopped nor ended, a process's own state field not being derived
+from its threads' — the pages mapped, and the name, which `execve` now sets to
+the program's so that `ps` names what runs and not the shell every child was
+forked from. `head` is what makes SIGPIPE visible: `cat /bin/sh | head -n 1`
+ends `cat` by it, silently, as every shell of this lineage does.
+
+| Property observed, 2026-09-16 under QEMU | What it shows |
+| ---------------------------------------- | ------------- |
+| `ls /bin \| sort -r \| head -3` printed `wc`, `touch`, `tail`. | A three-stage pipeline, the reverse order, and `-N`. |
+| `help \| grep -n file \| tail -n 2` printed the last two numbered matches. | `grep`'s numbering and `tail`'s count, which the first run had wrong by one. |
+| `help \| grep -c ,` printed 29, the count `help \| wc -l` also gives. | `-c`, and `help`'s lines. |
+| `echo b >/x; echo a >>/x; sort /x; mv /x /y; ls \| grep y` printed `a`, `b`, `y`; `mv /y /d` put it in the directory. | A sort of two lines, a rename, a move into a directory. |
+| `grep zzz /d/y; echo $?` printed 1. | The status of no line selected. |
+| `ps` with `cat &` stopped listed `sh` sleeping, `cat` stopped and `ps` itself running. | The state derived from the thread; a stopped job shown as one. |
+
+Limitations: **`grep` has no regular expression**, and no `-l`, `-w` or `-x`;
+**`sort` has no `-n`, `-u` or `-k`**; **`head` and `tail` take one option**,
+`-n N` or `-N`, and `tail` has no `-f`; **`mv` does not move a directory**,
+`link` refusing one, and does not copy across volumes; **`ps` has no options**
+and shows no time, this system keeping no account of it.

@@ -2241,3 +2241,8 @@ delivering one signal per way out, and which a program must be ready for.
 **`abort` does not raise SIGABRT**, there being no `abort` yet. **`alarm` and
 `sleep` are absent**, the kernel keeping no timer a program may set; SIGALRM is
 numbered and sent by nothing.
+
+Two wrappers were added after the sub-task, on 2026-09-16, for two utilities:
+`OxysLink`, `link()`, the twenty-eighth call, and `OxysProcessInformation`,
+the twenty-ninth, which fills a `SyscallProcessInformation` for one slot of the
+process table. [`SHELL.md`](SHELL.md), Section 30.

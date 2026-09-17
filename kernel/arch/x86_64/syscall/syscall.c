@@ -1126,6 +1126,124 @@ static int64_t SyscallDoTerminalGroup(uint64_t group)
     return (int64_t)TerminalForegroundGroup();
 }
 
+/* ------------------------------------------ the two calls of 2026-09-16 */
+
+/* `link`: a second name for a file, upon the same volume. */
+static int64_t SyscallDoLink(uint64_t existing_address, uint64_t name_address)
+{
+    char existing[SYSCALL_PATH_MAXIMUM + 1U];
+    char name[SYSCALL_PATH_MAXIMUM + 1U];
+    int64_t copied;
+
+    if (ProcessCurrent() == NULL)
+    {
+        return SYSCALL_EINVAL;
+    }
+
+    copied = SyscallCopyUserPath(existing_address, existing, sizeof existing);
+
+    if (copied != SYSCALL_OK)
+    {
+        return copied;
+    }
+
+    copied = SyscallCopyUserPath(name_address, name, sizeof name);
+
+    if (copied != SYSCALL_OK)
+    {
+        return copied;
+    }
+
+    if (!VfsLink(existing, name))
+    {
+        return SyscallFilesystemRefusal();
+    }
+
+    return SYSCALL_OK;
+}
+
+/* `procinfo`: one slot of the process table, described for `ps`. */
+static int64_t SyscallDoProcessInformation(uint64_t index, uint64_t address)
+{
+    SyscallProcessInformation information;
+    const Process *process;
+    const uint8_t *source = (const uint8_t *)&information;
+    uint8_t *const destination = (uint8_t *)(uintptr_t)address;
+
+    if (index >= PROCESS_CAPACITY)
+    {
+        return SYSCALL_EINVAL;
+    }
+
+    if (!SyscallUserRangeIsWritable(address, (uint64_t)sizeof information))
+    {
+        ++SyscallFaults;
+
+        return SYSCALL_EFAULT;
+    }
+
+    process = ProcessAt((size_t)index);
+
+    if ((process == NULL) || !process->used)
+    {
+        return 0;
+    }
+
+    information.id = process->id;
+    information.parent = process->parent_id;
+    information.group = process->group;
+    information.pages = process->mapped_pages;
+
+    /*
+     * The state is the thread's where the process is neither stopped nor
+     * ended: docs/design/PROCESS.md, Section 19, limitation 4, records that a
+     * process's own state field is not derived from its threads', and what
+     * `ps` should say is what the thread is doing.
+     */
+    if (process->state == PROCESS_STOPPED)
+    {
+        information.state = SYSCALL_PROCESS_STATE_STOPPED;
+    }
+    else if (process->state == PROCESS_EXITED)
+    {
+        information.state = SYSCALL_PROCESS_STATE_EXITED;
+    }
+    else if ((process->thread_count > 0U) && (process->threads[0] != NULL) &&
+             (process->threads[0]->state == THREAD_RUNNING))
+    {
+        information.state = SYSCALL_PROCESS_STATE_RUNNING;
+    }
+    else if ((process->thread_count > 0U) && (process->threads[0] != NULL) &&
+             (process->threads[0]->state == THREAD_BLOCKED))
+    {
+        information.state = SYSCALL_PROCESS_STATE_BLOCKED;
+    }
+    else
+    {
+        information.state = SYSCALL_PROCESS_STATE_READY;
+    }
+
+    for (size_t at = 0U; at <= SYSCALL_PROCESS_NAME_MAXIMUM; ++at)
+    {
+        information.name[at] = process->name[at];
+
+        if (process->name[at] == '\0')
+        {
+            break;
+        }
+    }
+
+    information.name[SYSCALL_PROCESS_NAME_MAXIMUM] = '\0';
+
+    /* Byte by byte, so that nothing depends upon the caller's alignment. */
+    for (size_t at = 0U; at < sizeof information; ++at)
+    {
+        destination[at] = source[at];
+    }
+
+    return 1;
+}
+
 /* ------------------------------------------------- the call of sub-task 7.3 */
 
 /*
@@ -1936,7 +2054,9 @@ static const SyscallEntryDescriptor SyscallTable[SYSCALL_COUNT] = {
     { "getpid", 0U },
     { "getpgid", 1U },
     { "setpgid", 2U },
-    { "tcgroup", 1U }
+    { "tcgroup", 1U },
+    { "link", 2U },
+    { "procinfo", 2U }
 };
 
 bool SyscallNumberIsValid(uint64_t number)
@@ -2091,6 +2211,14 @@ void SyscallDispatch(SyscallFrame *frame)
 
     case SYSCALL_TCGROUP:
         frame->rax = (uint64_t)SyscallDoTerminalGroup(frame->rdi);
+        break;
+
+    case SYSCALL_LINK:
+        frame->rax = (uint64_t)SyscallDoLink(frame->rdi, frame->rsi);
+        break;
+
+    case SYSCALL_PROCINFO:
+        frame->rax = (uint64_t)SyscallDoProcessInformation(frame->rdi, frame->rsi);
         break;
 
     default:

@@ -1023,6 +1023,14 @@ it would collect anything — a background pipeline that finished only when a
 person typed the next command. `ThreadTerminateCurrent` closes what the
 process held; `ProcessDestroy` then finds nothing to close.
 
+Two things were added after the sub-task, on 2026-09-16, for `ps`: `execve`
+names the process after the program — the last component of the path — so
+that a listing names what runs and not the shell every child was forked from;
+and `procinfo` reports one slot of the table, the state taken from the thread
+where the process is neither stopped nor ended, limitation 4 of Section 19
+being why the process's own field would not do. [`SHELL.md`](SHELL.md),
+Section 30.
+
 ### 18.5 Verification, and what it found
 
 `KernelVerifySignals` asserts, upon a process that never runs, the rules a

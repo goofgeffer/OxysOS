@@ -2122,6 +2122,23 @@ int64_t ProcessExecute(Process *process, const char *path,
     thread->entry = image.entry;
     thread->user_stack = stack;
 
+    /* The process takes the program's name — the last component of the path
+     * — since 2026-09-16, so that `ps` names what runs rather than the shell
+     * every child was forked from. */
+    {
+        const char *last = path;
+
+        for (const char *at = path; *at != '\0'; ++at)
+        {
+            if ((*at == '/') && (at[1] != '\0'))
+            {
+                last = at + 1;
+            }
+        }
+
+        ProcessCopyName(process->name, last);
+    }
+
     /* A thread that reached here by `fork` has a saved user context, and it
      * describes a program that no longer exists. Leaving it set would resume the
      * old program's registers in the new program's address space. */

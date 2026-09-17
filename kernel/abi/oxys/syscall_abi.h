@@ -13,6 +13,7 @@
  *          SYSCALL_CHDIR, SYSCALL_GETCWD, SYSCALL_DUP2, SYSCALL_RMDIR, SYSCALL_PIPE,
  *          SYSCALL_WAITPID, SYSCALL_KILL, SYSCALL_SIGACTION, SYSCALL_SIGRETURN,
  *          SYSCALL_GETPID, SYSCALL_GETPGID, SYSCALL_SETPGID, SYSCALL_TCGROUP,
+ *          SYSCALL_LINK, SYSCALL_PROCINFO, SyscallProcessInformation,
  *          SYSCALL_WAIT_NO_HANG, SYSCALL_WAIT_UNTRACED, SYSCALL_STATUS_MAKE,
  *          SYSCALL_STATUS_KIND, SYSCALL_STATUS_NUMBER, the SYSCALL_SIG numbers,
  *          SYSCALL_SIGNAL_DEFAULT, SYSCALL_SIGNAL_IGNORE, SYSCALL_EINTR, SYSCALL_ESRCH,
@@ -253,7 +254,42 @@
 #define SYSCALL_GETPGID   24U
 #define SYSCALL_SETPGID   25U
 #define SYSCALL_TCGROUP   26U
-#define SYSCALL_COUNT     27U
+
+/*
+ * The two calls added on 2026-09-16, beside sub-task 8.7, for two utilities a
+ * person asked for. `link` makes a second name for a file upon the same volume
+ * — IEEE Std 1003.1-2017's `link()` — which with `unlink` is how `mv` renames
+ * within a volume; a second name upon another volume is EXDEV. `procinfo`
+ * fills a SyscallProcessInformation for the process at a table index, so that
+ * `ps` can walk the table: it returns 1 where the slot holds a process, 0
+ * where it is empty, and EINVAL beyond the table — the index being a slot and
+ * not an identifier, so that a walk from 0 upward sees every process once.
+ */
+#define SYSCALL_LINK      27U
+#define SYSCALL_PROCINFO  28U
+#define SYSCALL_COUNT     29U
+
+/* What `procinfo` reports of one process. The state is one of
+ * SYSCALL_PROCESS_STATE_*, and the name is what the process was created as —
+ * the program's name where `execve` replaced it. */
+#define SYSCALL_PROCESS_NAME_MAXIMUM 31U
+#define SYSCALL_PROCESS_CAPACITY     64U
+
+#define SYSCALL_PROCESS_STATE_READY   1U
+#define SYSCALL_PROCESS_STATE_RUNNING 2U
+#define SYSCALL_PROCESS_STATE_BLOCKED 3U
+#define SYSCALL_PROCESS_STATE_STOPPED 4U
+#define SYSCALL_PROCESS_STATE_EXITED  5U
+
+typedef struct SyscallProcessInformation
+{
+    uint64_t id;
+    uint64_t parent;
+    uint64_t group;
+    uint64_t state;
+    uint64_t pages;   /* Pages mapped for the program: image, stack and heap. */
+    char name[SYSCALL_PROCESS_NAME_MAXIMUM + 1U];
+} SyscallProcessInformation;
 
 /* The options of `waitpid`. */
 #define SYSCALL_WAIT_NO_HANG  UINT64_C(0x1)

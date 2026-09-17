@@ -104,6 +104,18 @@ extern const uint8_t KernelProgramWordCountBegin[];
 extern const uint8_t KernelProgramWordCountEnd[];
 extern const uint8_t KernelProgramMicroBegin[];
 extern const uint8_t KernelProgramMicroEnd[];
+extern const uint8_t KernelProgramHeadBegin[];
+extern const uint8_t KernelProgramHeadEnd[];
+extern const uint8_t KernelProgramTailBegin[];
+extern const uint8_t KernelProgramTailEnd[];
+extern const uint8_t KernelProgramGrepBegin[];
+extern const uint8_t KernelProgramGrepEnd[];
+extern const uint8_t KernelProgramSortBegin[];
+extern const uint8_t KernelProgramSortEnd[];
+extern const uint8_t KernelProgramMvBegin[];
+extern const uint8_t KernelProgramMvEnd[];
+extern const uint8_t KernelProgramPsBegin[];
+extern const uint8_t KernelProgramPsEnd[];
 extern const uint8_t KernelProgramShellBegin[];
 extern const uint8_t KernelProgramShellEnd[];
 
@@ -128,6 +140,12 @@ static const KernelInitrdUtility KernelInitrdUtilities[] = {
     { KERNEL_INITRD_BIN "/rmdir", KernelProgramRemoveDirBegin, KernelProgramRemoveDirEnd },
     { KERNEL_INITRD_BIN "/wc", KernelProgramWordCountBegin, KernelProgramWordCountEnd },
     { KERNEL_INITRD_BIN "/micro", KernelProgramMicroBegin, KernelProgramMicroEnd },
+    { KERNEL_INITRD_BIN "/ps", KernelProgramPsBegin, KernelProgramPsEnd },
+    { KERNEL_INITRD_BIN "/mv", KernelProgramMvBegin, KernelProgramMvEnd },
+    { KERNEL_INITRD_BIN "/sort", KernelProgramSortBegin, KernelProgramSortEnd },
+    { KERNEL_INITRD_BIN "/grep", KernelProgramGrepBegin, KernelProgramGrepEnd },
+    { KERNEL_INITRD_BIN "/tail", KernelProgramTailBegin, KernelProgramTailEnd },
+    { KERNEL_INITRD_BIN "/head", KernelProgramHeadBegin, KernelProgramHeadEnd },
     { KERNEL_INITRD_BIN "/sh", KernelProgramShellBegin, KernelProgramShellEnd },
 };
 

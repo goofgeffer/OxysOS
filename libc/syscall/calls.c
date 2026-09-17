@@ -2,7 +2,7 @@
 /* SPDX-License-Identifier: MIT */
 /*
  * File: libc/syscall/calls.c
- * Purpose: The twenty-seven system-call wrappers, one for each call
+ * Purpose: The twenty-nine system-call wrappers, one for each call
  *          <oxys/syscall_abi.h> numbers: the arguments named rather than
  *          numbered, and the result translated into the convention a C program
  *          expects.
@@ -12,6 +12,7 @@
  *          OxysGetWorkingDirectory, OxysDuplicate, OxysRemoveDirectory, OxysPipe,
  *          OxysWaitFor, OxysKill, OxysSignalAction, OxysGetProcessId,
  *          OxysGetProcessGroup, OxysSetProcessGroup, OxysTerminalGroup,
+ *          OxysLink, OxysProcessInformation,
  *          OxysExit, OxysWait, OxysBrk, OxysSbrk.
  * References:
  *   - kernel/abi/oxys/syscall_abi.h: the call numbers and what each call means.
@@ -340,4 +341,18 @@ int64_t OxysSetProcessGroup(int64_t pid, int64_t group)
 int64_t OxysTerminalGroup(int64_t group)
 {
     return OxysSyscallResult(OxysSyscallInvoke1(SYSCALL_TCGROUP, (uint64_t)group));
+}
+
+/* ---------------------------------------------------- 2026-09-16, beside 8.7 */
+
+int64_t OxysLink(const char *existing, const char *name)
+{
+    return OxysSyscallResult(OxysSyscallInvoke2(SYSCALL_LINK, (uint64_t)(uintptr_t)existing,
+                                                (uint64_t)(uintptr_t)name));
+}
+
+int64_t OxysProcessInformation(uint64_t index, SyscallProcessInformation *information)
+{
+    return OxysSyscallResult(OxysSyscallInvoke2(SYSCALL_PROCINFO, index,
+                                                (uint64_t)(uintptr_t)information));
 }

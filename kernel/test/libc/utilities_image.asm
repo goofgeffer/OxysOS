@@ -3,7 +3,7 @@
 ;
 ; File: kernel/test/libc/utilities_image.asm
 ; Purpose: Carries the eight programs of sub-task 7.6, the three utilities of
-;          8.5, the one of 8.6 and the editor, inside the kernel image,
+;          8.5, the one of 8.6, the editor and the six of 2026-09-16, inside the kernel image,
 ;          so that the self-test which runs them has an ELF file for each.
 ; Key definitions: KernelProgramArgCheckBegin, KernelProgramArgCheckEnd,
 ;          KernelProgramExecCheckBegin, KernelProgramExecCheckEnd,
@@ -15,7 +15,8 @@
 ;          KernelProgramTouchEnd, KernelProgramCopyBegin, KernelProgramCopyEnd,
 ;          KernelProgramRemoveDirBegin, KernelProgramRemoveDirEnd,
 ;          KernelProgramWordCountBegin, KernelProgramWordCountEnd,
-;          KernelProgramMicroBegin, KernelProgramMicroEnd.
+;          KernelProgramMicroBegin, KernelProgramMicroEnd, and the six of
+;          2026-09-16: KernelProgramHeadBegin to KernelProgramPsEnd.
 ; References:
 ;   - kernel/test/libc/utilities.c: the self-test that loads these and runs them.
 ;   - kernel/test/libc/startup_image.asm: the same technique at sub-task 7.5,
@@ -115,6 +116,18 @@ global KernelProgramWordCountBegin
 global KernelProgramWordCountEnd
 global KernelProgramMicroBegin
 global KernelProgramMicroEnd
+global KernelProgramPsBegin
+global KernelProgramPsEnd
+global KernelProgramMvBegin
+global KernelProgramMvEnd
+global KernelProgramSortBegin
+global KernelProgramSortEnd
+global KernelProgramGrepBegin
+global KernelProgramGrepEnd
+global KernelProgramTailBegin
+global KernelProgramTailEnd
+global KernelProgramHeadBegin
+global KernelProgramHeadEnd
 
 KernelProgramTouchBegin:
     incbin "build/user/touch.embed.elf"
@@ -139,3 +152,33 @@ align 8
 KernelProgramMicroBegin:
     incbin "build/user/micro.embed.elf"
 KernelProgramMicroEnd:
+
+align 8
+KernelProgramHeadBegin:
+    incbin "build/user/head.embed.elf"
+KernelProgramHeadEnd:
+
+align 8
+KernelProgramTailBegin:
+    incbin "build/user/tail.embed.elf"
+KernelProgramTailEnd:
+
+align 8
+KernelProgramGrepBegin:
+    incbin "build/user/grep.embed.elf"
+KernelProgramGrepEnd:
+
+align 8
+KernelProgramSortBegin:
+    incbin "build/user/sort.embed.elf"
+KernelProgramSortEnd:
+
+align 8
+KernelProgramMvBegin:
+    incbin "build/user/mv.embed.elf"
+KernelProgramMvEnd:
+
+align 8
+KernelProgramPsBegin:
+    incbin "build/user/ps.embed.elf"
+KernelProgramPsEnd:
