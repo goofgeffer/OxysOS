@@ -156,7 +156,8 @@ LIBC_SOURCES := libc/string/copying.c \
                 libc/stdlib/exit.c \
                 libc/stdlib/environment.c \
                 libc/line/line.c \
-                libc/line/system.c
+                libc/line/system.c \
+                libc/signal/signal.c
 
 # The C library's one assembly translation unit, which is the system-call
 # instruction itself.
@@ -234,6 +235,7 @@ C_SOURCES := kernel/kernel.c \
              kernel/test/terminal/terminal.c \
              kernel/test/shell/parser.c \
              kernel/test/proc/directory.c \
+             kernel/test/proc/signal.c \
              kernel/terminal/terminal.c \
              kernel/mm/pmm.c \
              kernel/mm/vmm.c \
@@ -250,12 +252,14 @@ C_SOURCES := kernel/kernel.c \
              kernel/arch/x86_64/interrupt/irq.c \
              kernel/arch/x86_64/interrupt/exceptions.c \
              kernel/arch/x86_64/syscall/syscall.c \
+             kernel/arch/x86_64/syscall/sigframe.c \
              kernel/arch/x86_64/smp/ipi.c \
              kernel/arch/x86_64/smp/smp.c \
              kernel/acpi/acpi.c \
              kernel/exec/elf.c \
              kernel/proc/process.c \
              kernel/proc/sched.c \
+             kernel/proc/signal.c \
              kernel/fs/ext2/core.c \
              kernel/fs/ext2/superblock.c \
              kernel/fs/ext2/group.c \
@@ -314,6 +318,7 @@ ASM_SOURCES := boot/boot.asm \
                kernel/test/libc/utilities_image.asm \
                kernel/test/libc/line_image.asm \
                kernel/test/proc/directory_image.asm \
+               kernel/test/proc/signal_image.asm \
                kernel/test/shell/programs_image.asm \
                $(LIBC_ASM_SOURCES)
 
@@ -517,7 +522,7 @@ $(USER_CRT0): libc/crt/crt0.asm
 # Within the generated rule, the archive is named *after* the program's objects,
 # which is not a style choice: a linker resolves an archive's members against the
 # references it has already seen, so an archive named first contributes nothing.
-USER_PROGRAMS := startup-check arg-check exec-check file-check line-check dir-check env-check echo cat ls mkdir rm touch cp rmdir wc micro sh
+USER_PROGRAMS := startup-check arg-check exec-check file-check line-check dir-check env-check signal-check echo cat ls mkdir rm touch cp rmdir wc micro sh
 
 USER_PROGRAM_SOURCES := $(foreach program,$(USER_PROGRAMS),$(wildcard userland/$(program)/*.c))
 USER_PROGRAM_IMAGES  := $(foreach program,$(USER_PROGRAMS),$(USER_DIR)/$(program).elf)
@@ -571,6 +576,7 @@ $(BUILD_DIR)/kernel/test/libc/startup_image.asm.o: $(USER_DIR)/startup-check.emb
 $(BUILD_DIR)/kernel/test/libc/utilities_image.asm.o: $(USER_PROGRAM_EMBEDS)
 $(BUILD_DIR)/kernel/test/libc/line_image.asm.o: $(USER_DIR)/line-check.embed.elf $(USER_DIR)/sh.embed.elf
 $(BUILD_DIR)/kernel/test/proc/directory_image.asm.o: $(USER_DIR)/dir-check.embed.elf
+$(BUILD_DIR)/kernel/test/proc/signal_image.asm.o: $(USER_DIR)/signal-check.embed.elf
 $(BUILD_DIR)/kernel/test/shell/programs_image.asm.o: $(USER_DIR)/env-check.embed.elf
 $(BUILD_DIR)/%.asm.o: %.asm
 	@mkdir -p $(dir $@)

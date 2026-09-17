@@ -15,6 +15,8 @@
 ;   OxysSyscallInvoke2 - a call taking two.
 ;   OxysSyscallInvoke3 - a call taking three, which is every call this kernel
 ;                        presently has that takes more than two.
+;   OxysSignalRestorer - where a signal handler returns to, of sub-task 8.7: the
+;                        `sigreturn` call, and nothing else.
 ;
 ; References:
 ;   - Intel 64 and IA-32 Architectures Software Developer's Manual, Volume 2B,
@@ -139,3 +141,26 @@ OxysSyscallInvokeBytes3:
     ret
 
 OxysSyscallInvokeEnd:
+
+; ------------------------------------------------------------------------------
+; OxysSignalRestorer, of sub-task 8.7.
+;
+; Where a signal handler returns to. The kernel enters a handler with this
+; routine's address where a return address belongs, so the handler's own RET
+; arrives here with the stack pointer at the frame the kernel saved the
+; interrupted context in; the one thing to do is ask the kernel to put that
+; context back, which is the `sigreturn` call, and it does not return here —
+; it returns into the interrupted program. The number is written out rather
+; than taken from the header, this being assembly; kernel/abi/oxys/syscall_abi.h
+; numbers `sigreturn` twenty-second, and the C library asserts the two agree.
+;
+; It stands outside OxysSyscallInvokeBegin..End deliberately: the self-test
+; copies that range into a program of its own, and this routine is not one of
+; the four it exercises.
+; ------------------------------------------------------------------------------
+global OxysSignalRestorer
+
+OxysSignalRestorer:
+    mov     eax, 22
+    syscall
+    ud2

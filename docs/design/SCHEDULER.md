@@ -510,6 +510,19 @@ writer drop what did not fit rather than sleep, and the size came back short,
 | The fork self-test collects a child that never ran, from a caller with no thread. | A queued thread destroyed and later dequeued — a switch onto a released stack. |
 | Every other self-test still passes, and the scheduler's fixture threads are still pre-empted. | A tick filter that stopped pre-empting kernel threads, or the boot flow taken from a self-test. |
 
+
+### 9.7 What sub-task 8.7 added
+
+`SchedulerWakeThread` wakes one thread from whatever channel it sleeps upon —
+what a signal does to a target asleep in a call, so that the call re-tests
+its condition, finds the signal pending and reports `EINTR`. It is the first
+wake performed from an interrupt handler: the bootstrap processor's tick
+services the terminal, and a control-C there sends SIGINT to the foreground
+group, whose members may be asleep upon a pipe. The enqueue under the queue's
+lock is safe there because the tick returns before rescheduling where any
+lock is held, and the walk of the thread table reads fields the interrupted
+context was not writing. [`PROCESS.md`](PROCESS.md), Section 18.1.
+
 ## 10. Limitations
 
 1. **The bootstrap processor is not itself a scheduled thread.** It executes
@@ -554,8 +567,10 @@ writer drop what did not fit rather than sleep, and the size came back short,
    rotation for good, and the fixture threads still use it. What remains open
    is a lock that may be slept upon, which
    [`CONCURRENCY.md`](CONCURRENCY.md), Section 10, limitation 4, records, and
-   a wake from an interrupt handler, which nothing performs yet — the terminal's
-   reader polls and yields rather than sleeping, Section 9.2.
+   a wake from an interrupt handler — performed since 8.7 by the tick, which
+   sends the terminal's signals and so wakes a sleeping target through
+   `SchedulerWakeThread`; the terminal's
+   reader still polls and yields rather than sleeping, Section 9.2.
 9. **A wake walks the thread table.** A hundred and twenty-eight slots, under a
    masked section, at every write, read and close upon a pipe and every ending
    of a child. It is the cost of a channel that is an address and nothing more,

@@ -54,6 +54,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <syscall.h>
+#include <signal.h>
 
 /* The fixture, which kernel/test/libc/utilities.c composes before running this.
  * The contents are written out here rather than passed in, for the reason
@@ -610,7 +611,10 @@ static void FilePipes(void)
                 "a pipe with no writer did not read as the end of the file");
     FileRequire(OxysClose(ends[0]) >= 0, "the read end could not be closed");
 
-    /* A writer with no reader is refused by name. */
+    /* A writer with no reader is refused by name — and, since 8.7, sent
+     * SIGPIPE, which would end this program; it is ignored here so that the
+     * refusal can be seen. signal-check asserts the signal. */
+    FileRequire(signal(SIGPIPE, SIG_IGN) == SIG_DFL, "SIGPIPE was not at its default");
     FileRequire(OxysPipe(ends) == 0, "a second pipe could not be made");
     FileRequire(OxysClose(ends[0]) >= 0, "the second pipe's read end could not be closed");
     FileRefused(OxysWrite(ends[1], "x", 1U), EPIPE, "a write with no reader was accepted");

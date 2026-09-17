@@ -10,6 +10,7 @@
  *          8.6, the pipeline: one child per command and a pipe between each
  *          pair, every child collected and the status the last one's.
  * Key functions: ShellRunProgram, ShellExecuteProgram, ShellRunPipeline,
+ *          ShellDescribePipeline,
  *          ShellBuildEnvironment, ShellApplyRedirections.
  * References:
  *   - IEEE Std 1003.1-2017, Section 2.9.1.1 (Command Search and Execution):
@@ -52,6 +53,7 @@
 #include <string.h>
 #include <syscall.h>
 #include <line.h>
+#include <signal.h>
 
 /* Where a program is sought when PATH is unset: the one directory this
  * system's programs stand in. */
@@ -248,21 +250,6 @@ static bool ShellApplyRedirections(const ShellCommand *command, ShellLookup look
     return true;
 }
 
-/*
- * Turns what `wait` reported into the status a command has: the program's
- * own, or 128 plus the vector where a fault ended it — Section 2.8.2, with
- * the vector standing in for the signal this kernel has none of until 8.7.
- */
-static int ShellStatusOf(int64_t status)
-{
-    if (status < 0)
-    {
-        return 128 + (int)((-status) & 0x7F);
-    }
-
-    return (int)(status & 0xFF);
-}
-
 int ShellExecuteProgram(char **argv, const ShellCommand *command, ShellLookup lookup,
                         void *context)
 {
@@ -276,12 +263,63 @@ int ShellExecuteProgram(char **argv, const ShellCommand *command, ShellLookup lo
     return ShellExecute(argv, envp);
 }
 
+/*
+ * The text a job is reported by: the words of each command as typed, quotes
+ * kept, joined by ` | `. What a person sees in `jobs` is what they typed,
+ * which is the one description of a job they will recognise.
+ */
+static void ShellDescribePipeline(const ShellPipeline *pipeline, char *text, size_t capacity)
+{
+    size_t used = 0U;
+
+    text[0] = '\0';
+
+    for (size_t index = 0U; index < pipeline->command_count; ++index)
+    {
+        const ShellCommand *const command = &pipeline->command[index];
+
+        if (index > 0U)
+        {
+            used += (size_t)snprintf(&text[used], (used < capacity) ? capacity - used : 0U, " | ");
+        }
+
+        for (size_t word = 0U; word < command->word_count; ++word)
+        {
+            used += (size_t)snprintf(&text[used], (used < capacity) ? capacity - used : 0U, "%s%s",
+                                     (word > 0U) ? " " : "", command->word[word]);
+        }
+    }
+}
+
+/*
+ * A program run alone, since sub-task 8.7 a job of one: forked into a group of
+ * its own, given the terminal while it runs, and waited for until it ends or
+ * stops — so that control-C reaches it and not the shell, and control-Z stops
+ * it and returns the prompt. Its text for `jobs` is its argument vector.
+ */
 int ShellRunProgram(char **argv, const ShellCommand *command, ShellLookup lookup, void *context)
 {
+    char text[LINE_CAPACITY];
+    size_t used = 0U;
+    ShellJob *job;
     int64_t child;
-    int64_t status = 0;
+
+    text[0] = '\0';
+
+    for (size_t index = 0U; argv[index] != NULL; ++index)
+    {
+        used += (size_t)snprintf(&text[used], (used < sizeof text) ? sizeof text - used : 0U,
+                                 "%s%s", (index > 0U) ? " " : "", argv[index]);
+    }
 
     (void)fflush(stdout);
+
+    job = ShellJobBegin(text, false);
+
+    if (job == NULL)
+    {
+        return 126;
+    }
 
     child = OxysFork();
 
@@ -294,21 +332,17 @@ int ShellRunProgram(char **argv, const ShellCommand *command, ShellLookup lookup
 
     if (child == 0)
     {
+        ShellJobPrepareChild(job, false);
         OxysExit(ShellExecuteProgram(argv, command, lookup, context));
     }
 
-    if (OxysWait(&status) != child)
-    {
-        (void)fprintf(stderr, "sh: %s: the child could not be collected.\n", argv[0]);
+    ShellJobAddMember(job, child);
 
-        return 126;
-    }
-
-    return ShellStatusOf(status);
+    return ShellJobWaitForeground(job);
 }
 
 /*
- * The pipeline, of sub-task 8.6.
+ * The pipeline, of sub-task 8.6, and since 8.7 a job.
  *
  * One child per command, each made before the next, and one pipe between each
  * pair: a child's 1 is the write end of the pipe that follows it and its 0 the
@@ -327,19 +361,32 @@ int ShellRunProgram(char **argv, const ShellCommand *command, ShellLookup lookup
  * `cd` in a pipeline moves nothing but the child — the same surprise every
  * shell of this lineage offers.
  *
- * The shell waits for every child and the status is the last command's, as
- * Section 2.9.2 has it; a child that could not be made ends the making, and
- * the children already made are still waited for, so that none is left in the
+ * Every child joins the job's process group, the first child's identifier,
+ * and a foreground job holds the terminal while it runs. The shell waits for
+ * a foreground job until it ends or stops, and the status is the last
+ * command's, as Section 2.9.2 has it, or 128 plus SIGTSTP for a job that
+ * stopped; a background job is announced and left to run, and reported at a
+ * later prompt. A child that could not be made ends the making, and the
+ * children already made are still waited for, so that none is left in the
  * table.
  */
-int ShellRunPipeline(const ShellPipeline *pipeline, ShellStageRunner run_stage, void *context)
+int ShellRunPipeline(const ShellPipeline *pipeline, ShellStageRunner run_stage, void *context,
+                     bool background)
 {
-    int64_t children[SHELL_COMMAND_MAXIMUM];
+    char text[LINE_CAPACITY];
+    ShellJob *job;
     size_t made = 0U;
     int previous_read = -1;
-    int status = 126;
 
+    ShellDescribePipeline(pipeline, text, sizeof text);
     (void)fflush(stdout);
+
+    job = ShellJobBegin(text, background);
+
+    if (job == NULL)
+    {
+        return 126;
+    }
 
     for (size_t index = 0U; index < pipeline->command_count; ++index)
     {
@@ -370,6 +417,8 @@ int ShellRunPipeline(const ShellPipeline *pipeline, ShellStageRunner run_stage, 
 
         if (child == 0)
         {
+            ShellJobPrepareChild(job, background);
+
             if (previous_read >= 0)
             {
                 if (OxysDuplicate(previous_read, SYSCALL_DESCRIPTOR_INPUT) < 0)
@@ -401,7 +450,7 @@ int ShellRunPipeline(const ShellPipeline *pipeline, ShellStageRunner run_stage, 
             exit(run_stage(&pipeline->command[index], context));
         }
 
-        children[made] = child;
+        ShellJobAddMember(job, child);
         ++made;
 
         if (previous_read >= 0)
@@ -421,28 +470,17 @@ int ShellRunPipeline(const ShellPipeline *pipeline, ShellStageRunner run_stage, 
         (void)OxysClose(previous_read);
     }
 
-    /*
-     * Every child made is collected, in whatever order they end; the status
-     * kept is the last command's, and 126 where the last command was never
-     * made. `wait` names no child, so each collection is matched against the
-     * list by number.
-     */
-    for (size_t collected = 0U; collected < made; ++collected)
+    if (made == 0U)
     {
-        int64_t child_status = 0;
-        const int64_t ended = OxysWait(&child_status);
-
-        if (ended < 0)
-        {
-            (void)fprintf(stderr, "sh: a child of the pipeline could not be collected.\n");
-            break;
-        }
-
-        if ((made == pipeline->command_count) && (ended == children[made - 1U]))
-        {
-            status = ShellStatusOf(child_status);
-        }
+        return 126;
     }
 
-    return status;
+    if (background)
+    {
+        ShellJobAnnounce(job);
+
+        return 0;
+    }
+
+    return ShellJobWaitForeground(job);
 }

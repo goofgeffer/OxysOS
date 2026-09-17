@@ -105,6 +105,7 @@
 #include <oxys/fs/ext2.h>
 #include <oxys/fs/vfs.h>
 #include <oxys/fs/pipe.h>
+#include <oxys/proc/signal.h>
 #include <oxys/fs/ext2_vfs.h>
 
 /*
@@ -1742,6 +1743,11 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
      * is asserted by a program that changes into /bin. */
     KernelVerifyDirectory();
 
+    /* Sub-task 8.7: the signals, asserted upon a fixture process and then by
+     * signal-check and its children, the first programs to be ended, stopped
+     * and continued from outside themselves. */
+    KernelVerifySignals();
+
     /*
      * Sub-tasks 8.2 and 8.3: the shell's grammar, asserted in this kernel, and
      * then the shell itself run upon its sessions — after the root for the
@@ -1752,6 +1758,7 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
     /* Sub-task 8.6: the pipes the sessions above made, and the scheduler the
      * pipelines ran upon, which the shell is the first thing to sleep in. */
     VfsPipeReport();
+    SignalReport();
     SchedulerReport();
 
     IrqReport();

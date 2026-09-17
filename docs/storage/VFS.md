@@ -598,7 +598,10 @@ pipe's own design — who sleeps, who wakes whom, why a writer waits for room fo
 the whole of what remains — is in the header of
 [`../../kernel/fs/vfs/pipe.c`](../../kernel/fs/vfs/pipe.c) and in
 [`../design/SHELL.md`](../design/SHELL.md), Section 22.2. `VFS_ERROR_BROKEN_PIPE`
-is the sixteenth refusal, carried to a program as `EPIPE`.
+is the sixteenth refusal, carried to a program as `EPIPE`, and
+`VFS_ERROR_INTERRUPTED` the seventeenth, of 8.7, carried as `EINTR`: a sleep
+upon the pipe woken by a signal rather than by the pipe. A write with no
+reader also sends SIGPIPE, since 8.7.
 
 | Property asserted, from the kernel | The silent failure it catches |
 | ---------------------------------- | ----------------------------- |

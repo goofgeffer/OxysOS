@@ -11,6 +11,11 @@
  *          SYSCALL_WAIT, SYSCALL_BRK, SYSCALL_OPEN, SYSCALL_CLOSE,
  *          SYSCALL_READ, SYSCALL_READDIR, SYSCALL_MKDIR, SYSCALL_UNLINK,
  *          SYSCALL_CHDIR, SYSCALL_GETCWD, SYSCALL_DUP2, SYSCALL_RMDIR, SYSCALL_PIPE,
+ *          SYSCALL_WAITPID, SYSCALL_KILL, SYSCALL_SIGACTION, SYSCALL_SIGRETURN,
+ *          SYSCALL_GETPID, SYSCALL_GETPGID, SYSCALL_SETPGID, SYSCALL_TCGROUP,
+ *          SYSCALL_WAIT_NO_HANG, SYSCALL_WAIT_UNTRACED, SYSCALL_STATUS_MAKE,
+ *          SYSCALL_STATUS_KIND, SYSCALL_STATUS_NUMBER, the SYSCALL_SIG numbers,
+ *          SYSCALL_SIGNAL_DEFAULT, SYSCALL_SIGNAL_IGNORE, SYSCALL_EINTR, SYSCALL_ESRCH,
  *          SYSCALL_OPEN_WRITE, SYSCALL_OPEN_CREATE, SYSCALL_OPEN_TRUNCATE,
  *          SYSCALL_OPEN_APPEND,
  *          SYSCALL_COUNT, SYSCALL_OK, SYSCALL_ENOSYS, SYSCALL_EFAULT,
@@ -209,7 +214,103 @@
  * most — is delivered in one piece.
  */
 #define SYSCALL_PIPE    18U
-#define SYSCALL_COUNT   19U
+
+/*
+ * The eight calls of sub-task 8.7, by which a program governs the others and
+ * is told what became of them: job control, process groups and the signals
+ * the terminal delivers. Numbered twentieth to twenty-seventh for the reason
+ * recorded above.
+ *
+ * `waitpid` is `wait` with a choice: `pid` names one child, -1 any, and a
+ * number below -1 any child of the process group whose identifier is its
+ * negation; `options` may hold SYSCALL_WAIT_NO_HANG, upon which a call that
+ * would sleep returns 0 instead, and SYSCALL_WAIT_UNTRACED, upon which a child
+ * that has stopped is reported — once per stop — as an ended one would be. The
+ * status is the encoding below, and no longer the number `exit` was given.
+ *
+ * `kill` sends a signal to a process, or with a negative `pid` to every process
+ * of a group; a signal of 0 sends nothing and reports whether the target
+ * exists. `sigaction` sets a signal's disposition — SYSCALL_SIGNAL_DEFAULT,
+ * SYSCALL_SIGNAL_IGNORE or the address of a handler — together with the
+ * restorer the handler returns through, and reports the old disposition; a
+ * handler is entered with the signal's number as its argument, upon the
+ * program's own stack below what it was using, and returns into the restorer,
+ * which calls `sigreturn` to put the interrupted context back. SIGKILL and
+ * SIGSTOP may be neither caught nor ignored.
+ *
+ * `getpid` and `getpgid` report identifiers, the latter of the process named
+ * or of the caller for 0; `setpgid` puts a process (0 for the caller) into a
+ * group (0 for a group of its own identifier); and `tcgroup` reads the
+ * terminal's foreground process group, or sets it where `group` is not 0 — the
+ * group control-C and control-Z are delivered to, and the only group whose
+ * members may read the terminal without being stopped by SIGTTIN.
+ */
+#define SYSCALL_WAITPID   19U
+#define SYSCALL_KILL      20U
+#define SYSCALL_SIGACTION 21U
+#define SYSCALL_SIGRETURN 22U
+#define SYSCALL_GETPID    23U
+#define SYSCALL_GETPGID   24U
+#define SYSCALL_SETPGID   25U
+#define SYSCALL_TCGROUP   26U
+#define SYSCALL_COUNT     27U
+
+/* The options of `waitpid`. */
+#define SYSCALL_WAIT_NO_HANG  UINT64_C(0x1)
+#define SYSCALL_WAIT_UNTRACED UINT64_C(0x2)
+
+/*
+ * What `wait` and `waitpid` report, since sub-task 8.7: a kind in bits 8 to 15
+ * and a number in bits 0 to 7 — the code a program gave `exit`, reduced to
+ * eight bits, or the signal that ended or stopped it. Until 8.7 the status was
+ * the quadword `exit` was given, or the negated vector of a fault, which could
+ * not say that a program had been stopped and could not tell a signal from a
+ * vector; docs/design/PROCESS.md, Section 19, limitation 11, had recorded that
+ * the encoding was owed and belonged with the C library that must agree with it.
+ * A fault is reported as the signal it corresponds to — SIGSEGV for a page or
+ * protection fault, SIGILL for an invalid opcode, SIGFPE for a divide error,
+ * SIGBUS for an alignment check, SIGTRAP for a breakpoint or a debug exception.
+ */
+#define SYSCALL_STATUS_KIND_EXITED    UINT64_C(0)
+#define SYSCALL_STATUS_KIND_SIGNALLED UINT64_C(1)
+#define SYSCALL_STATUS_KIND_STOPPED   UINT64_C(2)
+
+#define SYSCALL_STATUS_MAKE(kind, number) (((kind) << 8) | ((uint64_t)(number) & 0xFFU))
+#define SYSCALL_STATUS_KIND(status)       ((((uint64_t)(status)) >> 8) & 0xFFU)
+#define SYSCALL_STATUS_NUMBER(status)     (((uint64_t)(status)) & 0xFFU)
+
+/*
+ * The signals, of sub-task 8.7, numbered as the x86 System V and Linux
+ * conventions number them so that a person who knows `kill -9` finds it here.
+ * IEEE Std 1003.1-2017 fixes the names and the default actions and leaves the
+ * numbers to the implementation.
+ */
+#define SYSCALL_SIGHUP    1U  /* Terminates. */
+#define SYSCALL_SIGINT    2U  /* Terminates; control-C at the terminal. */
+#define SYSCALL_SIGQUIT   3U  /* Terminates. */
+#define SYSCALL_SIGILL    4U  /* Terminates; an invalid opcode. */
+#define SYSCALL_SIGTRAP   5U  /* Terminates; a breakpoint or debug exception. */
+#define SYSCALL_SIGABRT   6U  /* Terminates. */
+#define SYSCALL_SIGBUS    7U  /* Terminates; an alignment check. */
+#define SYSCALL_SIGFPE    8U  /* Terminates; a divide error. */
+#define SYSCALL_SIGKILL   9U  /* Terminates, and cannot be caught or ignored. */
+#define SYSCALL_SIGUSR1   10U /* Terminates. */
+#define SYSCALL_SIGSEGV   11U /* Terminates; a page or general protection fault. */
+#define SYSCALL_SIGUSR2   12U /* Terminates. */
+#define SYSCALL_SIGPIPE   13U /* Terminates; a write to a pipe with no reader. */
+#define SYSCALL_SIGALRM   14U /* Terminates. */
+#define SYSCALL_SIGTERM   15U /* Terminates. */
+#define SYSCALL_SIGCHLD   17U /* Ignored; a child ended or stopped. */
+#define SYSCALL_SIGCONT   18U /* Continues a stopped process; otherwise ignored. */
+#define SYSCALL_SIGSTOP   19U /* Stops, and cannot be caught or ignored. */
+#define SYSCALL_SIGTSTP   20U /* Stops; control-Z at the terminal. */
+#define SYSCALL_SIGTTIN   21U /* Stops; a background read of the terminal. */
+#define SYSCALL_SIGTTOU   22U /* Stops; reserved, nothing sends it yet. */
+#define SYSCALL_SIGNAL_MAXIMUM 31U
+
+/* The two dispositions that are not a handler's address. */
+#define SYSCALL_SIGNAL_DEFAULT UINT64_C(0)
+#define SYSCALL_SIGNAL_IGNORE  UINT64_C(1)
 
 /*
  * The argument that asks where the break stands rather than moving it.
@@ -244,8 +345,8 @@
  * makes, carried out to a program one for one.
  *
  * They are not reduced to the seven above, and that is the whole reason there
- * are thirteen of them, and a fourteenth at 8.6. `VfsError` distinguishes
- * sixteen causes; a kernel that
+ * are thirteen of them, a fourteenth at 8.6 and a fifteenth at 8.7. `VfsError` distinguishes
+ * seventeen causes; a kernel that
  * collapsed them into `ENOENT` and `EINVAL` would tell a program that a
  * directory it could not remove was not there, and a person reading that
  * diagnostic would look for the file rather than for the entries still within
@@ -272,6 +373,13 @@
  * IEEE Std 1003.1-2017 sends SIGPIPE as well, which arrives with the signals of
  * 8.7; until then the result is the whole of what a writer is told. */
 #define SYSCALL_EPIPE          INT64_C(-21) /* The pipe is open for reading by nobody. */
+
+/* The two of sub-task 8.7. A call that slept and was woken by a signal reports
+ * EINTR rather than the thing it was waiting for, so that the signal is acted
+ * upon before the program is told anything else; ESRCH is a process, or a
+ * group, that does not exist. */
+#define SYSCALL_EINTR          INT64_C(-22) /* A signal arrived while the call slept. */
+#define SYSCALL_ESRCH          INT64_C(-23) /* No such process or process group. */
 
 /*
  * How a program opens a file: six of the flags the filesystem layer offers,

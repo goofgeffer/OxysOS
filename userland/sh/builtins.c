@@ -3,8 +3,8 @@
 /*
  * File: userland/sh/builtins.c
  * Purpose: The built-in commands — `cd`, `pwd`, `export` and `exit` of sub-task
- *          8.3, `unset`, `help`, `true` and `false` added at 8.5, and `clear`
- *          added on 2026-09-16 —
+ *          8.3, `unset`, `help`, `true` and `false` added at 8.5, `clear`
+ *          added on 2026-09-16, and `jobs`, `fg`, `bg` and `kill` of 8.7 —
  *          which are the commands a shell must run itself because
  *          a child process could not do them on the shell's behalf: a
  *          directory changed in a child is changed for the child, and so is a
@@ -44,7 +44,8 @@
  * before a special built-in persists in the shell, and before a regular one
  * does not. */
 static const char *const ShellSpecialBuiltins[] = { "exit", "export", "unset" };
-static const char *const ShellRegularBuiltins[] = { "cd", "pwd", "help", "true", "false", "clear" };
+static const char *const ShellRegularBuiltins[] = { "cd",   "pwd", "help", "true", "false",
+                                                    "clear", "jobs", "fg",  "bg",   "kill" };
 
 static bool ShellNameIsAmong(const char *name, const char *const *names, size_t count)
 {
@@ -331,6 +332,11 @@ static int ShellBuiltinHelp(void)
                  "false, fails.\n"
                  "help, prints this list.\n"
                  "clear, clears the screen.\n"
+                 "jobs, lists the jobs: each pipeline run with & or stopped by control-Z.\n"
+                 "fg [%%n], brings a job to the foreground, the newest with no operand.\n"
+                 "bg [%%n], continues a stopped job in the background.\n"
+                 "kill [-SIGNAL] pid | %%n..., sends a signal, TERM with none named, to a "
+                 "process or a job.\n"
                  "ls [-a] [dir]..., lists a directory, the working directory with no "
                  "operand; -a includes the entries that begin with a dot.\n"
                  "cat [file | -]..., copies each file to the standard output; the standard "
@@ -397,6 +403,28 @@ int ShellRunBuiltin(int argc, char **argv, int last_status, bool *exit_requested
         (void)fflush(stdout);
 
         return 0;
+    }
+
+    if (strcmp(argv[0], "jobs") == 0)
+    {
+        ShellJobsList();
+
+        return 0;
+    }
+
+    if (strcmp(argv[0], "fg") == 0)
+    {
+        return ShellJobForeground((argc > 1) ? argv[1] : NULL);
+    }
+
+    if (strcmp(argv[0], "bg") == 0)
+    {
+        return ShellJobBackground((argc > 1) ? argv[1] : NULL);
+    }
+
+    if (strcmp(argv[0], "kill") == 0)
+    {
+        return ShellJobKill(argc, argv);
     }
 
     if (strcmp(argv[0], "true") == 0)

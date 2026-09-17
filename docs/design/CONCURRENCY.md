@@ -655,6 +655,14 @@ kept, this section describing what the kernel does now.
    say so. What would break it is the same thing that breaks everything above:
    a user thread upon a second processor.
 
+   **Sub-task 8.7 added the signals** (`kernel/proc/signal.c`): the pending set
+   and the dispositions of each process, written by the sending thread and by
+   the bootstrap processor's tick handler — which sends the terminal's
+   control-C and control-Z — and read by the target on its way out of the
+   kernel. The masked sections in that file are what keep the tick's send
+   from interleaving with a system call's take upon one word; a second
+   processor sending would need the same word made atomic.
+
    **None of that is unsafe today, and the reason has changed twice.** It used to
    be that there was one flow of control. Then sub-task 6.14 started the other
    processors, and the reason became that a started processor had nothing to run.

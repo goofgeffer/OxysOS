@@ -13,7 +13,8 @@ contract that document holds the other half of: what stands upon a stack before 
 program's first instruction. **Section 14 is amended by sub-task 7.6**, which is
 where `execve` stopped refusing the two vectors and began closing the
 descriptors a replaced program held. **Section 17 is sub-task 8.6**, where a
-child of `fork` first ran beside its parent rather than inside its `wait`.
+child of `fork` first ran beside its parent rather than inside its `wait`;
+**Section 18 is sub-task 8.7**, the signals, the process groups and `waitpid`.
 
 **Authority**: `PROJECT_GUIDELINES.md`, Sections 2, 3 and 6.
 
@@ -893,7 +894,165 @@ the concurrency beneath it did.
 | A parent that forks and waits is resumed after the child ends, with the child's status. | A parent woken by nobody, or returned to the boot flow. |
 | Every self-test after the first sleep still passes. | Interrupts enabled inside a system call after a resume from idle. |
 
-## 18. Present limitations
+## 18. Sub-task 8.7: signals, process groups and `waitpid`
+
+**Implementation**: [`../../kernel/proc/signal.c`](../../kernel/proc/signal.c)
+behind [`../../kernel/include/oxys/proc/signal.h`](../../kernel/include/oxys/proc/signal.h)
+— the portable half: the pending set, the dispositions, the default actions,
+sending, stopping and continuing; and
+[`../../kernel/arch/x86_64/syscall/sigframe.c`](../../kernel/arch/x86_64/syscall/sigframe.c)
+behind [`../../kernel/include/oxys/arch/syscall/sigframe.h`](../../kernel/include/oxys/arch/syscall/sigframe.h)
+— the architecture's: delivery through the two frames a program's registers
+stand in, the frame a handler is entered upon, and `sigreturn`. `ProcessWaitFor`
+and the descriptors released at the ending in
+[`../../kernel/proc/process.c`](../../kernel/proc/process.c); the eight calls in
+[`../../kernel/arch/x86_64/syscall/syscall.c`](../../kernel/arch/x86_64/syscall/syscall.c);
+the terminal's half in [`SHELL.md`](SHELL.md), Section 28. Asserted by
+[`../../kernel/test/proc/signal.c`](../../kernel/test/proc/signal.c) and
+[`../../userland/signal-check/main.c`](../../userland/signal-check/main.c).
+
+### 18.1 What a signal is, and why a sender never touches its target
+
+A signal is a bit in the target process, set by the sender and cleared by the
+target itself on its next way out of the kernel — a system call returning, or
+an interrupt taken at privilege level 3 — which is the one moment every
+register of the target stands in a frame the kernel can edit. A sender that
+reached into a target asleep upon a pipe and rewrote its frame would be
+rewriting a frame the pipe's read was still going to return through. So
+`SignalSend` sets the bit and, where the target is asleep in a call, wakes it
+by `SchedulerWakeThread`; the call re-tests its condition, finds the signal
+pending, and reports `EINTR`; and the way out delivers.
+
+Delivery, `SignalDeliver`, takes the lowest pending signal and acts by its
+disposition: ignored is nothing; the default is the action IEEE Std
+1003.1-2017, Section 2.4.3, assigns — terminate for most, ignore for SIGCHLD,
+stop for SIGSTOP, SIGTSTP, SIGTTIN and SIGTTOU, continue for SIGCONT; a
+handler is entered. An ignored signal is discarded at generation, and so is a
+SIGCHLD to a process that has not asked and a SIGCONT to one that is not
+stopped, so that a sleeping call is never woken for a signal that would do
+nothing on the way out. SIGKILL and SIGSTOP cannot be given a disposition.
+`execve` resets a handler to the default and keeps an ignore, as the standard
+has it — which is why the shell's children put SIGINT and SIGTSTP back to the
+default before they become programs.
+
+A process is one of thirty-one numbers' worth of pending bits and a
+disposition apiece; the numbers are the x86 System V and Linux ones, so that a
+person who knows `kill -9` finds it here, and a fault at privilege level 3 is
+reported as the signal its vector maps to: SIGSEGV for a page or protection
+fault, SIGILL for an invalid opcode, SIGFPE, SIGBUS and SIGTRAP for theirs.
+
+### 18.2 Stopping, continuing, and the group
+
+`SignalStopCurrent` marks the process stopped, wakes its parent's wait channel
+and sends it SIGCHLD, and sleeps upon the process's own `stop_channel` until
+`SignalContinue`. It runs upon the stopping process's own thread, from the
+delivery path — so a stop sent to a process asleep upon a pipe wakes it, ends
+its read with `EINTR`, and stops it on the way out. A stopped process is left
+asleep by everything but SIGKILL and SIGCONT; what else is sent it waits, and
+is delivered when it is continued. A stop signal discards a pending SIGCONT
+and SIGCONT a pending stop, as Section 2.4.1 requires.
+
+Every process has a group, the identifier of the process that leads it: a
+child begins in its parent's, `setpgid` moves one — a process may move itself
+or a child of its own — and `kill` with a negative identifier reaches every
+member. The terminal's foreground group is the group control-C and control-Z
+are delivered to, and the only group whose members read the terminal without
+being stopped by SIGTTIN; that stop is made inside the `read` itself, which
+tries again when the process is continued, so that a background reader
+brought to the foreground by `fg` goes on reading. The foreground group is
+cleared when its last member ends, because a foreground group naming nobody
+would stop every later reader.
+
+### 18.3 The frame a handler runs upon
+
+A handler is entered upon the program's own stack: below the 128-byte red
+zone the System V ABI reserves beneath the stack pointer, aligned as a
+function is entered, with the signal number in RDI and the restorer's address
+where a return address belongs, so that the handler's `ret` enters the
+restorer — two instructions in the C library, `sigreturn` and nothing else —
+which puts the interrupted context back. The context is every register: the
+instruction pointer, the stack pointer, the flags and the fifteen general
+registers, written into a `SignalContext` above the return address.
+
+A program's registers stand in a `SyscallFrame` while it is inside a system
+call and in a `TrapFrame` while inside an interrupt taken at privilege level
+3, and the two are laid out by two entry paths for two returns — SYSRET takes
+the instruction pointer from RCX and the flags from R11; IRETQ takes both
+from the frame. Delivery does not care which: each frame is read into one
+register set, delivery edits three of its members, and the set is written
+back. Two adapters of a dozen lines apiece, one delivery.
+
+**The flags a program hands back are masked.** `sigreturn` restores RFLAGS
+from a frame the program could have edited, and SYSRET loads RFLAGS from R11
+as it stands. Only the flags a program at privilege level 3 may alter — the
+status flags, DF and TF — are taken; IF is forced set; and the instruction
+pointer is refused above the user limit, because the range check that admits
+the frame says nothing about the target.
+
+**A call the signal interrupted is restarted where the signal entered no
+handler.** A call that slept and was woken reported `EINTR`; where delivery
+then finds the signal ignored, or stops the process and the process is
+continued, the program is not told `EINTR` for a signal it never saw: the
+instruction pointer goes back two bytes to the SYSCALL and RAX back to the
+number, and the call is made again. That is what lets `cat`, stopped by
+control-Z and continued by `fg`, go on reading. A signal that did enter a
+handler leaves `EINTR` to the program, as the standard has it without
+SA_RESTART; `sigreturn` is never restarted, its RAX being the interrupted
+program's own.
+
+### 18.4 `waitpid`, and the status a program is told
+
+`ProcessWaitFor` is `wait` with a choice: one child by identifier, any, or any
+of a group; `SYSCALL_WAIT_NO_HANG`, upon which nothing to report is 0 rather
+than a sleep; and `SYSCALL_WAIT_UNTRACED`, upon which a stopped child is
+reported — once per stop, without being collected. Limitation 13 of Section
+19 is closed. The status is an encoding at last, which limitation 11 had
+recorded as owed and as belonging with the C library that must agree with it:
+a kind in bits 8 to 15 — exited, signalled, stopped — and a number in bits 0
+to 7, the code `exit` was given or the signal. `exit_status` keeps the
+quadword, which the self-tests read, and `wait_status` is what a program is
+told.
+
+**The descriptors are released at the ending, not at the collecting.** Until
+this sub-task the two were one moment, the collecting `wait` being the only
+thing that ever ran after a child; they stopped being one the first time a
+pipeline ran in the background. `cat /bin/sh | wc -c &` left `cat` ended and
+uncollected with the pipe's write end still open, `wc` waiting for an end of
+file only that close could give, and the shell waiting for a keypress before
+it would collect anything — a background pipeline that finished only when a
+person typed the next command. `ThreadTerminateCurrent` closes what the
+process held; `ProcessDestroy` then finds nothing to close.
+
+### 18.5 Verification, and what it found
+
+`KernelVerifySignals` asserts, upon a process that never runs, the rules a
+program can only see the consequence of; then `signal-check` asserts the rest
+from privilege level 3, with children reached on both paths — one that
+computes and never enters the kernel, reached by the timer's interrupt, and
+one asleep upon a pipe, reached by the wake and the `EINTR`.
+
+| Property asserted | The silent failure it catches |
+| ----------------- | ----------------------------- |
+| A sent signal is pending; the lowest is taken first; an ignored one, a default-ignored SIGCHLD and a SIGCONT to a running process are not made pending. | A sleeping call woken for nothing; a signal delivered out of order. |
+| SIGKILL and SIGSTOP cannot be given a disposition; a stop discards a pending SIGCONT and the reverse; an exec resets a handler and keeps an ignore. | A process that could not be killed; a `bg` undone by a control-Z typed before it; a program inheriting the shell's indifference to control-C. |
+| The vectors map to SIGSEGV, SIGILL, SIGFPE, SIGBUS and SIGTRAP; the default actions are the standard's. | `kill -9` on a fault, or a stop that terminated. |
+| `raise` enters the handler with the number; a value survives it; the handler is kept across its own invocation; `signal` reports the previous disposition. | A frame that clobbered a register; a handler reset to the default by its own use, the unreliable semantic. |
+| A computing child is ended by SIGTERM; one asleep upon a pipe by SIGINT; one with a handler ends with the code its handler let it choose. | Delivery missing on the interrupt path, or the wake missing on the sleep path; a handler's frame that could not be returned through. |
+| A write with no reader ends the writer by SIGPIPE; an invalid opcode is reported as SIGILL. | A pipeline whose head ran on after its tail had gone; a fault reported as a code. |
+| A group's two members are ended by one `kill`, collected by `waitpid` upon the group, and an emptied group is ESRCH. | A member left out of its group by the race between parent and child. |
+| A child asleep upon a pipe is stopped by SIGSTOP and reported once, is not reported ended while stopped, reads the byte after SIGCONT and ends with 7; a stopped child is ended by SIGKILL. | A stop reported twice; a byte lost across a stop; a call not restarted; a stopped process that SIGKILL could not reach. |
+| `waitpid` with NO_HANG reports 0 for a running child and ECHILD for none. | A `jobs` that waited, or a shell that could not tell "nothing yet" from "nothing". |
+| The shell's sixth session composes 130, 148 and 130 from control-C, control-Z and control-C, and the terminal's foreground group is cleared when the shell ends. | Control-C reaching the shell instead of `cat`; a control-Z lost to the shell's own group; a foreground group outliving its job. |
+
+**Two races the first run of `signal-check` showed, in the test and not the
+kernel**, each recorded rather than hidden. A child that installed a handler
+was sent SIGTERM before it had run — the parent continues after `fork` and the
+child is queued — and the default action ended it; the child now says it is
+ready through a pipe before the parent sends. And the SIGPIPE child wrote
+before the parent had closed its own read end, so a reader existed and the
+write succeeded; the read end is closed before the fork now.
+
+## 19. Present limitations
 
 1. ~~**Nothing has run.**~~ A program has: see Section 10.2. What has not
    happened is pre-emption — nothing takes a processor away from a thread that
@@ -951,12 +1110,11 @@ the concurrency beneath it did.
     layer did not have. `LIBC.md`, Section 12.7, limitation 8, recorded it, and the
     shell's redirection at 8.5 is what needed it: the layer counts holders since
     then, a child inherits every descriptor, and `execve` keeps them. Section 14.
-11. **A status is a quadword and nothing more.** `wait` reports what the program
-    passed to `exit`, or the negated vector where a fault ended it, and there is
-    no encoding distinguishing the two beyond the sign. A program cannot ask
-    *how* its child died. The distinction costs nothing to record and is
-    deliberately not invented here: the encoding belongs with the C library that
-    will have to agree with it.
+11. ~~**A status is a quadword and nothing more.**~~ **Closed at sub-task 8.7**:
+    `wait` and `waitpid` report a kind and a number — exited, signalled or
+    stopped, and the code or the signal — in the encoding of
+    `<oxys/syscall_abi.h>`, which the C library agrees with. `exit_status`
+    keeps the quadword for the self-tests. Section 18.4.
 12. **`Thread` embeds a `SyscallFrame`, so `process.h` now includes `syscall.h`.**
     That is the honest dependency — a forked child resumes a system call — and it
     enlarges a division already owed. `LICENSING.md` records that `syscall.h`
@@ -964,8 +1122,20 @@ the concurrency beneath it did.
     divided before sub-task 7.2, so that an `MIT` C library may include the
     former without the latter; `Thread` will then depend upon whichever half
     `SyscallFrame` lands in, and it is the kernel's half.
-13. **`wait` cannot name which child to wait for, and cannot decline to block.**
-    It collects whichever child is ready and otherwise sleeps until one ends.
-    Both refinements are now a matter of an argument — the caller can do
-    something else meanwhile, since 8.6 — and neither is wanted until 8.7's job
-    control, which is the first thing that will ask for a particular child.
+13. ~~**`wait` cannot name which child to wait for, and cannot decline to
+    block.**~~ **Closed at sub-task 8.7** by `waitpid`, Section 18.4: one child,
+    any, or a group; NO_HANG; and UNTRACED, which reports a stop.
+14. **A fault cannot be caught.** A fault at privilege level 3 ends the process
+    and is *reported* as the signal its vector maps to, Section 18.1, but a
+    handler for SIGSEGV is not entered by a fault: the exception path ends the
+    program directly, as it has since 6.10. Entering a handler there means
+    delivering upon the exception's frame and deciding what a handler that
+    returns to the faulting instruction should meet, which is a decision worth
+    making when something wants it.
+15. **An orphan is nobody's.** A process whose parent has ended is left in the
+    table when it ends, its status collected by nobody, and a job the shell
+    leaves running at `exit` is such a process. There is no `init` to reparent
+    it to until Phase 9, which is when this becomes a leak somebody can see.
+16. **A signal is delivered to one thread — the process's only one.** Every
+    process has one thread, and the pending set is the process's; a second
+    thread would need the set divided, or a rule for which thread takes what.

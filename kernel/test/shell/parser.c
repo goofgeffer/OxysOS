@@ -708,7 +708,7 @@ static const char VerifyShellPipelineSession[] =
 #define VERIFY_SHELL_PIPELINE_STATUS 10
 
 /* How many lines `help` prints: one per command, built-ins and programs. */
-#define VERIFY_SHELL_HELP_LINES "19"
+#define VERIFY_SHELL_HELP_LINES "23"
 
 static const VerifyShellFile VerifyShellPipelineFiles[] = {
     { "/verify/p1", "3\n" },
@@ -783,6 +783,74 @@ static void VerifyShellPipelines(void)
     VerifyShellRequire(VfsPipeCount() == pipes_before,
                        "the session left a pipe behind it");
     VerifyShellRequire(VfsPipeBytesCarried() > 0U, "no bytes were carried by any pipe");
+}
+
+
+/*
+ * A sixth session, of sub-task 8.7, whose evidence is the status: job
+ * control from the prompt, driven by the two bytes the terminal turns into
+ * signals. `cat` reading the terminal is ended by a control-C, which is 130;
+ * stopped by a control-Z, which is 148 and a job; put in the background by
+ * `bg`, where its next read stops it with SIGTTIN; brought back by `fg`,
+ * where it reads a line and is ended by a second control-C, 130 again. A `cat &` is
+ * stopped at once by SIGTTIN and ended by `kill %1`, which continues it so
+ * that the signal is acted upon; a pipeline run in the background completes
+ * while a foreground pipeline runs, and is collected at the prompt before the
+ * exit — a shell that exits with a background job still running leaves it an
+ * orphan, which is Phase 9's `init` to collect. `exit $S$T$F` is 130148130, which is
+ * 34 in the eight bits a status has, only if all three statuses were what
+ * they should be.
+ *
+ * Each control byte stands behind a line only the running `cat` will read,
+ * so that it becomes the head of the queue — and so a signal — only once
+ * `cat` holds the terminal. A control-Z immediately after `cat\n` would be
+ * the head while the shell was still forking, and the tick would deliver it
+ * to the shell's own group, which ignores it; the line before it is what
+ * makes the session say what it means whatever the timing. And `cat` is ended
+ * by a control-C rather than a control-D, because a control-D is a byte `cat`
+ * reads — with everything queued behind it in the same read, which it would
+ * discard as what followed the end; the session is placed upon the terminal
+ * whole, and a person types one line at a time.
+ */
+static const char VerifyShellJobSession[] =
+    "cat\n"
+    "abc\n"
+    "\x03"
+    "S=$?\n"
+    "cat\n"
+    "zzz\n"
+    "\x1a"
+    "T=$?\n"
+    "jobs\n"
+    "bg %1\n"
+    "fg %1\n"
+    "xyz\n"
+    "\x03"
+    "F=$?\n"
+    "cat &\n"
+    "kill %1\n"
+    "echo one | wc -l &\n"
+    "cat /bin/sh | wc -c >/verify/j\n"
+    "exit $S$T$F\n";
+
+#define VERIFY_SHELL_JOB_STATUS (130148130 & 0xFF)
+
+/* The two control bytes the terminal removes and turns into signals. */
+#define VERIFY_SHELL_JOB_INTERCEPTED 3U
+
+static void VerifyShellJobs(void)
+{
+    const uint64_t intercepted_before = TerminalBytesIntercepted();
+
+    VerifyShellProgram(VerifyShellJobSession, sizeof VerifyShellJobSession - 1U,
+                       VERIFY_SHELL_JOB_STATUS, "upon the job-control session");
+
+    VerifyShellRequire(TerminalBytesIntercepted() - intercepted_before ==
+                           VERIFY_SHELL_JOB_INTERCEPTED,
+                       "the control-C and the control-Z were not both turned into signals");
+    (void)VfsUnlink("/verify/j");
+    VerifyShellRequire(TerminalForegroundGroup() == 0U,
+                       "the terminal's foreground group outlived the shell");
 }
 
 /* Writes env-check onto the root. Returns false having said why. */
@@ -905,6 +973,7 @@ static void VerifyShellProgram(const char *session, size_t length, int64_t expec
 {
     int64_t status = 0;
     const uint64_t delivered_before = TerminalBytesDelivered();
+    const uint64_t intercepted_before = TerminalBytesIntercepted();
 
     VerifyShellBoot = ThreadAdoptCurrent("boot");
 
@@ -932,7 +1001,11 @@ static void VerifyShellProgram(const char *session, size_t length, int64_t expec
             VerifyShellSucceeded = false;
         }
 
-        VerifyShellRequire(TerminalBytesDelivered() - delivered_before ==
+        /* Every byte of the session is accounted for: delivered to a
+         * program, or — since 8.7 — removed as a control-C or control-Z and
+         * turned into a signal. */
+        VerifyShellRequire((TerminalBytesDelivered() - delivered_before) +
+                                   (TerminalBytesIntercepted() - intercepted_before) ==
                                length,
                            "the shell did not consume exactly the session");
         VerifyShellRequire(TerminalBytesQueued() == 0U,
@@ -966,6 +1039,7 @@ void KernelVerifyShell(void)
                            VERIFY_SHELL_PROGRAM_STATUS, "upon the programs' session");
         VerifyShellRedirections();
         VerifyShellPipelines();
+        VerifyShellJobs();
         VerifyShellRemoveProgram();
     }
 
@@ -981,9 +1055,11 @@ void KernelVerifyShell(void)
         KernelWriteDecimal((uint64_t)(sizeof VerifyShellProgramSession - 1U));
         KernelWriteString(", ");
         KernelWriteDecimal((uint64_t)(sizeof VerifyShellRedirectSession - 1U));
-        KernelWriteString(" and ");
+        KernelWriteString(", ");
         KernelWriteDecimal((uint64_t)(sizeof VerifyShellPipelineSession - 1U));
-        KernelWriteString(" bytes at privilege level 3, ending with zero, with the status its built-ins composed, with the status the programs it ran composed, with every redirection's file holding what was written, and with every pipeline's file holding what came through the pipe.\n");
+        KernelWriteString(" and ");
+        KernelWriteDecimal((uint64_t)(sizeof VerifyShellJobSession - 1U));
+        KernelWriteString(" bytes at privilege level 3, ending with zero, with the status its built-ins composed, with the status the programs it ran composed, with every redirection's file holding what was written, with every pipeline's file holding what came through the pipe, and with the statuses control-C, control-Z, bg, fg and kill composed.\n");
     }
     else
     {

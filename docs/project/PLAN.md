@@ -46,7 +46,7 @@ rotates round-robin between the threads upon it, and is taken back by a local
 timer calibrated against the interval timer when a ten-millisecond quantum
 expires.
 
-**Phase 7 is complete, and Phase 8 has begun.** Sub-task 7.1 is complete: the nineteen string and memory
+**Phase 7 is complete, and Phase 8 is complete but for the alpha it cuts.** Sub-task 7.1 is complete: the nineteen string and memory
 functions of ISO/IEC 9899:2011, Section 7.24, that do not require a locale or an
 `errno`, in [`../../libc/`](../../libc/) under the userland's permissive licence
 — and, because 7.2 could not be written until it was done,
@@ -139,7 +139,7 @@ same program embedded in the kernel image — the two having been one file at bu
 time — so a block read from the wrong offset or a length rounded to a boundary is
 caught rather than returned as data.
 
-**Phase 8 is open, and sub-task 8.1 is complete**: a person can type at this
+**Phase 8 is complete in its seven sub-tasks; sub-task 8.1 is where it began**: a person can type at this
 system and be answered by it. The plan's line for it is "line editing with
 history", and that is what is seen — a prompt, a line edited with the cursor
 keys, Home, End, Delete, Backspace and the control characters every shell of
@@ -231,8 +231,33 @@ session, which the shell had answered by refusing its pipelines, now runs them.
 [`../design/PROCESS.md`](../design/PROCESS.md), Section 17;
 [`../design/SCHEDULER.md`](../design/SCHEDULER.md), Section 9.
 
-**Next: sub-task 8.7** — job control, process groups and terminal signal
-delivery, and the first release, `Oxys 1 Alpha`.
+**Sub-task 8.7 is complete, and Phase 8 with it — the release it was to cut
+is held back at the project owner's direction.** Signals: a bit in the
+target, set by the sender and cleared by the target on its own way out of the
+kernel, where its registers stand in a frame the kernel can edit; a handler
+entered upon the program's own stack below the red zone and returned through
+a two-instruction restorer; SIGKILL and SIGSTOP that cannot be given a
+disposition; a stop that sleeps the process until SIGCONT and tells its
+parent; SIGPIPE from the pipe; a fault reported as the signal its vector maps
+to. Process groups, and a terminal that holds a foreground group: control-C
+and control-Z are removed from the input at the head of the queue — by a
+reader or by the bootstrap processor's tick — and sent to that group as
+SIGINT and SIGTSTP, and a background reader is stopped by SIGTTIN inside its
+`read` and reads on when brought to the foreground. `waitpid`, with the
+status at last an encoding of kind and number, and a child's descriptors
+released at its ending rather than its collecting — the defect a background
+pipeline found. The shell runs every pipeline as a job in a group of its own,
+`&` leaves one running, and `jobs`, `fg`, `bg` and `kill` govern them; the
+shell ignores what the terminal sends and every child puts the default back.
+Eight calls, twenty-seven in all; `<signal.h>` in the C library.
+[`../design/PROCESS.md`](../design/PROCESS.md), Section 18;
+[`../design/SHELL.md`](../design/SHELL.md), Sections 28 and 29;
+[`../design/LIBC.md`](../design/LIBC.md), Section 13.
+
+**Next: `Oxys 1 Alpha`, when the project owner says so**, and then Phase 9.
+The alpha is fixed at this sub-task below; the sub-task is done and the image
+is not yet cut, by decision of the project owner on 2026-09-16, and the build
+register stays suspended until it is.
 
 
 
@@ -871,7 +896,7 @@ system's — and the first of those is sub-task 8.3's.
 | 8.4 | Implement external program execution by `fork()` and `execve()`. | Implemented | `KernelVerifyShell`, `KernelVerifyDirectory` |
 | 8.5 | Implement input and output redirection. | Implemented | `KernelVerifyUtilities`, `KernelVerifyShell` |
 | 8.6 | Implement pipelines. | Implemented | `KernelVerifyVfs`, `KernelVerifyUtilities`, `KernelVerifyShell` |
-| 8.7 | Implement job control, process groups and terminal signal delivery. **`Oxys 1 Alpha` is cut here.** | Planned | — |
+| 8.7 | Implement job control, process groups and terminal signal delivery. **`Oxys 1 Alpha` is cut here** — implemented, the alpha held back at the project owner's direction of 2026-09-16. | Implemented | `KernelVerifySignals`, `KernelVerifyShell` |
 
 **Specifications**: IEEE Std 1003.1-2017, Section 11 (the terminal) and `sh`;
 ECMA-48, Section 5.4 and Sections 8.3.18 to 8.3.22; XTerm Control Sequences.
@@ -1061,7 +1086,50 @@ unprepared — was found by the first program to fork after it. Section 23.
 **Six limitations are recorded**, the first that there is no `SIGPIPE` until
 8.7. Section 24.
 
-**Sub-task 8.7 closes Phase 8 and is where the first release is cut.** `Oxys 1
+**(g)** Sub-task 8.7 closes the phase: job control, process groups and the
+signals the terminal delivers. A signal is a bit in the target process, set by
+whoever sends it and acted upon by the target itself on its next way out of
+the kernel — a system call returning or an interrupt taken at privilege level 3
+— which is the one moment every register stands in a frame the kernel can
+edit; a sender that reached into a target asleep upon a pipe would rewrite a
+frame the read was still going to return through. A sender wakes a sleeping
+target instead, the call reports `EINTR`, and the way out delivers: ignore,
+terminate, stop until SIGCONT, or a handler entered upon the program's own
+stack and returned through a two-instruction restorer, the interrupted
+context restored whole and the flags a program may not alter masked. A call a
+signal interrupted is made again where the signal entered no handler, so that
+`cat` stopped by control-Z and continued by `fg` goes on reading.
+[`../design/PROCESS.md`](../design/PROCESS.md), Section 18.
+
+**The terminal holds a foreground process group**, and control-C and
+control-Z are signals to it rather than input: removed at the head of the
+queue by whoever polls next — a reader, or the bootstrap processor's tick, so
+that a program which never reads is reached — and delivered in order with the
+bytes before them. A background reader is stopped by SIGTTIN inside its
+`read`. The shell makes every pipeline a job in a group of its own, gives a
+foreground job the terminal and takes it back, ignores SIGINT and SIGTSTP
+itself while every child puts the default back, and governs the rest with
+`jobs`, `fg`, `bg` and `kill`. `waitpid` names a child, declines to sleep, and
+reports a stop; the status is an encoding of kind and number at last.
+[`../design/SHELL.md`](../design/SHELL.md), Section 28.
+
+**The evidence is a program ended, stopped and continued from outside itself.**
+`signal-check` asserts a handler entered and returned through, the two
+withheld signals, a computing child reached by the timer's interrupt and a
+sleeping one by the wake, SIGPIPE, a fault as SIGILL, a group ended by one
+`kill`, and a child stopped, reported once, continued and collected; the
+kernel asserts the rules a program can only see the consequence of; and the
+shell's sixth session composes its exit from control-C, control-Z, `bg`,
+`fg` and `kill`. **Three defects were found by the tests**: a child's
+descriptors released at its collecting rather than its ending, which left a
+background pipeline waiting for a keypress; a stopped job `kill` could not end;
+and a `%n` in `help`'s own format string. **Six limitations are recorded**,
+the first that a control-C does not flush what was typed after it, and the
+last that the alpha is not yet cut. Section 29.
+
+**Sub-task 8.7 closes Phase 8 and is where the first release is cut** — the
+sub-task being complete since 2026-09-16 and the cut awaiting the project
+owner's word. `Oxys 1
 Alpha` is the first image worth handing to somebody, because it is the first one
 that does anything when they type at it.
 [`VERSIONING.md`](VERSIONING.md), Section 11.1, is the plan and Section 5.4 the

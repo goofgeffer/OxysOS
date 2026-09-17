@@ -9,7 +9,7 @@
  *          ProcessInitialise, ProcessCreate, ProcessDestroy, ThreadCreate,
  *          ThreadDestroy, ThreadSetCurrent, ThreadCurrent, ProcessRecordImage,
  *          ProcessCreateUserStack, ProcessReport, ProcessFork, ProcessExecute,
- *          ProcessExit, ProcessWait, ProcessCurrent, ProcessEstablishBreak,
+ *          ProcessExit, ProcessWait, ProcessWaitFor, ProcessCurrent, ProcessEstablishBreak,
  *          ProcessSetBreak, ProcessBreak, ProcessArguments,
  *          ProcessCloseDescriptors, ProcessAdoptDescriptor,
  *          ProcessDescriptorFile, ProcessReleaseDescriptor.
@@ -244,6 +244,7 @@ typedef enum ProcessState
     PROCESS_READY,      /* Runnable, and not running. */
     PROCESS_RUNNING,    /* Upon a processor now. */
     PROCESS_BLOCKED,    /* Waiting for something that has not happened. */
+    PROCESS_STOPPED,    /* Stopped by a signal, until SIGCONT; of sub-task 8.7. */
     PROCESS_EXITED      /* Finished; its status has not yet been collected. */
 } ProcessState;
 
@@ -497,6 +498,33 @@ struct Process
     size_t thread_count;
 
     int64_t exit_status;
+
+    /*
+     * Job control and signals, of sub-task 8.7.
+     *
+     * `group` is the process group, the identifier of the process that leads
+     * it: a child inherits its parent's, `setpgid` moves one, and the terminal
+     * delivers control-C and control-Z to every member of its foreground
+     * group. `pending` holds one bit per signal, set by SignalSend and cleared
+     * by delivery; `handlers` holds a disposition per signal — default,
+     * ignore, or the address of a handler — and `restorer` the address a
+     * handler returns through. `wait_status` is what `wait` reports, in the
+     * encoding of <oxys/syscall_abi.h>, composed when the process ends or
+     * stops; `exit_status` above stays the quadword `exit` was given, or the
+     * negated vector of a fault, which the self-tests read. `stop_signal` is
+     * why a stopped process stopped and `stop_reported` whether its parent
+     * has been told; `stop_channel` is the wait channel a stopped thread
+     * sleeps upon, chosen for its address alone.
+     */
+    uint64_t group;
+    uint32_t pending;
+    uint64_t handlers[SYSCALL_SIGNAL_MAXIMUM + 1U];
+    uint64_t restorer;
+    uint64_t wait_status;
+    uint32_t stop_signal;
+    uint32_t termination_signal;
+    bool stop_reported;
+    uint8_t stop_channel;
     bool used;
 };
 
@@ -796,14 +824,32 @@ int64_t ProcessExecute(Process *process, const char *path,
 void ProcessExit(int64_t status);
 
 /*
- * Collects a child that has ended, running it first if it has not yet run.
+ * Collects a child that has ended — sleeping until one does, since sub-task
+ * 8.6 — or reports one that has stopped, since 8.7.
  *
- * Returns the identifier of the child collected and places its status through
- * `status`, or zero where the caller has no children. The child's slot, its
- * threads and its address space are released before this returns, so the
- * identifier it names is already nobody's by the time the caller sees it — which
- * is why it is returned rather than left to be looked up.
+ * `pid` selects the children considered, as `waitpid` of IEEE Std 1003.1-2017
+ * has it: one child by identifier, -1 for any, and a number below -1 for any
+ * child of the group whose identifier is its negation. `options` may hold
+ * SYSCALL_WAIT_NO_HANG, upon which nothing to report is 0 and no sleep is
+ * made, and SYSCALL_WAIT_UNTRACED, upon which a stopped child is reported —
+ * once per stop, without being collected — through `status` in the encoding
+ * of <oxys/syscall_abi.h>.
+ *
+ * Returns the identifier of the child collected or reported; 0 where there is
+ * nothing yet and the caller declined to sleep; PROCESS_WAIT_NO_CHILD where
+ * no child matches; and PROCESS_WAIT_INTERRUPTED where a signal arrived while
+ * the caller slept, which the system call reports as EINTR. A collected
+ * child's slot, threads and address space are released before this returns,
+ * so the identifier it names is already nobody's by the time the caller sees
+ * it — which is why it is returned rather than left to be looked up.
+ *
+ * ProcessWait is the form that predates 8.7: any child, no options, and 0 for
+ * none, which is what its callers — the self-tests — expect.
  */
+#define PROCESS_WAIT_NO_CHILD    UINT64_MAX
+#define PROCESS_WAIT_INTERRUPTED (UINT64_MAX - 1U)
+
+uint64_t ProcessWaitFor(Process *parent, int64_t pid, uint64_t options, int64_t *status);
 uint64_t ProcessWait(Process *parent, int64_t *status);
 
 /* The process the running thread belongs to, or null where the running thread

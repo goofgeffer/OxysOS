@@ -125,8 +125,10 @@ size_t TerminalRead(char *buffer, size_t capacity);
  * bootstrap processor, and since a pipeline's children share that processor a
  * reader that halted would halt them too. docs/design/SHELL.md, Sections 2.3
  * and 22.3, say why the reader yields rather than sleeping upon a channel.
+ * Returns false, since sub-task 8.7, where a signal is pending upon the
+ * caller, so that the read reports EINTR and the signal is delivered.
  */
-void TerminalWaitForInput(void);
+bool TerminalWaitForInput(void);
 
 /* Reports whether the queue holds at least one byte, polling the devices first. */
 bool TerminalHasInput(void);
@@ -142,6 +144,29 @@ size_t TerminalBytesQueued(void);
 uint64_t TerminalBytesDelivered(void);
 uint64_t TerminalBytesDiscarded(void);
 uint64_t TerminalKeysTranslated(void);
+
+/*
+ * Job control at the terminal, of sub-task 8.7.
+ *
+ * The foreground process group is the group control-C and control-Z are
+ * delivered to — as SIGINT and SIGTSTP, the two bytes removed from the input
+ * rather than delivered — and the only group whose members may read the
+ * terminal without being stopped by SIGTTIN. Zero is no group, upon which the
+ * two bytes are discarded. The shell sets it to each foreground job's group
+ * and back to its own.
+ *
+ * TerminalService polls the devices and acts upon a control byte at the head
+ * of the queue; it is called by the bootstrap processor's timer tick, so that
+ * control-C reaches a program that never reads. Only the head of the queue is
+ * looked at, for the reason terminal.c gives beside TerminalInterceptHead.
+ * TerminalBytesIntercepted counts the bytes so removed, which a session
+ * placed upon the terminal must add to what was delivered to account for
+ * itself.
+ */
+uint64_t TerminalForegroundGroup(void);
+void TerminalSetForegroundGroup(uint64_t group);
+void TerminalService(void);
+uint64_t TerminalBytesIntercepted(void);
 
 /* Emits a summary upon both output devices. */
 void TerminalReport(void);

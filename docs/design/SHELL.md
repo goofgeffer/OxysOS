@@ -8,8 +8,8 @@ order, each recording what that sub-task built and why, and each revised as the
 design is. Sub-tasks 8.1 (Sections 1 to 7), 8.2 (Sections 8 to 10), 8.3
 (Sections 11 to 15), 8.4 (Sections 16 to 18), 8.5 (Sections 19 to 21) and 8.6
 (Sections 22 to 24) are here so far; Section 25 is `micro`, the line editor
-added beside 8.6, Section 26 is `clear`, and Section 27 the prompt that names the
-working directory.
+added beside 8.6, Section 26 is `clear`, Section 27 the prompt that names the
+working directory, and Sections 28 and 29 are sub-task 8.7.
 
 **Authority**: `PROJECT_GUIDELINES.md`, Sections 2, 3 and 6. Every control
 sequence and every rule of the grammar named below carries a citation, and the
@@ -380,7 +380,8 @@ reverted.
    because their backspace crosses a row boundary. It needs the editor to move
    the cursor up, which needs a display that interprets CUU, which none of the
    three do.
-4. **Nothing interrupts a program.** Control-C is byte 3 and is ignored by the
+4. ~~**Nothing interrupts a program.**~~ **Closed at sub-task 8.7**, Section
+   28.3: control-C is SIGINT to the foreground group. Until then it was byte 3, ignored by the
    editor; a program that does not return to the prompt cannot be stopped from
    the keyboard. That is sub-task 8.7's terminal signal delivery, and there is
    nothing to interrupt before 8.4 runs a program.
@@ -1017,7 +1018,7 @@ caught by `/verify/both` holding nothing.
    being no line discipline; every other program reading the terminal reads
    keystrokes without end until 8.7.
 5. ~~**Pipelines and `&`** are 8.6's and 8.7's, as before.~~ Pipelines arrived
-   at 8.6, Section 22; `&` is 8.7's still.
+   at 8.6, Section 22; `&` at 8.7, Section 28.
 
 ## 22. Sub-task 8.6: pipelines
 
@@ -1193,12 +1194,12 @@ no stack beneath it. The first program to fork after the change found it.
 
 ## 24. Limitations of sub-task 8.6
 
-1. **No `SIGPIPE`.** A writer whose reader has gone is told `EPIPE` and nothing
-   more; a program that ignores the result — `cat` does not — runs on. The
-   signal arrives with 8.7.
-2. **`&` is still recorded and not honoured**, and nothing interrupts a program;
-   both are 8.7's. A pipeline that reads the terminal and never ends can be
-   ended only by the terminal's control-D reaching a `cat`.
+1. ~~**No `SIGPIPE`.**~~ **Closed at sub-task 8.7**: a write to a pipe with no
+   reader sends SIGPIPE beside `EPIPE`, Section 28. Until then a writer was
+   told `EPIPE` and nothing more, and one that ignored the result ran on.
+2. ~~**`&` is still recorded and not honoured**, and nothing interrupts a
+   program.~~ **Closed at sub-task 8.7**, Section 28: `&` is a background job,
+   and control-C interrupts the foreground one.
 3. **Eight pipes**, each of a page, drawn from a fixed table; a ninth is refused
    as `EMFILE`. A pipeline of nine commands is therefore refused at its eighth
    pipe, which is one more than `SHELL_COMMAND_MAXIMUM` allows anyway.
@@ -1313,3 +1314,159 @@ for a continuation. [`../../userland/sh/main.c`](../../userland/sh/main.c),
 Anything that waits for the prompt — the driver of
 [`../project/TESTING.md`](../project/TESTING.md), Section 2.1, was one — now
 waits for `> ` at the end of the output rather than for `oxys$ `.
+
+## 28. Sub-task 8.7: job control, process groups and the terminal's signals
+
+**Implementation**: [`../../userland/sh/jobs.c`](../../userland/sh/jobs.c) —
+the job table, `jobs`, `fg`, `bg` and `kill` — and the job every pipeline and
+program becomes in [`../../userland/sh/run.c`](../../userland/sh/run.c); in the
+kernel, the foreground group, the interception of control-C and control-Z and
+the service from the tick in
+[`../../kernel/terminal/terminal.c`](../../kernel/terminal/terminal.c), the
+SIGTTIN stop in the `read` of
+[`../../kernel/arch/x86_64/syscall/syscall.c`](../../kernel/arch/x86_64/syscall/syscall.c),
+and the signals themselves, [`PROCESS.md`](PROCESS.md), Section 18. `<signal.h>`
+in the C library, [`LIBC.md`](LIBC.md), Section 13. Asserted by
+`signal-check` and the sixth session of
+[`../../kernel/test/shell/parser.c`](../../kernel/test/shell/parser.c).
+
+### 28.1 A job is a process group
+
+Every pipeline the shell runs — and every program run alone, which is a
+pipeline of one since this sub-task — is a job: a process group of its own,
+led by its first child, which every later child joins. Both the parent and
+the child set the group and, for a foreground job, both set the terminal's
+foreground group, because neither can know which of the two runs first after
+the fork: the child must be in its group before it reads the terminal or
+SIGTTIN stops it, and the parent must know it is there before it signals the
+group. The second of them to do so does nothing, and that is what every shell
+of this lineage does.
+
+A foreground job holds the terminal — `tcgroup`, IEEE Std 1003.1-2017's
+`tcsetpgrp` — and the shell waits for it with `waitpid` upon the group and
+`WUNTRACED`, until every member has ended or every live member has stopped;
+then the shell takes the terminal back. The status is the last command's, or
+128 plus SIGTSTP for a job that stopped, and a stopped job stays in the table
+for `fg` and `bg`. A job ended by a signal is reported by the signal's name
+rather than as done, as every shell of this lineage reports it. A background
+job, `&`, is announced as `[n] pid` and left to run; what happened to it is
+reported before the next prompt, `ShellJobsNotify` collecting with
+`WNOHANG | WUNTRACED` whatever ended or stopped. A command of one run with `&`
+runs in a child too, a built-in among them in a subshell, which is what `&`
+means for one.
+
+`fg [%n]` gives a job the terminal, continues it if it was stopped and waits
+for it; `bg [%n]` continues it in the background; `jobs` lists them; `kill
+[-SIGNAL] pid | %n...` sends a signal by name or number, SIGTERM where none is
+named, to a process or to a job's whole group — and a stopped job that is sent
+anything but a stop is continued afterwards, so that a `kill %1` of one is
+acted upon now and not at the next `fg`.
+
+### 28.2 The shell ignores what the terminal sends
+
+The terminal sends SIGINT and SIGTSTP to the foreground group, and between
+jobs the foreground group is the shell's own. A shell that took the default
+action would end at the first control-C typed at its prompt and stop at the
+first control-Z, so it ignores both — and, an ignored disposition surviving
+`execve`, each child puts them back to the default before it becomes a
+program. A program that inherited the shell's indifference to control-C could
+not be interrupted, which is the one failure this whole sub-task exists to
+prevent.
+
+### 28.3 What the terminal does with control-C and control-Z
+
+Two bytes are signals rather than input: 0x03, which is SIGINT, and 0x1A,
+which is SIGTSTP — the interrupt and suspend characters of Section 11.1.9 of
+the standard with ISIG in effect, the one piece of a line discipline this
+terminal has. They are acted upon **at the head of the queue**: the byte is
+removed and the signal sent to the foreground group, by whoever polls next —
+a reader, or the bootstrap processor's timer tick, which services the terminal
+every ten milliseconds so that a program which never reads is reached all the
+same. Only the head is looked at, so that the two are acted upon in order with
+the bytes before them, which is what a line discipline does and what lets a
+session placed upon the terminal whole — as the self-test places one — have
+its control-C reach the program running when the bytes before it have been
+read. A reader that finds a signal pending upon itself after the wait —
+because the intercept during its own poll sent it one — reports `EINTR` rather
+than the bytes behind the control-C, which wait for whoever reads next.
+
+**A background read stops the reader.** A process not in the foreground group
+that reads the terminal is stopped by SIGTTIN inside the `read` itself, and
+tries again when continued, as Section 11.1.4 of the standard has it; brought
+to the foreground by `fg` it goes on reading, left in the background by `bg` it
+stops again, and a signal sent to it while stopped — `kill %1` — is acted upon
+before the read is tried again. A process that ignores or catches SIGTTIN is
+refused with `EIO` instead.
+
+### 28.4 What was found
+
+**A background pipeline that finished only when a person typed.** `cat /bin/sh
+| wc -c &` was announced and then did nothing until the next command: `cat`
+had ended, but a process's descriptors were released when its parent collected
+it and not when it ended — one moment until this sub-task, the collecting
+`wait` being the only thing that ever ran after a child — so the pipe's write
+end stayed open in a process that had ended, `wc` waited for an end of file
+only that close could give, and the shell collected nothing until its next
+prompt. The descriptors are released at the ending now,
+[`PROCESS.md`](PROCESS.md), Section 18.4.
+
+**A stopped job that `kill` could not end.** A `kill %1` of a job stopped by
+SIGTTIN left it stopped: the signal waited, as it should, for a continue, and
+the continued read stopped the job again before the way out delivered it. The
+read now reports `EINTR` after a stop where a signal is pending, and the
+shell continues a stopped job it has signalled.
+
+**A `%n` in `help`.** The line for `fg [%n]` was a `printf` format, and `%n`
+is the conversion that writes a count; the self-test's count of `help`'s lines
+caught it, the file `help | wc -l` wrote holding something other than the
+number.
+
+## 29. Verification of sub-task 8.7, and its limitations
+
+`signal-check` and `KernelVerifySignals`, [`PROCESS.md`](PROCESS.md), Section
+18.5, assert the signals from the kernel and from a program. The shell's sixth
+session asserts job control from the prompt, with the control bytes placed
+upon the terminal among the lines: `cat` ended by a control-C, 130; stopped by
+a control-Z, 148, and listed by `jobs`; continued by `bg`, where its next read
+stops it with SIGTTIN; brought back by `fg`, where it reads a line and is
+ended by a second control-C; `cat &` stopped at once and ended by `kill %1`,
+which continues it; a pipeline run in the background and collected before the
+exit. `exit $S$T$F` is 130148130, which is 34, only if each was so, and the
+kernel asserts that both control bytes were turned into signals and that the
+terminal's foreground group was cleared when the shell ended. Each control
+byte stands behind a line only the running `cat` will read, so that it becomes
+the head of the queue — and so a signal — only once `cat` holds the terminal;
+a control-Z immediately after `cat\n` would be the head while the shell was
+still forking, and the tick would deliver it to the shell's group, which
+ignores it. Section 28.4 records what the sub-task found; the two races in
+`signal-check`'s first run are in `PROCESS.md`, Section 18.5.
+
+Observed on 2026-09-16 under QEMU over the serial line and under VirtualBox at
+the PS/2 keyboard: control-C ending `cat` with 130, control-Z stopping it,
+`jobs`, `fg` resuming it, `cat &` stopped by SIGTTIN and ended by `kill %1`,
+and `cat /bin/sh | wc -c &` printing its count while the shell waited at the
+prompt. [`../project/TESTING-RECORD.md`](../project/TESTING-RECORD.md).
+
+Limitations:
+
+1. **A control-C does not flush what was typed after it.** A line discipline
+   discards the input queue upon the interrupt character; this terminal
+   removes the byte and leaves the rest, which the next reader — the shell,
+   usually — receives. The self-test depends upon exactly that, its session
+   being placed whole; a person meets it only by typing ahead of a control-C.
+2. **A control-C at the shell's own prompt does nothing visible.** The shell
+   ignores SIGINT and the line stands as typed; every shell of this lineage
+   prints a fresh prompt instead, which needs the editor told to abandon its
+   line, and is a small change owed to the line editor.
+3. **No SIGTTOU**: a background job may write the terminal. **No `wait`
+   built-in, no `%string` or `%%` job names, no `disown`, no `suspend`.**
+4. **A `cat` reading the terminal takes every queued byte in one read**, a
+   control-D among them, and discards what follows the control-D — there
+   being no line discipline to deliver a line at a time. The session ends
+   `cat` by a control-C for that reason, Section 29.
+5. **An orphan is nobody's**, [`PROCESS.md`](PROCESS.md), Section 19,
+   limitation 15: a job left running at `exit` is collected by nobody until
+   Phase 9's `init`.
+6. **The alpha is not yet cut.** [`../project/PLAN.md`](../project/PLAN.md)
+   fixes `Oxys 1 Alpha` at this sub-task; the project owner directed on
+   2026-09-16 that the release wait, and the sub-task is complete without it.

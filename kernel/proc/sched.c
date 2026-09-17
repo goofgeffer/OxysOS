@@ -13,7 +13,7 @@
  * Key functions: SchedulerInitialise, SchedulerStartOnThisProcessor,
  *          SchedulerEnterIdle, SchedulerAdmit, SchedulerYield,
  *          SchedulerBlockCurrent, SchedulerCanSleep, SchedulerSleep,
- *          SchedulerWake, SchedulerExitCurrent, SchedulerWithdraw,
+ *          SchedulerWake, SchedulerWakeThread, SchedulerExitCurrent, SchedulerWithdraw,
  *          SchedulerSetAffinity, SchedulerAffinity, SchedulerQueueLength,
  *          SchedulerRunningOn, SchedulerIsRunning, SchedulerReport.
  * References:
@@ -60,6 +60,7 @@
 #include <oxys/arch/cpu/spinlock.h>
 #include <oxys/dev/lapic.h>
 #include <oxys/arch/interrupt/interrupts.h>
+#include <oxys/terminal/terminal.h>
 #include <oxys/kernel.h>
 
 /*
@@ -391,6 +392,23 @@ static void SchedulerHandleTick(TrapFrame *frame)
     if (PerCpuLocksHeld() != 0U)
     {
         return;
+    }
+
+    /*
+     * The terminal is serviced from here, upon the bootstrap processor alone,
+     * since sub-task 8.7: the devices are polled and a control-C or control-Z
+     * at the head of the queue becomes a signal to the foreground group. It is
+     * done from the tick so that a program which never reads — one that
+     * computes, or waits upon a pipe — is reached all the same. It is safe
+     * upon this processor because every reader of the terminal is a system
+     * call, which runs with interrupts masked, or a halt with them enabled at
+     * a point where no reader stands mid-way; and it is confined to this
+     * processor because the terminal's queue is one of the structures
+     * docs/design/CONCURRENCY.md, Section 10, limitation 1, enumerates.
+     */
+    if (SchedulerIndex() == 0U)
+    {
+        TerminalService();
     }
 
     /*
@@ -788,6 +806,36 @@ size_t SchedulerWake(const void *channel)
         {
             ++woken;
         }
+    }
+
+    PerCpuPopInterruptState();
+
+    return woken;
+}
+
+bool SchedulerWakeThread(Thread *thread)
+{
+    bool woken = false;
+
+    if ((thread == NULL) || !thread->used)
+    {
+        return false;
+    }
+
+    PerCpuPushInterruptState();
+
+    /*
+     * Whatever the thread was waiting upon, it is woken from it, and the
+     * channel is cleared so that a later wake of that channel does not find
+     * it: the call it was asleep in re-tests its condition, finds a signal
+     * pending, and reports EINTR. A thread that is not asleep — running,
+     * queued, or never yet run — is left alone; the signal waits for it at
+     * its next way out of the kernel.
+     */
+    if ((thread->state == THREAD_BLOCKED) && (thread->wait_channel != NULL))
+    {
+        thread->wait_channel = NULL;
+        woken = SchedulerAdmit(thread);
     }
 
     PerCpuPopInterruptState();

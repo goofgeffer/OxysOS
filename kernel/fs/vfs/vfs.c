@@ -163,6 +163,8 @@ const char *VfsErrorName(VfsError error)
         return "unsupported";
     case VFS_ERROR_BROKEN_PIPE:
         return "broken pipe";
+    case VFS_ERROR_INTERRUPTED:
+        return "interrupted by a signal";
     case VFS_ERROR_MEDIUM:
         return "the medium failed";
     default:

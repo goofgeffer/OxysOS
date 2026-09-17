@@ -2,7 +2,8 @@
 <!-- SPDX-License-Identifier: CC0-1.0 -->
 # The C Library
 
-**Phase**: 7, sub-tasks 7.1 to 7.6, of [`../project/PLAN.md`](../project/PLAN.md).
+**Phase**: 7, sub-tasks 7.1 to 7.6, of [`../project/PLAN.md`](../project/PLAN.md);
+Section 13 is sub-task 8.7's, `<signal.h>`.
 
 **Sub-task 7.1** is Sections 2 to 7. Section 2 is the division of the system-call
 header, which is not part of 7.1 but was required to happen before 7.2 and is
@@ -2192,3 +2193,51 @@ inherited.
     A user thread's affinity names the bootstrap processor alone, so the case
     cannot arise, and [`CONCURRENCY.md`](CONCURRENCY.md), Section 10, limitation
     1, is where it is counted with the rest.
+
+## 13. Sub-task 8.7: `<signal.h>`, and what the wrappers gained
+
+**Implementation**: [`../../libc/include/signal.h`](../../libc/include/signal.h),
+[`../../libc/signal/signal.c`](../../libc/signal/signal.c), the restorer at
+the end of [`../../libc/syscall/invoke.asm`](../../libc/syscall/invoke.asm),
+and seven wrappers in [`../../libc/syscall/calls.c`](../../libc/syscall/calls.c).
+The kernel's half is [`PROCESS.md`](PROCESS.md), Section 18. Asserted by
+`signal-check`, [`PROCESS.md`](PROCESS.md), Section 18.5.
+
+`<signal.h>` is ISO/IEC 9899:2011, Section 7.14 — `sig_atomic_t`, `SIG_DFL`,
+`SIG_IGN`, `SIG_ERR`, `signal` and `raise` — with IEEE Std 1003.1-2017's `kill`
+beside them and the standard's signals numbered as the x86 System V and Linux
+conventions number them, each asserted against the kernel's own definition by
+`_Static_assert`. `signal` installs a handler with the restorer the kernel
+enters it with the address of: two instructions, the `sigreturn` call and a
+`ud2` that is never reached, standing outside the range the wrappers' self-test
+copies into a program of its own. The restorer is named in `signal` and
+nowhere else, because a handler installed through the raw wrapper with the
+wrong restorer would return from its handler into whatever stood at the
+address given. The handler installed is kept across its own invocation, the
+reliable semantic, which is the kernel's doing and not this library's.
+
+**What a handler may do** is what the standard lets it: the interrupted
+context is restored whole, so a handler may call anything, but the
+interrupted code may have been in the middle of the heap or a stream, and a
+handler that calls `malloc` or `printf` upon a structure the interruption left
+half-updated corrupts it. The safe rule is the standard's — set a `volatile
+sig_atomic_t` and return — and the header says so.
+
+The seven wrappers are `OxysWaitFor` (`waitpid`), `OxysKill`,
+`OxysSignalAction`, `OxysGetProcessId`, `OxysGetProcessGroup`,
+`OxysSetProcessGroup` and `OxysTerminalGroup`; `OxysWait` is `OxysWaitFor(-1,
+status, 0)`. The status they report is the encoding of
+`<oxys/syscall_abi.h>` — `SYSCALL_STATUS_KIND` and `SYSCALL_STATUS_NUMBER` —
+which Section 12.7, limitation 9, is where the quadword that preceded it was
+recorded as owed. `EINTR` and `ESRCH` join `errno`, the twenty-second and
+twenty-third failure results, and `strerror` names them. There is no
+`<sys/wait.h>`: a program reads a status through the two macros, and the day
+`WIFEXITED` is wanted is the day a header of that name is one line each.
+
+Limitations: **`sigaction`'s mask, flags and `siginfo` are absent**; a handler
+cannot block other signals while it runs, and a second signal arriving during
+one enters its handler upon the first's frame — which the kernel permits,
+delivering one signal per way out, and which a program must be ready for.
+**`abort` does not raise SIGABRT**, there being no `abort` yet. **`alarm` and
+`sleep` are absent**, the kernel keeping no timer a program may set; SIGALRM is
+numbered and sent by nothing.

@@ -7,6 +7,8 @@
  *          received characters, that a program's `read` of descriptor 0 drains.
  * Key functions: TerminalInitialise, TerminalInject, TerminalPoll, TerminalRead,
  *          TerminalWaitForInput, TerminalHasInput, TerminalFlush,
+ *          TerminalForegroundGroup, TerminalSetForegroundGroup, TerminalService,
+ *          TerminalBytesIntercepted,
  *          TerminalBytesQueued, TerminalBytesDelivered, TerminalBytesDiscarded,
  *          TerminalKeysTranslated, TerminalReport.
  * References:
@@ -60,6 +62,7 @@
 #include <oxys/dev/keyboard.h>
 #include <oxys/dev/serial.h>
 #include <oxys/proc/sched.h>
+#include <oxys/proc/signal.h>
 #include <oxys/arch/cpu/percpu.h>
 
 /* The queue, and the two indices that are never reduced: their difference is the
@@ -72,6 +75,21 @@ static uint32_t TerminalReadIndex;
 static uint64_t TerminalDelivered;
 static uint64_t TerminalDiscarded;
 static uint64_t TerminalTranslated;
+
+/*
+ * The foreground process group, of sub-task 8.7, and the two bytes that are
+ * signals to it rather than input: control-C, which is SIGINT, and control-Z,
+ * which is SIGTSTP — the interrupt and suspend characters of IEEE Std
+ * 1003.1-2017, Section 11.1.9, with ISIG in effect, which is the one piece of
+ * the line discipline this terminal has. Zero is no group, upon which the two
+ * bytes are discarded: a signal to nobody is nothing.
+ */
+#define TERMINAL_INTERRUPT_BYTE 0x03
+#define TERMINAL_SUSPEND_BYTE   0x1A
+
+static uint64_t TerminalForeground;
+static uint64_t TerminalSignalsSent;
+static uint64_t TerminalIntercepted;
 
 /* The extended scancodes of the keys given a control sequence. Scan code set 1,
  * each prefixed by 0xE0 upon the wire, the prefix being consumed by the driver. */
@@ -242,6 +260,77 @@ size_t TerminalPoll(void)
     return appended;
 }
 
+
+/*
+ * Acts upon a control-C or control-Z standing at the head of the queue: the
+ * byte is removed and the signal sent to the foreground group. Only the head
+ * is looked at, so that the two are acted upon in the order they were typed
+ * with the bytes before them, which is what a line discipline does with ISIG
+ * — and which lets a session placed upon the terminal whole, as the self-test
+ * places one, have its control-C reach the program that is running when the
+ * bytes before it have been read. Returns how many were acted upon.
+ */
+static size_t TerminalInterceptHead(void)
+{
+    size_t acted = 0U;
+
+    while (TerminalQueued() > 0U)
+    {
+        const char head = TerminalQueue[TerminalReadIndex & (TERMINAL_QUEUE_CAPACITY - 1U)];
+        uint32_t signal;
+
+        if (head == TERMINAL_INTERRUPT_BYTE)
+        {
+            signal = SYSCALL_SIGINT;
+        }
+        else if (head == TERMINAL_SUSPEND_BYTE)
+        {
+            signal = SYSCALL_SIGTSTP;
+        }
+        else
+        {
+            break;
+        }
+
+        ++TerminalReadIndex;
+        ++acted;
+        ++TerminalIntercepted;
+
+        if (TerminalForeground != 0U)
+        {
+            (void)SignalSendGroup(TerminalForeground, signal);
+            ++TerminalSignalsSent;
+        }
+    }
+
+    return acted;
+}
+
+/* Whether the head of the queue is a byte the reader must not be given. */
+static bool TerminalHeadIsSignal(void)
+{
+    const char head = TerminalQueue[TerminalReadIndex & (TERMINAL_QUEUE_CAPACITY - 1U)];
+
+    return (TerminalQueued() > 0U) &&
+           ((head == TERMINAL_INTERRUPT_BYTE) || (head == TERMINAL_SUSPEND_BYTE));
+}
+
+void TerminalService(void)
+{
+    (void)TerminalPoll();
+    (void)TerminalInterceptHead();
+}
+
+uint64_t TerminalForegroundGroup(void)
+{
+    return TerminalForeground;
+}
+
+void TerminalSetForegroundGroup(uint64_t group)
+{
+    TerminalForeground = group;
+}
+
 size_t TerminalRead(char *buffer, size_t capacity)
 {
     size_t removed = 0U;
@@ -252,8 +341,9 @@ size_t TerminalRead(char *buffer, size_t capacity)
     }
 
     (void)TerminalPoll();
+    (void)TerminalInterceptHead();
 
-    while ((removed < capacity) && (TerminalQueued() > 0U))
+    while ((removed < capacity) && (TerminalQueued() > 0U) && !TerminalHeadIsSignal())
     {
         buffer[removed] = TerminalQueue[TerminalReadIndex & (TERMINAL_QUEUE_CAPACITY - 1U)];
         ++TerminalReadIndex;
@@ -268,14 +358,33 @@ size_t TerminalRead(char *buffer, size_t capacity)
 bool TerminalHasInput(void)
 {
     (void)TerminalPoll();
+    (void)TerminalInterceptHead();
 
     return TerminalQueued() > 0U;
 }
 
-void TerminalWaitForInput(void)
+bool TerminalWaitForInput(void)
 {
+    /* A signal already pending — a control-C intercepted by the tick before this
+     * read began — ends the wait before the queue is even looked at. */
+    if (SignalIsPending(ProcessCurrent()))
+    {
+        return false;
+    }
+
     while (!TerminalHasInput())
     {
+        /*
+         * A signal pending upon the reader ends the wait, since sub-task 8.7:
+         * the read reports EINTR and the signal is delivered on the way out,
+         * which is how control-C reaches `cat` while it waits for a key and
+         * how a background reader is stopped rather than left waiting.
+         */
+        if (SignalIsPending(ProcessCurrent()))
+        {
+            return false;
+        }
+
         /*
          * Another thread that could run is given the processor first, since
          * sub-task 8.6. A program reading the terminal used to halt the
@@ -287,8 +396,8 @@ void TerminalWaitForInput(void)
          * halt is taken only then. The reader stays runnable rather than
          * sleeping upon a channel, because the bytes arrive through an
          * interrupt handler and a wake performed there would be the first
-         * thing in this kernel to enqueue from one — a cost paid at 8.7, when
-         * a signal must interrupt a read, and not before.
+         * thing in this kernel to enqueue from one — a cost paid at 8.7 for
+         * the signals, which the tick handler sends, and not for the bytes.
          */
         if (SchedulerQueueLength(PerCpuIsEstablished() ? PerCpuIndex() : 0U) > 0U)
         {
@@ -302,6 +411,13 @@ void TerminalWaitForInput(void)
          * the two and leave the processor halted with nothing to wake it. */
         __asm__ __volatile__("sti; hlt; cli");
     }
+
+    return true;
+}
+
+uint64_t TerminalBytesIntercepted(void)
+{
+    return TerminalIntercepted;
 }
 
 void TerminalFlush(void)

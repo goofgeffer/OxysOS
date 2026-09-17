@@ -11,7 +11,7 @@
  *          SCHED_AFFINITY_OF, SCHED_QUANTUM_MILLISECONDS, SCHED_TICK_VECTOR,
  *          SchedulerInitialise, SchedulerPrepareProcessor, SchedulerEnterIdle,
  *          SchedulerAdmit, SchedulerYield, SchedulerBlockCurrent,
- *          SchedulerCanSleep, SchedulerSleep, SchedulerWake,
+ *          SchedulerCanSleep, SchedulerSleep, SchedulerWake, SchedulerWakeThread,
  *          SchedulerExitCurrent, SchedulerWithdraw,
  *          SchedulerDetachThisProcessor,
  *          SchedulerSetAffinity,
@@ -219,6 +219,14 @@ void SchedulerBlockCurrent(void);
 bool SchedulerCanSleep(void);
 void SchedulerSleep(const void *channel);
 size_t SchedulerWake(const void *channel);
+
+/*
+ * Wakes one thread from whatever channel it sleeps upon, of sub-task 8.7: what
+ * a signal does to a target asleep in a call, so that the call re-tests its
+ * condition, finds the signal pending, and reports EINTR. A thread that is not
+ * asleep upon a channel is left alone. Returns whether it was woken.
+ */
+bool SchedulerWakeThread(Thread *thread);
 
 /*
  * Gives the processor up for good, of sub-task 8.6, on behalf of a thread that

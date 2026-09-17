@@ -2,7 +2,7 @@
 /* SPDX-License-Identifier: MIT */
 /*
  * File: libc/syscall/calls.c
- * Purpose: The nineteen system-call wrappers, one for each call
+ * Purpose: The twenty-seven system-call wrappers, one for each call
  *          <oxys/syscall_abi.h> numbers: the arguments named rather than
  *          numbered, and the result translated into the convention a C program
  *          expects.
@@ -10,6 +10,8 @@
  *          OxysOpen, OxysClose, OxysRead, OxysReadDirectory,
  *          OxysMakeDirectory, OxysUnlink, OxysChangeDirectory,
  *          OxysGetWorkingDirectory, OxysDuplicate, OxysRemoveDirectory, OxysPipe,
+ *          OxysWaitFor, OxysKill, OxysSignalAction, OxysGetProcessId,
+ *          OxysGetProcessGroup, OxysSetProcessGroup, OxysTerminalGroup,
  *          OxysExit, OxysWait, OxysBrk, OxysSbrk.
  * References:
  *   - kernel/abi/oxys/syscall_abi.h: the call numbers and what each call means.
@@ -297,4 +299,45 @@ int64_t OxysPipe(int descriptors[2])
 {
     return OxysSyscallResult(OxysSyscallInvoke1(SYSCALL_PIPE,
                                                 (uint64_t)(uintptr_t)descriptors));
+}
+
+/* ---------------------------------------------------------- sub-task 8.7 */
+
+int64_t OxysWaitFor(int64_t pid, int64_t *status, uint64_t options)
+{
+    return OxysSyscallResult(OxysSyscallInvoke3(SYSCALL_WAITPID, (uint64_t)pid,
+                                                (uint64_t)(uintptr_t)status, options));
+}
+
+int64_t OxysKill(int64_t pid, int signal)
+{
+    return OxysSyscallResult(OxysSyscallInvoke2(SYSCALL_KILL, (uint64_t)pid,
+                                                (uint64_t)signal));
+}
+
+int64_t OxysSignalAction(int signal, uint64_t disposition, uint64_t restorer)
+{
+    return OxysSyscallResult(OxysSyscallInvoke3(SYSCALL_SIGACTION, (uint64_t)signal,
+                                                disposition, restorer));
+}
+
+int64_t OxysGetProcessId(void)
+{
+    return OxysSyscallResult(OxysSyscallInvoke0(SYSCALL_GETPID));
+}
+
+int64_t OxysGetProcessGroup(int64_t pid)
+{
+    return OxysSyscallResult(OxysSyscallInvoke1(SYSCALL_GETPGID, (uint64_t)pid));
+}
+
+int64_t OxysSetProcessGroup(int64_t pid, int64_t group)
+{
+    return OxysSyscallResult(OxysSyscallInvoke2(SYSCALL_SETPGID, (uint64_t)pid,
+                                                (uint64_t)group));
+}
+
+int64_t OxysTerminalGroup(int64_t group)
+{
+    return OxysSyscallResult(OxysSyscallInvoke1(SYSCALL_TCGROUP, (uint64_t)group));
 }

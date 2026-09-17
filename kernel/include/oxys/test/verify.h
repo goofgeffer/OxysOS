@@ -23,7 +23,7 @@
  *          KernelVerifyPit, KernelVerifyKeyboard, KernelVerifySerial,
  *          KernelVerifyVga, KernelVerifyPci, KernelVerifyAta, KernelVerifyBlock,
  *          KernelVerifyBuffer, KernelVerifyExt2, KernelVerifyVfs,
- *          KernelVerifyInitrd, KernelVerifyDirectory,
+ *          KernelVerifyInitrd, KernelVerifyDirectory, KernelVerifySignals,
  *          KernelReportVolumes, KernelVfsProbeVolume, KernelBootInformation,
  *          KernelCommandLineHasOption.
  * References:
@@ -415,6 +415,16 @@ void KernelVerifyInitrd(void);
  * runs after the root is mounted, for the reason KernelVerifyInitrd does.
  */
 void KernelVerifyDirectory(void);
+
+/*
+ * Sub-task 8.7: the signals, the process groups and `waitpid`. The pending
+ * set, the dispositions and the default actions are asserted from the kernel
+ * upon a process that never runs; then signal-check is run, which catches,
+ * ignores, sends, stops, continues and kills from privilege level 3 and ends
+ * with the number of assertions that failed. It runs after the root is
+ * mounted, as the tests that run a program do.
+ */
+void KernelVerifySignals(void);
 
 /*
  * The diagnostic probes, which are not self-tests.

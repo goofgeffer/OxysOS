@@ -3,14 +3,16 @@
 /*
  * File: libc/include/syscall.h
  * Purpose: Declares the C library's system-call wrappers — one for each of the
- *          nineteen calls <oxys/syscall_abi.h> numbers — together with the raw
+ *          twenty-seven calls <oxys/syscall_abi.h> numbers — together with the raw
  *          invocation they are built upon and the translation that turns a
  *          kernel result into a library result and an errno.
  * Key definitions: OxysSyscallInvoke0, OxysSyscallInvoke1, OxysSyscallInvoke2,
  *          OxysSyscallInvoke3, OxysSyscallResult, OxysOpen, OxysClose,
  *          OxysRead, OxysReadDirectory, OxysMakeDirectory, OxysUnlink,
  *          OxysChangeDirectory, OxysGetWorkingDirectory, OxysDuplicate,
- *          OxysRemoveDirectory, OxysPipe,
+ *          OxysRemoveDirectory, OxysPipe, OxysWaitFor, OxysKill,
+ *          OxysSignalAction, OxysGetProcessId, OxysGetProcessGroup,
+ *          OxysSetProcessGroup, OxysTerminalGroup, OxysSignalRestorer,
  *          OxysWrite, OxysTicks,
  *          OxysVersion, OxysFork, OxysExecve, OxysExit, OxysWait, OxysBrk,
  *          OxysSbrk.
@@ -376,5 +378,35 @@ int64_t OxysRemoveDirectory(const char *path);
  * array may not be written.
  */
 int64_t OxysPipe(int descriptors[2]);
+
+/*
+ * The seven of sub-task 8.7.
+ *
+ * OxysWaitFor is `waitpid`: `pid` names one child, -1 any, and a number below
+ * -1 any child of the group its negation names; `options` may hold
+ * SYSCALL_WAIT_NO_HANG and SYSCALL_WAIT_UNTRACED; the status is in the
+ * encoding of <oxys/syscall_abi.h>, read with SYSCALL_STATUS_KIND and
+ * SYSCALL_STATUS_NUMBER. Returns the child's identifier, 0 where nothing is to
+ * be reported and the caller declined to wait, or -1 with errno ECHILD or
+ * EINTR. OxysWait above is OxysWaitFor(-1, status, 0).
+ *
+ * OxysKill sends a signal — 0 to test for existence — to a process, or with a
+ * negative `pid` to a group; -1 with ESRCH or EINVAL. OxysSignalAction sets a
+ * signal's disposition and the restorer, and returns the previous disposition;
+ * <signal.h>'s `signal` is the form a program should use. The three that
+ * follow report the caller's identifier, a process's group and set one, and
+ * OxysTerminalGroup reads the terminal's foreground group, or sets it where
+ * `group` is not 0.
+ */
+int64_t OxysWaitFor(int64_t pid, int64_t *status, uint64_t options);
+int64_t OxysKill(int64_t pid, int signal);
+int64_t OxysSignalAction(int signal, uint64_t disposition, uint64_t restorer);
+int64_t OxysGetProcessId(void);
+int64_t OxysGetProcessGroup(int64_t pid);
+int64_t OxysSetProcessGroup(int64_t pid, int64_t group);
+int64_t OxysTerminalGroup(int64_t group);
+
+/* The restorer, of libc/syscall/invoke.asm: what a handler returns into. */
+void OxysSignalRestorer(void);
 
 #endif /* OXYS_LIBC_SYSCALL_H */

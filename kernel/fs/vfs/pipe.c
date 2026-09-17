@@ -58,6 +58,7 @@
 #include <oxys/fs/vfs.h>
 #include <oxys/kernel.h>
 #include <oxys/proc/sched.h>
+#include <oxys/proc/signal.h>
 #include <oxys/arch/cpu/percpu.h>
 
 _Static_assert((VFS_PIPE_BUFFER_SIZE & (VFS_PIPE_BUFFER_SIZE - 1U)) == 0U,
@@ -266,6 +267,15 @@ bool VfsPipeRead(VfsFile *file, void *buffer, uint64_t length, uint64_t *read)
         ++VfsPipeReaderSleeps;
         SchedulerSleep(pipe);
         PerCpuPopInterruptState();
+
+        /* Woken by a signal rather than by the pipe, since sub-task 8.7: the
+         * call reports EINTR — as VFS_ERROR_INTERRUPTED — and the signal is
+         * delivered on the way out. What was transferred before is reported
+         * where any was. */
+        if (SignalIsPending(ProcessCurrent()))
+        {
+            return VfsRefuse(VFS_ERROR_INTERRUPTED, "a signal arrived while the pipe was waited upon");
+        }
     }
 }
 
@@ -299,6 +309,12 @@ bool VfsPipeWrite(VfsFile *file, const void *buffer, uint64_t length, uint64_t *
              * and is reported.
              */
             PerCpuPopInterruptState();
+
+            /* And SIGPIPE beside it, since sub-task 8.7: a writer whose reader
+             * has gone is ended unless it asked to be told instead, which is
+             * how `cat` at the head of a pipeline stops when `head` — when
+             * there is one — has had enough. */
+            (void)SignalSend(ProcessCurrent(), SYSCALL_SIGPIPE);
 
             return VfsRefuse(VFS_ERROR_BROKEN_PIPE, "the pipe is open for reading by nobody");
         }
@@ -345,6 +361,15 @@ bool VfsPipeWrite(VfsFile *file, const void *buffer, uint64_t length, uint64_t *
         ++VfsPipeWriterSleeps;
         SchedulerSleep(pipe);
         PerCpuPopInterruptState();
+
+        /* Woken by a signal rather than by the pipe, since sub-task 8.7: the
+         * call reports EINTR — as VFS_ERROR_INTERRUPTED — and the signal is
+         * delivered on the way out. What was transferred before is reported
+         * where any was. */
+        if (SignalIsPending(ProcessCurrent()))
+        {
+            return VfsRefuse(VFS_ERROR_INTERRUPTED, "a signal arrived while the pipe was waited upon");
+        }
     }
 
     VfsSucceed();

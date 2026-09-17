@@ -28,7 +28,7 @@ call, may make a child of itself and collect what it ended with, and is ended
 when it faults or when it asks.
 
 **And it runs programs a person would recognise.** Since sub-task 7.6 the kernel
-carries fourteen system calls rather than eight (eighteen since sub-task 8.5, nineteen since 8.6) — `open`, `close`, `read`,
+carries fourteen system calls rather than eight (eighteen since sub-task 8.5, nineteen since 8.6, twenty-seven since 8.7) — `open`, `close`, `read`,
 `readdir`, `mkdir` and `unlink` joining them — each process holds a descriptor
 table of its own, and `execve` carries the argument and environment vectors it
 had refused since Phase 6. Above those stand `ls`, `cat`, `echo`, `mkdir` and
@@ -61,6 +61,14 @@ sleeps or is pre-empted at privilege level 3; `wait` sleeps until a child ends.
 The bootstrap processor is still the only one a user thread runs upon, and a
 user thread is never pre-empted inside the kernel, which is what keeps the
 unsynchronised structures beneath a system call unentered by two threads.
+
+**And since sub-task 8.7 a person can stop what runs.** Control-C ends the
+foreground job and control-Z stops it — the terminal turns the two bytes into
+SIGINT and SIGTSTP to its foreground process group, by whoever polls next, the
+timer tick included — and `jobs`, `fg`, `bg` and `kill` govern what `&` left
+running. A signal is a bit the target acts upon on its own way out of the
+kernel: ignored, terminating, stopping, or entering a handler on the program's
+own stack; `waitpid` reports a child's ending or its stop by kind and number.
 
 **It pre-empts, and it schedules across processors.** Since sub-task 6.15 each
 processor holds a run queue of its own with a lock of its own, rotates
@@ -136,7 +144,7 @@ each refuses the options it does not implement rather than accepting them and
 doing nothing. [`../design/LIBC.md`](../design/LIBC.md), Section 12.3.
 
 **A program may now reach the filesystem, and may be given arguments.** The
-kernel carries **fourteen** system calls — eighteen since 8.5, nineteen since 8.6 — the eight it had, and `open`, `close`,
+kernel carries **fourteen** system calls — eighteen since 8.5, nineteen since 8.6, twenty-seven since 8.7 — the eight it had, and `open`, `close`,
 `read`, `readdir`, `mkdir` and `unlink`, each a validation of a caller's
 arguments and then a call of the filesystem layer that has existed since Phase 5.
 Each process holds a descriptor table of its own, so that the numbers a program
@@ -237,7 +245,7 @@ the GRUB entry that permits writing. See
   rather than one for all; and composites all of it over a back buffer, after
   which **nothing reads the framebuffer**.
 - A `SYSCALL` entry path swaps `GS`, loads a kernel stack from a per-processor
-  block, dispatches through a table of nineteen calls and validates a caller's
+  block, dispatches through a table of twenty-seven calls and validates a caller's
   arguments against both the canonical user limit and the paging hierarchy — and
   resolves a copy-on-write fault upon a page it is asked to write, rather than
   refusing an address a fork had protected.
@@ -496,7 +504,7 @@ between them did — and reads, loads and runs one of them at privilege level 3.
 a volume upon a disk needs a working directory and a way to move a mount, and the
 first of those is sub-task 8.3's.
 
-**Phase 8 — the shell, in progress.** Sub-task 8.1 is complete, and it is three
+**Phase 8 — the shell, complete but for the alpha it cuts.** Sub-task 8.1 is complete, and it is three
 things where its line names one. **The terminal**: `kernel/terminal/terminal.c`,
 a queue of a kibibyte filled by polling the keyboard's events and the serial
 adapter's characters when a reader asks, the keyboard's cursor, home, end and
@@ -621,6 +629,26 @@ upon; `SHELL.md`, Sections 25 and 26.
 [`../design/PROCESS.md`](../design/PROCESS.md), Section 17;
 [`../design/SCHEDULER.md`](../design/SCHEDULER.md), Section 9.
 
+**Sub-task 8.7 is complete: job control, process groups and the terminal's
+signals — and Phase 8 with it, the alpha it cuts held back at the project
+owner's direction.** A signal is a bit in the target, set by the sender and
+acted upon by the target on its way out of the kernel: ignored, terminating,
+stopping until SIGCONT, or entering a handler upon the program's own stack
+that returns through a two-instruction restorer; SIGKILL and SIGSTOP cannot
+be given a disposition; a call a signal interrupted is made again where no
+handler was entered. The terminal holds a foreground process group, turns
+control-C and control-Z at the head of its queue into SIGINT and SIGTSTP to
+it — by whoever polls next, the bootstrap processor's tick included — and
+stops a background reader with SIGTTIN inside its `read`. `waitpid` names a
+child, declines to sleep and reports a stop, with the status an encoding of
+kind and number; a process's descriptors are released when it ends. The shell
+runs every pipeline as a job in a group of its own, `&` leaves one running,
+and `jobs`, `fg`, `bg` and `kill` govern them. `<signal.h>` in the C library;
+`signal-check` and a sixth shell session assert it. Eight calls, twenty-seven
+in all. [`../design/PROCESS.md`](../design/PROCESS.md), Section 18;
+[`../design/SHELL.md`](../design/SHELL.md), Sections 28 and 29;
+[`../design/LIBC.md`](../design/LIBC.md), Section 13.
+
 ## 3. Where it has been observed to work
 
 A sub-task marked *implemented* in [`PLAN.md`](PLAN.md) means the code exists and
@@ -656,6 +684,7 @@ The physical machine is one machine — the HP Laptop 14-dq0052dx specified in
 | 8.4 Programs run from the prompt | Yes, and driven over the serial line | **Yes** | **Yes — 8.4**, to the prompt | — | **Not yet run** |
 | 8.5 Redirection, and the writable file | Yes, and driven over the serial line | **Yes** | **Yes — 8.5**, to the prompt | — | **Not yet run** |
 | 8.6 Pipelines, and two programs at once | Yes, and driven over the serial line | **Yes, and driven at the PS/2 keyboard** | **Yes — 8.6**, to the prompt | — | **Not yet run** |
+| 8.7 Job control, process groups and the terminal's signals | Yes, and driven over the serial line with control-C and control-Z | **Yes, and driven at the PS/2 keyboard** | **Yes — 8.7**, to the prompt | — | **Not yet run** |
 
 **The rows marked "— 7.2" were all established by two boots of one image**,
 because a boot runs every self-test in the corpus and a clean one is therefore
@@ -860,7 +889,7 @@ functional. [`TESTING.md`](TESTING.md), Section 3.
 There is no test harness and there will be none before Phase 7, there being no
 userland to run one in. The kernel therefore asserts its own properties at boot,
 in the order the subsystems are initialised, and `make verify` fails if any of
-them reports a failure. Sixty-five assertions presently report passed or sound.
+them reports a failure. Sixty-six assertions presently report passed or sound.
 
 Those tests are in [`../../kernel/test/`](../../kernel/test/), one file per
 subsystem. Each subsystem's design document carries a table pairing every
@@ -886,7 +915,7 @@ design document ends with its particular ones.
 | A user program upon anything but the bootstrap processor. Every user thread's affinity mask names processor 0 alone, because the allocators, the process tables and the filesystem layer its system calls reach are still unsynchronised. `SCHEDULER.md`, Section 4, and `CONCURRENCY.md`, Section 10, limitation 1. | Phase 7 |
 | ~~More than one program at a time.~~ **Arrived at 8.6**: a child of `fork` joins the run queue at the fork, `wait` sleeps until a child ends, and a pipeline's commands run beside one another. Upon the bootstrap processor alone, and never pre-empted inside the kernel. `PROCESS.md`, Section 17; `SCHEDULER.md`, Section 9. | — |
 | ~~A wait that yields the processor.~~ **Amended at 8.6**: `wait` and the pipe sleep upon the wait channel `SCHEDULER.md`, Section 9, added; a `read` of the terminal yields to whatever is runnable and halts only when nothing is, rather than sleeping, because its bytes arrive through an interrupt handler and nothing yet wakes a thread from one. `SHELL.md`, Section 22.3. | 8.7, for the wake from a handler |
-| A signal. A writer whose reader has gone is told `EPIPE` and nothing more; nothing interrupts a program; `&` is recorded and not honoured. | 8.7 |
+| ~~A signal.~~ **Arrived at 8.7**: SIGPIPE, control-C and control-Z, `&`, `jobs`, `fg`, `bg` and `kill`. What remains is a control-C that does not flush the typed-ahead input, and an orphan collected by nobody. `SHELL.md`, Section 29; `PROCESS.md`, Section 19. | Phase 9, for the orphan |
 | A canonical terminal. `stdin` is raw: `fgets` delivers keystrokes and control sequences, unechoed, and `cat` with no operand still reports the absence. The shell wants raw; nothing yet wants the other. `SHELL.md`, Section 2.1. | When something wants it |
 | Synchronisation **applied**, beyond three structures. The diagnostic channel was locked at 6.14; the run queues and the process and thread tables at 6.15. Every other shared structure is still unsynchronised and still says so in its own file's header; `CONCURRENCY.md`, Section 10, limitation 1, enumerates them. | Phase 7 |
 | A reaper. A kernel thread that finishes cannot free its own stack — it is standing on it — and nothing else does. Its slot and its four pages are held until the machine stops. | Phase 7 |

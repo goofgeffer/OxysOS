@@ -18,7 +18,8 @@
  *          ShellVariableExport, ShellVariableIsExported, ShellVariableCount,
  *          ShellVariableAt, ShellVariablesInitialise; of 8.4, ShellRunProgram
  *          and ShellBuildEnvironment; and of 8.6, ShellStageRunner,
- *          ShellExecuteProgram and ShellRunPipeline.
+ *          ShellExecuteProgram and ShellRunPipeline; and of 8.7, ShellJob and the
+ *          job-control functions of jobs.c.
  * References:
  *   - IEEE Std 1003.1-2017, Section 2.2 (Quoting): the escape character, single
  *     quotes and double quotes, and which five characters a backslash escapes
@@ -331,6 +332,33 @@ char **ShellBuildEnvironment(void);
  */
 typedef int (*ShellStageRunner)(const ShellCommand *command, void *context);
 
-int ShellRunPipeline(const ShellPipeline *pipeline, ShellStageRunner run_stage, void *context);
+int ShellRunPipeline(const ShellPipeline *pipeline, ShellStageRunner run_stage, void *context,
+                     bool background);
+
+/*
+ * Job control, of sub-task 8.7, in userland/sh/jobs.c — a unit that reaches
+ * system calls and is therefore not compiled into the kernel image. A job is
+ * a process group made for one pipeline: ShellJobBegin records one,
+ * ShellJobPrepareChild is the child's half of joining it and
+ * ShellJobAddMember the parent's, ShellJobWaitForeground waits until the job
+ * ends or stops and takes the terminal back, ShellJobsNotify reports what
+ * happened in the background, and the four commands are `jobs`, `fg`, `bg`
+ * and `kill`. ShellJobStatus turns a status of <oxys/syscall_abi.h> into the
+ * number the shell reports: the code, or 128 plus the signal.
+ */
+typedef struct ShellJob ShellJob;
+
+void ShellJobsInitialise(void);
+ShellJob *ShellJobBegin(const char *text, bool background);
+void ShellJobPrepareChild(const ShellJob *job, bool background);
+void ShellJobAddMember(ShellJob *job, int64_t pid);
+void ShellJobAnnounce(const ShellJob *job);
+int ShellJobWaitForeground(ShellJob *job);
+void ShellJobsNotify(void);
+void ShellJobsList(void);
+int ShellJobForeground(const char *operand);
+int ShellJobBackground(const char *operand);
+int ShellJobKill(int argc, char **argv);
+int ShellJobStatus(int64_t status);
 
 #endif /* OXYS_SHELL_H */

@@ -302,6 +302,7 @@ kernel/proc/process.c	arch/cpu/tss.h	Writes rsp0 when a thread becomes current.
 kernel/proc/process.c	arch/mm/addrspace.h	Gives a process an address space of its own, and clones one on fork.
 kernel/proc/process.c	arch/mm/paging.h	Maps a thread's kernel stack and the guard page beneath it.
 kernel/proc/sched.c	arch/cpu/percpu.h	The run queue each processor holds is in its own area.
+kernel/proc/signal.c	arch/cpu/percpu.h	The masked section a pending set is read and written within, against the tick handler that sends from it.
 kernel/proc/sched.c	arch/cpu/spinlock.h	Guards each run queue.
 kernel/proc/sched.c	arch/interrupt/interrupts.h	Registers the local timer handler that ends a quantum.
 CROSSINGS

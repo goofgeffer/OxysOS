@@ -33,6 +33,7 @@
 #include <oxys/arch/interrupt/interrupts.h>
 #include <oxys/arch/cpu/idt.h>
 #include <oxys/kernel.h>
+#include <oxys/arch/syscall/sigframe.h>
 
 #include <stddef.h>
 
@@ -260,6 +261,15 @@ void InterruptDispatch(TrapFrame *frame)
     if (handler != NULL)
     {
         handler(frame);
+
+        /*
+         * The way out to privilege level 3, of sub-task 8.7: a signal pending
+         * upon the interrupted program is delivered through the frame IRETQ
+         * will return through. It is what makes control-C reach a program
+         * that never enters the kernel of its own accord — the timer tick
+         * brings it here, and it leaves into its handler or not at all.
+         */
+        SignalDeliverToTrapFrame(frame);
         return;
     }
 

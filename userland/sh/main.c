@@ -362,9 +362,14 @@ static void ShellRunList(const ShellList *list, bool *exit_requested)
             continue;
         }
 
-        if (pipeline->command_count > 1U)
+        if ((pipeline->command_count > 1U) ||
+            (pipeline->separator == SHELL_SEPARATOR_BACKGROUND))
         {
-            status = ShellRunPipeline(pipeline, ShellRunStage, NULL);
+            /* A background command of one runs in a child too, since 8.7 —
+             * a built-in among them, in a subshell, which is what `&` means
+             * for one in every shell of this lineage. */
+            status = ShellRunPipeline(pipeline, ShellRunStage, NULL,
+                                      pipeline->separator == SHELL_SEPARATOR_BACKGROUND);
         }
         else
         {
@@ -427,6 +432,7 @@ int main(void)
 
     LineInitialise(&ShellEditor, NULL, NULL);
     ShellVariablesInitialise();
+    ShellJobsInitialise();
 
     /* PWD is set from the kernel, which begins every program at the root, so
      * that `$PWD` means something before the first `cd`. */
@@ -446,7 +452,12 @@ int main(void)
     while (!exit_requested)
     {
         bool ended;
-        const ShellParseStatus status = ShellReadCommand(&ended);
+        ShellParseStatus status;
+
+        /* What ended or stopped in the background is reported before the
+         * prompt, since 8.7, where a person is looking. */
+        ShellJobsNotify();
+        status = ShellReadCommand(&ended);
 
         if (status == SHELL_PARSE_OK)
         {

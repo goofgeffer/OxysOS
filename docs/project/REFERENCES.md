@@ -1350,8 +1350,24 @@ process holds it open for writing, blocking when it is empty and one does; and
 by `"%d %d %d %s\n"`, a word "a non-zero-length string of characters delimited
 by white space", the `total` line, and the standard input for no operand.
 
+For sub-task 8.7, read from the online edition on 2026-09-16: **System
+Interfaces, Section 2.4** (Signal Concepts) — generation and delivery, that
+SIGKILL and SIGSTOP "cannot be caught or ignored", that a stop signal discards
+a pending SIGCONT and SIGCONT a pending stop, and the table of default actions
+in 2.4.3; **`kill()`** — `pid` of 0 or negative names a group, a signal of 0
+sends nothing; **`sigaction()`** and **`signal()`**; **`waitpid()`** — WNOHANG
+and WUNTRACED, and the status a stopped child reports; **`setpgid()`** and
+**`tcsetpgrp()`**; **Section 11.1.4** (Terminal Access Control) — a process in
+a background group that reads the terminal is sent SIGTTIN; **Section 11.1.9**
+(Special Characters) — INTR and SUSP, control-C and control-Z, and ISIG;
+**Section 2.9.3.1** of the shell — a list ended by `&` is asynchronous; and
+the `sh` utility's Job Control, the `%n` identifier, `jobs`, `fg`, `bg` and
+`kill`. **ISO/IEC 9899:2011, Section 7.14**, `<signal.h>`: `signal`, `raise`,
+`sig_atomic_t`, and the six signals the language requires.
+
 Used by: `kernel/fs/vfs/`, `kernel/include/oxys/fs/vfs.h`, `kernel/include/oxys/fs/pipe.h`,
-`libc/line/line.c`, `userland/wc/main.c`,
+`kernel/include/oxys/proc/signal.h`, `libc/line/line.c`, `libc/include/signal.h`,
+`userland/wc/main.c`, `userland/signal-check/main.c`,
 `userland/sh/`.
 
 ### The UNIX Time-Sharing System

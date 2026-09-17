@@ -82,6 +82,8 @@
 #include <oxys/mm/vmm.h>
 #include <oxys/arch/cpu/percpu.h>
 #include <oxys/proc/sched.h>
+#include <oxys/proc/signal.h>
+#include <oxys/terminal/terminal.h>
 #include <oxys/arch/cpu/spinlock.h>
 #include <oxys/fs/vfs.h>
 
@@ -232,6 +234,8 @@ const char *ProcessStateName(ProcessState state)
         return "running";
     case PROCESS_BLOCKED:
         return "blocked";
+    case PROCESS_STOPPED:
+        return "stopped";
     case PROCESS_EXITED:
         return "exited";
     case PROCESS_UNUSED:
@@ -334,6 +338,24 @@ static Process *ProcessAllocate(const char *name, const Process *parent,
         process->user_stack_pages = 0U;
         process->thread_count = 0U;
         process->exit_status = 0;
+
+        /* The job-control fields of sub-task 8.7. A process leads a group of
+         * its own identifier unless it is a child, which begins in its
+         * parent's — IEEE Std 1003.1-2017, `fork()`. */
+        process->group = (parent != NULL) ? parent->group : process->id;
+        process->pending = 0U;
+        process->restorer = 0U;
+        process->wait_status = 0U;
+        process->stop_signal = 0U;
+        process->termination_signal = 0U;
+        process->stop_reported = false;
+        process->stop_channel = 0U;
+
+        for (size_t signal = 0U; signal <= SYSCALL_SIGNAL_MAXIMUM; ++signal)
+        {
+            process->handlers[signal] = SYSCALL_SIGNAL_DEFAULT;
+        }
+
         process->used = true;
 
         for (size_t slot = 0U; slot < PROCESS_THREAD_MAXIMUM; ++slot)
@@ -1236,6 +1258,23 @@ bool ThreadStart(Thread *thread)
     return true;
 }
 
+/* Whether no live process but `except` belongs to a group, of sub-task 8.7. */
+static bool ProcessGroupIsEmptyBut(uint64_t group, const Process *except)
+{
+    for (size_t index = 0U; index < PROCESS_CAPACITY; ++index)
+    {
+        const Process *const candidate = &ProcessTable[index];
+
+        if (candidate->used && (candidate != except) && (candidate->group == group) &&
+            (candidate->state != PROCESS_EXITED))
+        {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 bool ThreadTerminateCurrent(int64_t status)
 {
     Thread *const thread = ProcessCurrentThreads[ProcessProcessorIndex()];
@@ -1266,9 +1305,59 @@ bool ThreadTerminateCurrent(int64_t status)
 
     if (thread->owner != NULL)
     {
-        thread->owner->state = PROCESS_EXITED;
-        thread->owner->exit_status = status;
-        parent = ProcessById(thread->owner->parent_id);
+        Process *const owner = thread->owner;
+
+        owner->state = PROCESS_EXITED;
+        owner->exit_status = status;
+
+        /*
+         * What `wait` reports, in the encoding of sub-task 8.7: the code a
+         * program gave `exit`, or the signal that ended it — the one delivery
+         * recorded in `termination_signal`, or for a fault the signal the
+         * vector maps to. `exit_status` keeps the quadword, which the
+         * self-tests read.
+         */
+        if (owner->termination_signal != 0U)
+        {
+            owner->wait_status = SYSCALL_STATUS_MAKE(SYSCALL_STATUS_KIND_SIGNALLED,
+                                                     owner->termination_signal);
+        }
+        else if (status < 0)
+        {
+            owner->wait_status = SYSCALL_STATUS_MAKE(
+                SYSCALL_STATUS_KIND_SIGNALLED, SignalFromVector((uint64_t)(-status)));
+        }
+        else
+        {
+            owner->wait_status = SYSCALL_STATUS_MAKE(SYSCALL_STATUS_KIND_EXITED, status);
+        }
+
+        parent = ProcessById(owner->parent_id);
+
+        /*
+         * The descriptors are released now, at the ending, and not when the
+         * parent collects the process — which until sub-task 8.7 was the same
+         * moment, the collecting `wait` being the only thing that ever ran
+         * after a child. It stopped being the same moment the first time a
+         * pipeline ran in the background: the shell collects a background job
+         * at its next prompt, so `cat /bin/sh | wc -c &` left `cat` ended but
+         * uncollected with the pipe's write end still open, `wc` waiting for
+         * an end of file that only the close could give, and the shell waiting
+         * for a keypress before it would collect anything. A process that has
+         * ended holds nothing; what it held is given back here.
+         */
+        ProcessCloseDescriptors(owner);
+
+        /*
+         * The terminal's foreground group is cleared where this was its last
+         * member, of sub-task 8.7: a foreground group naming nobody would
+         * stop every later reader with SIGTTIN, the shell that starts next
+         * included, for a job that no longer exists.
+         */
+        if ((TerminalForegroundGroup() == owner->group) && ProcessGroupIsEmptyBut(owner->group, owner))
+        {
+            TerminalSetForegroundGroup(0U);
+        }
     }
 
     ++ProcessTerminations;
@@ -1302,6 +1391,7 @@ bool ThreadTerminateCurrent(int64_t status)
     if (parent != NULL)
     {
         (void)SchedulerWake(parent);
+        (void)SignalSend(parent, SYSCALL_SIGCHLD);
     }
 
     SchedulerExitCurrent();
@@ -1834,6 +1924,17 @@ Process *ProcessFork(Process *parent, const SyscallFrame *frame)
     child->break_start = parent->break_start;
     child->break_current = parent->break_current;
 
+    /* The dispositions come across, of sub-task 8.7, and the pending set does
+     * not: IEEE Std 1003.1-2017, `fork()`, has the child begin with no signal
+     * pending and every disposition its parent had. The group came across in
+     * ProcessAllocate. */
+    for (size_t signal = 0U; signal <= SYSCALL_SIGNAL_MAXIMUM; ++signal)
+    {
+        child->handlers[signal] = parent->handlers[signal];
+    }
+
+    child->restorer = parent->restorer;
+
     /* The working directory of sub-task 8.3 comes across as IEEE Std 1003.1-2017
      * has it: a child begins where its parent stood. */
     for (size_t index = 0U; index <= PROCESS_PATH_MAXIMUM; ++index)
@@ -2026,6 +2127,11 @@ int64_t ProcessExecute(Process *process, const char *path,
      * old program's registers in the new program's address space. */
     thread->resumes_from_fork = false;
 
+    /* A handler belongs to the program that installed it, and that program is
+     * gone: IEEE Std 1003.1-2017 resets a caught signal to its default across
+     * an exec and keeps an ignored one ignored. Of sub-task 8.7. */
+    SignalResetForExecute(process);
+
     ++ProcessExecutions;
 
     SyscallEstablishUserGsBase();
@@ -2051,28 +2157,33 @@ void ProcessExit(int64_t status)
     }
 }
 
-uint64_t ProcessWait(Process *parent, int64_t *status)
+uint64_t ProcessWaitFor(Process *parent, int64_t pid, uint64_t options, int64_t *status)
 {
     Process *child = NULL;
     uint64_t collected;
 
     if ((parent == NULL) || !parent->used || (status == NULL))
     {
-        return 0U;
+        return PROCESS_WAIT_NO_CHILD;
     }
 
     for (;;)
     {
+        bool any = false;
+
         child = NULL;
 
         /*
-         * A child that has ended is preferred to one that has not.
+         * A child that has ended is preferred to one that has not, and one
+         * that has stopped and not yet been reported comes next where the
+         * caller asked for stops; of the rest, whichever is found first is
+         * the one waited for.
          *
-         * Both are children and either may be collected, but collecting one
-         * that has already ended costs nothing, where collecting one that has
-         * not means waiting for it. Taking the finished one first is therefore
-         * what makes a parent with several children collect them as they
-         * finish rather than in the order the table happens to hold them.
+         * Collecting one that has already ended costs nothing, where
+         * collecting one that has not means waiting for it. Taking the
+         * finished one first is therefore what makes a parent with several
+         * children collect them as they finish rather than in the order the
+         * table happens to hold them.
          *
          * The scan and the sleep below are one masked section, which is the
          * discipline <oxys/proc/sched.h> sets out: a child that ends between
@@ -2091,10 +2202,36 @@ uint64_t ProcessWait(Process *parent, int64_t *status)
                 continue;
             }
 
+            /* The selector of `waitpid`, of sub-task 8.7: one child by
+             * identifier, every child, or every child of a group. */
+            if (pid > 0)
+            {
+                if (candidate->id != (uint64_t)pid)
+                {
+                    continue;
+                }
+            }
+            else if (pid < -1)
+            {
+                if (candidate->group != (uint64_t)(-pid))
+                {
+                    continue;
+                }
+            }
+
+            any = true;
+
             if (candidate->state == PROCESS_EXITED)
             {
                 child = candidate;
                 break;
+            }
+
+            if (((options & SYSCALL_WAIT_UNTRACED) != 0U) &&
+                (candidate->state == PROCESS_STOPPED) && !candidate->stop_reported)
+            {
+                child = candidate;
+                continue;
             }
 
             if (child == NULL)
@@ -2103,19 +2240,63 @@ uint64_t ProcessWait(Process *parent, int64_t *status)
             }
         }
 
-        if ((child != NULL) && (child->state != PROCESS_EXITED) && SchedulerCanSleep())
+        if (!any)
+        {
+            PerCpuPopInterruptState();
+
+            return PROCESS_WAIT_NO_CHILD;
+        }
+
+        if ((child != NULL) && (child->state == PROCESS_EXITED))
+        {
+            PerCpuPopInterruptState();
+            break;
+        }
+
+        if ((child != NULL) && (child->state == PROCESS_STOPPED) && !child->stop_reported &&
+            ((options & SYSCALL_WAIT_UNTRACED) != 0U))
+        {
+            /* A stop is reported once, and the child is not collected: it is
+             * still there, and `waitpid` will report its ending later. */
+            child->stop_reported = true;
+            *status = (int64_t)child->wait_status;
+            PerCpuPopInterruptState();
+
+            return child->id;
+        }
+
+        if ((options & SYSCALL_WAIT_NO_HANG) != 0U)
+        {
+            PerCpuPopInterruptState();
+            *status = 0;
+
+            return 0U;
+        }
+
+        if (SchedulerCanSleep())
         {
             /*
              * A child that has not ended is waited for, since sub-task 8.6: the
              * parent sleeps upon its own process, which is the channel every
-             * child of it wakes when it ends, and looks again when woken. The
-             * child was admitted to the rotation at the fork and runs while
-             * the parent sleeps — or ran already, pre-empting the parent at
-             * privilege level 3, in which case the scan above found it ended
-             * and this branch was not taken.
+             * child of it wakes when it ends or stops, and looks again when
+             * woken. The child was admitted to the rotation at the fork and
+             * runs while the parent sleeps — or ran already, pre-empting the
+             * parent at privilege level 3, in which case the scan above found
+             * it ended and this branch was not taken.
+             *
+             * A signal that arrives during the sleep ends the wait with
+             * EINTR, since 8.7, so that the signal is acted upon before the
+             * parent is told anything else; the shell's `wait` is interrupted
+             * that way by nothing today, because it ignores what the terminal
+             * sends, and a program that catches SIGINT sees its wait fail.
              */
             SchedulerSleep(parent);
             PerCpuPopInterruptState();
+
+            if (SignalIsPending(parent))
+            {
+                return PROCESS_WAIT_INTERRUPTED;
+            }
 
             continue;
         }
@@ -2127,7 +2308,7 @@ uint64_t ProcessWait(Process *parent, int64_t *status)
 
     if (child == NULL)
     {
-        return 0U;
+        return PROCESS_WAIT_NO_CHILD;
     }
 
     /*
@@ -2161,17 +2342,33 @@ uint64_t ProcessWait(Process *parent, int64_t *status)
              */
             child->state = PROCESS_EXITED;
             child->exit_status = SYSCALL_EINVAL;
+            child->wait_status = (uint64_t)SYSCALL_EINVAL;
         }
     }
 
     collected = child->id;
-    *status = child->exit_status;
+    *status = (int64_t)child->wait_status;
 
     /* And the slot, the threads and the address space go back. Nothing else
      * holds the child: its parent named it by number, which is why a parent may
      * be told an identifier that is already nobody's. */
     ProcessDestroy(child);
     ++ProcessReaps;
+
+    return collected;
+}
+
+uint64_t ProcessWait(Process *parent, int64_t *status)
+{
+    const uint64_t collected = ProcessWaitFor(parent, -1, 0U, status);
+
+    /* The callers of the form that predates 8.7 — the self-tests — ask for
+     * any child and cannot be interrupted, and are told 0 for none as they
+     * always were. */
+    if ((collected == PROCESS_WAIT_NO_CHILD) || (collected == PROCESS_WAIT_INTERRUPTED))
+    {
+        return 0U;
+    }
 
     return collected;
 }

@@ -44,6 +44,8 @@
 #include <oxys/proc/process.h>
 #include <oxys/fs/vfs.h>
 #include <oxys/fs/pipe.h>
+#include <oxys/proc/signal.h>
+#include <oxys/arch/syscall/sigframe.h>
 #include <oxys/terminal/terminal.h>
 
 /* Defined in kernel/arch/x86_64/syscall/syscall_entry.asm. */
@@ -941,21 +943,27 @@ static int64_t SyscallDoExit(uint64_t status)
 }
 
 /*
- * Collects a child that has ended, sleeping until one does — since sub-task 8.6;
- * until then the child was run here, upon the caller's own flow of control.
+ * `waitpid`, of sub-task 8.7, and `wait` as the case of it that names any
+ * child with no options. Until 8.6 `wait` ran the child here, upon the
+ * caller's own flow of control; since then it sleeps until one ends.
  *
- * The caller's buffer is validated before the wait and not afterwards.
- * The wait is what produces the status, and a status produced and then
- * found to have nowhere to go would be a child collected and its outcome
- * discarded — the one loss in this call that nothing could recover from.
+ * The caller's buffer is validated before the wait and not afterwards. The
+ * wait is what produces the status, and a status produced and then found to
+ * have nowhere to go would be a child collected and its outcome discarded —
+ * the one loss in this call that nothing could recover from.
  */
-static int64_t SyscallDoWait(uint64_t status_address)
+static int64_t SyscallDoWaitFor(uint64_t pid, uint64_t status_address, uint64_t options)
 {
     Process *const parent = ProcessCurrent();
     int64_t status = 0;
     uint64_t collected;
 
     if (parent == NULL)
+    {
+        return SYSCALL_EINVAL;
+    }
+
+    if ((options & ~(SYSCALL_WAIT_NO_HANG | SYSCALL_WAIT_UNTRACED)) != 0U)
     {
         return SYSCALL_EINVAL;
     }
@@ -968,11 +976,16 @@ static int64_t SyscallDoWait(uint64_t status_address)
         return SYSCALL_EFAULT;
     }
 
-    collected = ProcessWait(parent, &status);
+    collected = ProcessWaitFor(parent, (int64_t)pid, options, &status);
 
-    if (collected == 0U)
+    if (collected == PROCESS_WAIT_NO_CHILD)
     {
         return SYSCALL_ECHILD;
+    }
+
+    if (collected == PROCESS_WAIT_INTERRUPTED)
+    {
+        return SYSCALL_EINTR;
     }
 
     if (status_address != 0U)
@@ -989,6 +1002,128 @@ static int64_t SyscallDoWait(uint64_t status_address)
     }
 
     return (int64_t)collected;
+}
+
+static int64_t SyscallDoWait(uint64_t status_address)
+{
+    return SyscallDoWaitFor((uint64_t)(int64_t)-1, status_address, 0U);
+}
+
+/* ------------------------------------------ the other calls of sub-task 8.7 */
+
+/*
+ * `kill`: a signal to one process, or with a negative `pid` to every member
+ * of a group. A signal of 0 reports whether the target exists and sends
+ * nothing. Nothing here asks who the caller is: this system has one user, and
+ * a program that can name a process may signal it.
+ */
+static int64_t SyscallDoKill(uint64_t pid, uint64_t signal)
+{
+    const int64_t target = (int64_t)pid;
+
+    if ((signal > SYSCALL_SIGNAL_MAXIMUM) || (target == 0) || (target == -1))
+    {
+        return SYSCALL_EINVAL;
+    }
+
+    if (target < 0)
+    {
+        return (SignalSendGroup((uint64_t)(-target), (uint32_t)signal) > 0U) ? SYSCALL_OK
+                                                                              : SYSCALL_ESRCH;
+    }
+
+    return SignalSend(ProcessById((uint64_t)target), (uint32_t)signal) ? SYSCALL_OK
+                                                                        : SYSCALL_ESRCH;
+}
+
+/* `sigaction`, reduced to what a handler needs: the disposition, and the
+ * restorer it returns through, with the disposition that stood before as the
+ * result. A handler's address is validated as an address the program owns. */
+static int64_t SyscallDoSignalAction(uint64_t signal, uint64_t disposition, uint64_t restorer)
+{
+    Process *const process = ProcessCurrent();
+    uint64_t previous = SYSCALL_SIGNAL_DEFAULT;
+
+    if (process == NULL)
+    {
+        return SYSCALL_EINVAL;
+    }
+
+    if ((disposition != SYSCALL_SIGNAL_DEFAULT) && (disposition != SYSCALL_SIGNAL_IGNORE))
+    {
+        if (!SyscallUserRangeIsReadable(disposition, 1U) ||
+            !SyscallUserRangeIsReadable(restorer, 1U))
+        {
+            ++SyscallFaults;
+
+            return SYSCALL_EFAULT;
+        }
+    }
+
+    if (!SignalSetDisposition(process, (uint32_t)signal, disposition, restorer, &previous))
+    {
+        return SYSCALL_EINVAL;
+    }
+
+    return (int64_t)previous;
+}
+
+static int64_t SyscallDoGetProcessId(void)
+{
+    const Process *const process = ProcessCurrent();
+
+    return (process != NULL) ? (int64_t)process->id : SYSCALL_EINVAL;
+}
+
+static int64_t SyscallDoGetProcessGroup(uint64_t pid)
+{
+    const Process *const process = (pid == 0U) ? ProcessCurrent() : ProcessById(pid);
+
+    if ((process == NULL) || !process->used)
+    {
+        return SYSCALL_ESRCH;
+    }
+
+    return (int64_t)process->group;
+}
+
+/*
+ * `setpgid`: puts a process — the caller for 0 — into a group, its own for 0.
+ * A process may move itself or a child of its own, as IEEE Std 1003.1-2017
+ * has it; the shell does both, in the parent and in the child, because which
+ * of the two runs first is not something either can know.
+ */
+static int64_t SyscallDoSetProcessGroup(uint64_t pid, uint64_t group)
+{
+    Process *const caller = ProcessCurrent();
+    Process *const process = (pid == 0U) ? caller : ProcessById(pid);
+
+    if ((caller == NULL) || (process == NULL) || !process->used)
+    {
+        return SYSCALL_ESRCH;
+    }
+
+    if ((process != caller) && (process->parent_id != caller->id))
+    {
+        return SYSCALL_ESRCH;
+    }
+
+    process->group = (group == 0U) ? process->id : group;
+
+    return SYSCALL_OK;
+}
+
+/* `tcgroup`: the terminal's foreground process group, read for 0 and set
+ * otherwise. The group control-C and control-Z reach, and the only one whose
+ * members read the terminal without being stopped. */
+static int64_t SyscallDoTerminalGroup(uint64_t group)
+{
+    if (group != 0U)
+    {
+        TerminalSetForegroundGroup(group);
+    }
+
+    return (int64_t)TerminalForegroundGroup();
 }
 
 /* ------------------------------------------------- the call of sub-task 7.3 */
@@ -1088,6 +1223,8 @@ static int64_t SyscallFromVfsError(VfsError error)
         return SYSCALL_EIO;
     case VFS_ERROR_BROKEN_PIPE:
         return SYSCALL_EPIPE;
+    case VFS_ERROR_INTERRUPTED:
+        return SYSCALL_EINTR;
     }
 
     /*
@@ -1311,7 +1448,50 @@ static int64_t SyscallDoRead(uint64_t descriptor, uint64_t address, uint64_t len
             return SYSCALL_EFAULT;
         }
 
-        TerminalWaitForInput();
+        /*
+         * A background read, of sub-task 8.7: a process not in the terminal's
+         * foreground group is stopped by SIGTTIN, here, and tries again when
+         * it is continued — which is what `fg` does — until it is the
+         * foreground or the terminal has no foreground at all. A process
+         * that ignores or catches SIGTTIN is refused with EIO instead, as
+         * IEEE Std 1003.1-2017, Section 11.1.4, has it.
+         */
+        for (;;)
+        {
+            const uint64_t foreground = TerminalForegroundGroup();
+
+            if ((foreground == 0U) || (process->group == foreground))
+            {
+                break;
+            }
+
+            if (SignalDisposition(process, SYSCALL_SIGTTIN) != SYSCALL_SIGNAL_DEFAULT)
+            {
+                return SYSCALL_EIO;
+            }
+
+            SignalStopCurrent(process, SYSCALL_SIGTTIN);
+
+            /* Continued — and a signal sent meanwhile, a `kill` of the
+             * stopped job say, is acted upon before the read is tried
+             * again: the call reports EINTR, the way out delivers, and a
+             * signal that entered no handler restarts the call. */
+            if (SignalIsPending(process))
+            {
+                return SYSCALL_EINTR;
+            }
+        }
+
+        /* The wait polls the devices, and a control-C at the head of the queue
+         * becomes a signal to the foreground group during it — which may be
+         * this very process, in which case the bytes behind the control-C are
+         * not its to read: the signal comes first, and the bytes wait for
+         * whoever reads next. */
+        if (!TerminalWaitForInput() || SignalIsPending(process))
+        {
+            return SYSCALL_EINTR;
+        }
+
         read = (uint64_t)TerminalRead(buffer, (size_t)length);
 
         for (uint64_t index = 0U; index < read; ++index)
@@ -1748,7 +1928,15 @@ static const SyscallEntryDescriptor SyscallTable[SYSCALL_COUNT] = {
     { "getcwd", 2U },
     { "dup2", 2U },
     { "rmdir", 1U },
-    { "pipe", 1U }
+    { "pipe", 1U },
+    { "waitpid", 3U },
+    { "kill", 2U },
+    { "sigaction", 3U },
+    { "sigreturn", 0U },
+    { "getpid", 0U },
+    { "getpgid", 1U },
+    { "setpgid", 2U },
+    { "tcgroup", 1U }
 };
 
 bool SyscallNumberIsValid(uint64_t number)
@@ -1780,6 +1968,8 @@ void SyscallDispatch(SyscallFrame *frame)
         frame->rax = (uint64_t)SYSCALL_ENOSYS;
         return;
     }
+
+    const uint64_t number = frame->rax;
 
     ++SyscallCalls;
 
@@ -1861,6 +2051,48 @@ void SyscallDispatch(SyscallFrame *frame)
         frame->rax = (uint64_t)SyscallDoRemoveDirectory(frame->rdi);
         break;
 
+    case SYSCALL_WAITPID:
+        frame->rax = (uint64_t)SyscallDoWaitFor(frame->rdi, frame->rsi, frame->rdx);
+        break;
+
+    case SYSCALL_KILL:
+        frame->rax = (uint64_t)SyscallDoKill(frame->rdi, frame->rsi);
+        break;
+
+    case SYSCALL_SIGACTION:
+        frame->rax = (uint64_t)SyscallDoSignalAction(frame->rdi, frame->rsi, frame->rdx);
+        break;
+
+    case SYSCALL_SIGRETURN:
+        /*
+         * The one call whose result is not placed in RAX by this switch: the
+         * frame it restores holds the interrupted program's RAX already, and
+         * the refusal — a frame that cannot be read — ends the program rather
+         * than returning, there being no program left to return a refusal to
+         * once its stack is gone.
+         */
+        if (SignalReturn(frame) == SYSCALL_EFAULT)
+        {
+            (void)SignalSend(ProcessCurrent(), SYSCALL_SIGSEGV);
+        }
+        break;
+
+    case SYSCALL_GETPID:
+        frame->rax = (uint64_t)SyscallDoGetProcessId();
+        break;
+
+    case SYSCALL_GETPGID:
+        frame->rax = (uint64_t)SyscallDoGetProcessGroup(frame->rdi);
+        break;
+
+    case SYSCALL_SETPGID:
+        frame->rax = (uint64_t)SyscallDoSetProcessGroup(frame->rdi, frame->rsi);
+        break;
+
+    case SYSCALL_TCGROUP:
+        frame->rax = (uint64_t)SyscallDoTerminalGroup(frame->rdi);
+        break;
+
     default:
         /*
          * Unreachable while the table and the switch agree, and present because
@@ -1873,6 +2105,14 @@ void SyscallDispatch(SyscallFrame *frame)
         frame->rax = (uint64_t)SYSCALL_ENOSYS;
         break;
     }
+
+    /*
+     * The way out, of sub-task 8.7: whatever signal is pending upon the caller
+     * is delivered through the frame before SYSRET returns through it. A call
+     * that slept and was woken by a signal has reported EINTR above, and this
+     * is where the signal it was woken for is acted upon.
+     */
+    SignalDeliverToSyscallFrame(frame, number);
 }
 
 uint64_t SyscallDispatched(void)
