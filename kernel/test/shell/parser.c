@@ -661,7 +661,6 @@ static void VerifyShellFileHolds(const VerifyShellFile *expected)
 static void VerifyShellProgram(const char *session, size_t length, int64_t expected,
                                const char *what);
 
-
 static void VerifyShellRedirections(void)
 {
     VerifyShellProgram(VerifyShellRedirectSession, sizeof VerifyShellRedirectSession - 1U,
@@ -681,7 +680,6 @@ static void VerifyShellRedirections(void)
                            "the directory rmdir removed is still there");
     }
 }
-
 
 /*
  * A fifth session, of sub-task 8.6, whose evidence is what the files hold and
@@ -784,7 +782,6 @@ static void VerifyShellPipelines(void)
                        "the session left a pipe behind it");
     VerifyShellRequire(VfsPipeBytesCarried() > 0U, "no bytes were carried by any pipe");
 }
-
 
 /*
  * A sixth session, of sub-task 8.7, whose evidence is the status: job

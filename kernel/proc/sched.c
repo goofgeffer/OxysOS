@@ -331,7 +331,6 @@ static void SchedulerRescheduleLocked(bool preempted)
     SchedulerSwitchTo(current, next);
 }
 
-
 /*
  * What a processor does when it has nothing to run.
  *
@@ -544,7 +543,6 @@ bool SchedulerStartOnThisProcessor(void)
     return true;
 }
 
-
 _Noreturn void SchedulerEnterIdle(void)
 {
     /*
@@ -578,7 +576,6 @@ _Noreturn void SchedulerEnterIdle(void)
         KernelWriteString("  A processor could not be put under the scheduler; "
                           "it answers interrupts and idles.\n");
     }
-
 
     SchedulerIdleLoop();
 }
@@ -638,7 +635,6 @@ void SchedulerYield(void)
     SchedulerRescheduleLocked(false);
     PerCpuPopInterruptState();
 }
-
 
 void SchedulerBlockCurrent(void)
 {

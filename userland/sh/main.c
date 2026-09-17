@@ -341,9 +341,9 @@ static int ShellRunStage(const ShellCommand *command, void *context)
  * Runs a list: each pipeline in order, subject to the condition that joins it
  * to the one before (Section 2.9.3), and `!` inverting its status (2.9.2). A
  * pipeline of one command runs in the shell; one of more runs in children,
- * since 8.6, one to a command with a pipe between each pair. The `&`
- * separator is recorded and not honoured: nothing runs in the background
- * until 8.7.
+ * since 8.6, one to a command with a pipe between each pair, as a job of its
+ * own group since 8.7 — in the background where `&` ends it, announced and
+ * left to run, or in the foreground, waited for until it ends or stops.
  */
 static void ShellRunList(const ShellList *list, bool *exit_requested)
 {

@@ -1775,13 +1775,13 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
      * than faulting, hanging or resetting on the way. What follows them says
      * which sub-task the boot got as far as, and must be revised with the boot.
      */
-    KernelWriteString("Phase 8 initialisation complete: the shell of sub-task 8.6 is "
+    KernelWriteString("Phase 8 initialisation complete: the shell of sub-task 8.7 is "
                       "about to be read off the root\nfilesystem and entered at privilege "
                       "level 3, where it prompts, edits a line with a\nhistory, reads the "
                       "terminal through descriptor 0, and runs what is typed: built-ins,\n"
-                      "programs sought upon PATH, their redirections, and pipelines of them "
-                      "— two programs\nalive at once with a pipe between, the first this "
-                      "system has run; beneath it,\neverything Phase 7 built: a program "
+                      "programs sought upon PATH, their redirections, pipelines of them, and "
+                      "jobs — control-C, control-Z, &,\nfg and bg — the first programs this "
+                      "system has stopped from outside;\nbeneath it, everything Phase 7 built: a program "
                       "loaded from a volume, entered with an argument\nvector, making a "
                       "child of itself and collecting it, above a C library whose streams,\n"
                       "heap and wrappers were asserted by the kernel before a userland "

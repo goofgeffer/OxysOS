@@ -303,10 +303,9 @@ bool VfsPipeWrite(VfsFile *file, const void *buffer, uint64_t length, uint64_t *
         {
             /*
              * Nothing will ever read it. IEEE Std 1003.1-2017 names this
-             * EPIPE and sends a signal as well; the signal is 8.7's, so until
-             * then a writer whose reader has gone is told so and nothing
-             * more. What was written before the reader went stays written
-             * and is reported.
+             * EPIPE and sends a signal as well, SIGPIPE, which the caller of
+             * this function sends since 8.7. What was written before the
+             * reader went stays written and is reported.
              */
             PerCpuPopInterruptState();
 

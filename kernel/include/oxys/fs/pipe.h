@@ -19,7 +19,7 @@
  *     less shall not be interleaved with data from other processes doing
  *     writes on the same pipe"; a write to a pipe "that is not open for
  *     reading by any process" fails with EPIPE, and a signal is also sent —
- *     which this kernel has none of until sub-task 8.7.
+ *     which this kernel sends since sub-task 8.7.
  *   - docs/design/SHELL.md, Section 22: what the pipe is for and why it is an
  *     open file of the filesystem layer rather than a thing of its own.
  *

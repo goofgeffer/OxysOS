@@ -260,7 +260,6 @@ size_t TerminalPoll(void)
     return appended;
 }
 
-
 /*
  * Acts upon a control-C or control-Z standing at the head of the queue: the
  * byte is removed and the signal sent to the foreground group. Only the head

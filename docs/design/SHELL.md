@@ -816,7 +816,8 @@ second call's failure to report. `execve` is tried upon each candidate, and
 there and cannot run, which is Section 2.8.2's 126 and the end of the search.
 Nothing found at all is 127. The parent waits, and the status is the
 program's — or, for a program ended by a fault, 128 plus the vector, this
-system having no signals until 8.7 and the vector standing in for one.
+system having had no signals until 8.7, when the status became the signal the
+vector maps to.
 
 ### 16.2 The environment
 
@@ -1094,7 +1095,7 @@ open file, and a pipe end that was not one would have needed all of it twice.
 | ---- | ---------------- |
 | A read of an empty pipe sleeps until a write, or until the last writer closes, upon which it reports zero. | A reader that saw the end before the writer had finished — `wc` counting half a file. |
 | A write to a full pipe sleeps until a reader makes room, and waits for room for the *whole* of what remains where that fits the buffer. | Bytes dropped, or two writers' bytes interleaved; every write a program can make is a page or less, and the buffer is a page, so every write is one piece. |
-| A write to a pipe held open for reading by nobody is `EPIPE`. | A writer told its bytes went somewhere; the signal the standard sends beside it is 8.7's. |
+| A write to a pipe held open for reading by nobody is `EPIPE` — and, since 8.7, SIGPIPE. | A writer told its bytes went somewhere. |
 | Readers and writers are counted as open files, not descriptors. | A child's inherited write end closing the pipe from under its parent — one open file with two holders is one writer. |
 | One channel for both, woken by every write, read and close. | A close that woke the reader and not the writer, or the reverse; each sleeper re-tests and sleeps again if it was not the one meant. |
 | A caller that cannot sleep is refused as busy. | The kernel's own flow of control, reading an empty pipe in a self-test, waiting for ever for a writer that is itself. |

@@ -288,7 +288,6 @@ static int ShellBuiltinExit(int argc, char **argv, int last_status, bool *exit_r
     return status;
 }
 
-
 /* `unset name...`: each variable removed, IEEE Std 1003.1-2017's `unset`
  * without its `-f`, this shell having no functions. */
 static int ShellBuiltinUnset(int argc, char **argv)

@@ -153,7 +153,6 @@ static int ShellExecute(char **argv, char **envp)
     return 127;
 }
 
-
 /*
  * Performs a command's redirections, in the child, in the order written —
  * IEEE Std 1003.1-2017, Section 2.7: each opens or duplicates, and then the

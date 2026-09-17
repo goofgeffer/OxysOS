@@ -26,8 +26,8 @@
  *
  * The standard input is read to its end and not to a control-D, unlike `cat`:
  * `wc` is what a pipe feeds, and a pipe ends when its writer does. A person
- * who runs `wc` against the terminal by mistake is one whom 8.7's signals will
- * rescue; until then the terminal delivers the control-D as a byte, counted.
+ * who runs `wc` against the terminal by mistake ends it with a control-C, since
+ * 8.7; a control-D the terminal delivers as a byte, counted.
  */
 
 #include <errno.h>

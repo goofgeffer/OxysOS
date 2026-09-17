@@ -669,7 +669,6 @@ bool PagingAddressIsUser(VirtualAddress address)
     return PagingAddressPermits(address, PAGE_ENTRY_USER);
 }
 
-
 /*
  * Locates the page-table entry that maps the given address, if the address is
  * mapped by a 4 KiB page.

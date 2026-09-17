@@ -135,7 +135,7 @@ static bool CatFile(const char *path)
  *
  * The standard input is a file the shell redirected, which ends, or the
  * terminal, which does not: the terminal is raw and delivers keystrokes with
- * no end until 8.7's job control gives a person a way to interrupt. So a
+ * no end — a control-C ends the program, since 8.7, but not the input. So a
  * control-D — the byte a terminal sends for the key every shell treats as
  * the end of input — ends the copy where it stands in what a read delivered,
  * the bytes before it copied. That is what a canonical line discipline would

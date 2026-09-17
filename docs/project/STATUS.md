@@ -585,9 +585,9 @@ in the system-call entry path** that had stood since 6.7: the caller's stack
 pointer was saved in the per-processor block and restored from there, and a
 child's `SYSCALL` inside the parent's `wait` overwrote it; a child that exited
 from the cloned stack had the same pointer, which is why five sub-tasks never
-saw it. It is restored from the per-thread frame now. What is still absent is
-8.7's job control, refused or named rather than pretended — as 8.5's redirection
-and 8.6's pipeline were until they arrived. [`../design/SHELL.md`](../design/SHELL.md), Sections 16
+saw it. It is restored from the per-thread frame now. 8.5's redirection, 8.6's
+pipeline and 8.7's job control were each refused or
+named rather than pretended until they arrived. [`../design/SHELL.md`](../design/SHELL.md), Sections 16
 to 18.
 
 **Sub-task 8.5 is complete: redirection, and the writable file beneath it.**
@@ -621,7 +621,7 @@ the bootstrap processor has an idle thread of its own. `wc` joins `/bin`, and
 `help` is a list of every command, one to a line. `file-check` sends twelve
 kibibytes through a pipe from a child, the kernel asserts the pipe from a
 caller that cannot sleep, and a fifth session of the shell carries `/bin/sh`
-through `cat | wc -c`. No `SIGPIPE` until 8.7. Beside the sub-task, at the
+through `cat | wc -c`. Beside the sub-task, at the
 project owner's request, the line editor `micro` — the first thing that changes
 a file rather than writes one — and `clear`, one form feed the displays clear
 upon; `SHELL.md`, Sections 25 and 26.
