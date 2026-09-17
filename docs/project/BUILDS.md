@@ -319,16 +319,17 @@ regenerates it and fails if what is here differs.*
 
 | | |
 | --- | --- |
-| Builds recorded | 0 |
-| Verified | 0 passed, 0 not |
-| Compilers | - |
-| Environments | - |
-| First | - |
-| Latest | - |
+| Builds recorded | 1 |
+| Verified | 1 passed, 0 not |
+| Compilers | gcc |
+| Environments | QEMU, VirtualBox |
+| First | 2026-09-17T01:34Z |
+| Latest | 2026-09-17T01:34Z |
 
 ## The builds
 
 | # | Date (UTC) | Commit | Compiler | Kernel | ISO | Result | Environments | Note |
 | - | ---------- | ------ | -------- | ------ | --- | ------ | ------------ | ---- |
+| 1 | 2026-09-17T01:34Z | `6bcb5fd` | gcc 13.2.0 | 3060288 | 10287104 | passed (66 assertions) | QEMU;VirtualBox | Oxys 1 Alpha: the release image, cut at the close of Phase 8; booted under QEMU by make verify and under VirtualBox at the keyboard |
 
 <!-- END GENERATED -->

@@ -18,3 +18,4 @@
 # docs/project/TESTING-RECORD.md, which is an account of runs and is not edited
 # after the fact, says so at its head.
 number	date	commit	dirty	compiler	cc_version	kernel	iso	result	assertions	environments	sha256	note
+1	2026-09-17T01:34Z	6bcb5fd	no	gcc	13.2.0	3060288	10287104	passed	66	QEMU;VirtualBox	66c6198326b03549041d8dd9d2b4ca5352ef462309ee83c065968e646424886c	Oxys 1 Alpha: the release image, cut at the close of Phase 8; booted under QEMU by make verify and under VirtualBox at the keyboard

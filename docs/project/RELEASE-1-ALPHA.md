@@ -140,8 +140,10 @@ keeps it, and a copy named `oxys-1-alpha.iso` beside it, as
 
 | Image | SHA-256 |
 | ----- | ------- |
-| `oxys-1-alpha.iso` | _recorded with build 1 in the commit that follows the tag_ |
+| `oxys-1-alpha.iso` | `66c6198326b03549041d8dd9d2b4ca5352ef462309ee83c065968e646424886c` |
 
-The checksum is that of the archived image; an image rebuilt from the same
+The checksum is that of the archived image, 10,287,104 bytes, built from commit
+`6bcb5fd` and recorded at 2026-09-17T01:34Z — the evening of the 16th where the
+machine stands. An image rebuilt from the same
 commit is the same kernel and the same programs and not the same bytes, the
 ISO and the ramdisk carrying the timestamps of their making.
