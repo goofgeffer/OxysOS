@@ -9,11 +9,14 @@
  *          GraphicsSurfaceFromFramebuffer, GraphicsSetClip, GraphicsResetClip,
  *          GraphicsPutPixel, GraphicsPixelAt, GraphicsFillRectangle,
  *          GraphicsDrawRectangle, GraphicsDrawLine, GraphicsBlit, GraphicsClear,
- *          GraphicsPatternBlock.
+ *          GraphicsPatternBlock, GraphicsFillCircle.
  * References:
  *   - J. E. Bresenham, "Algorithm for computer control of a digital plotter",
  *     IBM Systems Journal 4(1), 1965: the integer line algorithm implemented in
  *     graphics/draw.c, which uses no division and no floating point.
+ *   - J. E. Bresenham, "A linear algorithm for incremental digital display of
+ *     circular arcs", Communications of the ACM 20(2), pages 100 to 106, 1977:
+ *     the circle algorithm behind GraphicsFillCircle, integer likewise.
  *   - docs/design/DRAWING.md, Sections 1 to 6: the design, and every
  *     assertion made upon it.
  *
@@ -279,6 +282,18 @@ void GraphicsDrawRectangle(GraphicsSurface *surface, GraphicsRectangle rectangle
 
 /* Fills the whole clip. */
 void GraphicsClear(GraphicsSurface *surface, uint32_t colour);
+
+/*
+ * Fills the disc of the given radius about the centre, clipped. A radius of
+ * zero is one pixel; a negative radius draws nothing.
+ *
+ * Sub-task 9.1's one addition to the primitives, for the close control of a
+ * window's frame, which docs/project/INSPIRATIONS.md, Section 3, wants
+ * geometric and not a glyph. The spans are found by Bresenham's circle
+ * algorithm and are integer throughout; see docs/design/DRAWING.md, Section 4.1.
+ */
+void GraphicsFillCircle(GraphicsSurface *surface, int32_t centre_x, int32_t centre_y,
+                        int32_t radius, uint32_t colour);
 
 /*
  * Writes a block eight pixels wide and `rows` high, each pixel taking one of two

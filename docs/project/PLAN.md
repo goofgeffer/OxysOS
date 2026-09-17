@@ -260,8 +260,27 @@ release notes [`RELEASE-1-ALPHA.md`](RELEASE-1-ALPHA.md), which say what it does
 what it does not have, and that it has not been booted upon physical hardware.
 The build register resumes with it, numbering from 1.
 
-**Next: Phase 9** — the desktop, its system services and its configuration,
-beginning with sub-task 9.1.
+**Sub-task 9.1 is complete**: the window manager, the first of Phase 9. A
+window is a content surface the owner draws into and a queue the owner drains,
+with a frame the manager draws — a flat band, a one-pixel border, a title in the
+face at twice its size, and a disc for a close control, the one curve the
+primitives now have. The stack is an array walked from the top; a key goes to
+the window holding the focus; a movement goes to the window beneath the pointer
+in that window's own coordinates; a press raises, focuses, and binds the pointer
+to its window until every button is up; a press in the band drags the window or,
+upon the disc, asks it to close — the manager destroys nothing. It runs from the
+bootstrap processor's tick beside the terminal, and the default menu entry now
+gives it the screen, the keyboard and the mouse, the shell running upon the
+serial line; two entries, **Shell-only** and **Shell Diagnostics**, give the
+shell the screen as before. Three windows a person can operate stand in for the
+desktop until 9.5. Asserted upon a screen composed in memory, with the stacking
+order read from the pixel where two windows overlap; judged by eye under QEMU,
+VirtualBox and Bochs. [`../design/WINDOWS.md`](../design/WINDOWS.md);
+[`../design/DRAWING.md`](../design/DRAWING.md), Section 4.1.
+
+**Next: sub-task 9.2** — the client protocol, by which a user process creates,
+draws and receives events upon a window; the surface interface of 6.6 and the
+window interface of 9.1 are both revisited against that first real client.
 
 
 
@@ -1163,6 +1182,15 @@ and not the framebuffer. The division of the graphical work between Phase 6 and
 this phase is argued in [`../design/ARCHITECTURE.md`](../design/ARCHITECTURE.md),
 Section 4.1, which records what it cost.
 
+**Sub-task 9.1 is complete**, on 2026-09-17, and is the first thing built
+against the preference below: [`../design/WINDOWS.md`](../design/WINDOWS.md),
+Section 4, is where the frame and the palette are judged against it, and
+records that a flat frame with a disc for its one control was reached and that
+rounded corners and any asymmetry were not. It also changed what the default
+menu entry boots — the window manager, with the shell upon the serial line —
+and added the **Shell-only** entry beside the renamed **Shell Diagnostics**, at
+the project owner's direction; Section 7.2 of that document.
+
 **The appearance of what 9.5 to 9.8 present** is not decided here, but the
 preference it is to be designed against is written down:
 [`INSPIRATIONS.md`](INSPIRATIONS.md), Section 3 — a contemporary playful
@@ -1172,7 +1200,7 @@ rather than left implied.
 
 | # | Sub-task | State | Asserted by |
 | - | -------- | ----- | ----------- |
-| 9.1 | Implement a stacking window manager with focus and event routing. | Planned | — |
+| 9.1 | Implement a stacking window manager with focus and event routing. | Implemented | `KernelVerifyWindows`, `KernelVerifyCircle` |
 | 9.2 | Implement the client protocol by which user processes create, draw and receive events upon windows. *(The surface interface of 6.6 is revisited here against its first real client.)* | Planned | — |
 | 9.3 | Implement `init`: the first user process, the supervision of the services below it, and the orderly shutdown of both. | Planned | — |
 | 9.4 | Define the system configuration format, its parser, and the `/etc` hierarchy the services and the desktop read at start. | Planned | — |

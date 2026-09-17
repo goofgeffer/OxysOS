@@ -352,6 +352,54 @@ endpoints. See `docs/design/DRAWING.md`, Section 4.
 Used by: `graphics/draw.c`, `kernel/test/gfx/graphics.c`,
 `docs/design/DRAWING.md`.
 
+### A linear algorithm for incremental digital display of circular arcs
+J. E. Bresenham, Communications of the ACM, volume 20, number 2, pages 100 to
+106, February 1977. `https://dl.acm.org/doi/10.1145/359423.359432`
+
+Sections relied upon:
+
+- The circle algorithm entire: from the top of the circle to the diagonal, each
+  step is chosen by the sign of an integer measure of the current point's
+  distance from the true circle, so the arc is walked without division and
+  without floating point, and the eight-fold symmetry supplies the rest.
+
+The consequence this project depends upon: the walk visits the rows from the top
+to the diagonal, and the rows from the diagonal to the side are the same points
+with the coordinates exchanged. `graphics/draw.c` fills a disc as spans, one to a
+row, taking each span's half-width from the walk; the row upon the diagonal is
+produced by both and filled twice. See `docs/design/DRAWING.md`, Section 4.1.
+Retrieved on 2026-09-17.
+
+Used by: `graphics/draw.c`, `kernel/test/gfx/windows.c`,
+`docs/design/DRAWING.md`.
+
+### X Window System Protocol
+Robert W. Scheifler, X Consortium Standard, X Version 11 Release 7.7.
+`https://www.x.org/releases/X11R7.7/doc/xproto/x11protocol.html`
+
+Not a specification this project implements, and no request, event, type or
+encoding of it is adopted — [`INSPIRATIONS.md`](INSPIRATIONS.md), Section 5,
+which permits a reason to be taken and forbids a thing. Three notions are
+relied upon as notions, restated for one pointer and one screen:
+
+- **Glossary, *Input focus***: "The input focus is normally a window defining
+  the scope for processing of keyboard input." One window holds the keys.
+- **Glossary, *Stacking order***: "Windows above other windows both obscure and
+  occlude those lower windows. This is similar to paper on a desk." The stack
+  is the order, and the hit test walks it from the top.
+- **Chapter 11, *Input Device events***: "When a button press is processed with
+  the pointer in some window W and no active pointer grab is in progress ... an
+  active grab is started automatically for the client receiving the event", and
+  under *GrabButton*, "The active grab is terminated automatically when the
+  logical state of the pointer has all buttons released". A press binds the
+  pointer to its window until every button is up, so that a drag begun in one
+  window ends in that window.
+
+Read from the HTML edition on 2026-09-17.
+
+Used by: `graphics/window.c`, `kernel/include/oxys/gfx/window.h`,
+`docs/design/WINDOWS.md`.
+
 ### AMD64 Architecture Programmer's Manual, Volume 2: System Programming
 Advanced Micro Devices, publication 24593.
 

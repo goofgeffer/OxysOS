@@ -4,7 +4,7 @@
 
 **Corresponding phase**: 6, sub-task 6.3 — the surface, the clipping that bounds
 every write to it, and the pixel, rectangle, line and blit drawn within that
-bound.
+bound; and, from sub-task 9.1, the disc of Section 4.1.
 
 **Authority**: `PROJECT_GUIDELINES.md`, Sections 2 and 4.
 
@@ -12,10 +12,14 @@ bound.
 [`../../kernel/include/oxys/gfx/graphics.h`](../../kernel/include/oxys/gfx/graphics.h).
 
 **Asserted by**: `KernelVerifyGraphics` in
-[`../../kernel/test/gfx/graphics.c`](../../kernel/test/gfx/graphics.c).
+[`../../kernel/test/gfx/graphics.c`](../../kernel/test/gfx/graphics.c); the disc
+by `KernelVerifyCircle` in
+[`../../kernel/test/gfx/windows.c`](../../kernel/test/gfx/windows.c).
 
 **Specifications**: J. E. Bresenham, "Algorithm for computer control of a digital
-plotter", IBM Systems Journal 4(1), pages 25 to 30, 1965.
+plotter", IBM Systems Journal 4(1), pages 25 to 30, 1965; and, for the disc,
+J. E. Bresenham, "A linear algorithm for incremental digital display of circular
+arcs", Communications of the ACM 20(2), pages 100 to 106, 1977.
 
 **Where this sits**: the second of the five documents the graphical work of
 sub-tasks 6.2 to 6.6 is divided into. [`GRAPHICS.md`](GRAPHICS.md) is the index
@@ -108,6 +112,38 @@ of the unclipped line that fall within the clip.** The cost is two comparisons
 per step. Section 6 asserts the promise directly, by drawing the line both ways
 and comparing pixel for pixel.
 
+
+### 4.1 The disc, sub-task 9.1's one addition
+
+A window's close control is a disc, for the reason [`WINDOWS.md`](WINDOWS.md),
+Section 4, gives: [`../project/INSPIRATIONS.md`](../project/INSPIRATIONS.md),
+Section 3, asks that the character be carried by geometry, and a circle where
+everything else is a rectangle is the one control a person is asked to find.
+There was no curve, so `GraphicsFillCircle` was added, and it is the only
+primitive added since sub-task 6.6.
+
+**It is a stack of spans, one to a row, and each span is a rectangle fill.**
+The clip is therefore applied by the fill, once per span, and nothing in the
+disc tests a pixel — the rule of Section 3, unchanged. The half-width of each
+span comes from Bresenham's circle algorithm of 1977, which walks the arc from
+the top to the diagonal keeping an integer measure of the current point's
+distance from the true circle and steps inward exactly when the measure says the
+point outside is the farther; the eight-fold symmetry then gives the rows the
+walk did not visit, the arc from the diagonal to the side being the first arc
+with its coordinates exchanged. Integer throughout, as `PROJECT_GUIDELINES.md`,
+Section 8, requires.
+
+The row upon the diagonal is produced by both reflections and is filled twice,
+with one colour, rather than special-cased: a branch existing for one row in a
+hundred is a branch that is wrong for one row in a hundred.
+
+| Property asserted | The silent failure it would catch |
+| ----------------- | --------------------------------- |
+| The centre is filled, and each axis reaches exactly the radius and no further | An off-by-one in the initial error term, which draws a disc of the wrong radius that looks like a disc |
+| The diagonal is where the integer algorithm places it: `(3, 4)` filled and `(4, 4)` not, for a radius of five | A step taken on the wrong sign of the measure, which squares the corners |
+| The disc is symmetric about its centre in both axes | A reflection with a sign wrong, which fills one quadrant with another's spans |
+| No pixel lies outside the bounding square | A span whose width was computed from the wrong reflection |
+| A disc at the corner of the surface is clipped and writes nothing into the padding | A span escaping the surface by the difference between pitch and width, which the fill's clip exists to prevent and which this asserts it does |
 ## 5. The blit, and the direction of the copy
 
 `GraphicsBlit` copies a rectangle between surfaces, or within one.
@@ -219,8 +255,11 @@ written into the row padding. The edit was then reverted.
    `GraphicsBlendPixel` and `GraphicsBlendSurface`, combining the channels apart
    through `FramebufferDecode`. The outline's care not to write a corner twice,
    taken in anticipation of this, is now load-bearing. See [`COMPOSITOR.md`](COMPOSITOR.md), Section 2.2.
-3. **Lines are one pixel wide and unantialiased**, and there are no curves. A
-   thicker line is several lines, which nothing needs yet.
+3. **Lines are one pixel wide and unantialiased**, ~~and there are no curves~~ —
+   there is one, since sub-task 9.1: the filled disc of Section 4.1, for a
+   window's close control. An outline circle, an arc and an ellipse are not
+   drawn, nothing needing them yet. A thicker line is several lines, which
+   nothing needs yet.
 4. **The blit does not scale.** Source and destination rectangles are the same
    size by construction.
 5. **Nothing is safe against concurrent drawing.** Two processors drawing upon

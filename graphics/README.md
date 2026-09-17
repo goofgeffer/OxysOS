@@ -2,10 +2,12 @@
 <!-- SPDX-License-Identifier: CC0-1.0 -->
 # `graphics/` — The Display
 
-**Phase**: 6, sub-tasks 6.2 to 6.6, all of which are done. This directory was
-created by sub-task 6.2 and completed by 6.6; the graphical work that remains
-needs a process to exist and is Phase 9.
-**Detailed design**: [`../docs/design/GRAPHICS.md`](../docs/design/GRAPHICS.md), which is the index of the five documents this directory is described by.
+**Phase**: 6, sub-tasks 6.2 to 6.6, all of which are done, and — from sub-task
+9.1 — Phase 9, whose window manager is here because it is the same kind of
+thing: arithmetic upon surfaces, drawn into by whoever owns a window. This
+directory was created by sub-task 6.2 and completed by 6.6; what Phase 9 adds
+to it needs something to own a window, which is why it waited.
+**Detailed design**: [`../docs/design/GRAPHICS.md`](../docs/design/GRAPHICS.md), which is the index of the five documents this directory is described by; and [`../docs/design/WINDOWS.md`](../docs/design/WINDOWS.md) for `window.c`.
 
 ## Purpose
 
@@ -35,13 +37,14 @@ position came from somewhere else entirely.
 
 | Path | Description |
 | ---- | ----------- |
-| `draw.c` | Sub-task 6.3. The two-dimensional primitives upon a surface: the rectangle arithmetic every one of them clips with, the pixel, the filled and outlined rectangle, Bresenham's line, and the blit — including the overlapping case a console scrolls with. `GraphicsRectangleIsEmpty`, `GraphicsRectangleIntersect`, `GraphicsRectangleContains`, `GraphicsSurfaceInitialise`, `GraphicsSurfaceFromFramebuffer`, `GraphicsSurfaceBounds`, `GraphicsSetClip`, `GraphicsResetClip`, `GraphicsClip`, `GraphicsPutPixel`, `GraphicsPixelAt`, `GraphicsFillRectangle`, `GraphicsDrawRectangle`, `GraphicsClear`, `GraphicsPatternBlock`, `GraphicsDrawLine`, `GraphicsBlit`, `GraphicsReport`. |
+| `draw.c` | Sub-task 6.3. The two-dimensional primitives upon a surface: the rectangle arithmetic every one of them clips with, the pixel, the filled and outlined rectangle, Bresenham's line, the filled disc — sub-task 9.1's one addition, for a window's close control — and the blit — including the overlapping case a console scrolls with. `GraphicsRectangleIsEmpty`, `GraphicsRectangleIntersect`, `GraphicsRectangleContains`, `GraphicsSurfaceInitialise`, `GraphicsSurfaceFromFramebuffer`, `GraphicsSurfaceBounds`, `GraphicsSetClip`, `GraphicsResetClip`, `GraphicsClip`, `GraphicsPutPixel`, `GraphicsPixelAt`, `GraphicsFillRectangle`, `GraphicsDrawRectangle`, `GraphicsFillCircle`, `GraphicsClear`, `GraphicsPatternBlock`, `GraphicsDrawLine`, `GraphicsBlit`, `GraphicsReport`. |
 | `font.c` | Sub-task 6.4. The bitmap face — ninety-five glyphs of eight by eight covering the printable ASCII range, **drawn for this project rather than obtained**, with a picture comment beside each — and three ways of drawing one: transparent, opaque, and enlarged for a banner. `FontCovers`, `FontGlyph`, `FontGlyphRow`, `FontDrawGlyph`, `FontDrawGlyphOpaque`, `FontDrawGlyphScaled`. |
 | `compositor.c` | Sub-task 6.6. The compositor: a back buffer standing in for the framebuffer, an ordered list of layers composited over it at presentation, the accumulated region that has changed, and the carrying of that region to the display. Nothing reads the framebuffer. `CompositorInitialise`, `CompositorIsActive`, `CompositorSurface`, `CompositorAddLayer`, `CompositorRemoveLayer`, `CompositorMoveLayer`, `CompositorSetLayerVisible`, `CompositorInvalidate`, `CompositorInvalidateAll`, `CompositorPresent`, `CompositorSuspend`, `CompositorReport`. |
 | `console.c` | Sub-task 6.4. The graphical console: a grid of character cells upon the framebuffer, the four control characters of ANSI X3.4-1986 as the text-mode driver implements them, a scroll performed by blitting the surface upon itself, a record of where each row's text ends so that a backspace crossing to the row above lands after it, and a buffer that replays what was written before the framebuffer could be mapped. `ConsoleInitialise`, `ConsoleIsActive`, `ConsoleWriteCharacter`, `ConsoleWriteString`, `ConsoleSetColour`, `ConsoleColumns`, `ConsoleRows`, `ConsoleColumn`, `ConsoleRow`, `ConsoleSetEraseLimit`, `ConsoleReport`. |
 | `faultscreen.c` | Sub-task 6.4. The full-screen page a fault the kernel cannot survive produces — which faults those are is `ExceptionDispositionOf`'s decision, not this file's, a fault belonging to a program drawing nothing here: a table of screens, one for each fault, each with its own title, colour, account of what the processor is reporting, direction as to what to examine first, and evidence panels chosen for that fault. Runs inside a fault handler, so it allocates nothing, reads no address without asking the paging hierarchy, and draws once. `FaultScreenShowException`, `FaultScreenShowPanic`, `FaultScreenDemonstrate`, `FaultScreenWasDrawn`, `FaultScreenEntryCount`, `FaultScreenEntryAt`. |
 | `cursor.c` | Sub-tasks 6.5 and 6.6. The pointer: a shape of two bitmaps, drawn for this project, that says of each pixel whether the pointer covers it and, if so, in which of two colours — three states, because an arrow of one colour vanishes against itself. Sub-task 6.5 had it keep the pixels beneath it and put them back as it moved, there being one surface and no back buffer; **6.6 removed all of that**. The shape is rendered once into a surface with a mask, and the compositor draws it as a layer, so moving it is moving the layer and what is beneath it is simply still there. `CursorConceal`, `CursorReveal` and the store of saved pixels are gone. `CursorInitialise`, `CursorIsAvailable`, `CursorShow`, `CursorHide`, `CursorIsVisible`, `CursorMoveTo`, `CursorX`, `CursorY`, `CursorShapeIsOpaque`, `CursorShapeIsInterior`, `CursorImageSurface`, `CursorImageMask`, `CursorMoveCount`, `CursorReport`. |
 | `framebuffer.c` | Sub-task 6.2. Acquires the framebuffer described in the Multiboot2 boot information, gives its pages the write-combining memory type through the page attribute table, maps them into the kernel arena, and describes what was obtained. `FramebufferInitialise`, `FramebufferIsPresent`, `FramebufferIsGraphical`, `FramebufferAddress`, `FramebufferWidth`, `FramebufferHeight`, `FramebufferPitch`, `FramebufferBitsPerPixel`, `FramebufferBytesPerPixel`, `FramebufferByteCount`, `FramebufferFormat`, `FramebufferEncode`, `FramebufferWriteCombining`, `FramebufferReport`. |
+| `window.c` | Sub-task 9.1. The window manager: a fixed table of windows, each a content surface from the heap with a frame drawn about it; the stack, an array walked from the top for a hit test; the focus, moved by a press; the binding of the pointer to a window by a held button until every button is up; the drag by the band, the close control that asks, and the confinement that keeps a band reachable; the routing of every key and every movement into a window's queue; and the composition of the changed region, ground first and every intersecting window over it in order. Presents nothing: it says what it changed, and the caller carries that to the compositor. `WindowManagerInitialise`, `WindowCreate`, `WindowDestroy`, `WindowRaise`, `WindowFocus`, `WindowMove`, `WindowSurface`, `WindowInvalidate`, `WindowReadEvent`, `WindowManagerHandleKey`, `WindowManagerHandleMouse`, `WindowManagerCompose`, `WindowManagerWindowAt`, `WindowManagerReport`. |
 
 The interfaces are declared in
 [`../kernel/include/oxys/gfx/framebuffer.h`](../kernel/include/oxys/gfx/framebuffer.h),
@@ -49,8 +52,9 @@ The interfaces are declared in
 [`../kernel/include/oxys/gfx/font.h`](../kernel/include/oxys/gfx/font.h) and
 [`../kernel/include/oxys/gfx/console.h`](../kernel/include/oxys/gfx/console.h),
 [`../kernel/include/oxys/gfx/faultscreen.h`](../kernel/include/oxys/gfx/faultscreen.h),
-[`../kernel/include/oxys/gfx/cursor.h`](../kernel/include/oxys/gfx/cursor.h) and
-[`../kernel/include/oxys/gfx/compositor.h`](../kernel/include/oxys/gfx/compositor.h),
+[`../kernel/include/oxys/gfx/cursor.h`](../kernel/include/oxys/gfx/cursor.h),
+[`../kernel/include/oxys/gfx/compositor.h`](../kernel/include/oxys/gfx/compositor.h) and
+[`../kernel/include/oxys/gfx/window.h`](../kernel/include/oxys/gfx/window.h),
 with the
 rest of the kernel's header corpus, so that a consumer depends upon an interface
 and not upon this directory.
@@ -79,6 +83,8 @@ the row padding — which no framebuffer could be asked.
 | Intel SDM, Volume 3A | 11.12.2, 11.12.3, Tables 11-7, 11-10, 11-11 | The page attribute table: its eight entries, the index a page-table entry selects by `(PAT << 2) \| (PCD << 1) \| PWT`, the write-combining encoding, and the combination with the memory type range registers. |
 | Intel SDM, Volume 2A, `CPUID` | — | Leaf 1, EDX bit 16: whether the page attribute table exists at all. |
 | J. E. Bresenham, IBM Systems Journal 4(1), 1965 | — | The integer line algorithm of `draw.c`, which decides each step from an accumulated error and uses no division and no floating point. |
+| J. E. Bresenham, Communications of the ACM 20(2), 1977 | — | The integer circle algorithm, from which the disc of `draw.c` takes the half-width of each of its spans. |
+| X Window System Protocol, X11R7.7 | Glossary; Chapter 11, Input Device events | Three notions of `window.c` — the input focus, the stacking order, and the binding of the pointer to a window by a held button — taken as notions and not as an interface. |
 | ANSI X3.4-1986 | — | The printable range `0x20` to `0x7E` the font of `font.c` covers, and the four control characters `console.c` interprets — the same four, given the same meanings, as the text-mode driver. |
 
 Full citations are held in
@@ -86,12 +92,13 @@ Full citations are held in
 
 ## Present limitations
 
-The complete lists are `docs/design/FRAMEBUFFER.md`, Section 10; `docs/design/DRAWING.md`, Section 7; `docs/design/CONSOLE.md`, Section 3; and `docs/design/COMPOSITOR.md`, Section 2.7.
+The complete lists are `docs/design/FRAMEBUFFER.md`, Section 10; `docs/design/DRAWING.md`, Section 7; `docs/design/CONSOLE.md`, Section 3; `docs/design/COMPOSITOR.md`, Section 2.7; and `docs/design/WINDOWS.md`, Section 9.
 The four that govern what can be built next:
 
-1. **There is no scaling blit and no curve**, and a line is one pixel wide and
-   unantialiased. The blending and the clip stack this entry used to name were
-   supplied by sub-task 6.6.
+1. **There is no scaling blit**, and a line is one pixel wide and unantialiased.
+   The blending and the clip stack this entry used to name were supplied by
+   sub-task 6.6, and the curve it used to name by sub-task 9.1 — a filled disc,
+   and no other.
 2. **The console has no text cursor**, and there are no colours per character.
    Sub-task 6.6 supplied the compositing that removing a text cursor again would
    need — a cursor is a layer, and a layer is removed by hiding it — but nothing

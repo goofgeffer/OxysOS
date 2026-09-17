@@ -394,9 +394,12 @@ static void SchedulerHandleTick(TrapFrame *frame)
     }
 
     /*
-     * The terminal is serviced from here, upon the bootstrap processor alone,
-     * since sub-task 8.7: the devices are polled and a control-C or control-Z
-     * at the head of the queue becomes a signal to the foreground group. It is
+     * The terminal is serviced from here — and the display after it: the
+     * pointer moved to where the mouse is, since 2026-09-16, or the window
+     * manager of sub-task 9.1 given its round — upon the bootstrap processor
+     * alone, since sub-task 8.7: the devices are polled and a control-C or
+     * control-Z at the head of the queue becomes a signal to the foreground
+     * group. It is
      * done from the tick so that a program which never reads — one that
      * computes, or waits upon a pipe — is reached all the same. It is safe
      * upon this processor because every reader of the terminal is a system
@@ -408,6 +411,7 @@ static void SchedulerHandleTick(TrapFrame *frame)
     if (SchedulerIndex() == 0U)
     {
         TerminalService();
+        KernelServiceDisplay();
     }
 
     /*

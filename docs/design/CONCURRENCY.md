@@ -612,8 +612,11 @@ kept, this section describing what the kernel does now.
    (`drivers/apic/ioapic.c`), the 8042's configuration byte
    (`drivers/ps2/ps2.c`), the drawing surfaces (`graphics/draw.c`), the fault
    screen (`graphics/faultscreen.c`), the keyboard and mouse buffers
-   (`drivers/keyboard/keyboard.c`, `drivers/mouse/mouse.c`), and the ramdisk's
-   extent and registration (`drivers/ramdisk/ramdisk.c`).
+   (`drivers/keyboard/keyboard.c`, `drivers/mouse/mouse.c`), the ramdisk's
+   extent and registration (`drivers/ramdisk/ramdisk.c`), and — since sub-task
+   9.1 — the window manager's table, stack and queues (`graphics/window.c`),
+   which the bootstrap processor's tick alone touches today and which a client
+   of sub-task 9.2 will read from a system call.
 
    The last of those is the mildest entry in the list and is named anyway. A
    transfer to or from a ramdisk is a copy between disjoint ranges, so two

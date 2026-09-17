@@ -170,6 +170,22 @@ instead, which is the same policy above a different source, and the census the
 stdio test ends by examining now requires both transfer counters to be zero
 rather than one.
 
+### 2.5 Since sub-task 9.1: the keyboard can be taken from it
+
+The terminal read the keyboard unconditionally, and that was right for as long
+as the shell was the only reader of keys. Sub-task 9.1 gave the screen, and the
+keyboard with it, to the window manager: a key now goes to the window that
+holds the focus. Had `TerminalPoll` gone on translating keys into bytes, every
+keystroke would have reached two readers — the shell upon the serial line and
+the focused window — and each would have acted upon half of what a person
+typed, which is a defect that presents as a shell that answers to some keys.
+
+`TerminalAttachKeyboard(false)` therefore detaches it for the manager's tenure,
+and the shell's ending reattaches it. The serial line is read regardless: it is
+the shell's whichever of the two has the keyboard, and the shell upon the
+default entry is reached that way. The two entries that give the shell the
+screen never detach it. [`WINDOWS.md`](WINDOWS.md), Section 5.2.
+
 ## 3. The line editor
 
 ### 3.1 What the keys do

@@ -370,6 +370,7 @@ either.
 | `kernel/arch/x86_64/proc/switch.asm` | `ThreadSwitchContext`, which exchanges six registers and a stack pointer; `ThreadTrampoline`, where a thread that has never run begins; `ThreadEnterUser`, which clears every register and descends to privilege level 3 by `IRETQ`; and `ThreadResumeUser`, which descends with a whole saved register set restored, as a thread made by `fork` requires. |
 | `graphics/compositor.c` | The compositor: the back buffer that stands in for the framebuffer, the ordered layers composited over it, the damage rectangle that narrows what is carried to the display, and the suspension a fault screen imposes. |
 | `graphics/cursor.c` | The pointer: its two-bitmap shape, and the layer the compositor draws it as. |
+| `graphics/window.c` | The window manager of sub-task 9.1: the table of windows, the stack, the focus, the binding of the pointer by a held button, the frame drawn about each window, the routing of keys and movements into the windows' queues, and the composition of the changed region. |
 | `graphics/draw.c` | The two-dimensional primitives upon a surface: rectangle arithmetic and clipping, the pixel, the filled and outlined rectangle, the integer line, and the blit. |
 | `graphics/framebuffer.c` | The framebuffer the boot loader supplies: its validation, the write-combining memory type given to its pages, its mapping into the kernel arena, and the description every later phase draws through. |
 | `graphics/font.c` | The bitmap face — ninety-five glyphs of eight by eight, drawn for this project — and the drawing of one glyph upon a surface. |
@@ -496,8 +497,10 @@ Phase 3 is installed. The dependency is resolved by implementing the memory
 management structures of sub-tasks 2.1 to 2.6 first, then Phase 3, and finally
 returning to sub-tasks 2.7 and 2.8.
 
-**Status.** Phases 2 to 5 are complete, and Phase 6 is complete as far as
-sub-task 6.10. The mutual dependency described above has been discharged:
+**Status.** Phases 1 to 8 are complete, `Oxys 1 Alpha` was cut at the close of
+Phase 8 on 2026-09-16, and Phase 9 has begun: sub-task 9.1, the window manager,
+closed on 2026-09-17. What follows was written as each phase closed and stands
+as the account of how the order above was discharged. The mutual dependency described above has been discharged:
 sub-task 3.4 supplied the fault handler, sub-task 2.7 the copy-on-write
 resolution beneath it, and sub-task 2.8 the address-space cloning that creates
 the shared pages the resolution acts upon. Sub-task 3.5 remapped the interrupt
@@ -515,8 +518,15 @@ compositor beneath all of it, after which nothing reads the framebuffer (6.6);
 the `SYSCALL` entry path, its dispatch table and its argument validation (6.7);
 the ELF64 loader (6.8); the process, the thread and the context (6.9); and the
 switch and the descent to privilege level 3 (6.10), at which point a program
-first ran. Work continues at sub-task 6.11 — `fork()` upon the copy-on-write
-substrate of Phase 2, with `execve()`, `exit()` and `wait()` beside it.
+first ran; then `fork()`, `execve()`, `exit()` and `wait()` (6.11), the APIC
+(6.12), the locks and the shootdown (6.13), the application processors (6.14)
+and the scheduler (6.15). Phase 7 supplied the C library and the utilities
+built upon it, and the initial ramdisk they are read from; Phase 8 the terminal,
+the shell, and everything from a redirection to job control. Phase 9 stands upon
+all of it: the window manager of 9.1 is the first graphical thing here that
+needed a process to exist, and the first thing built against the appearance
+[`../project/INSPIRATIONS.md`](../project/INSPIRATIONS.md), Section 3, wrote
+down — [`WINDOWS.md`](WINDOWS.md).
 
 ### 4.1 The two orderings chosen against the obvious one
 

@@ -565,3 +565,53 @@ because it is an easy way to spend an hour diagnosing a driver that is working.
 When capturing a screenshot, either let GRUB's timeout elapse or wait for the
 boot to finish before drawing conclusions from the report.
 
+
+## 8. Verification of the window manager
+
+The self-test of sub-task 9.1 conducts the manager upon a screen composed in
+memory and reads the stacking order from the pixel where two windows overlap;
+[`../design/WINDOWS.md`](../design/WINDOWS.md), Section 6, pairs each of its
+assertions with the failure it would catch. What follows is what only looking
+establishes, and how it is looked at.
+
+**Boot the default entry.** Three windows stand upon a dark ground: *Oxys*,
+*Pointer* and *Keys*, the last with its band in blue — it holds the focus. The
+pointer is at the centre of the screen. Judge:
+
+1. **Typing** goes into the Keys window and nowhere else, and a backspace
+   removes the last character. Press the Pointer window and type again: nothing
+   arrives anywhere, the Pointer window ignoring keys, and the blue has moved to
+   its band.
+2. **The pointer** moved into the Pointer window makes a disc follow it and the
+   numbers above count in that window's own coordinates, from its top left.
+   Hold a button: the disc grows. Drag out of the window with the button held:
+   the numbers go negative or beyond the extent while the disc is out of sight,
+   and no other window reacts. Release, and the pointer is the other windows'
+   again.
+3. **A drag** by a band moves the window under the hand with no trail where it
+   was and no lag a person can see, and the dragged window is on top of whatever
+   it crosses from the moment it is pressed. Drag it to every edge: the band
+   never leaves the screen.
+4. **The disc** at the right of a band closes the window: it vanishes whole, the
+   ground and whatever it covered are repainted beneath, and the blue passes to
+   the topmost window remaining. Close all three: the ground is bare, the
+   pointer still moves, and nothing is drawn.
+
+**Under QEMU without a person**, the monitor drives all of it: `sendkey` for the
+keys, `mouse_move` and `mouse_button` for the pointer, and `screendump` after
+each step. That is how the runs of 2026-09-17 in
+[`TESTING-RECORD.md`](TESTING-RECORD.md) were made, and the captures are what
+was judged. `mouse_move` is relative and the pointer begins at the centre, so a
+script's arithmetic must follow the windows it has moved: the first such script
+pressed where a window it had dragged now stood rather than upon the disc it
+meant, which was the script's defect and is recorded there.
+
+**Under VirtualBox** `keyboardputscancode` types and `screenshotpng` captures;
+there is no way to move the mouse from `VBoxManage`, so the pointer and the
+drag are judged at the console when a person is at it. **Under Bochs** with
+`nogui` nothing can be operated and the evidence is the log: the manager's
+report after the banner names the three windows at their places.
+
+**The two entries that give the shell the screen** are judged by the absence:
+*Shell-only* shows the banner and a prompt with the pointer following the
+mouse, *Shell Diagnostics* the boot log first, and neither draws a window.

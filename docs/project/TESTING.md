@@ -155,17 +155,22 @@ The VGA console is expected to present the identification banner in light cyan
 upon black, followed by the status lines. The serial output is directed to the
 standard output stream of the invoking terminal.
 
-**The default entry is quiet upon the screen, from 2026-09-15.** The boot log —
-the self-test verdicts and device reports, some four hundred lines — is carried
-by the serial line in every boot, which is what `make verify` and this target's
-`-serial stdio` read; but the screen of the default entry shows the banner
-and the shell's prompt and nothing between. The **`Oxys-OS
-(diagnostics)`** entry of the menu shows the log upon the screen as well, and is
-the one to boot when a person at the machine is diagnosing a boot. It replaced
-the "serial console diagnostics" entry, whose `serial=com1` option had been read
-by nothing since Phase 1. `KernelPanic` restores the display whatever the entry,
-a machine that has stopped having to say why. `kernel/kernel.c`,
-`KernelDisplaySetQuiet`.
+**The default entry is quiet upon the screen, from 2026-09-15 — and, from
+sub-task 9.1, the screen is the window manager's.** The boot log — the
+self-test verdicts and device reports, some four hundred lines — is carried by
+the serial line in every boot, which is what `make verify` and this target's
+`-serial stdio` read; the screen of the default entry shows three windows a
+person can operate, and the shell runs upon the serial line, which is where
+this target's terminal is attached. The **`Oxys-OS (Shell-only)`** entry gives
+the shell the screen, quiet: the banner and a prompt and nothing between, which
+is what the default entry showed through Phase 8. The **`Oxys-OS (Shell
+Diagnostics)`** entry — named *diagnostics* until 9.1 — shows the log upon the
+screen first, and is the one to boot when a person at the machine is diagnosing
+a boot. It replaced the "serial console diagnostics" entry, whose `serial=com1`
+option had been read by nothing since Phase 1. `KernelPanic` restores the
+display whatever the entry, a machine that has stopped having to say why.
+`kernel/kernel.c`, `KernelDisplaySetQuiet`; [`../design/WINDOWS.md`](../design/WINDOWS.md),
+Section 7.2.
 
 ### 2.1 Typing at the shell, and driving it without a person
 

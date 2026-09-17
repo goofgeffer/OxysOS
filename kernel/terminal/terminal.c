@@ -8,7 +8,8 @@
  * Key functions: TerminalInitialise, TerminalInject, TerminalPoll, TerminalRead,
  *          TerminalWaitForInput, TerminalHasInput, TerminalFlush,
  *          TerminalForegroundGroup, TerminalSetForegroundGroup, TerminalService,
- *          TerminalBytesIntercepted,
+ *          TerminalBytesIntercepted, TerminalAttachKeyboard,
+ *          TerminalKeyboardIsAttached,
  *          TerminalBytesQueued, TerminalBytesDelivered, TerminalBytesDiscarded,
  *          TerminalKeysTranslated, TerminalReport.
  * References:
@@ -90,6 +91,9 @@ static uint64_t TerminalTranslated;
 static uint64_t TerminalForeground;
 static uint64_t TerminalSignalsSent;
 static uint64_t TerminalIntercepted;
+
+/* Whether keys are read at all; see TerminalAttachKeyboard. */
+static bool TerminalKeyboardDetached;
 
 /* The extended scancodes of the keys given a control sequence. Scan code set 1,
  * each prefixed by 0xE0 upon the wire, the prefix being consumed by the driver. */
@@ -244,7 +248,7 @@ size_t TerminalPoll(void)
      * Between the two devices no order is promised: two people typing at once
      * upon two devices have no expectation the machine could meet.
      */
-    while (KeyboardReadEvent(&event))
+    while (!TerminalKeyboardDetached && KeyboardReadEvent(&event))
     {
         appended += TerminalTranslate(&event);
     }
@@ -459,4 +463,14 @@ void TerminalReport(void)
     KernelWriteString(", keys translated to a control sequence ");
     KernelWriteDecimal(TerminalTranslated);
     KernelWriteString(".\n");
+}
+
+void TerminalAttachKeyboard(bool attached)
+{
+    TerminalKeyboardDetached = !attached;
+}
+
+bool TerminalKeyboardIsAttached(void)
+{
+    return !TerminalKeyboardDetached;
 }

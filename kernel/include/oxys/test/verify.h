@@ -19,7 +19,8 @@
  *          KernelVerifyScheduler, KernelVerifyString, KernelVerifyWrappers,
  *          KernelVerifyHeap, KernelVerifyStdio, KernelVerifyStartup,
  *          KernelVerifyUtilities, KernelVerifyLine, KernelVerifyShell,
- *          KernelVerifyTerminal,
+ *          KernelVerifyTerminal, KernelVerifyWindows, KernelVerifyCircle,
+ *          KernelWindowDemonstrationStart, KernelWindowDemonstrationService,
  *          KernelVerifyPit, KernelVerifyKeyboard, KernelVerifySerial,
  *          KernelVerifyVga, KernelVerifyPci, KernelVerifyAta, KernelVerifyBlock,
  *          KernelVerifyBuffer, KernelVerifyExt2, KernelVerifyVfs,
@@ -118,6 +119,26 @@ void KernelVerifyCursor(void);
 /* Phase 6, sub-task 6.3: the two-dimensional primitives, asserted against a
  * surface composed in memory so that they hold upon a machine with no display. */
 void KernelVerifyGraphics(void);
+
+/*
+ * Sub-task 9.1: the window manager, and the disc it draws its close control
+ * with. Both are asserted upon surfaces composed in memory, so that the
+ * stacking order is read from the pixel where two windows overlap rather
+ * than taken from the manager's word for it, and both hold upon a machine
+ * with no display.
+ */
+void KernelVerifyWindows(void);
+void KernelVerifyCircle(void);
+
+/*
+ * The demonstration the default boot entry presents: the window manager upon
+ * the real screen, with three windows a person can operate. Started by the
+ * entry point where there is a compositor and a mouse; serviced from the
+ * bootstrap processor's tick, where the pointer already was.
+ */
+bool KernelWindowDemonstrationStart(void);
+void KernelWindowDemonstrationService(void);
+bool KernelWindowDemonstrationIsRunning(void);
 
 /* Phase 6, sub-task 6.1: the descriptors, the task state segment, the interrupt
  * stack table and the three registers that configure SYSCALL. */

@@ -4,16 +4,21 @@
  * File: graphics/draw.c
  * Purpose: Implements the two-dimensional drawing primitives upon a surface:
  *          rectangle arithmetic, the setting of a pixel, filled and outlined
- *          rectangles, the integer line, and the blit.
+ *          rectangles, the integer line, the disc, and the blit.
  * Key functions: GraphicsRectangleIsEmpty, GraphicsRectangleIntersect,
  *          GraphicsRectangleContains, GraphicsSurfaceInitialise,
  *          GraphicsSurfaceFromFramebuffer, GraphicsSetClip, GraphicsResetClip,
  *          GraphicsPutPixel, GraphicsPixelAt, GraphicsFillRectangle,
- *          GraphicsDrawRectangle, GraphicsClear, GraphicsDrawLine, GraphicsBlit.
+ *          GraphicsDrawRectangle, GraphicsFillCircle, GraphicsClear,
+ *          GraphicsDrawLine, GraphicsBlit.
  * References:
  *   - J. E. Bresenham, "Algorithm for computer control of a digital plotter",
  *     IBM Systems Journal 4(1), pages 25 to 30, 1965: the line algorithm, which
  *     decides each step from an accumulated integer error and uses no division.
+ *   - J. E. Bresenham, "A linear algorithm for incremental digital display of
+ *     circular arcs", Communications of the ACM 20(2), pages 100 to 106, 1977:
+ *     the circle algorithm, from which GraphicsFillCircle takes the half-width
+ *     of each span of a disc, in integers likewise.
  *   - PROJECT_GUIDELINES.md, Section 8: floating point is prohibited in the
  *     kernel, which is why every calculation here is integer.
  *   - docs/design/DRAWING.md, Sections 1 to 6: the design and its limits.
@@ -596,6 +601,78 @@ void GraphicsDrawRectangle(GraphicsSurface *surface, GraphicsRectangle rectangle
         {
             edge.x = (int32_t)((int64_t)rectangle.x + rectangle.width - 1);
             GraphicsFillRectangle(surface, edge, colour);
+        }
+    }
+}
+
+/* One row of pixels, as a rectangle: what a span of a disc is filled as. */
+static GraphicsRectangle GraphicsSpan(int32_t x, int32_t y, int32_t width)
+{
+    GraphicsRectangle span;
+
+    span.x = x;
+    span.y = y;
+    span.width = width;
+    span.height = 1;
+
+    return span;
+}
+
+/*
+ * The disc is a stack of horizontal spans, one to a row, and each span is a
+ * rectangle fill: the clip is applied by the fill, once per span, and nothing
+ * here tests a pixel. The half-width of each span comes from Bresenham's
+ * circle algorithm, which walks the arc from the top of the circle to the
+ * diagonal keeping an integer measure of how far the current point lies from
+ * the true circle, and steps inward exactly when the measure says the point
+ * outside is the farther of the two. The eight-fold symmetry of the circle then
+ * gives every other row: the arc from the top to the diagonal, reflected, is
+ * the arc from the diagonal to the side, with the two coordinates exchanged.
+ *
+ * Rows near the top and bottom are produced by the first reflection and rows
+ * near the middle by the second, and the two meet at the diagonal, where one
+ * row is produced by both. It is filled twice with one colour, which is
+ * harmless, rather than special-cased, which would be a branch existing for
+ * one row in a hundred.
+ */
+void GraphicsFillCircle(GraphicsSurface *surface, int32_t centre_x, int32_t centre_y,
+                        int32_t radius, uint32_t colour)
+{
+    int32_t x;
+    int32_t y;
+    int32_t error;
+
+    if (radius < 0)
+    {
+        return;
+    }
+
+    x = radius;
+    y = 0;
+    error = 1 - radius;
+
+    while (x >= y)
+    {
+        /*
+         * The point (x, y) lies upon the arc, so row centre_y ± y extends x
+         * either side of the centre, and row centre_y ± x extends y either
+         * side — the same point reflected in the diagonal.
+         */
+        GraphicsFillRectangle(surface, GraphicsSpan(centre_x - x, centre_y + y, 2 * x + 1), colour);
+        GraphicsFillRectangle(surface, GraphicsSpan(centre_x - x, centre_y - y, 2 * x + 1), colour);
+        GraphicsFillRectangle(surface, GraphicsSpan(centre_x - y, centre_y + x, 2 * y + 1), colour);
+        GraphicsFillRectangle(surface, GraphicsSpan(centre_x - y, centre_y - x, 2 * y + 1), colour);
+
+        ++y;
+
+        if (error < 0)
+        {
+            error += (2 * y) + 1;
+        }
+        else
+        {
+            --x;
+            error += (2 * (y - x)) + 1;
         }
     }
 }

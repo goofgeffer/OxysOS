@@ -1,0 +1,322 @@
+/* SPDX-FileCopyrightText: 2026 The Oxys-OS Authors */
+/* SPDX-License-Identifier: LGPL-3.0-or-later */
+/*
+ * File: kernel/include/oxys/gfx/window.h
+ * Purpose: Declares the window manager of sub-task 9.1: a table of windows upon
+ *          one screen surface, the order they stack in, the one of them that
+ *          holds the keyboard, and the routing of every key and every movement
+ *          of the mouse to the window it belongs to.
+ * Key definitions: WINDOW_CAPACITY, WINDOW_NONE, WindowEvent, WindowEventKind,
+ *          WindowManagerInitialise, WindowCreate, WindowDestroy, WindowRaise,
+ *          WindowFocus, WindowMove, WindowSurface, WindowInvalidate,
+ *          WindowReadEvent, WindowManagerHandleKey, WindowManagerHandleMouse,
+ *          WindowManagerCompose, WindowManagerWindowAt, WindowManagerReport.
+ * References:
+ *   - docs/design/WINDOWS.md: the design, the appearance it commits to, and
+ *     every assertion made upon it.
+ *   - X Window System Protocol, X Version 11 Release 7.7, Chapter 11, "Input
+ *     Device events", and the Glossary entries "Input focus" and "Stacking
+ *     order": the three notions this manager has — that keyboard input has one
+ *     scope, that sibling windows obscure one another in an order, and that a
+ *     button pressed in a window binds the pointer to that window until every
+ *     button is released — are the ones that document defines, and they are
+ *     taken as notions and not as an interface. No request, event or type of
+ *     that protocol is adopted; docs/project/INSPIRATIONS.md, Section 5.
+ *   - docs/project/INSPIRATIONS.md, Section 3: the appearance the frame is
+ *     designed against, and the idiom it is required not to have.
+ *
+ * Why the manager is in the kernel, and what that decides.
+ *
+ *   Sub-task 9.2 puts the programs that own windows on the far side of a
+ *   protocol; this sub-task has no such program, so the windows here are owned
+ *   by whatever kernel code created them, and the demonstration of
+ *   kernel/test/gfx/windows.c is the only owner. What is decided now, and will
+ *   not change when a client arrives, is the shape of the thing on this side of
+ *   the protocol: a window is a rectangle of pixels the owner draws into and a
+ *   queue of events the owner drains, and the manager's whole business is to
+ *   compose the rectangles in their order and to put each event into the right
+ *   queue. A protocol carries those two things across a boundary; it does not
+ *   change what they are.
+ *
+ * What a window is.
+ *
+ *   A content surface, owned by the manager and drawn into by the owner, and a
+ *   frame the manager draws around it: a title band above and a one-pixel border
+ *   about the whole. The owner names the content's size and the frame's position
+ *   and never draws the frame — a frame the owner drew would be a frame every
+ *   owner drew differently, and the one thing a person recognises a window by
+ *   is that they all have the same one. The frame is flat, by
+ *   docs/project/INSPIRATIONS.md, Section 3, and the reason that section gives.
+ *
+ * Where an event goes.
+ *
+ *   A key goes to the window that holds the focus, and to no other. The focus is
+ *   given to a window when it is created and when a button is pressed within it,
+ *   and passes to the topmost window remaining when its holder is destroyed.
+ *
+ *   A movement of the pointer goes to the window under the pointer — the topmost
+ *   whose frame contains it — with the position translated so that the owner
+ *   reads it against the content's own origin. A button pressed within a
+ *   window's content raises that window, gives it the focus, and binds the
+ *   pointer to it: until every button is released, every movement and every
+ *   release goes to that window wherever the pointer has gone since. Without
+ *   that, a drag begun in one window and carried over another would end in the
+ *   other, and the first would never learn that the button it saw pressed was
+ *   released.
+ *
+ *   A button pressed in a window's title band is the manager's and not the
+ *   owner's: it raises and focuses the window and begins a drag that moves it,
+ *   or — upon the close control — puts a close event into the window's queue.
+ *   The manager destroys nothing upon that event. What a close means is the
+ *   owner's decision, an editor with an unsaved file being the standing example
+ *   of a window that must be asked and not removed.
+ *
+ * Nothing here presents. The manager composes into the surface it was given and
+ * says which region it changed; carrying that region to the display is the
+ * caller's, so that the same code composes into a surface in memory for the
+ * self-test as into the compositor's back buffer for the screen.
+ */
+
+#ifndef OXYS_GFX_WINDOW_H
+#define OXYS_GFX_WINDOW_H
+
+#include <oxys/types.h>
+#include <oxys/gfx/graphics.h>
+#include <oxys/dev/keyboard.h>
+#include <oxys/dev/mouse.h>
+
+/*
+ * How many windows may exist at once.
+ *
+ * Sixteen, and a fixed table with a refusal beyond it, for the reason the
+ * compositor's layer table is fixed: the manager must be honest about a bound
+ * rather than grow until an allocation fails somewhere nothing expects it to.
+ * The desktop of sub-task 9.5 and the utilities of 9.7 are a handful of windows;
+ * a program that opens sixteen has a defect this bound turns into a refusal.
+ */
+#define WINDOW_CAPACITY 16U
+
+/* The value WindowCreate returns when it cannot make a window, and the value
+ * WindowManagerWindowAt and WindowManagerFocused return when there is none. */
+#define WINDOW_NONE ((size_t)-1)
+
+/* The longest title kept, in characters, the terminator not counted. A longer
+ * title is cut and not refused: a title is a label, not an identity. */
+#define WINDOW_TITLE_CAPACITY 31U
+
+/* How many events a window's queue holds before the newest is dropped. */
+#define WINDOW_EVENT_CAPACITY 32U
+
+/*
+ * The frame's geometry, in pixels. The title band holds the face of sub-task
+ * 6.4 drawn at twice its size — sixteen pixels — with four above and four below,
+ * and the border is one pixel, depth being expressed by stacking and not by
+ * thickness.
+ */
+#define WINDOW_TITLE_HEIGHT 24
+#define WINDOW_BORDER       1
+
+/* The smallest content a window may have, and the largest. The bound above is
+ * the coordinate limit of the primitives; the one below is a window a person
+ * can still find. */
+#define WINDOW_MINIMUM_EXTENT 16
+#define WINDOW_MAXIMUM_EXTENT 4096
+
+/*
+ * The width of a frame that must remain upon the screen when a window is moved,
+ * so that the title band — and with it the means of moving it back — can always
+ * be reached. A window dragged wholly off the screen is a window nobody can
+ * recover without knowing its name.
+ */
+#define WINDOW_REACHABLE_WIDTH 48
+
+/* What an event is. */
+typedef enum WindowEventKind
+{
+    /* A key was pressed or released while this window held the focus. */
+    WINDOW_EVENT_KEY = 1,
+
+    /* The pointer moved over this window, or anywhere while a button pressed
+     * within it was still held. */
+    WINDOW_EVENT_POINTER_MOVE,
+
+    /* A button was pressed within the content, or released while this window
+     * held the pointer. */
+    WINDOW_EVENT_BUTTON_PRESS,
+    WINDOW_EVENT_BUTTON_RELEASE,
+
+    /* This window gained or lost the focus. */
+    WINDOW_EVENT_FOCUS_IN,
+    WINDOW_EVENT_FOCUS_OUT,
+
+    /* The close control was pressed. The owner decides what that means. */
+    WINDOW_EVENT_CLOSE
+} WindowEventKind;
+
+/*
+ * One event, as the owner reads it.
+ *
+ * `x` and `y` are the pointer's position relative to the content's top left,
+ * for the three pointer events; they may lie outside the content, and below
+ * zero, while the pointer is bound to this window by a held button. `button`
+ * names the one button a press or a release concerns and `buttons` the set held
+ * afterwards, as the mouse driver's own event distinguishes them. `key` is the
+ * keyboard driver's event entire, for a key event, so that an owner wanting a
+ * release or a key that produces no character has it.
+ */
+typedef struct WindowEvent
+{
+    WindowEventKind kind;
+    int32_t x;
+    int32_t y;
+    uint8_t button;
+    uint8_t buttons;
+    KeyEvent key;
+} WindowEvent;
+
+/*
+ * The colours the manager draws with, supplied rather than named because a
+ * pixel value means nothing without an encoding; for the display that is
+ * FramebufferEncode, and for the self-test's surface it is whatever the test
+ * says. docs/design/WINDOWS.md, Section 4, records the palette the entry point
+ * supplies and why each colour is what it is.
+ */
+typedef struct WindowPalette
+{
+    uint32_t ground;          /* The screen where no window stands. */
+    uint32_t paper;           /* A window's content, as created. */
+    uint32_t border;          /* The one-pixel border about a frame. */
+    uint32_t title_focused;   /* The title band of the window holding the focus. */
+    uint32_t title_unfocused; /* The title band of every other window. */
+    uint32_t text_focused;    /* The title and the close control upon the first. */
+    uint32_t text_unfocused;  /* The same upon the second. */
+} WindowPalette;
+
+/*
+ * Takes a screen: every window is destroyed, the table emptied, and the whole
+ * of the surface marked as changed, so that the first composition paints the
+ * ground. Returns false where the surface is null or has no pixels.
+ *
+ * It may be called again with another surface, which is how the self-test
+ * conducts the manager upon a surface in memory before the entry point gives it
+ * the compositor's back buffer.
+ */
+bool WindowManagerInitialise(GraphicsSurface *screen, const WindowPalette *palette);
+
+/* Whether a screen has been taken. Every routine below does nothing, or
+ * returns WINDOW_NONE, until one has. */
+bool WindowManagerIsActive(void);
+
+/*
+ * Makes a window whose frame's top left is at (x, y) upon the screen and whose
+ * content is `width` by `height`, titled as given, filled with the paper
+ * colour, placed upon the top of the stack, and given the focus.
+ *
+ * Returns WINDOW_NONE where the table is full, the extent is outside the bounds
+ * above, or the heap cannot supply the content. A window is not refused for
+ * lying partly off the screen — the frame is confined as WindowMove confines a
+ * moved one.
+ */
+size_t WindowCreate(int32_t x, int32_t y, int32_t width, int32_t height, const char *title);
+
+/*
+ * Destroys a window, giving its content back to the heap, marking where it
+ * stood as changed, and passing the focus to the topmost window remaining if it
+ * held it. A window bound to the pointer by a held button is unbound.
+ */
+void WindowDestroy(size_t window);
+
+/* Whether the identifier names a window that exists. */
+bool WindowExists(size_t window);
+
+/* Places the window upon the top of the stack. */
+void WindowRaise(size_t window);
+
+/*
+ * Gives the window the focus, telling the previous holder it has lost it and
+ * this one that it has gained it, in that order, and marking both title bands
+ * as changed. Giving the focus to the window that holds it does nothing.
+ */
+void WindowFocus(size_t window);
+
+/*
+ * Moves the frame's top left to (x, y), confined so that WINDOW_REACHABLE_WIDTH
+ * pixels of the title band remain upon the screen and the band's top is never
+ * above it. Both where the window was and where it now is are marked changed.
+ */
+void WindowMove(size_t window, int32_t x, int32_t y);
+
+/* The frame's rectangle upon the screen, and the content's. */
+GraphicsRectangle WindowFrame(size_t window);
+GraphicsRectangle WindowContentBounds(size_t window);
+
+/* The content surface the owner draws into, or null. Drawing into it changes
+ * nothing upon the screen until the region is invalidated and composed. */
+GraphicsSurface *WindowSurface(size_t window);
+
+/* Records that a region of the content, in the content's coordinates, has
+ * changed and must be composed again. */
+void WindowInvalidate(size_t window, GraphicsRectangle region);
+
+/* The title, as kept. */
+const char *WindowTitle(size_t window);
+
+/*
+ * Removes the oldest event from the window's queue. Returns false, leaving the
+ * argument untouched, where the queue is empty or the window does not exist.
+ */
+bool WindowReadEvent(size_t window, WindowEvent *event);
+
+/* How many events the window's queue holds, and how many it has dropped. */
+size_t WindowEventsQueued(size_t window);
+uint64_t WindowEventsDropped(size_t window);
+
+/*
+ * Routes a key: into the queue of the window holding the focus, or nowhere,
+ * counted, where no window does.
+ */
+void WindowManagerHandleKey(const KeyEvent *event);
+
+/*
+ * Routes a movement of the mouse, with whatever buttons it changed, by the
+ * rules the header of this file sets out: to the window bound by a held button,
+ * else to the window under the pointer; a press in a title band to the manager
+ * itself. A movement over the ground goes nowhere and is not counted as
+ * dropped, the ground being nobody's.
+ */
+void WindowManagerHandleMouse(const MouseEvent *event);
+
+/*
+ * Composes every window that intersects the changed region into the screen, in
+ * stacking order over the ground, and returns that region — empty where nothing
+ * had changed — so that the caller may carry it to the display. The changed
+ * region is empty afterwards.
+ */
+GraphicsRectangle WindowManagerCompose(void);
+
+/* The region presently awaiting composition, which the self-test asserts about. */
+GraphicsRectangle WindowManagerDamage(void);
+
+/* The topmost window whose frame contains the point, or WINDOW_NONE. */
+size_t WindowManagerWindowAt(int32_t x, int32_t y);
+
+/* The window holding the focus, or WINDOW_NONE. */
+size_t WindowManagerFocused(void);
+
+/* The window bound to the pointer by a held button, or WINDOW_NONE. */
+size_t WindowManagerGrabbed(void);
+
+/* The window at a position in the stack, counted from the bottom, or
+ * WINDOW_NONE beyond the top; and how many windows there are. */
+size_t WindowManagerStackAt(size_t position);
+size_t WindowManagerCount(void);
+
+/* Accounting, for the report and for the self-test. */
+uint64_t WindowManagerEventsRouted(void);
+uint64_t WindowManagerEventsDiscarded(void);
+uint64_t WindowManagerCompositionCount(void);
+
+/* Emits the screen's geometry, the stack, the focus and the accounting. */
+void WindowManagerReport(void);
+
+#endif /* OXYS_GFX_WINDOW_H */

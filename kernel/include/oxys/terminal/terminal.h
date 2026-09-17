@@ -10,7 +10,8 @@
  * Key definitions: TERMINAL_QUEUE_CAPACITY, TerminalInitialise, TerminalInject,
  *          TerminalPoll, TerminalRead, TerminalWaitForInput, TerminalHasInput,
  *          TerminalFlush, TerminalBytesQueued, TerminalBytesDelivered,
- *          TerminalBytesDiscarded, TerminalKeysTranslated, TerminalReport.
+ *          TerminalBytesDiscarded, TerminalKeysTranslated,
+ *          TerminalAttachKeyboard, TerminalReport.
  * References:
  *   - ECMA-48, 5th edition (1991), Section 5.4: the structure of a control
  *     sequence, CSI followed by parameter bytes and a final byte; and Sections
@@ -167,6 +168,18 @@ uint64_t TerminalForegroundGroup(void);
 void TerminalSetForegroundGroup(uint64_t group);
 void TerminalService(void);
 uint64_t TerminalBytesIntercepted(void);
+
+/*
+ * Whether the terminal reads the keyboard, since sub-task 9.1. It does until
+ * told otherwise; the window manager, when it takes the screen, takes the
+ * keyboard with it, and a terminal that went on translating keys into bytes
+ * would hand every keystroke to two readers — the shell upon the serial line
+ * and the window that holds the focus — of which each would act upon half.
+ * The serial line is read regardless: it is the shell's whichever of the two
+ * has the keyboard.
+ */
+void TerminalAttachKeyboard(bool attached);
+bool TerminalKeyboardIsAttached(void);
 
 /* Emits a summary upon both output devices. */
 void TerminalReport(void);

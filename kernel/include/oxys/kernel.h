@@ -7,7 +7,8 @@
  * Key definitions: KERNEL_VIRTUAL_BASE, PhysicalToVirtual, VirtualToPhysical,
  *          KernelTextStart, KernelTextEnd, KernelMain, KernelPanic,
  *          KernelWriteString, KernelDiagnosticChannelReset,
- *          KernelDisplaySetQuiet, KernelDisplayIsQuiet, OXYS_VERSION_BANNER.
+ *          KernelDisplaySetQuiet, KernelDisplayIsQuiet, KernelServiceDisplay,
+ *          OXYS_VERSION_BANNER.
  * References:
  *   - Intel 64 and IA-32 Architectures Software Developer's Manual, Volume 3A,
  *     Section 4.5 (Four-Level Paging) and Section 3.3.7.1 (Canonical Addressing).
@@ -178,6 +179,17 @@ void KernelDiagnosticChannelReset(void);
  */
 void KernelDisplaySetQuiet(bool quiet);
 bool KernelDisplayIsQuiet(void);
+
+/*
+ * Services the display from the bootstrap processor's timer tick, beside the
+ * terminal's service. What it does depends upon what the entry point decided:
+ * nothing, before the shell has started or after it has ended; the pointer
+ * moved to where the mouse is, since 2026-09-16, while the shell has the
+ * console; or, since sub-task 9.1, the window manager's whole round — every
+ * movement and every key routed to the window it belongs to, the windows'
+ * owner given its turn, the changed region composed and presented.
+ */
+void KernelServiceDisplay(void);
 
 /*
  * Writes an unsigned value in hexadecimal, prefixed by "0x", to both output

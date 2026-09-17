@@ -214,6 +214,7 @@ C_SOURCES := kernel/kernel.c \
              kernel/test/gfx/console.c \
              kernel/test/gfx/compositor.c \
              kernel/test/gfx/faultscreen.c \
+             kernel/test/gfx/windows.c \
              kernel/test/dev/devices.c \
              kernel/test/dev/mouse.c \
              kernel/test/storage/stack.c \
@@ -305,6 +306,7 @@ C_SOURCES := kernel/kernel.c \
              graphics/compositor.c \
              graphics/faultscreen.c \
              graphics/cursor.c \
+             graphics/window.c \
              $(LIBC_SOURCES) \
              $(SHELL_SOURCES)
 

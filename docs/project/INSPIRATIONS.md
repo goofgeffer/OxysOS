@@ -122,10 +122,15 @@ afterwards, from one that was chosen. This section is what makes the difference
 visible.
 
 This remains a preference of taste and is stated as one. It is not a decision
-already made about any particular pixel; Phase 9 has not been reached, and no
-part of it has been designed. When it is designed, what is actually built is
-recorded in its own document under [`../design/`](../design/), and this section
-is judged against it.
+already made about any particular pixel. **Sub-task 9.1 is the first thing
+built against it**, on 2026-09-17, and
+[`../design/WINDOWS.md`](../design/WINDOWS.md), Section 4, is where the window's
+frame and the palette are judged against this section: a flat band, a one-pixel
+border, one blue reserved for the focus, and a disc for the one control — the
+geometry was reached, the bevel was not reached for, and rounded corners and any
+asymmetry wait for the desktop of 9.5, which decides what a corner meets. Every
+later part of Phase 9 is recorded likewise in its own document under
+[`../design/`](../design/), and this section is judged against each.
 
 ## 4. BSD — the second inspiration
 
@@ -173,12 +178,14 @@ it produced. A thing is written here, from nothing, by this project.
 
 ## 6. Limitations of this document
 
-This document states intentions concerning work that has not been begun. The
-graphical inspirations concern sub-tasks 6.2 to 6.6 and the whole of Phase 9,
-and none of those is implemented; nothing here should be read as a description
-of behaviour that exists. When they are reached, what is actually built is
-recorded in its own document under [`../design/`](../design/), and this document
-is revised to record how much of the intention survived contact with the work.
+This document states intentions, and most of the work they concern has not been
+begun. The graphical inspirations concern sub-tasks 6.2 to 6.6, which are
+built, and the whole of Phase 9, of which sub-task 9.1 alone is; nothing here
+should be read as a description of behaviour that exists — that is
+[`../design/WINDOWS.md`](../design/WINDOWS.md) for 9.1, and Section 3 above now
+records how much of the intention survived contact with it. As each later part
+is reached, what is actually built is recorded in its own document under
+[`../design/`](../design/), and this document is revised likewise.
 
 The characterisations of the two systems above are stated in general terms
 deliberately. This project cites specifications for its assertions about

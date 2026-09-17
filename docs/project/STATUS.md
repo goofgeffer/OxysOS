@@ -25,7 +25,9 @@ the PCI bus, mounts and writes an EXT2 volume through a virtual filesystem layer
 draws upon a composited linear framebuffer, and loads and runs a statically
 linked ELF64 program at privilege level 3 — which returns to the kernel by system
 call, may make a child of itself and collect what it ended with, and is ended
-when it faults or when it asks. **`Oxys 1 Alpha`, the first release, was cut from
+when it faults or when it asks — and, since sub-task 9.1, arranges windows upon
+that framebuffer, one of them holding the keyboard and the one beneath the
+pointer receiving the mouse. **`Oxys 1 Alpha`, the first release, was cut from
 this state on 2026-09-16**: [`RELEASE-1-ALPHA.md`](RELEASE-1-ALPHA.md).
 
 **And it runs programs a person would recognise.** Since sub-task 7.6 the kernel
@@ -651,6 +653,29 @@ with the `link` and `procinfo` calls, twenty-nine. [`../design/PROCESS.md`](../d
 [`../design/SHELL.md`](../design/SHELL.md), Sections 28 and 29;
 [`../design/LIBC.md`](../design/LIBC.md), Section 13.
 
+**Phase 9 — the desktop, its system services and its configuration.** Begun:
+sub-task 9.1 is complete, on 2026-09-17, and the seven after it are not. The
+window manager holds a fixed table of sixteen windows upon the compositor's back
+buffer, each a content surface its owner draws into and a queue of events its
+owner drains, with a frame the manager draws: a flat band, a one-pixel border, a
+title, and a disc for the close control — the one curve the primitives now have.
+The stack is an array walked from the top for a hit test; the window holding the
+focus takes every key and is drawn in the one colour the palette reserves; a
+movement goes to the window beneath the pointer, in that window's coordinates;
+a press raises and focuses its window and binds the pointer to it until every
+button is up, so that a drag ends where it began; a press in the band drags the
+window or, upon the disc, asks it to close, and the manager destroys nothing.
+It is serviced from the bootstrap processor's tick beside the terminal, which
+gives up the keyboard for it. **What the default entry boots changed**: it now
+gives the window manager the screen, the keyboard and the mouse, with the shell
+upon the serial line and three windows a person can operate — the notes, the
+pointer's position with a disc that follows it, and the characters typed — and
+the **Shell-only** and **Shell Diagnostics** entries give the shell the screen
+as every entry did through Phase 8. There is no client yet: the windows' only
+owner is the demonstration, and 9.2 is where a process becomes one.
+[`../design/WINDOWS.md`](../design/WINDOWS.md);
+[`../design/DRAWING.md`](../design/DRAWING.md), Section 4.1.
+
 ## 3. Where it has been observed to work
 
 A sub-task marked *implemented* in [`PLAN.md`](PLAN.md) means the code exists and
@@ -687,6 +712,7 @@ The physical machine is one machine — the HP Laptop 14-dq0052dx specified in
 | 8.5 Redirection, and the writable file | Yes, and driven over the serial line | **Yes** | **Yes — 8.5**, to the prompt | — | **Not yet run** |
 | 8.6 Pipelines, and two programs at once | Yes, and driven over the serial line | **Yes, and driven at the PS/2 keyboard** | **Yes — 8.6**, to the prompt | — | **Not yet run** |
 | 8.7 Job control, process groups and the terminal's signals | Yes, and driven over the serial line with control-C and control-Z | **Yes, and driven at the PS/2 keyboard** | **Yes — 8.7**, to the prompt | — | **Not yet run** |
+| 9.1 The window manager | Yes, at 1280 by 800, the mouse and the keyboard driven through the monitor and the screen captured at each step | **Yes**, at 640 by 480, typed at the PS/2 keyboard and captured | **Yes — 9.1**, at 1024 by 768, to the three windows and the prompt upon the serial line | — | **Not yet run** |
 
 **The rows marked "— 7.2" were all established by two boots of one image**,
 because a boot runs every self-test in the corpus and a clean one is therefore
@@ -891,7 +917,7 @@ functional. [`TESTING.md`](TESTING.md), Section 3.
 There is no test harness and there will be none before Phase 7, there being no
 userland to run one in. The kernel therefore asserts its own properties at boot,
 in the order the subsystems are initialised, and `make verify` fails if any of
-them reports a failure. Sixty-six assertions presently report passed or sound.
+them reports a failure. Sixty-eight assertions presently report passed or sound.
 
 Those tests are in [`../../kernel/test/`](../../kernel/test/), one file per
 subsystem. Each subsystem's design document carries a table pairing every
@@ -920,6 +946,9 @@ design document ends with its particular ones.
 | ~~A signal.~~ **Arrived at 8.7**: SIGPIPE, control-C and control-Z, `&`, `jobs`, `fg`, `bg` and `kill`. What remains is a control-C that does not flush the typed-ahead input, and an orphan collected by nobody. `SHELL.md`, Section 29; `PROCESS.md`, Section 19. | Phase 9, for the orphan |
 | A canonical terminal. `stdin` is raw: `fgets` delivers keystrokes and control sequences, unechoed, and `cat` with no operand still reports the absence. The shell wants raw; nothing yet wants the other. `SHELL.md`, Section 2.1. | When something wants it |
 | Synchronisation **applied**, beyond three structures. The diagnostic channel was locked at 6.14; the run queues and the process and thread tables at 6.15. Every other shared structure is still unsynchronised and still says so in its own file's header; `CONCURRENCY.md`, Section 10, limitation 1, enumerates them. | Phase 7 |
+| A program that owns a window. The window manager's windows are owned by kernel code; a process cannot yet create one, draw into one or read its events. | 9.2 |
+| A desktop: a root beneath every window, a panel above them, and a way to start a program from the screen. The default entry presents three demonstration windows upon a bare ground. | 9.5 |
+| The shell upon the screen and the window manager at once. With the window manager the shell is upon the serial line; a terminal emulator window is what puts it back upon the screen. | 9.6 |
 | A reaper. A kernel thread that finishes cannot free its own stack — it is standing on it — and nothing else does. Its slot and its four pages are held until the machine stops. | Phase 7 |
 | Migration, work stealing, and more than one priority. A thread is placed once, at admission, upon the shortest queue its affinity permits, and stays there. | Later |
 | `CR4.SMEP`, `CR4.SMAP` and `IA32_EFER.NXE`. The user mappings that would be protected now exist. | 13.3 |

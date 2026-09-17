@@ -92,6 +92,7 @@
 #include <oxys/gfx/console.h>
 #include <oxys/gfx/cursor.h>
 #include <oxys/gfx/faultscreen.h>
+#include <oxys/gfx/window.h>
 #include <oxys/dev/serial.h>
 #include <oxys/dev/pci.h>
 #include <oxys/dev/storage/ata.h>
@@ -236,6 +237,124 @@ bool KernelDisplayIsQuiet(void)
 {
     return KernelDisplayQuiet;
 }
+
+/*
+ * What the display is doing while the machine runs, decided once by the entry
+ * point and read by the bootstrap processor's tick.
+ *
+ *   KERNEL_DISPLAY_IDLE      Nothing: before the shell, when the mouse self-test
+ *                            reads the driver's events itself and a service that
+ *                            drained them would take the packets the test
+ *                            injected, and after it, when the echo loop drains
+ *                            them on its own.
+ *   KERNEL_DISPLAY_POINTER   The shell has the console and the pointer follows
+ *                            the mouse, since 2026-09-16, because a person with
+ *                            a mouse in hand saw nothing move and asked why.
+ *   KERNEL_DISPLAY_WINDOWS   Sub-task 9.1: the window manager has the screen,
+ *                            the keyboard and the mouse; the shell has the
+ *                            serial line.
+ */
+typedef enum KernelDisplayMode
+{
+    KERNEL_DISPLAY_IDLE = 0,
+    KERNEL_DISPLAY_POINTER,
+    KERNEL_DISPLAY_WINDOWS
+} KernelDisplayMode;
+
+static KernelDisplayMode KernelDisplay;
+
+/* Moves the pointer to where the mouse is, presenting only if it moved. */
+static void KernelFollowMouse(void)
+{
+    const int32_t x = MouseX();
+    const int32_t y = MouseY();
+
+    if ((x != CursorX()) || (y != CursorY()))
+    {
+        CursorMoveTo(x, y);
+    }
+}
+
+void KernelServiceDisplay(void)
+{
+    MouseEvent movement;
+    KeyEvent key;
+
+    if (KernelDisplay == KERNEL_DISPLAY_IDLE)
+    {
+        return;
+    }
+
+    if (KernelDisplay == KERNEL_DISPLAY_POINTER)
+    {
+        if (!MouseIsPresent() || !CursorIsAvailable())
+        {
+            return;
+        }
+
+        /*
+         * Drained whole and moved once, as the echo loop does and for its
+         * reason: the intermediate positions were never displayed. The
+         * position is read from the driver rather than from the last event,
+         * so that a buffer which overflowed still leaves the pointer where
+         * the mouse actually is. The present is asked for only where the
+         * pointer moved: CompositorPresent writes the framebuffer, and a tick
+         * that wrote it a hundred times a second for a pointer standing still
+         * would be paying for nothing.
+         */
+        while (MouseReadEvent(&movement))
+        {
+            (void)movement;
+        }
+
+        if ((MouseX() != CursorX()) || (MouseY() != CursorY()))
+        {
+            KernelFollowMouse();
+            CompositorPresent();
+        }
+
+        return;
+    }
+
+    /*
+     * The window manager: every movement is routed, not merely the last, so
+     * that a press and its release within one tick both arrive; then the
+     * windows' owner — the demonstration, until sub-task 9.2 — acts upon its
+     * queues; then whatever changed is composed into the back buffer and
+     * carried out with the pointer over it. A tick in which nothing moved,
+     * nothing was pressed and nothing was drawn composes nothing and presents
+     * nothing, which is most ticks.
+     */
+    while (MouseReadEvent(&movement))
+    {
+        WindowManagerHandleMouse(&movement);
+    }
+
+    while (KeyboardReadEvent(&key))
+    {
+        WindowManagerHandleKey(&key);
+    }
+
+    KernelWindowDemonstrationService();
+
+    {
+        const GraphicsRectangle changed = WindowManagerCompose();
+
+        if (!GraphicsRectangleIsEmpty(changed))
+        {
+            CompositorInvalidate(changed);
+        }
+    }
+
+    if (CursorIsAvailable())
+    {
+        KernelFollowMouse();
+    }
+
+    CompositorPresent();
+}
+
+
 
 /*
  * Writes a string to the serial line, with each form feed translated to the
@@ -1125,6 +1244,7 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
      */
     GraphicsReport();
     KernelVerifyGraphics();
+    KernelVerifyCircle();
 
     /*
      * Phase 6, sub-task 6.4. The console, which takes the screen.
@@ -1168,6 +1288,15 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
     KernelVerifyCompositing();
     KernelVerifyCompositor();
     CompositorReport();
+
+    /*
+     * Sub-task 9.1: the window manager, upon a screen composed in memory, after
+     * the compositor it will be given the back buffer of and before the pointer
+     * whose events it will route. It leaves the manager holding the test's
+     * surface; the entry point gives it the real one when the demonstration is
+     * started, below the banner.
+     */
+    KernelVerifyWindows();
     KernelVerifyConsole();
     KernelVerifyFaultScreen();
 
@@ -1775,75 +1904,158 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
      * than faulting, hanging or resetting on the way. What follows them says
      * which sub-task the boot got as far as, and must be revised with the boot.
      */
-    KernelWriteString("Phase 8 initialisation complete: the shell of sub-task 8.7 is "
-                      "about to be read off the root\nfilesystem and entered at privilege "
-                      "level 3, where it prompts, edits a line with a\nhistory, reads the "
-                      "terminal through descriptor 0, and runs what is typed: built-ins,\n"
-                      "programs sought upon PATH, their redirections, pipelines of them, and "
-                      "jobs — control-C, control-Z, &,\nfg and bg — the first programs this "
-                      "system has stopped from outside;\nbeneath it, everything Phase 7 built: a program "
-                      "loaded from a volume, entered with an argument\nvector, making a "
-                      "child of itself and collecting it, above a C library whose streams,\n"
-                      "heap and wrappers were asserted by the kernel before a userland "
-                      "existed to assert\nthem in.\n");
+    KernelWriteString("Phase 9 initialisation complete: the window manager of sub-task 9.1 "
+                      "is about to take the\nscreen, the keyboard and the mouse — a stack of "
+                      "windows, one of them holding the focus,\nevery key routed to that one "
+                      "and every movement to the one beneath the pointer — with\nthree "
+                      "windows a person can operate upon it; and the shell of Phase 8 is "
+                      "about to be read\noff the root filesystem and entered at privilege "
+                      "level 3 upon the serial line, or upon\nthe console where the "
+                      "shell-only or the diagnostics entry was chosen, where it prompts,\n"
+                      "edits a line with a history, and runs what is typed: built-ins, "
+                      "programs sought upon\nPATH, their redirections, pipelines of them, "
+                      "and jobs.\n");
 
     VgaSetColour(VGA_COLOUR_LIGHT_GREY, VGA_COLOUR_BLACK);
 
     /*
-     * The display speaks again, if it was quiet. A person who booted the
-     * default entry sees the banner and a prompt and nothing between: the
-     * boot log is upon the serial line, and upon the screen of the
-     * `diagnostics` entry. It said so in a line here until 2026-09-15, at the
-     * project owner's request removed — the menu entry's name is the notice.
-     */
-    KernelDisplaySetQuiet(false);
-
-    /*
-     * Sub-task 8.1: the shell, where there is a root to read it from and a
-     * terminal to type at. It is started again when it ends, because the
-     * alternative is a machine that halts the first time somebody presses
-     * control-D — and each ending is reported, so that a shell which faulted
-     * is not mistaken for one that was asked to stop.
+     * Which of two things the screen is for, decided by the menu entry.
      *
-     * The erase limit is set before the first prompt for the reason the echo
-     * loop sets it: everything above this line is the boot log, and a backspace
-     * must not consume it. The editor never backspaces past its own prompt, so
-     * the limit is a guard and not a mechanism the shell depends upon.
-     *
-     * Where there is a keyboard or a mouse but no root, the echo loop of Phase 3
-     * remains, as the demonstration of the interrupt path it always was.
+     * Since sub-task 9.1 the default entry gives the screen to the window
+     * manager, and the shell runs upon the serial line; the `shell-only`
+     * entry, and the `diagnostics` entry that shows the boot log first, give
+     * the screen to the shell as every entry did through Phase 8. The window
+     * manager needs a compositor, so a machine the boot loader left in a
+     * text mode gets the shell whichever entry was chosen, and is told so.
      */
-    if (VfsRootIsMounted() && (KeyboardIsPresent() || SerialIsPresent()))
     {
-        VgaSetEraseLimit();
-        ConsoleSetEraseLimit();
+        const bool shell_only = KernelCommandLineHasOption("shell-only") ||
+                                KernelCommandLineHasOption("diagnostics");
+        const bool windows = !shell_only && CompositorIsActive() && VfsRootIsMounted();
 
-        for (;;)
+        if (!shell_only && !windows)
         {
-            int64_t status = 0;
+            KernelWriteString("The window manager needs a compositor and a root, and one is "
+                              "absent; the shell takes the screen.\n");
+        }
 
-            if (!KernelRunShell(&status))
+        /*
+         * The display speaks again, if it was quiet — where the shell has it. A
+         * person who booted the shell-only entry sees the banner and a prompt
+         * and nothing between: the boot log is upon the serial line, and upon
+         * the screen of the `diagnostics` entry. It said so in a line here
+         * until 2026-09-15, at the project owner's request removed — the menu
+         * entry's name is the notice. Where the window manager has the screen
+         * the display stays quiet, the shell's output being the serial line's
+         * and the screen being the windows'.
+         */
+        KernelDisplaySetQuiet(windows);
+
+        /*
+         * Sub-task 8.1: the shell, where there is a root to read it from and a
+         * terminal to type at. It is started again when it ends, because the
+         * alternative is a machine that halts the first time somebody presses
+         * control-D — and each ending is reported, so that a shell which faulted
+         * is not mistaken for one that was asked to stop.
+         *
+         * The erase limit is set before the first prompt for the reason the echo
+         * loop sets it: everything above this line is the boot log, and a
+         * backspace must not consume it. The editor never backspaces past its
+         * own prompt, so the limit is a guard and not a mechanism the shell
+         * depends upon.
+         *
+         * Where there is a keyboard or a mouse but no root, the echo loop of
+         * Phase 3 remains, as the demonstration of the interrupt path it always
+         * was.
+         */
+        if (VfsRootIsMounted() && (KeyboardIsPresent() || SerialIsPresent()))
+        {
+            VgaSetEraseLimit();
+            ConsoleSetEraseLimit();
+
+            if (windows)
             {
-                KernelWriteString("The shell " KERNEL_SHELL_PATH " could not be started.\n");
-                break;
+                /*
+                 * Sub-task 9.1: the window manager takes the screen and the
+                 * keyboard, and the pointer becomes visible over its windows.
+                 * The terminal stops reading the keyboard, or every keystroke
+                 * would reach both the focused window and the shell; the serial
+                 * line remains the shell's. The tick handler does the rest.
+                 */
+                if (KernelWindowDemonstrationStart())
+                {
+                    TerminalAttachKeyboard(false);
+
+                    if (MouseIsPresent())
+                    {
+                        CursorShow();
+                    }
+
+                    KernelDisplay = KERNEL_DISPLAY_WINDOWS;
+                    WindowManagerReport();
+                }
+                else
+                {
+                    KernelWriteString("The window manager could not make its windows; the "
+                                      "shell takes the screen.\n");
+                    KernelDisplaySetQuiet(false);
+                }
             }
 
-            if (status < 0)
+            if (KernelDisplay != KERNEL_DISPLAY_WINDOWS)
             {
-                /* A shell that faulted — a negative status is the negated
-                 * vector — is not started again: a shell that faulted at once
-                 * would be started at once, for ever, and the log would be
-                 * that. A status the shell chose, since 8.3's `exit [n]`, is
-                 * an ending and not a failure, whatever the number. */
-                KernelWriteString("The shell ended by a fault, status ");
+                /*
+                 * The pointer becomes visible with the shell, and follows the
+                 * mouse while the shell runs, since 2026-09-16. Until then it
+                 * was shown by the echo loop below alone, which the shell had
+                 * replaced at 8.1, and the shell path drained no mouse event —
+                 * so a person with a mouse in hand saw nothing move and asked
+                 * why. Nothing upon this path uses the pointer; it is shown
+                 * because a pointer that follows the hand is the one thing a
+                 * machine with a mouse is expected to do without being asked.
+                 * The tick handler moves it.
+                 */
+                if (MouseIsPresent())
+                {
+                    CursorShow();
+                    CompositorPresent();
+                    KernelDisplay = KERNEL_DISPLAY_POINTER;
+                }
+            }
+
+            for (;;)
+            {
+                int64_t status = 0;
+
+                if (!KernelRunShell(&status))
+                {
+                    KernelWriteString("The shell " KERNEL_SHELL_PATH " could not be started.\n");
+                    break;
+                }
+
+                if (status < 0)
+                {
+                    /* A shell that faulted — a negative status is the negated
+                     * vector — is not started again: a shell that faulted at
+                     * once would be started at once, for ever, and the log
+                     * would be that. A status the shell chose, since 8.3's
+                     * `exit [n]`, is an ending and not a failure, whatever the
+                     * number. */
+                    KernelWriteString("The shell ended by a fault, status ");
+                    KernelWriteHexadecimal((uint64_t)status);
+                    KernelWriteString(", and is not started again.\n");
+                    break;
+                }
+
+                KernelWriteString("The shell ended with status ");
                 KernelWriteHexadecimal((uint64_t)status);
-                KernelWriteString(", and is not started again.\n");
-                break;
+                KernelWriteString("; starting it again.\n");
             }
 
-            KernelWriteString("The shell ended with status ");
-            KernelWriteHexadecimal((uint64_t)status);
-            KernelWriteString("; starting it again.\n");
+            /* The echo loop below drains the mouse and the keyboard for itself. */
+            KernelDisplay = KERNEL_DISPLAY_IDLE;
+            TerminalAttachKeyboard(true);
+            KernelDisplaySetQuiet(false);
         }
     }
 
