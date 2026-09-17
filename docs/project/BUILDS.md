@@ -216,6 +216,39 @@ permanent and would be paid for by everybody who ever clones the project. A
 check is used rather than a convention because a convention is what somebody
 overrides at the moment it matters.
 
+## Every build is recorded, since 2026-09-16
+
+**By the project owner's decision on the day `Oxys 1 Alpha` was cut, every
+build is recorded — mid-development or not.** Not the released ones, not the
+ones somebody made an observation about, every image `make verify` boots: one
+row each, whether or not the image is kept. The judgement that had governed
+recording — was this image worth a row? — is withdrawn, and with it the failure
+it invited, which is the failure this document opens with: some hundreds of
+images by sub-task 7.2 of which not one could be referred to, because each had
+seemed at the time not worth the line.
+
+What the decision costs is the row, and a row is cheap by construction — that
+was the argument of *The record is `builds.tsv`* above. What it buys is that
+every observation ever made about an image can name it, including the
+observations nobody knew at the time they were making: a self-test that began
+failing between two builds, a kernel that grew by a page, an assertion count
+that changed. The register becomes the one record here whose rows are the
+images and not the source.
+
+**Archiving is still a flag** and the section below still holds: the row is
+recorded every time and the image is kept when somebody judges it worth
+keeping. A row that claims no archive claims nothing false.
+
+**The procedure** is the commit convention of
+[`../../CONTRIBUTING.md`](../../CONTRIBUTING.md), Section 6, with one step
+more: the change is verified and committed, `make build-record NOTE="…"` then
+records the image the verification booted — the commit column naming the
+commit just made, the tree being clean — and the row goes into the second
+commit, the one that records the first's hash in [`HISTORY.md`](HISTORY.md).
+A build made and verified without being committed — a negative test, an
+experiment — is recorded all the same, `dirty=yes`, and its note says what it
+was.
+
 ### Archiving is not the default
 
 `make build-record ARCHIVE=1` keeps the image; plain `make build-record` does

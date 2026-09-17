@@ -51,7 +51,7 @@ A change is not complete until all of these are true. This is
 | A boot-time self-test asserts the new behaviour, or the absence of one is recorded | Section 6 |
 | `make verify` passes | Section 7 |
 | `make lint` passes | The licence tags and the corpus checks of [`tools/README.md`](tools/README.md), and what CI runs |
-| The image the run was made against is in the build register | `make build-record NOTE="…"`, which appends to [`docs/project/builds.tsv`](docs/project/builds.tsv) and re-renders [`BUILDS.md`](docs/project/BUILDS.md). Added at sub-task 7.2 so that an observation about an image can name it |
+| The image the run was made against is in the build register | `make build-record NOTE="…"`, which appends to [`docs/project/builds.tsv`](docs/project/builds.tsv) and re-renders [`BUILDS.md`](docs/project/BUILDS.md). Added at sub-task 7.2 so that an observation about an image can name it; since 2026-09-16 every build, mid-development or not |
 
 **A stale document is a defect of the same kind as a bug.** That is the whole of
 the reasoning: the documentation is part of the codebase and not a description of
@@ -166,7 +166,11 @@ field rather than overlaid.
 **Commits.** Long-form formal prose saying what changed and why — not a bullet
 list. Commit to `main`; this project does not branch. Then a second commit,
 `Record the commit hash of <thing>`, filling in the `Commit` column of the
-`HISTORY.md` row, which cannot be written until the first commit exists.
+`HISTORY.md` row, which cannot be written until the first commit exists —
+and, since 2026-09-16, carrying the build register's row for the image the
+verification booted: `make build-record NOTE="…"` after the first commit, so
+that the row names it, and every build is recorded whether or not it is kept.
+[`docs/project/BUILDS.md`](docs/project/BUILDS.md), *Every build is recorded*.
 
 An amendment to `PROJECT_GUIDELINES.md` requires the project owner's explicit
 decision, and the amendment and its reason must be acknowledged in the commit
