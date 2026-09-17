@@ -215,6 +215,7 @@ C_SOURCES := kernel/kernel.c \
              kernel/test/gfx/compositor.c \
              kernel/test/gfx/faultscreen.c \
              kernel/test/gfx/windows.c \
+             kernel/test/gfx/client.c \
              kernel/test/dev/devices.c \
              kernel/test/dev/mouse.c \
              kernel/test/storage/stack.c \
@@ -307,6 +308,7 @@ C_SOURCES := kernel/kernel.c \
              graphics/faultscreen.c \
              graphics/cursor.c \
              graphics/window.c \
+             graphics/client.c \
              $(LIBC_SOURCES) \
              $(SHELL_SOURCES)
 
@@ -321,6 +323,7 @@ ASM_SOURCES := boot/boot.asm \
                kernel/test/libc/line_image.asm \
                kernel/test/proc/directory_image.asm \
                kernel/test/proc/signal_image.asm \
+               kernel/test/gfx/client_image.asm \
                kernel/test/shell/programs_image.asm \
                $(LIBC_ASM_SOURCES)
 
@@ -524,7 +527,7 @@ $(USER_CRT0): libc/crt/crt0.asm
 # Within the generated rule, the archive is named *after* the program's objects,
 # which is not a style choice: a linker resolves an archive's members against the
 # references it has already seen, so an archive named first contributes nothing.
-USER_PROGRAMS := startup-check arg-check exec-check file-check line-check dir-check env-check signal-check echo cat ls mkdir rm touch cp rmdir wc micro head tail grep sort mv ps sh
+USER_PROGRAMS := startup-check arg-check exec-check file-check line-check dir-check env-check signal-check window-check echo cat ls mkdir rm touch cp rmdir wc micro head tail grep sort mv ps sh windows
 
 USER_PROGRAM_SOURCES := $(foreach program,$(USER_PROGRAMS),$(wildcard userland/$(program)/*.c))
 USER_PROGRAM_IMAGES  := $(foreach program,$(USER_PROGRAMS),$(USER_DIR)/$(program).elf)
@@ -579,6 +582,7 @@ $(BUILD_DIR)/kernel/test/libc/utilities_image.asm.o: $(USER_PROGRAM_EMBEDS)
 $(BUILD_DIR)/kernel/test/libc/line_image.asm.o: $(USER_DIR)/line-check.embed.elf $(USER_DIR)/sh.embed.elf
 $(BUILD_DIR)/kernel/test/proc/directory_image.asm.o: $(USER_DIR)/dir-check.embed.elf
 $(BUILD_DIR)/kernel/test/proc/signal_image.asm.o: $(USER_DIR)/signal-check.embed.elf
+$(BUILD_DIR)/kernel/test/gfx/client_image.asm.o: $(USER_DIR)/window-check.embed.elf
 $(BUILD_DIR)/kernel/test/shell/programs_image.asm.o: $(USER_DIR)/env-check.embed.elf
 $(BUILD_DIR)/%.asm.o: %.asm
 	@mkdir -p $(dir $@)
@@ -688,7 +692,7 @@ INITRD_UUID    := 0c5f7a10-7b41-4d2e-9a3c-6f0c5f7a1000
 # check program is a test's apparatus: it is embedded in the kernel image, where
 # the self-test that runs it is, and a system that shipped it in /bin would be
 # shipping its own test harness to somebody who asked for a shell.
-INITRD_UTILITIES := echo cat ls mkdir rm touch cp rmdir wc micro head tail grep sort mv ps sh
+INITRD_UTILITIES := echo cat ls mkdir rm touch cp rmdir wc micro head tail grep sort mv ps sh windows
 INITRD_SOURCES   := $(foreach utility,$(INITRD_UTILITIES),$(USER_DIR)/$(utility).embed.elf)
 
 # `/mnt` is the second and last thing upon the image, and it is empty.

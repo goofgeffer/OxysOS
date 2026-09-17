@@ -2,15 +2,17 @@
 <!-- SPDX-License-Identifier: CC0-1.0 -->
 # `userland/` — The Programs That Run Upon This System
 
-**Phase**: 7 and 8 of [`../docs/project/PLAN.md`](../docs/project/PLAN.md). Sub-task
+**Phase**: 7, 8 and 9 of [`../docs/project/PLAN.md`](../docs/project/PLAN.md). Sub-task
 7.5 placed the first material here; sub-task 7.6 added the utilities and the three
 programs that assert them; and sub-task 7.7 put five of them somewhere a person
 could find, in `/bin` upon the initial ramdisk the kernel mounts as its root; and
 sub-task 8.1 added the shell, which the kernel starts when the boot finishes, and
 the program that asserts its line editor; 8.5 added `touch`, `cp` and `rmdir`, and 8.6
 `wc` and, at the project owner's request, the editor `micro` and then `head`, `tail`,
-`grep`, `sort`, `mv` and `ps`, so that `/bin` holds
-seventeen. See
+`grep`, `sort`, `mv` and `ps`, so that `/bin` held
+seventeen; and sub-task 9.2 added `windows`, the demonstration the default
+entry presents and the first client of the window manager, the eighteenth, with
+`window-check` beside it. See
 [`../docs/storage/INITRD.md`](../docs/storage/INITRD.md), and Section 2 of it for
 why the six `-check` programs are **not** carried there: each exists to make a
 machine-readable statement about a system call, so each is embedded in the kernel
@@ -59,6 +61,8 @@ which is what makes the boundary worth having somewhere a person can see.
 | [`sort/main.c`](sort/main.c) | 2026-09-16: the lines in byte order, `-r` reversed, by a stable merge; `ls` does not sort and this is where it is done. |
 | [`mv/main.c`](mv/main.c) | 2026-09-16: a rename by `link` and `unlink`, or a move into a directory; not atomic, not lossy, not across volumes. |
 | [`ps/main.c`](ps/main.c) | 2026-09-16: the processes, one slot of the kernel's table per `procinfo` call — identifier, parent, group, state, pages, name. |
+| [`windows/main.c`](windows/main.c) | Sub-task 9.2: the window demonstration, the first client of the window manager — three windows composed in the program's own memory and carried across by `OxysWindowBlit`, their events read by `OxysWindowEvent` with `SYSCALL_WINDOW_ANY` and a wait: a figure of discs, a disc that follows the pointer and grows while a button is held, and a tile per key typed. Placed by `OxysWindowScreen`. No text, there being no face in userland; `../docs/design/WINDOWS.md`, Section 7. |
+| [`window-check/main.c`](window-check/main.c) | Sub-task 9.2: asserts the client protocol from privilege level 3 — the screen's bounds, a window made and told of the focus, pixels taken and a rectangle outside the content refused, the focus passing between two windows and back, a window the caller does not hold refused, and a wait that sleeps until the kernel's self-test injects a key — and leaves a window standing for its ending to destroy. `../docs/design/WINDOWS.md`, Section 11. |
 | [`wc/main.c`](wc/main.c) | Sub-task 8.6: counts the newlines, words and bytes of each operand, or of the standard input for none, with `-c`, `-l` and `-w` and a `total` line — the first utility whose reason to exist is the pipeline, being what a person puts at the end of one. It reads the standard input to its end and not to a control-D, a pipe ending when its writer does. |
 | [`arg-check/main.c`](arg-check/main.c) | Sub-task 7.6: compares the argument vector it was given against the vector it expects, and ends with the number of comparisons that failed. It exists because nothing in this kernel can read what a program printed. |
 | [`exec-check/main.c`](exec-check/main.c) | Sub-task 7.6: becomes `arg-check` through `execve`, so that a vector crosses an address space that is destroyed. It has no assertions of its own — upon success it no longer exists, and the status the kernel collects is `arg-check`'s. |

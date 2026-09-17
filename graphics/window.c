@@ -6,8 +6,9 @@
  *          the stack they are composed in, the focus, the binding of the pointer
  *          to a window by a held button, the frame drawn about each window, and
  *          the routing of keys and movements into the windows' queues.
- * Key functions: WindowManagerInitialise, WindowCreate, WindowDestroy,
- *          WindowRaise, WindowFocus, WindowMove, WindowInvalidate,
+ * Key functions: WindowManagerInitialise, WindowManagerShutdown, WindowCreate,
+ *          WindowDestroy, WindowRaise, WindowFocus, WindowMove, WindowInvalidate,
+ *          WindowWritePixels, WindowSetOwner, WindowDestroyOwnedBy,
  *          WindowReadEvent, WindowManagerHandleKey, WindowManagerHandleMouse,
  *          WindowManagerCompose, WindowManagerWindowAt, WindowManagerReport.
  * References:
@@ -42,15 +43,15 @@
  *   rectangle is what the caller carries to the compositor.
  *
  * Concurrency. The table, the stack, the focus and the queues are touched by
- * whoever routes events and by whoever composes, and nothing here is locked.
- * Upon the running machine both are the bootstrap processor's timer tick,
- * which runs with interrupts masked, and the demonstration that owns the
- * windows runs from that tick as well; a second processor reaches none of it.
- * A client of sub-task 9.2 will draw from a process and read its queue from a
- * system call, at which point the queue acquires a producer and a consumer upon
- * possibly different processors and must take a lock, and
- * docs/design/CONCURRENCY.md, Section 10, limitation 1, lists this file until
- * it does.
+ * whoever routes events and by whoever composes — the bootstrap processor's
+ * timer tick, which runs with interrupts masked — and, since sub-task 9.2, by
+ * a client's system calls, which run upon the bootstrap processor with
+ * interrupts masked as well, every user thread being pinned there. Nothing
+ * here is locked: the two cannot interleave upon the one processor that
+ * reaches either. A user thread upon a second processor is what would make
+ * the queue a producer and a consumer upon two processors, and the lock this
+ * file would then need is the one docs/design/CONCURRENCY.md, Section 10,
+ * limitation 1, lists this file as lacking.
  */
 
 #include <oxys/gfx/window.h>
@@ -81,6 +82,9 @@ typedef struct Window
 
     char title[WINDOW_TITLE_CAPACITY + 1U];
 
+    /* The owner's tag, since sub-task 9.2; zero is the kernel's own. */
+    uint64_t owner;
+
     /* The content: a tightly packed surface over pixels from the heap. */
     GraphicsSurface surface;
     void *pixels;
@@ -95,6 +99,7 @@ typedef struct Window
 static bool WindowActive;
 static GraphicsSurface *WindowScreen;
 static WindowPalette WindowColours;
+static WindowEncodeFunction WindowEncode;
 
 static Window WindowTable[WINDOW_CAPACITY];
 
@@ -463,15 +468,10 @@ static void WindowDrawFrame(size_t identifier)
 
 /* ---------------------------------------------------------- interface */
 
-bool WindowManagerInitialise(GraphicsSurface *screen, const WindowPalette *palette)
+/* Gives every window back, so that a manager initialised twice, or given up,
+ * leaks nothing. */
+static void WindowReleaseAll(void)
 {
-    if ((screen == NULL) || (palette == NULL) || (screen->pixels == NULL))
-    {
-        return false;
-    }
-
-    /* Every window of a previous screen is given back before the new one is
-     * taken, so that a manager initialised twice leaks nothing. */
     for (size_t index = 0U; index < WINDOW_CAPACITY; ++index)
     {
         if (WindowTable[index].in_use)
@@ -482,8 +482,25 @@ bool WindowManagerInitialise(GraphicsSurface *screen, const WindowPalette *palet
         }
     }
 
+    WindowStackCount = 0U;
+    WindowFocused = WINDOW_NONE;
+    WindowGrabbed = WINDOW_NONE;
+    WindowDragged = WINDOW_NONE;
+}
+
+bool WindowManagerInitialise(GraphicsSurface *screen, const WindowPalette *palette,
+                             WindowEncodeFunction encode)
+{
+    if ((screen == NULL) || (palette == NULL) || (screen->pixels == NULL))
+    {
+        return false;
+    }
+
+    WindowReleaseAll();
+
     WindowScreen = screen;
     WindowColours = *palette;
+    WindowEncode = encode;
     WindowActive = true;
     WindowStackCount = 0U;
     WindowFocused = WINDOW_NONE;
@@ -499,6 +516,19 @@ bool WindowManagerInitialise(GraphicsSurface *screen, const WindowPalette *palet
     WindowDamageAdd(GraphicsSurfaceBounds(screen));
 
     return true;
+}
+
+void WindowManagerShutdown(void)
+{
+    if (!WindowActive)
+    {
+        return;
+    }
+
+    WindowReleaseAll();
+    WindowScreen = NULL;
+    WindowActive = false;
+    WindowDamaged = false;
 }
 
 bool WindowManagerIsActive(void)
@@ -570,6 +600,7 @@ size_t WindowCreate(int32_t x, int32_t y, int32_t width, int32_t height, const c
         window->title[length] = '\0';
     }
 
+    window->owner = 0U;
     window->head = 0U;
     window->count = 0U;
     window->dropped = 0U;
@@ -630,6 +661,44 @@ void WindowDestroy(size_t identifier)
 bool WindowExists(size_t identifier)
 {
     return WindowAt(identifier) != NULL;
+}
+
+void WindowSetOwner(size_t identifier, uint64_t owner)
+{
+    Window *const window = WindowAt(identifier);
+
+    if (window != NULL)
+    {
+        window->owner = owner;
+    }
+}
+
+uint64_t WindowOwner(size_t identifier)
+{
+    const Window *const window = WindowAt(identifier);
+
+    return (window == NULL) ? 0U : window->owner;
+}
+
+size_t WindowDestroyOwnedBy(uint64_t owner)
+{
+    size_t destroyed = 0U;
+
+    if (!WindowActive)
+    {
+        return 0U;
+    }
+
+    for (size_t index = 0U; index < WINDOW_CAPACITY; ++index)
+    {
+        if (WindowTable[index].in_use && (WindowTable[index].owner == owner))
+        {
+            WindowDestroy(index);
+            ++destroyed;
+        }
+    }
+
+    return destroyed;
 }
 
 void WindowRaise(size_t identifier)
@@ -722,6 +791,46 @@ void WindowInvalidate(size_t identifier, GraphicsRectangle region)
 
         WindowDamageAdd(GraphicsRectangleIntersect(upon_screen, content));
     }
+}
+
+bool WindowWritePixels(size_t identifier, GraphicsRectangle area, const uint32_t *pixels)
+{
+    Window *const window = WindowAt(identifier);
+
+    if ((window == NULL) || (pixels == NULL) || (area.width <= 0) || (area.height <= 0) ||
+        (area.x < 0) || (area.y < 0) || (area.x > window->width - area.width) ||
+        (area.y > window->height - area.height))
+    {
+        return false;
+    }
+
+    /*
+     * Pixel by pixel, because each is encoded on the way in and an encoding
+     * is per pixel. A client's rectangle is small — the demonstration's
+     * largest is a window's whole content, a few hundred thousand pixels —
+     * and a copy that converted rows at a time would be a second encoder to
+     * keep in step with FramebufferEncode.
+     */
+    for (int32_t row = 0; row < area.height; ++row)
+    {
+        const uint32_t *const source = pixels + ((size_t)row * (size_t)area.width);
+
+        for (int32_t column = 0; column < area.width; ++column)
+        {
+            const uint32_t value = source[column];
+            const uint32_t encoded =
+                (WindowEncode == NULL)
+                    ? value
+                    : WindowEncode((uint8_t)((value >> 16) & 0xFFU),
+                                   (uint8_t)((value >> 8) & 0xFFU), (uint8_t)(value & 0xFFU));
+
+            GraphicsPutPixel(&window->surface, area.x + column, area.y + row, encoded);
+        }
+    }
+
+    WindowInvalidate(identifier, area);
+
+    return true;
 }
 
 const char *WindowTitle(size_t identifier)
@@ -998,6 +1107,11 @@ GraphicsRectangle WindowManagerCompose(void)
 GraphicsRectangle WindowManagerDamage(void)
 {
     return WindowDamaged ? WindowDamage : WindowEmptyRectangle();
+}
+
+GraphicsRectangle WindowManagerScreenBounds(void)
+{
+    return WindowActive ? GraphicsSurfaceBounds(WindowScreen) : WindowEmptyRectangle();
 }
 
 size_t WindowManagerWindowAt(int32_t x, int32_t y)

@@ -371,6 +371,7 @@ either.
 | `graphics/compositor.c` | The compositor: the back buffer that stands in for the framebuffer, the ordered layers composited over it, the damage rectangle that narrows what is carried to the display, and the suspension a fault screen imposes. |
 | `graphics/cursor.c` | The pointer: its two-bitmap shape, and the layer the compositor draws it as. |
 | `graphics/window.c` | The window manager of sub-task 9.1: the table of windows, the stack, the focus, the binding of the pointer by a held button, the frame drawn about each window, the routing of keys and movements into the windows' queues, and the composition of the changed region. |
+| `graphics/client.c` | The client side of the window manager, sub-task 9.2: the six window calls, the ownership of a window by a process, the copy of a client's pixels with the screen's encoding, and the wait for an event. |
 | `graphics/draw.c` | The two-dimensional primitives upon a surface: rectangle arithmetic and clipping, the pixel, the filled and outlined rectangle, the integer line, and the blit. |
 | `graphics/framebuffer.c` | The framebuffer the boot loader supplies: its validation, the write-combining memory type given to its pages, its mapping into the kernel arena, and the description every later phase draws through. |
 | `graphics/font.c` | The bitmap face — ninety-five glyphs of eight by eight, drawn for this project — and the drawing of one glyph upon a surface. |

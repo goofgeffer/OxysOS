@@ -31,7 +31,7 @@ pointer receiving the mouse. **`Oxys 1 Alpha`, the first release, was cut from
 this state on 2026-09-16**: [`RELEASE-1-ALPHA.md`](RELEASE-1-ALPHA.md).
 
 **And it runs programs a person would recognise.** Since sub-task 7.6 the kernel
-carries fourteen system calls rather than eight (eighteen since sub-task 8.5, nineteen since 8.6, twenty-seven since 8.7, twenty-nine with `link` and `procinfo` added after it) — `open`, `close`, `read`,
+carries fourteen system calls rather than eight (eighteen since sub-task 8.5, nineteen since 8.6, twenty-seven since 8.7, twenty-nine with `link` and `procinfo` added after it, thirty-five with the six window calls of 9.2) — `open`, `close`, `read`,
 `readdir`, `mkdir` and `unlink` joining them — each process holds a descriptor
 table of its own, and `execve` carries the argument and environment vectors it
 had refused since Phase 6. Above those stand `ls`, `cat`, `echo`, `mkdir` and
@@ -654,7 +654,8 @@ with the `link` and `procinfo` calls, twenty-nine. [`../design/PROCESS.md`](../d
 [`../design/LIBC.md`](../design/LIBC.md), Section 13.
 
 **Phase 9 — the desktop, its system services and its configuration.** Begun:
-sub-task 9.1 is complete, on 2026-09-17, and the seven after it are not. The
+sub-tasks 9.1 and 9.2 are complete, both on 2026-09-17, and the six after them
+are not. The
 window manager holds a fixed table of sixteen windows upon the compositor's back
 buffer, each a content surface its owner draws into and a queue of events its
 owner drains, with a frame the manager draws: a flat band, a one-pixel border, a
@@ -671,9 +672,15 @@ gives the window manager the screen, the keyboard and the mouse, with the shell
 upon the serial line and three windows a person can operate — the notes, the
 pointer's position with a disc that follows it, and the characters typed — and
 the **Shell-only** and **Shell Diagnostics** entries give the shell the screen
-as every entry did through Phase 8. There is no client yet: the windows' only
-owner is the demonstration, and 9.2 is where a process becomes one.
-[`../design/WINDOWS.md`](../design/WINDOWS.md);
+as every entry did through Phase 8. **Since 9.2 a process owns a window**:
+six calls — thirty-five in all — by which it creates one, moves it, carries a
+rectangle of `0x00RRGGBB` pixels into it, asks the screen's size, and reads its
+events one at a time from one window or any of its own, sleeping until one
+arrives. A window is the process's and `EBADF` to every other, and goes with
+the process at its ending. The demonstration is that process, `/bin/windows`,
+launched beside the shell and drawing everything it shows from privilege level
+3; `window-check` asserts the protocol with a kernel thread reading its pixels
+and waking it. [`../design/WINDOWS.md`](../design/WINDOWS.md);
 [`../design/DRAWING.md`](../design/DRAWING.md), Section 4.1.
 
 ## 3. Where it has been observed to work
@@ -713,6 +720,7 @@ The physical machine is one machine — the HP Laptop 14-dq0052dx specified in
 | 8.6 Pipelines, and two programs at once | Yes, and driven over the serial line | **Yes, and driven at the PS/2 keyboard** | **Yes — 8.6**, to the prompt | — | **Not yet run** |
 | 8.7 Job control, process groups and the terminal's signals | Yes, and driven over the serial line with control-C and control-Z | **Yes, and driven at the PS/2 keyboard** | **Yes — 8.7**, to the prompt | — | **Not yet run** |
 | 9.1 The window manager | Yes, at 1280 by 800, the mouse and the keyboard driven through the monitor and the screen captured at each step | **Yes**, at 640 by 480, typed at the PS/2 keyboard and captured | **Yes — 9.1**, at 1024 by 768, to the three windows and the prompt upon the serial line | — | **Not yet run** |
+| 9.2 The client protocol | Yes, the demonstration program driven through the monitor and captured at each step | **Yes**, at 640 by 480, the program's windows placed by the screen it asked for | **Yes — 9.2**, `window-check` passed and the prompt reached | — | **Not yet run** |
 
 **The rows marked "— 7.2" were all established by two boots of one image**,
 because a boot runs every self-test in the corpus and a clean one is therefore
@@ -917,7 +925,7 @@ functional. [`TESTING.md`](TESTING.md), Section 3.
 There is no test harness and there will be none before Phase 7, there being no
 userland to run one in. The kernel therefore asserts its own properties at boot,
 in the order the subsystems are initialised, and `make verify` fails if any of
-them reports a failure. Sixty-eight assertions presently report passed or sound.
+them reports a failure. Sixty-nine assertions presently report passed or sound.
 
 Those tests are in [`../../kernel/test/`](../../kernel/test/), one file per
 subsystem. Each subsystem's design document carries a table pairing every
@@ -946,7 +954,7 @@ design document ends with its particular ones.
 | ~~A signal.~~ **Arrived at 8.7**: SIGPIPE, control-C and control-Z, `&`, `jobs`, `fg`, `bg` and `kill`. What remains is a control-C that does not flush the typed-ahead input, and an orphan collected by nobody. `SHELL.md`, Section 29; `PROCESS.md`, Section 19. | Phase 9, for the orphan |
 | A canonical terminal. `stdin` is raw: `fgets` delivers keystrokes and control sequences, unechoed, and `cat` with no operand still reports the absence. The shell wants raw; nothing yet wants the other. `SHELL.md`, Section 2.1. | When something wants it |
 | Synchronisation **applied**, beyond three structures. The diagnostic channel was locked at 6.14; the run queues and the process and thread tables at 6.15. Every other shared structure is still unsynchronised and still says so in its own file's header; `CONCURRENCY.md`, Section 10, limitation 1, enumerates them. | Phase 7 |
-| A program that owns a window. The window manager's windows are owned by kernel code; a process cannot yet create one, draw into one or read its events. | 9.2 |
+| ~~A program that owns a window.~~ **Arrived at 9.2**: six calls, and the demonstration is such a program. What remains is a face a program can draw text with, which 9.6 needs, and a shared mapping in place of the copy. `WINDOWS.md`, Section 12. | 9.6 for the face |
 | A desktop: a root beneath every window, a panel above them, and a way to start a program from the screen. The default entry presents three demonstration windows upon a bare ground. | 9.5 |
 | The shell upon the screen and the window manager at once. With the window manager the shell is upon the serial line; a terminal emulator window is what puts it back upon the screen. | 9.6 |
 | A reaper. A kernel thread that finishes cannot free its own stack — it is standing on it — and nothing else does. Its slot and its four pages are held until the machine stops. | Phase 7 |

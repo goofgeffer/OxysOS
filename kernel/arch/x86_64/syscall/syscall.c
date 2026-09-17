@@ -26,12 +26,19 @@
  * sub-task 6.7 replaces; the reasons it is shaped as it is are recorded in
  * kernel/arch/x86_64/syscall/syscall_entry.asm.
  *
+ * Since sub-task 6.7 this file also holds the dispatch table and the validation
+ * of a caller's arguments, and since sub-task 9.2 it dispatches the six window
+ * calls to graphics/client.c, which validates them; the note above records
+ * what it was when it was written and the reasons still hold for the part it
+ * describes.
+ *
  * Concurrency. Every register written here is per-processor. Sub-task 6.14 must
  * repeat this configuration upon each application processor as it is brought up,
  * with the same values; a processor that entered user mode without it would find
  * SYSCALL an invalid opcode.
  */
 
+#include <oxys/gfx/client.h>
 #include <oxys/arch/syscall/syscall.h>
 #include <oxys/arch/cpu/percpu.h>
 #include <oxys/arch/cpu/msr.h>
@@ -2056,7 +2063,13 @@ static const SyscallEntryDescriptor SyscallTable[SYSCALL_COUNT] = {
     { "setpgid", 2U },
     { "tcgroup", 1U },
     { "link", 2U },
-    { "procinfo", 2U }
+    { "procinfo", 2U },
+    { "window_create", 2U },
+    { "window_destroy", 1U },
+    { "window_move", 3U },
+    { "window_blit", 3U },
+    { "window_event", 3U },
+    { "window_screen", 1U }
 };
 
 bool SyscallNumberIsValid(uint64_t number)
@@ -2219,6 +2232,37 @@ void SyscallDispatch(SyscallFrame *frame)
 
     case SYSCALL_PROCINFO:
         frame->rax = (uint64_t)SyscallDoProcessInformation(frame->rdi, frame->rsi);
+        break;
+
+    /*
+     * The window calls of sub-task 9.2 are implemented in graphics/client.c
+     * and dispatched here without judgement: the arguments go across as the
+     * registers hold them, and the client layer validates every one, so that
+     * the protocol is in one file and this switch stays a switch.
+     */
+    case SYSCALL_WINDOW_CREATE:
+        frame->rax = (uint64_t)WindowClientCreate(frame->rdi, frame->rsi);
+        break;
+
+    case SYSCALL_WINDOW_DESTROY:
+        frame->rax = (uint64_t)WindowClientDestroy(frame->rdi);
+        break;
+
+    case SYSCALL_WINDOW_MOVE:
+        frame->rax = (uint64_t)WindowClientMove(frame->rdi, (int64_t)frame->rsi,
+                                                (int64_t)frame->rdx);
+        break;
+
+    case SYSCALL_WINDOW_BLIT:
+        frame->rax = (uint64_t)WindowClientBlit(frame->rdi, frame->rsi, frame->rdx);
+        break;
+
+    case SYSCALL_WINDOW_EVENT:
+        frame->rax = (uint64_t)WindowClientEvent(frame->rdi, frame->rsi, frame->rdx);
+        break;
+
+    case SYSCALL_WINDOW_SCREEN:
+        frame->rax = (uint64_t)WindowClientScreen(frame->rdi);
         break;
 
     default:

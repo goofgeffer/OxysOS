@@ -92,6 +92,7 @@
 #include <oxys/gfx/console.h>
 #include <oxys/gfx/cursor.h>
 #include <oxys/gfx/faultscreen.h>
+#include <oxys/gfx/client.h>
 #include <oxys/gfx/window.h>
 #include <oxys/dev/serial.h>
 #include <oxys/dev/pci.h>
@@ -318,24 +319,33 @@ void KernelServiceDisplay(void)
 
     /*
      * The window manager: every movement is routed, not merely the last, so
-     * that a press and its release within one tick both arrive; then the
-     * windows' owner — the demonstration, until sub-task 9.2 — acts upon its
-     * queues; then whatever changed is composed into the back buffer and
-     * carried out with the pointer over it. A tick in which nothing moved,
-     * nothing was pressed and nothing was drawn composes nothing and presents
-     * nothing, which is most ticks.
+     * that a press and its release within one tick both arrive; then, since
+     * sub-task 9.2, every program asleep for an event is woken where any was
+     * routed, so that it drains its queue and draws when it next runs; then
+     * whatever changed is composed into the back buffer and carried out with
+     * the pointer over it. A tick in which nothing moved, nothing was pressed
+     * and nothing was drawn composes nothing and presents nothing, which is
+     * most ticks. The windows' owners draw between ticks, from their own
+     * calls; what they drew is composed at the next.
      */
-    while (MouseReadEvent(&movement))
     {
-        WindowManagerHandleMouse(&movement);
-    }
+        const uint64_t routed_before = WindowManagerEventsRouted();
 
-    while (KeyboardReadEvent(&key))
-    {
-        WindowManagerHandleKey(&key);
-    }
+        while (MouseReadEvent(&movement))
+        {
+            WindowManagerHandleMouse(&movement);
+        }
 
-    KernelWindowDemonstrationService();
+        while (KeyboardReadEvent(&key))
+        {
+            WindowManagerHandleKey(&key);
+        }
+
+        if (WindowManagerEventsRouted() != routed_before)
+        {
+            WindowClientWakeAll();
+        }
+    }
 
     {
         const GraphicsRectangle changed = WindowManagerCompose();
@@ -893,6 +903,110 @@ static void KernelAttachPointer(void)
 /* Where the shell stands upon the root, and the name its process carries. */
 #define KERNEL_SHELL_PATH "/bin/sh"
 #define KERNEL_SHELL_NAME "sh"
+
+/* Where the window demonstration of sub-task 9.2 stands, and its name. */
+#define KERNEL_WINDOWS_PATH "/bin/windows"
+#define KERNEL_WINDOWS_NAME "windows"
+
+/*
+ * Gives the window manager the screen: the compositor's back buffer, the
+ * palette, and the framebuffer's encoding for a client's pixels. Returns false
+ * where there is no compositor.
+ *
+ * The palette, which docs/design/WINDOWS.md, Section 4, records: a dark slate
+ * ground, a warm white paper, one blue accent for the band that holds the
+ * focus and a quiet grey for the bands that do not. It is here because the
+ * entry point is what knows the framebuffer's encoding, as it is for the
+ * pointer's two colours.
+ */
+static bool KernelStartWindowManager(void)
+{
+    GraphicsSurface *const screen = CompositorSurface();
+    WindowPalette palette;
+
+    if (screen == NULL)
+    {
+        return false;
+    }
+
+    palette.ground = FramebufferEncode(43U, 52U, 64U);
+    palette.paper = FramebufferEncode(245U, 243U, 238U);
+    palette.border = FramebufferEncode(32U, 38U, 46U);
+    palette.title_focused = FramebufferEncode(79U, 134U, 247U);
+    palette.title_unfocused = FramebufferEncode(217U, 214U, 207U);
+    palette.text_focused = FramebufferEncode(255U, 255U, 255U);
+    palette.text_unfocused = FramebufferEncode(74U, 74U, 74U);
+
+    return WindowManagerInitialise(screen, &palette, FramebufferEncode);
+}
+
+/*
+ * Starts a program from the root and does not wait for it, of sub-task 9.2:
+ * what KernelRunShell does up to the start, and then ThreadLaunch in place of
+ * ThreadStart. The process has no parent and is collected by nobody, which is
+ * the orphan docs/design/PROCESS.md, Section 19, records and which `init` of
+ * sub-task 9.3 exists to collect; until then a program started this way that
+ * ends holds one slot of the process table until the machine stops.
+ */
+static bool KernelLaunchProgram(const char *path, const char *name)
+{
+    ProcessArguments arguments;
+    Process *process;
+    Thread *thread;
+    ElfImage image;
+    uint64_t stack;
+    size_t length = 0U;
+
+    while (name[length] != '\0')
+    {
+        ++length;
+    }
+
+    arguments.argument_count = 1U;
+    arguments.environment_count = 0U;
+    arguments.argument[0] = 0U;
+    arguments.storage_used = (uint32_t)(length + 1U);
+
+    for (size_t index = 0U; index <= length; ++index)
+    {
+        arguments.storage[index] = name[index];
+    }
+
+    process = ProcessCreate(name, NULL);
+
+    if (process == NULL)
+    {
+        return false;
+    }
+
+    if (ElfLoadFile(&process->space, path, &image) != ELF_OK)
+    {
+        ProcessDestroy(process);
+
+        return false;
+    }
+
+    ProcessRecordImage(process, &image);
+    stack = ProcessCreateUserStack(process, &arguments);
+
+    if (stack == 0U)
+    {
+        ProcessDestroy(process);
+
+        return false;
+    }
+
+    thread = ThreadCreate(process, image.entry, stack);
+
+    if ((thread == NULL) || !ThreadLaunch(thread))
+    {
+        ProcessDestroy(process);
+
+        return false;
+    }
+
+    return true;
+}
 
 /*
  * Runs the shell from the root filesystem, at privilege level 3, and returns
@@ -1877,6 +1991,13 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
      * and continued from outside themselves. */
     KernelVerifySignals();
 
+    /* Sub-task 9.2: the client protocol, asserted by window-check upon a
+     * manager holding a screen composed in memory, with a kernel thread for
+     * the world outside the program. After the signals, because the wait it
+     * asserts is ended by a wake the signals' machinery also uses. */
+    KernelVerifyClients();
+    WindowClientReport();
+
     /*
      * Sub-tasks 8.2 and 8.3: the shell's grammar, asserted in this kernel, and
      * then the shell itself run upon its sessions — after the root for the
@@ -1982,7 +2103,7 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
                  * would reach both the focused window and the shell; the serial
                  * line remains the shell's. The tick handler does the rest.
                  */
-                if (KernelWindowDemonstrationStart())
+                if (KernelStartWindowManager())
                 {
                     TerminalAttachKeyboard(false);
 
@@ -1992,12 +2113,27 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
                     }
 
                     KernelDisplay = KERNEL_DISPLAY_WINDOWS;
+
+                    /*
+                     * Sub-task 9.2: the demonstration is a program, the first
+                     * client of the protocol, launched beside the shell and
+                     * waited for by nobody. A desktop with nothing upon it is
+                     * what its absence leaves, and is reported rather than
+                     * turned into the shell taking the screen: the manager
+                     * works without it.
+                     */
+                    if (!KernelLaunchProgram(KERNEL_WINDOWS_PATH, KERNEL_WINDOWS_NAME))
+                    {
+                        KernelWriteString("The demonstration " KERNEL_WINDOWS_PATH
+                                          " could not be started; the screen is bare.\n");
+                    }
+
                     WindowManagerReport();
                 }
                 else
                 {
-                    KernelWriteString("The window manager could not make its windows; the "
-                                      "shell takes the screen.\n");
+                    KernelWriteString("The window manager could not take the screen; the "
+                                      "shell takes it.\n");
                     KernelDisplaySetQuiet(false);
                 }
             }

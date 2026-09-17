@@ -2246,3 +2246,27 @@ Two wrappers were added after the sub-task, on 2026-09-16, for two utilities:
 `OxysLink`, `link()`, the twenty-eighth call, and `OxysProcessInformation`,
 the twenty-ninth, which fills a `SyscallProcessInformation` for one slot of the
 process table. [`SHELL.md`](SHELL.md), Section 30.
+
+## 14. Sub-task 9.2: the window calls
+
+**Implementation**: six wrappers in [`../../libc/syscall/calls.c`](../../libc/syscall/calls.c),
+declared in [`../../libc/include/syscall.h`](../../libc/include/syscall.h), over
+the calls 29 to 34 of `<oxys/syscall_abi.h>` — thirty-five in all. The kernel's
+half is [`WINDOWS.md`](WINDOWS.md), Section 10, and `window-check` asserts them,
+Section 11 of that document.
+
+`OxysWindowCreate`, `OxysWindowDestroy`, `OxysWindowMove`, `OxysWindowBlit`,
+`OxysWindowEvent` and `OxysWindowScreen` are the calls and nothing above them:
+a program composes its pixels in its own memory, in `0x00RRGGBB`, and carries a
+rectangle of them across with a blit; it reads its events one at a time, from
+one window or from any of its own with `SYSCALL_WINDOW_ANY`, sleeping with
+`SYSCALL_WINDOW_WAIT` until one arrives. `ENOTSUP` from a create says the
+window manager does not have the screen — the shell-only and the diagnostics
+entries — and a program that wants a window should say so and stop, which is
+what `windows` does. No new `errno` was needed; `EBADF` is a window the caller
+does not hold, as it is a descriptor the caller does not hold.
+
+There is no drawing library above the calls and no face: a program draws
+rectangles and discs with arithmetic of its own, as `userland/windows/main.c`
+does, and cannot draw text. [`WINDOWS.md`](WINDOWS.md), Section 12, limitation
+4, is where that is owed, and 9.6 is where it is paid.

@@ -63,12 +63,13 @@ sub-task 8.1 the shell.
 | `/bin/micro` | The line editor added on 2026-09-16: the first thing that changes a file rather than writes one. |
 | `/bin/head`, `/bin/tail`, `/bin/grep`, `/bin/sort`, `/bin/mv`, `/bin/ps` | The six of 2026-09-16, after sub-task 8.7: the first lines, the last, the lines holding a string, the lines in order, a rename, and the processes. [`../design/SHELL.md`](../design/SHELL.md), Section 30. |
 | `/bin/sh` | The shell of Phase 8 — begun at sub-task 8.1 and complete at 8.7 — which the kernel reads off this filesystem and starts when the boot finishes. [`../design/SHELL.md`](../design/SHELL.md). |
+| `/bin/windows` | Sub-task 9.2: the window demonstration, the first client of the window manager, which the kernel starts beside the shell upon the default entry. Not a utility, and here because the kernel reads it off this filesystem as it reads the shell. |
 | `/mnt` | Empty. Where a volume the machine carries is mounted; Section 6.3. |
 | `/lost+found` | `mke2fs` makes it. Nothing here uses it. |
 
-**The check programs — four of sub-task 7.6, one of 8.1, one of 8.3 and one of 8.4 — are deliberately not here.**
-`arg-check`, `exec-check`, `file-check`, `startup-check`, `line-check`, `dir-check`
-and `env-check` are a test's
+**The check programs — four of sub-task 7.6, one of 8.1, one of 8.3, one of 8.4, one of 8.7 and one of 9.2 — are deliberately not here.**
+`arg-check`, `exec-check`, `file-check`, `startup-check`, `line-check`, `dir-check`,
+`env-check`, `signal-check` and `window-check` are a test's
 apparatus: each exists to make a machine-readable statement about a system call,
 and each is embedded in the kernel image beside the self-test that runs it. A
 system that shipped them in `/bin` would be shipping its own test harness to

@@ -14,6 +14,11 @@
  *          SYSCALL_WAITPID, SYSCALL_KILL, SYSCALL_SIGACTION, SYSCALL_SIGRETURN,
  *          SYSCALL_GETPID, SYSCALL_GETPGID, SYSCALL_SETPGID, SYSCALL_TCGROUP,
  *          SYSCALL_LINK, SYSCALL_PROCINFO, SyscallProcessInformation,
+ *          SYSCALL_WINDOW_CREATE, SYSCALL_WINDOW_DESTROY, SYSCALL_WINDOW_MOVE,
+ *          SYSCALL_WINDOW_BLIT, SYSCALL_WINDOW_EVENT, SYSCALL_WINDOW_SCREEN,
+ *          SyscallWindowRectangle,
+ *          SyscallWindowEvent, SYSCALL_WINDOW_WAIT, SYSCALL_WINDOW_ANY, the
+ *          SYSCALL_WINDOW_EVENT kinds,
  *          SYSCALL_WAIT_NO_HANG, SYSCALL_WAIT_UNTRACED, SYSCALL_STATUS_MAKE,
  *          SYSCALL_STATUS_KIND, SYSCALL_STATUS_NUMBER, the SYSCALL_SIG numbers,
  *          SYSCALL_SIGNAL_DEFAULT, SYSCALL_SIGNAL_IGNORE, SYSCALL_EINTR, SYSCALL_ESRCH,
@@ -267,7 +272,118 @@
  */
 #define SYSCALL_LINK      27U
 #define SYSCALL_PROCINFO  28U
-#define SYSCALL_COUNT     29U
+
+/*
+ * The window calls of sub-task 9.2: the client protocol by which a program
+ * creates, draws upon and receives events upon a window of the window manager.
+ *
+ * A window is named by a small number the kernel assigns, valid to the process
+ * that created it and to no other — a call upon another process's window is
+ * EBADF, as a call upon a descriptor the caller does not hold is. The kernel
+ * destroys a process's windows when the process ends.
+ *
+ *   window_screen(geometry)            Fills `geometry` with the screen: x and
+ *                                      y zero, width and height the display's,
+ *                                      or ENOTSUP where the window manager
+ *                                      does not have it. A program places its
+ *                                      windows by this and not by a guess.
+ *   window_create(geometry, title)     A window whose frame's top left is at
+ *                                      (x, y) upon the screen and whose content
+ *                                      is width by height, titled; the number,
+ *                                      or EINVAL for an extent outside the
+ *                                      bounds, ENOMEM where there is no room,
+ *                                      ENOTSUP where the window manager does
+ *                                      not have the screen.
+ *   window_destroy(window)             Destroys it.
+ *   window_move(window, x, y)          Moves the frame's top left, confined so
+ *                                      that its title band stays reachable.
+ *   window_blit(window, area, pixels)  Copies `area.width` by `area.height`
+ *                                      pixels, row by row, tightly packed, each
+ *                                      a 32-bit value 0x00RRGGBB, to the
+ *                                      content at (area.x, area.y); an area
+ *                                      that reaches outside the content is
+ *                                      EINVAL. The kernel encodes each pixel
+ *                                      for the screen it has.
+ *   window_event(window, event, flags) Removes the oldest event into `event`
+ *                                      and returns 1; returns 0 where the queue
+ *                                      is empty, or — with SYSCALL_WINDOW_WAIT
+ *                                      — sleeps until one arrives, reporting
+ *                                      EINTR if a signal arrives first. With
+ *                                      SYSCALL_WINDOW_ANY for the window, an
+ *                                      event of any window the caller owns,
+ *                                      the event naming which; EBADF where it
+ *                                      owns none. A program with two windows
+ *                                      must be able to sleep for either.
+ *
+ * **The client's pixel is 0x00RRGGBB whatever the screen's format**, so that a
+ * program draws the same bytes upon every machine and the one thing that knows
+ * the framebuffer's encoding is the kernel. A client that had to know the
+ * format would be a client that broke when the boot loader chose another mode.
+ */
+#define SYSCALL_WINDOW_CREATE  29U
+#define SYSCALL_WINDOW_DESTROY 30U
+#define SYSCALL_WINDOW_MOVE    31U
+#define SYSCALL_WINDOW_BLIT    32U
+#define SYSCALL_WINDOW_EVENT   33U
+#define SYSCALL_WINDOW_SCREEN  34U
+#define SYSCALL_COUNT          35U
+
+/* The longest title a window keeps, the terminator not counted. */
+#define SYSCALL_WINDOW_TITLE_MAXIMUM 31U
+
+/* The window argument of window_event that means any of the caller's. */
+#define SYSCALL_WINDOW_ANY UINT64_MAX
+
+/* A rectangle upon the screen, for window_create, or within a window's
+ * content, for window_blit. */
+typedef struct SyscallWindowRectangle
+{
+    int32_t x;
+    int32_t y;
+    int32_t width;
+    int32_t height;
+} SyscallWindowRectangle;
+
+/* The kinds of event a window receives. */
+#define SYSCALL_WINDOW_EVENT_KEY            1U /* A key, while this window held the focus. */
+#define SYSCALL_WINDOW_EVENT_POINTER_MOVE   2U /* The pointer moved over, or while bound to, this window. */
+#define SYSCALL_WINDOW_EVENT_BUTTON_PRESS   3U /* A button was pressed within the content. */
+#define SYSCALL_WINDOW_EVENT_BUTTON_RELEASE 4U /* A button was released while this window held the pointer. */
+#define SYSCALL_WINDOW_EVENT_FOCUS_IN       5U /* This window gained the focus. */
+#define SYSCALL_WINDOW_EVENT_FOCUS_OUT      6U /* This window lost the focus. */
+#define SYSCALL_WINDOW_EVENT_CLOSE          7U /* The close control was pressed; the program decides. */
+
+/* The buttons of a pointer event, as bits. */
+#define SYSCALL_WINDOW_BUTTON_LEFT   0x01U
+#define SYSCALL_WINDOW_BUTTON_RIGHT  0x02U
+#define SYSCALL_WINDOW_BUTTON_MIDDLE 0x04U
+
+/*
+ * One event, as window_event delivers it. `x` and `y` are the pointer's
+ * position relative to the content's top left, for the three pointer events,
+ * and may lie outside the content while a button pressed within it is held.
+ * `key_character` is the character the key produces under the modifiers held,
+ * or zero for a key that produces none; `key_scancode` is the key itself, so
+ * that a program wanting a key that produces no character has it.
+ */
+typedef struct SyscallWindowEvent
+{
+    uint32_t kind;
+    uint32_t window;       /* The window the event belongs to. */
+    int32_t x;
+    int32_t y;
+    uint8_t button;        /* The button a press or a release concerns. */
+    uint8_t buttons;       /* The buttons held afterwards. */
+    uint8_t key_scancode;
+    uint8_t key_modifiers;
+    char key_character;
+    uint8_t key_pressed;   /* 1 for a depression, 0 for a release. */
+    uint8_t key_extended;  /* 1 where the scancode was prefixed by 0xE0. */
+    uint8_t reserved;
+} SyscallWindowEvent;
+
+/* The flag of window_event: sleep until an event arrives. */
+#define SYSCALL_WINDOW_WAIT UINT64_C(0x1)
 
 /* What `procinfo` reports of one process. The state is one of
  * SYSCALL_PROCESS_STATE_*, and the name is what the process was created as —

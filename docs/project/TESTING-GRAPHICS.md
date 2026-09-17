@@ -576,18 +576,21 @@ establishes, and how it is looked at.
 
 **Boot the default entry.** Three windows stand upon a dark ground: *Oxys*,
 *Pointer* and *Keys*, the last with its band in blue — it holds the focus. The
-pointer is at the centre of the screen. Judge:
+pointer is at the centre of the screen. Since sub-task 9.2 the three are drawn
+by `/bin/windows` at privilege level 3, so everything below is also a judgement
+upon the client protocol: a program that could not blit, or that never woke
+for an event, would show a window that never changes. Judge:
 
-1. **Typing** goes into the Keys window and nowhere else, and a backspace
-   removes the last character. Press the Pointer window and type again: nothing
-   arrives anywhere, the Pointer window ignoring keys, and the blue has moved to
-   its band.
-2. **The pointer** moved into the Pointer window makes a disc follow it and the
-   numbers above count in that window's own coordinates, from its top left.
-   Hold a button: the disc grows. Drag out of the window with the button held:
-   the numbers go negative or beyond the extent while the disc is out of sight,
-   and no other window reacts. Release, and the pointer is the other windows'
-   again.
+1. **Typing** adds a tile per character to the Keys window and nowhere else,
+   and a backspace removes the last. Press the Pointer window and type again:
+   nothing arrives anywhere, the Pointer window ignoring keys, and the blue has
+   moved to its band.
+2. **The pointer** moved into the Pointer window makes a disc follow it. Hold a
+   button: the disc grows. Drag out of the window with the button held: the
+   disc goes out of sight while the window still receives — the program's
+   event has coordinates beyond the content — and no other window reacts.
+   Release, and the pointer is the other windows' again. (At 9.1 the window
+   printed the coordinates as well; a program cannot draw text yet.)
 3. **A drag** by a band moves the window under the hand with no trail where it
    was and no lag a person can see, and the dragged window is on top of whatever
    it crosses from the moment it is pressed. Drag it to every edge: the band

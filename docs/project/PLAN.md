@@ -278,9 +278,27 @@ order read from the pixel where two windows overlap; judged by eye under QEMU,
 VirtualBox and Bochs. [`../design/WINDOWS.md`](../design/WINDOWS.md);
 [`../design/DRAWING.md`](../design/DRAWING.md), Section 4.1.
 
-**Next: sub-task 9.2** — the client protocol, by which a user process creates,
-draws and receives events upon a window; the surface interface of 6.6 and the
-window interface of 9.1 are both revisited against that first real client.
+**Sub-task 9.2 is complete**: the client protocol. Six calls — `window_create`,
+`window_destroy`, `window_move`, `window_blit`, `window_event` and
+`window_screen`, thirty-five in all — by which a process owns a window: a
+rectangle of `0x00RRGGBB` pixels carried across by a copy the kernel encodes
+for the screen it has, and an event read one at a time from one window or from
+any of the caller's, sleeping until one arrives and woken by the tick that
+routed it. A window belongs to the process that made it and is `EBADF` to every
+other; a process's windows go at its ending, beside its descriptors. **The
+first real client's verdict upon the surface interface of 6.6**: a surface does
+not cross — it describes kernel memory — and what crosses is the promise that a
+rectangle of pixels will arrive; the abstraction stays on this side unchanged,
+and two things the first client found wanting were added before it was done —
+a wait upon any of a program's windows, and a call that says how big the
+screen is. The demonstration is a program now, `/bin/windows`, launched beside
+the shell by `ThreadLaunch` and waited for by nobody. Asserted by
+`window-check` at privilege level 3 with a kernel thread to read its pixels and
+wake it. [`../design/WINDOWS.md`](../design/WINDOWS.md), Sections 10 to 12.
+
+**Next: sub-task 9.3** — `init`: the first user process, the supervision of the
+services below it, and the orderly shutdown of both; the orphan the launched
+demonstration becomes when it ends is the first thing it collects.
 
 
 
@@ -1182,8 +1200,8 @@ and not the framebuffer. The division of the graphical work between Phase 6 and
 this phase is argued in [`../design/ARCHITECTURE.md`](../design/ARCHITECTURE.md),
 Section 4.1, which records what it cost.
 
-**Sub-task 9.1 is complete**, on 2026-09-17, and is the first thing built
-against the preference below: [`../design/WINDOWS.md`](../design/WINDOWS.md),
+**Sub-tasks 9.1 and 9.2 are complete**, both on 2026-09-17, and 9.1 is the
+first thing built against the preference below: [`../design/WINDOWS.md`](../design/WINDOWS.md),
 Section 4, is where the frame and the palette are judged against it, and
 records that a flat frame with a disc for its one control was reached and that
 rounded corners and any asymmetry were not. It also changed what the default
@@ -1201,7 +1219,7 @@ rather than left implied.
 | # | Sub-task | State | Asserted by |
 | - | -------- | ----- | ----------- |
 | 9.1 | Implement a stacking window manager with focus and event routing. | Implemented | `KernelVerifyWindows`, `KernelVerifyCircle` |
-| 9.2 | Implement the client protocol by which user processes create, draw and receive events upon windows. *(The surface interface of 6.6 is revisited here against its first real client.)* | Planned | — |
+| 9.2 | Implement the client protocol by which user processes create, draw and receive events upon windows. *(The surface interface of 6.6 is revisited here against its first real client.)* | Implemented | `KernelVerifyClients`, `window-check` |
 | 9.3 | Implement `init`: the first user process, the supervision of the services below it, and the orderly shutdown of both. | Planned | — |
 | 9.4 | Define the system configuration format, its parser, and the `/etc` hierarchy the services and the desktop read at start. | Planned | — |
 | 9.5 | Implement the session: the desktop root, the panel, the launcher, and the ownership of the display that decides who may draw upon it. | Planned | — |

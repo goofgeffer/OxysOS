@@ -1060,6 +1060,23 @@ ready through a pipe before the parent sends. And the SIGPIPE child wrote
 before the parent had closed its own read end, so a reader existed and the
 write succeeded; the read end is closed before the fork now.
 
+### 18.6 Sub-task 9.2: a thread launched, and a process's windows
+
+Two things the window client protocol asked of this layer, both small.
+`ThreadLaunch` hands a thread to the scheduler without waiting for it — prepared
+as a forked child is and admitted, with nothing to return to — so that the entry
+point can start the window demonstration and then the shell with neither
+waiting for the other; `ThreadStart` starts by a call and returns when the
+started thread ends, which is right for the shell and wrong for a program that
+must run beside it. A process started this way has no parent and is the orphan
+of Section 19, limitation 15, when it ends.
+
+And a process's windows are destroyed at its ending, in `ThreadTerminateCurrent`
+beside the release of its descriptors and for the same reason: what a process
+that has ended held is given back at the ending and not at the collecting.
+`ProcessDestroy` releases them as well, for a process destroyed without having
+run. [`WINDOWS.md`](WINDOWS.md), Section 10.2.
+
 ## 19. Present limitations
 
 1. ~~**Nothing has run.**~~ A program has: see Section 10.2. What has not

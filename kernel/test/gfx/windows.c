@@ -6,16 +6,14 @@
  *          in memory — the stack, the focus, the routing of keys and movements,
  *          the binding of the pointer by a held button, the drag, the close
  *          control, the confinement of a move, the bounds of the table and of a
- *          queue, and the disc primitive the frame is drawn with — and holds
- *          the demonstration the default boot entry presents, which is the
- *          same manager upon the real screen with three windows a person can
- *          operate.
- * Key functions: KernelVerifyWindows, KernelVerifyCircle,
- *          KernelWindowDemonstrationStart, KernelWindowDemonstrationService,
- *          KernelWindowDemonstrationIsRunning.
+ *          queue — and the disc primitive the frame is drawn with. Until
+ *          sub-task 9.2 it also held the demonstration the default boot entry
+ *          presents; that is a program now, userland/windows/main.c, run at
+ *          privilege level 3 through the client protocol.
+ * Key functions: KernelVerifyWindows, KernelVerifyCircle.
  * References:
  *   - docs/design/WINDOWS.md, Section 6: every assertion here paired with the
- *     silent failure it would catch, and Section 7 the demonstration.
+ *     silent failure it would catch.
  *   - docs/design/DRAWING.md, Section 4.1: the disc, and its assertions.
  *
  * The screen is composed in memory, as every graphical assertion since
@@ -29,17 +27,14 @@
  *
  * The self-test gives back every window it takes, for the reason the
  * compositor's does: the table is bounded, and a test that left it full
- * would leave the demonstration below with nothing to make its windows from
- * and no failure reported.
+ * would leave the client self-test after it with nothing to make its windows
+ * from and no failure reported.
  */
 
 #include <oxys/kernel.h>
 #include <oxys/test/verify.h>
 #include <oxys/gfx/window.h>
 #include <oxys/gfx/graphics.h>
-#include <oxys/gfx/font.h>
-#include <oxys/gfx/framebuffer.h>
-#include <oxys/gfx/compositor.h>
 
 #define KERNEL_SCREEN_WIDTH  160U
 #define KERNEL_SCREEN_HEIGHT 120U
@@ -180,7 +175,7 @@ void KernelVerifyWindows(void)
     KernelWriteString("Window manager: asserting the stack, the focus and the routing.\n");
 
     KernelScreenPrepare(&screen);
-    KernelWindowRequire(WindowManagerInitialise(&screen, &KernelTestPalette),
+    KernelWindowRequire(WindowManagerInitialise(&screen, &KernelTestPalette, NULL),
                         "the manager refused a surface in memory");
 
     /* --- Creation, the stack and the focus. --- */
@@ -441,6 +436,13 @@ void KernelVerifyWindows(void)
     KernelWindowRequire(WindowManagerCount() == 0U, "the self-test left a window behind");
     KernelWindowRequire(KernelScreenPaddingIsIntact(), "something wrote into the padding");
 
+    /* The manager gives the test's surface up, since sub-task 9.2: the client
+     * self-test takes it again for its own run, and the entry point gives the
+     * manager the real screen or nothing. */
+    WindowManagerShutdown();
+    KernelWindowRequire(!WindowManagerIsActive() && (WindowCreate(0, 0, 16, 16, "x") == WINDOW_NONE),
+                        "a manager that gave its screen up still makes windows");
+
     KernelWriteString(KernelWindowSucceeded ? "Window manager self-test passed.\n"
                                             : "Window manager self-test FAILED.\n");
 }
@@ -543,349 +545,4 @@ void KernelVerifyCircle(void)
 
     KernelWriteString(KernelWindowSucceeded ? "Disc self-test passed.\n"
                                             : "Disc self-test FAILED.\n");
-}
-
-/* ---------------------------------------------------- the demonstration */
-
-/*
- * Three windows a person can operate, upon the real screen, which is what the
- * default boot entry presents until sub-task 9.5 has a desktop to present
- * instead. Each shows one thing the self-test above asserts without a person:
- * that keys reach the focused window, that movements reach the window under
- * the pointer in its own coordinates, and that the frame does what the frame
- * says. The text is the face of sub-task 6.4 at twice its size.
- */
-
-#define KERNEL_DEMO_KEYS_CAPACITY 28U
-
-/*
- * The text's scale and the windows' extents follow the screen: the face at
- * twice its size upon a screen at least 1024 wide, and at its own size upon a
- * smaller one — VirtualBox's 640 by 480 being the case in hand, upon which
- * windows sized for 1280 by 800 stood upon one another with nothing to be
- * read. Every extent below is in units of the scale.
- */
-static int32_t KernelDemoScale = 2;
-#define KERNEL_DEMO_CELL  ((int32_t)FONT_WIDTH * KernelDemoScale)
-#define KERNEL_DEMO_LINE  ((int32_t)FONT_HEIGHT * KernelDemoScale)
-#define KERNEL_DEMO_INSET (6 * KernelDemoScale)
-
-static bool KernelDemoRunning;
-static size_t KernelDemoNotes;
-static size_t KernelDemoKeys;
-static size_t KernelDemoPointer;
-
-static char KernelDemoTyped[KERNEL_DEMO_KEYS_CAPACITY + 1U];
-static size_t KernelDemoTypedCount;
-
-static int32_t KernelDemoPointerX;
-static int32_t KernelDemoPointerY;
-static bool KernelDemoPointerHeld;
-static bool KernelDemoPointerInside;
-
-static uint32_t KernelDemoInk;
-static uint32_t KernelDemoPaper;
-static uint32_t KernelDemoAccent;
-
-static void KernelDemoDrawText(GraphicsSurface *surface, int32_t x, int32_t y, const char *text)
-{
-    for (const char *at = text; *at != '\0'; ++at)
-    {
-        FontDrawGlyphScaled(surface, x, y, (uint8_t)*at, KernelDemoInk, KernelDemoPaper,
-                            KernelDemoScale);
-        x += KERNEL_DEMO_CELL;
-    }
-}
-
-/* Appends the decimal form of `value` at `text[*at]`, moving `*at` past it. */
-static void KernelDemoAppendDecimal(char *text, size_t *at, int32_t value)
-{
-    char digits[12];
-    size_t length = 0U;
-    uint32_t magnitude = (value < 0) ? (uint32_t)(-(value + 1)) + 1U : (uint32_t)value;
-
-    do
-    {
-        digits[length] = (char)('0' + (magnitude % 10U));
-        ++length;
-        magnitude /= 10U;
-    } while (magnitude != 0U);
-
-    if (value < 0)
-    {
-        text[*at] = '-';
-        ++*at;
-    }
-
-    while (length != 0U)
-    {
-        --length;
-        text[*at] = digits[length];
-        ++*at;
-    }
-
-    text[*at] = '\0';
-}
-
-static void KernelDemoDrawNotes(void)
-{
-    GraphicsSurface *const surface = WindowSurface(KernelDemoNotes);
-    static const char *const lines[] = {
-        "Oxys 1 Alpha: sub-task 9.1.",
-        "",
-        "Press a window to focus it.",
-        "Drag its title to move it.",
-        "The disc closes it.",
-        "",
-        "Keys go to the focused",
-        "window; the pointer to the",
-        "one beneath it.",
-    };
-
-    if (surface == NULL)
-    {
-        return;
-    }
-
-    GraphicsClear(surface, KernelDemoPaper);
-
-    for (size_t line = 0U; line < (sizeof lines / sizeof lines[0]); ++line)
-    {
-        KernelDemoDrawText(surface, KERNEL_DEMO_INSET,
-                           KERNEL_DEMO_INSET +
-                               ((int32_t)line * (KERNEL_DEMO_LINE + (2 * KernelDemoScale))),
-                           lines[line]);
-    }
-
-    WindowInvalidate(KernelDemoNotes, GraphicsSurfaceBounds(surface));
-}
-
-static void KernelDemoDrawKeys(void)
-{
-    GraphicsSurface *const surface = WindowSurface(KernelDemoKeys);
-
-    if (surface == NULL)
-    {
-        return;
-    }
-
-    GraphicsClear(surface, KernelDemoPaper);
-    KernelDemoDrawText(surface, KERNEL_DEMO_INSET, KERNEL_DEMO_INSET, "Type here:");
-    KernelDemoDrawText(surface, KERNEL_DEMO_INSET,
-                       KERNEL_DEMO_INSET + KERNEL_DEMO_LINE + (4 * KernelDemoScale),
-                       KernelDemoTyped);
-
-    /* The text cursor: a disc after the last character, in the accent. */
-    GraphicsFillCircle(surface,
-                       KERNEL_DEMO_INSET + ((int32_t)KernelDemoTypedCount * KERNEL_DEMO_CELL) +
-                           (2 * KernelDemoScale) + 1,
-                       KERNEL_DEMO_INSET + KERNEL_DEMO_LINE + (4 * KernelDemoScale) +
-                           (KERNEL_DEMO_LINE / 2),
-                       2 * KernelDemoScale, KernelDemoAccent);
-
-    WindowInvalidate(KernelDemoKeys, GraphicsSurfaceBounds(surface));
-}
-
-static void KernelDemoDrawPointer(void)
-{
-    GraphicsSurface *const surface = WindowSurface(KernelDemoPointer);
-
-    if (surface == NULL)
-    {
-        return;
-    }
-
-    GraphicsClear(surface, KernelDemoPaper);
-
-    if (KernelDemoPointerInside)
-    {
-        GraphicsFillCircle(surface, KernelDemoPointerX, KernelDemoPointerY,
-                           (KernelDemoPointerHeld ? 12 : 7) * KernelDemoScale, KernelDemoAccent);
-    }
-
-    {
-        char line[40] = "Pointer: ";
-        size_t at = 9U;
-
-        KernelDemoAppendDecimal(line, &at, KernelDemoPointerX);
-        line[at] = ',';
-        line[at + 1U] = ' ';
-        at += 2U;
-        KernelDemoAppendDecimal(line, &at, KernelDemoPointerY);
-        KernelDemoDrawText(surface, KERNEL_DEMO_INSET, KERNEL_DEMO_INSET, line);
-    }
-
-    WindowInvalidate(KernelDemoPointer, GraphicsSurfaceBounds(surface));
-}
-
-bool KernelWindowDemonstrationStart(void)
-{
-    GraphicsSurface *const screen = CompositorSurface();
-    WindowPalette palette;
-    int32_t width;
-    int32_t height;
-
-    if (screen == NULL)
-    {
-        return false;
-    }
-
-    /*
-     * The palette, which docs/design/WINDOWS.md, Section 4, records: a dark
-     * slate ground, a warm white paper, one blue accent for the band that
-     * holds the focus and a quiet grey for the bands that do not.
-     */
-    palette.ground = FramebufferEncode(43U, 52U, 64U);
-    palette.paper = FramebufferEncode(245U, 243U, 238U);
-    palette.border = FramebufferEncode(32U, 38U, 46U);
-    palette.title_focused = FramebufferEncode(79U, 134U, 247U);
-    palette.title_unfocused = FramebufferEncode(217U, 214U, 207U);
-    palette.text_focused = FramebufferEncode(255U, 255U, 255U);
-    palette.text_unfocused = FramebufferEncode(74U, 74U, 74U);
-
-    KernelDemoInk = FramebufferEncode(38U, 38U, 38U);
-    KernelDemoPaper = palette.paper;
-    KernelDemoAccent = palette.title_focused;
-
-    if (!WindowManagerInitialise(screen, &palette))
-    {
-        return false;
-    }
-
-    width = (int32_t)screen->width;
-    height = (int32_t)screen->height;
-    KernelDemoScale = (width >= 1024) ? 2 : 1;
-
-    KernelDemoNotes = WindowCreate(width / 16, height / 12, 240 * KernelDemoScale,
-                                   100 * KernelDemoScale, "Oxys");
-    KernelDemoPointer = WindowCreate(width / 2, height / 4, 180 * KernelDemoScale,
-                                     130 * KernelDemoScale, "Pointer");
-    KernelDemoKeys = WindowCreate((width / 16) + (28 * KernelDemoScale),
-                                  (height / 12) + (140 * KernelDemoScale), 240 * KernelDemoScale,
-                                  40 * KernelDemoScale, "Keys");
-
-    KernelDemoTypedCount = 0U;
-    KernelDemoTyped[0] = '\0';
-    KernelDemoPointerInside = false;
-    KernelDemoPointerHeld = false;
-    KernelDemoPointerX = 0;
-    KernelDemoPointerY = 0;
-
-    KernelDemoDrawNotes();
-    KernelDemoDrawKeys();
-    KernelDemoDrawPointer();
-
-    KernelDemoRunning = (KernelDemoNotes != WINDOW_NONE) && (KernelDemoPointer != WINDOW_NONE) &&
-                        (KernelDemoKeys != WINDOW_NONE);
-
-    return KernelDemoRunning;
-}
-
-bool KernelWindowDemonstrationIsRunning(void)
-{
-    return KernelDemoRunning;
-}
-
-void KernelWindowDemonstrationService(void)
-{
-    WindowEvent event;
-
-    if (!KernelDemoRunning)
-    {
-        return;
-    }
-
-    while (WindowReadEvent(KernelDemoNotes, &event))
-    {
-        if (event.kind == WINDOW_EVENT_CLOSE)
-        {
-            WindowDestroy(KernelDemoNotes);
-        }
-    }
-
-    {
-        bool changed = false;
-
-        while (WindowReadEvent(KernelDemoKeys, &event))
-        {
-            if (event.kind == WINDOW_EVENT_CLOSE)
-            {
-                WindowDestroy(KernelDemoKeys);
-                changed = false;
-                break;
-            }
-
-            if ((event.kind != WINDOW_EVENT_KEY) || !event.key.pressed)
-            {
-                continue;
-            }
-
-            if (event.key.character == '\b')
-            {
-                if (KernelDemoTypedCount != 0U)
-                {
-                    --KernelDemoTypedCount;
-                    KernelDemoTyped[KernelDemoTypedCount] = '\0';
-                    changed = true;
-                }
-            }
-            else if ((event.key.character == '\n') || (event.key.character == '\r'))
-            {
-                KernelDemoTypedCount = 0U;
-                KernelDemoTyped[0] = '\0';
-                changed = true;
-            }
-            else if (FontCovers((uint8_t)event.key.character) &&
-                     (KernelDemoTypedCount < KERNEL_DEMO_KEYS_CAPACITY))
-            {
-                KernelDemoTyped[KernelDemoTypedCount] = event.key.character;
-                ++KernelDemoTypedCount;
-                KernelDemoTyped[KernelDemoTypedCount] = '\0';
-                changed = true;
-            }
-        }
-
-        if (changed)
-        {
-            KernelDemoDrawKeys();
-        }
-    }
-
-    {
-        bool changed = false;
-
-        while (WindowReadEvent(KernelDemoPointer, &event))
-        {
-            switch (event.kind)
-            {
-            case WINDOW_EVENT_CLOSE:
-                WindowDestroy(KernelDemoPointer);
-                changed = false;
-                break;
-
-            case WINDOW_EVENT_POINTER_MOVE:
-            case WINDOW_EVENT_BUTTON_PRESS:
-            case WINDOW_EVENT_BUTTON_RELEASE:
-                KernelDemoPointerX = event.x;
-                KernelDemoPointerY = event.y;
-                KernelDemoPointerHeld = (event.buttons != 0U);
-                KernelDemoPointerInside = true;
-                changed = true;
-                break;
-
-            default:
-                break;
-            }
-
-            if (!WindowExists(KernelDemoPointer))
-            {
-                break;
-            }
-        }
-
-        if (changed && WindowExists(KernelDemoPointer))
-        {
-            KernelDemoDrawPointer();
-        }
-    }
 }

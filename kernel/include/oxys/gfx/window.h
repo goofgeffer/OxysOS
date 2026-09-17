@@ -10,7 +10,9 @@
  *          WindowManagerInitialise, WindowCreate, WindowDestroy, WindowRaise,
  *          WindowFocus, WindowMove, WindowSurface, WindowInvalidate,
  *          WindowReadEvent, WindowManagerHandleKey, WindowManagerHandleMouse,
- *          WindowManagerCompose, WindowManagerWindowAt, WindowManagerReport.
+ *          WindowManagerCompose, WindowManagerWindowAt, WindowManagerReport,
+ *          WindowSetOwner, WindowDestroyOwnedBy, WindowWritePixels,
+ *          WindowManagerShutdown, WindowEncodeFunction.
  * References:
  *   - docs/design/WINDOWS.md: the design, the appearance it commits to, and
  *     every assertion made upon it.
@@ -181,6 +183,15 @@ typedef struct WindowEvent
  * says. docs/design/WINDOWS.md, Section 4, records the palette the entry point
  * supplies and why each colour is what it is.
  */
+/*
+ * How a client's pixel — 0x00RRGGBB, since sub-task 9.2 — becomes the screen's.
+ * Supplied to WindowManagerInitialise beside the palette, for the reason the
+ * palette is supplied: the manager draws in pixel values and does not know the
+ * encoding. Null means the screen's pixel is the client's, unchanged, which is
+ * what the self-test's surface wants and what lets it assert exact values.
+ */
+typedef uint32_t (*WindowEncodeFunction)(uint8_t red, uint8_t green, uint8_t blue);
+
 typedef struct WindowPalette
 {
     uint32_t ground;          /* The screen where no window stands. */
@@ -201,7 +212,17 @@ typedef struct WindowPalette
  * conducts the manager upon a surface in memory before the entry point gives it
  * the compositor's back buffer.
  */
-bool WindowManagerInitialise(GraphicsSurface *screen, const WindowPalette *palette);
+bool WindowManagerInitialise(GraphicsSurface *screen, const WindowPalette *palette,
+                             WindowEncodeFunction encode);
+
+/*
+ * Gives the screen up: every window is destroyed and the manager is inactive
+ * until initialised again. The self-test calls it so that the manager does not
+ * stand holding the test's surface — where a client's window, made through the
+ * calls of sub-task 9.2 upon an entry that gave the shell the screen, would be
+ * drawn into memory nobody displays and refused by nothing.
+ */
+void WindowManagerShutdown(void);
 
 /* Whether a screen has been taken. Every routine below does nothing, or
  * returns WINDOW_NONE, until one has. */
@@ -228,6 +249,18 @@ void WindowDestroy(size_t window);
 
 /* Whether the identifier names a window that exists. */
 bool WindowExists(size_t window);
+
+/*
+ * The owner, since sub-task 9.2: a tag the client layer sets to the process's
+ * identifier, zero being the kernel's own. The manager attaches no meaning to
+ * it beyond WindowDestroyOwnedBy, which destroys every window carrying the tag
+ * and returns how many — what a process's ending calls, so that a program
+ * which ended without destroying its windows leaves none standing upon the
+ * screen with nobody to drain their queues.
+ */
+void WindowSetOwner(size_t window, uint64_t owner);
+uint64_t WindowOwner(size_t window);
+size_t WindowDestroyOwnedBy(uint64_t owner);
 
 /* Places the window upon the top of the stack. */
 void WindowRaise(size_t window);
@@ -257,6 +290,16 @@ GraphicsSurface *WindowSurface(size_t window);
 /* Records that a region of the content, in the content's coordinates, has
  * changed and must be composed again. */
 void WindowInvalidate(size_t window, GraphicsRectangle region);
+
+/*
+ * Writes a rectangle of pixels into the content, since sub-task 9.2: `area` in
+ * the content's coordinates, `pixels` row by row and tightly packed, each
+ * 0x00RRGGBB, encoded for the screen on the way in, and the area marked as
+ * changed. Refused, with nothing written, where the area is empty or reaches
+ * outside the content — a client's rectangle is not clipped, because a client
+ * that asked for more than its window has made a mistake it should hear of.
+ */
+bool WindowWritePixels(size_t window, GraphicsRectangle area, const uint32_t *pixels);
 
 /* The title, as kept. */
 const char *WindowTitle(size_t window);
@@ -296,6 +339,9 @@ GraphicsRectangle WindowManagerCompose(void);
 
 /* The region presently awaiting composition, which the self-test asserts about. */
 GraphicsRectangle WindowManagerDamage(void);
+
+/* The screen's bounds, or an empty rectangle where no screen has been taken. */
+GraphicsRectangle WindowManagerScreenBounds(void);
 
 /* The topmost window whose frame contains the point, or WINDOW_NONE. */
 size_t WindowManagerWindowAt(int32_t x, int32_t y);

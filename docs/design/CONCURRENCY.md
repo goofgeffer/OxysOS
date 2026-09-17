@@ -615,8 +615,10 @@ kept, this section describing what the kernel does now.
    (`drivers/keyboard/keyboard.c`, `drivers/mouse/mouse.c`), the ramdisk's
    extent and registration (`drivers/ramdisk/ramdisk.c`), and — since sub-task
    9.1 — the window manager's table, stack and queues (`graphics/window.c`),
-   which the bootstrap processor's tick alone touches today and which a client
-   of sub-task 9.2 will read from a system call.
+   which the bootstrap processor's tick fills and, since sub-task 9.2, a
+   client's system calls drain — both upon the bootstrap processor with
+   interrupts masked, so that they cannot interleave today; a user thread upon
+   a second processor is what would make them.
 
    The last of those is the mildest entry in the list and is named anyway. A
    transfer to or from a ramdisk is a copy between disjoint ranges, so two

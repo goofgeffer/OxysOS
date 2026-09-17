@@ -71,6 +71,7 @@
  * counted with the rest.
  */
 
+#include <oxys/gfx/client.h>
 #include <oxys/proc/process.h>
 #include <oxys/arch/mm/addrspace.h>
 #include <oxys/kernel.h>
@@ -430,6 +431,7 @@ void ProcessDestroy(Process *process)
      * cost the machine a descriptor permanently.
      */
     ProcessCloseDescriptors(process);
+    WindowClientReleaseProcess(process->id);
 
     AddressSpaceDestroy(&process->space);
 
@@ -1254,6 +1256,27 @@ bool ThreadStart(Thread *thread)
     return true;
 }
 
+bool ThreadLaunch(Thread *thread)
+{
+    if ((thread == NULL) || !thread->used || (thread->entry == 0U) ||
+        (thread->user_stack == 0U) || !SchedulerIsRunning())
+    {
+        return false;
+    }
+
+    /*
+     * Prepared as a forked child is, and admitted as one is: the first switch
+     * to it returns into the trampoline, and it runs when the scheduler next
+     * reaches it. Nothing is returned to when it ends — return_to is null, as
+     * a child's is — so its ending marks the process exited and withdraws the
+     * thread, and whoever cares collects the process as a parent would.
+     */
+    ThreadPrepareStart(thread);
+    thread->return_to = NULL;
+
+    return SchedulerAdmit(thread);
+}
+
 /* Whether no live process but `except` belongs to a group, of sub-task 8.7. */
 static bool ProcessGroupIsEmptyBut(uint64_t group, const Process *except)
 {
@@ -1341,8 +1364,14 @@ bool ThreadTerminateCurrent(int64_t status)
          * an end of file that only the close could give, and the shell waiting
          * for a keypress before it would collect anything. A process that has
          * ended holds nothing; what it held is given back here.
+         *
+         * Its windows likewise, since sub-task 9.2, and for the same reason: a
+         * window whose owner has ended is one nobody will draw upon or drain,
+         * and one left standing until the collecting `wait` would stand upon
+         * the screen for as long as a background job's parent took to notice.
          */
         ProcessCloseDescriptors(owner);
+        WindowClientReleaseProcess(owner->id);
 
         /*
          * The terminal's foreground group is cleared where this was its last

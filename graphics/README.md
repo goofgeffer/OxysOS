@@ -4,10 +4,11 @@
 
 **Phase**: 6, sub-tasks 6.2 to 6.6, all of which are done, and — from sub-task
 9.1 — Phase 9, whose window manager is here because it is the same kind of
-thing: arithmetic upon surfaces, drawn into by whoever owns a window. This
-directory was created by sub-task 6.2 and completed by 6.6; what Phase 9 adds
-to it needs something to own a window, which is why it waited.
-**Detailed design**: [`../docs/design/GRAPHICS.md`](../docs/design/GRAPHICS.md), which is the index of the five documents this directory is described by; and [`../docs/design/WINDOWS.md`](../docs/design/WINDOWS.md) for `window.c`.
+thing: arithmetic upon surfaces, drawn into by whoever owns a window; and from
+9.2 the client side of it, by which the owner is a process. This directory was
+created by sub-task 6.2 and completed by 6.6; what Phase 9 adds to it needs
+something to own a window, which is why it waited.
+**Detailed design**: [`../docs/design/GRAPHICS.md`](../docs/design/GRAPHICS.md), which is the index of the five documents this directory is described by; and [`../docs/design/WINDOWS.md`](../docs/design/WINDOWS.md) for `window.c` and `client.c`.
 
 ## Purpose
 
@@ -45,6 +46,7 @@ position came from somewhere else entirely.
 | `cursor.c` | Sub-tasks 6.5 and 6.6. The pointer: a shape of two bitmaps, drawn for this project, that says of each pixel whether the pointer covers it and, if so, in which of two colours — three states, because an arrow of one colour vanishes against itself. Sub-task 6.5 had it keep the pixels beneath it and put them back as it moved, there being one surface and no back buffer; **6.6 removed all of that**. The shape is rendered once into a surface with a mask, and the compositor draws it as a layer, so moving it is moving the layer and what is beneath it is simply still there. `CursorConceal`, `CursorReveal` and the store of saved pixels are gone. `CursorInitialise`, `CursorIsAvailable`, `CursorShow`, `CursorHide`, `CursorIsVisible`, `CursorMoveTo`, `CursorX`, `CursorY`, `CursorShapeIsOpaque`, `CursorShapeIsInterior`, `CursorImageSurface`, `CursorImageMask`, `CursorMoveCount`, `CursorReport`. |
 | `framebuffer.c` | Sub-task 6.2. Acquires the framebuffer described in the Multiboot2 boot information, gives its pages the write-combining memory type through the page attribute table, maps them into the kernel arena, and describes what was obtained. `FramebufferInitialise`, `FramebufferIsPresent`, `FramebufferIsGraphical`, `FramebufferAddress`, `FramebufferWidth`, `FramebufferHeight`, `FramebufferPitch`, `FramebufferBitsPerPixel`, `FramebufferBytesPerPixel`, `FramebufferByteCount`, `FramebufferFormat`, `FramebufferEncode`, `FramebufferWriteCombining`, `FramebufferReport`. |
 | `window.c` | Sub-task 9.1. The window manager: a fixed table of windows, each a content surface from the heap with a frame drawn about it; the stack, an array walked from the top for a hit test; the focus, moved by a press; the binding of the pointer to a window by a held button until every button is up; the drag by the band, the close control that asks, and the confinement that keeps a band reachable; the routing of every key and every movement into a window's queue; and the composition of the changed region, ground first and every intersecting window over it in order. Presents nothing: it says what it changed, and the caller carries that to the compositor. `WindowManagerInitialise`, `WindowCreate`, `WindowDestroy`, `WindowRaise`, `WindowFocus`, `WindowMove`, `WindowSurface`, `WindowInvalidate`, `WindowReadEvent`, `WindowManagerHandleKey`, `WindowManagerHandleMouse`, `WindowManagerCompose`, `WindowManagerWindowAt`, `WindowManagerReport`. |
+| `client.c` | Sub-task 9.2. The client side of the window manager: the six calls by which a process creates, moves, draws upon, destroys, asks the screen of and receives events upon a window — each validated whole before anything is done — the ownership that binds a window to the process that made it and refuses every other, the copy of a client's `0x00RRGGBB` pixels into a window with the screen's encoding, the conversion of an event into the structure the ABI declares, and the sleep a program waits in until the tick wakes it. `WindowClientCreate`, `WindowClientDestroy`, `WindowClientMove`, `WindowClientBlit`, `WindowClientEvent`, `WindowClientScreen`, `WindowClientReleaseProcess`, `WindowClientWakeAll`, `WindowClientReport`. |
 
 The interfaces are declared in
 [`../kernel/include/oxys/gfx/framebuffer.h`](../kernel/include/oxys/gfx/framebuffer.h),
@@ -53,8 +55,9 @@ The interfaces are declared in
 [`../kernel/include/oxys/gfx/console.h`](../kernel/include/oxys/gfx/console.h),
 [`../kernel/include/oxys/gfx/faultscreen.h`](../kernel/include/oxys/gfx/faultscreen.h),
 [`../kernel/include/oxys/gfx/cursor.h`](../kernel/include/oxys/gfx/cursor.h),
-[`../kernel/include/oxys/gfx/compositor.h`](../kernel/include/oxys/gfx/compositor.h) and
-[`../kernel/include/oxys/gfx/window.h`](../kernel/include/oxys/gfx/window.h),
+[`../kernel/include/oxys/gfx/compositor.h`](../kernel/include/oxys/gfx/compositor.h),
+[`../kernel/include/oxys/gfx/window.h`](../kernel/include/oxys/gfx/window.h) and
+[`../kernel/include/oxys/gfx/client.h`](../kernel/include/oxys/gfx/client.h),
 with the
 rest of the kernel's header corpus, so that a consumer depends upon an interface
 and not upon this directory.

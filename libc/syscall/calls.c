@@ -12,7 +12,9 @@
  *          OxysGetWorkingDirectory, OxysDuplicate, OxysRemoveDirectory, OxysPipe,
  *          OxysWaitFor, OxysKill, OxysSignalAction, OxysGetProcessId,
  *          OxysGetProcessGroup, OxysSetProcessGroup, OxysTerminalGroup,
- *          OxysLink, OxysProcessInformation,
+ *          OxysLink, OxysProcessInformation, OxysWindowCreate,
+ *          OxysWindowDestroy, OxysWindowMove, OxysWindowBlit, OxysWindowEvent,
+ *          OxysWindowScreen,
  *          OxysExit, OxysWait, OxysBrk, OxysSbrk.
  * References:
  *   - kernel/abi/oxys/syscall_abi.h: the call numbers and what each call means.
@@ -355,4 +357,44 @@ int64_t OxysProcessInformation(uint64_t index, SyscallProcessInformation *inform
 {
     return OxysSyscallResult(OxysSyscallInvoke2(SYSCALL_PROCINFO, index,
                                                 (uint64_t)(uintptr_t)information));
+}
+
+/* ------------------------------------------------------------ sub-task 9.2 */
+
+int64_t OxysWindowCreate(const SyscallWindowRectangle *geometry, const char *title)
+{
+    return OxysSyscallResult(OxysSyscallInvoke2(SYSCALL_WINDOW_CREATE,
+                                                (uint64_t)(uintptr_t)geometry,
+                                                (uint64_t)(uintptr_t)title));
+}
+
+int64_t OxysWindowDestroy(int64_t window)
+{
+    return OxysSyscallResult(OxysSyscallInvoke1(SYSCALL_WINDOW_DESTROY, (uint64_t)window));
+}
+
+int64_t OxysWindowMove(int64_t window, int32_t x, int32_t y)
+{
+    return OxysSyscallResult(OxysSyscallInvoke3(SYSCALL_WINDOW_MOVE, (uint64_t)window,
+                                                (uint64_t)(int64_t)x, (uint64_t)(int64_t)y));
+}
+
+int64_t OxysWindowBlit(int64_t window, const SyscallWindowRectangle *area,
+                       const uint32_t *pixels)
+{
+    return OxysSyscallResult(OxysSyscallInvoke3(SYSCALL_WINDOW_BLIT, (uint64_t)window,
+                                                (uint64_t)(uintptr_t)area,
+                                                (uint64_t)(uintptr_t)pixels));
+}
+
+int64_t OxysWindowEvent(int64_t window, SyscallWindowEvent *event, uint64_t flags)
+{
+    return OxysSyscallResult(OxysSyscallInvoke3(SYSCALL_WINDOW_EVENT, (uint64_t)window,
+                                                (uint64_t)(uintptr_t)event, flags));
+}
+
+int64_t OxysWindowScreen(SyscallWindowRectangle *geometry)
+{
+    return OxysSyscallResult(OxysSyscallInvoke1(SYSCALL_WINDOW_SCREEN,
+                                                (uint64_t)(uintptr_t)geometry));
 }

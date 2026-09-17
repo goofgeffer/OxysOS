@@ -20,7 +20,7 @@
  *          KernelVerifyHeap, KernelVerifyStdio, KernelVerifyStartup,
  *          KernelVerifyUtilities, KernelVerifyLine, KernelVerifyShell,
  *          KernelVerifyTerminal, KernelVerifyWindows, KernelVerifyCircle,
- *          KernelWindowDemonstrationStart, KernelWindowDemonstrationService,
+ *          KernelVerifyClients,
  *          KernelVerifyPit, KernelVerifyKeyboard, KernelVerifySerial,
  *          KernelVerifyVga, KernelVerifyPci, KernelVerifyAta, KernelVerifyBlock,
  *          KernelVerifyBuffer, KernelVerifyExt2, KernelVerifyVfs,
@@ -131,14 +131,14 @@ void KernelVerifyWindows(void);
 void KernelVerifyCircle(void);
 
 /*
- * The demonstration the default boot entry presents: the window manager upon
- * the real screen, with three windows a person can operate. Started by the
- * entry point where there is a compositor and a mouse; serviced from the
- * bootstrap processor's tick, where the pointer already was.
+ * Sub-task 9.2: the client protocol, asserted by running window-check at
+ * privilege level 3 upon a manager holding a screen composed in memory, with
+ * a kernel thread standing in for the world outside the program — it reads
+ * the pixels the program blitted, injects the key the program waits for, and
+ * wakes it — and then asserting that the program's windows went with it. It
+ * runs after the root is mounted, as the tests that run a program do.
  */
-bool KernelWindowDemonstrationStart(void);
-void KernelWindowDemonstrationService(void);
-bool KernelWindowDemonstrationIsRunning(void);
+void KernelVerifyClients(void);
 
 /* Phase 6, sub-task 6.1: the descriptors, the task state segment, the interrupt
  * stack table and the three registers that configure SYSCALL. */

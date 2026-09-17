@@ -9,6 +9,7 @@
  *          ProcessInitialise, ProcessCreate, ProcessDestroy, ThreadCreate,
  *          ThreadDestroy, ThreadSetCurrent, ThreadCurrent, ProcessRecordImage,
  *          ProcessCreateUserStack, ProcessReport, ProcessFork, ProcessExecute,
+ *          ThreadLaunch,
  *          ProcessExit, ProcessWait, ProcessWaitFor, ProcessCurrent, ProcessEstablishBreak,
  *          ProcessSetBreak, ProcessBreak, ProcessArguments,
  *          ProcessCloseDescriptors, ProcessAdoptDescriptor,
@@ -729,6 +730,17 @@ void ThreadSwitchTo(Thread *from, Thread *to);
  * sufficing when a program could sleep while another ran.
  */
 bool ThreadStart(Thread *thread);
+
+/*
+ * Hands a thread to the scheduler without waiting for it, of sub-task 9.2: what
+ * ThreadStart does by a call, this does by admission, so that the caller and
+ * the thread run beside each other rather than one after the other. It is how
+ * the entry point starts the window demonstration and then the shell, with
+ * neither waiting for the other. Requires the scheduler to be running; returns
+ * false, changing nothing, where it is not or where the thread cannot be
+ * admitted.
+ */
+bool ThreadLaunch(Thread *thread);
 
 /*
  * Ends the running thread: returns to whoever started it, or — for a thread

@@ -13,7 +13,8 @@
  *          OxysRemoveDirectory, OxysPipe, OxysWaitFor, OxysKill,
  *          OxysSignalAction, OxysGetProcessId, OxysGetProcessGroup,
  *          OxysSetProcessGroup, OxysTerminalGroup, OxysSignalRestorer, OxysLink,
- *          OxysProcessInformation,
+ *          OxysProcessInformation, OxysWindowCreate, OxysWindowDestroy,
+ *          OxysWindowMove, OxysWindowBlit, OxysWindowEvent, OxysWindowScreen,
  *          OxysWrite, OxysTicks,
  *          OxysVersion, OxysFork, OxysExecve, OxysExit, OxysWait, OxysBrk,
  *          OxysSbrk.
@@ -419,5 +420,26 @@ void OxysSignalRestorer(void);
  */
 int64_t OxysLink(const char *existing, const char *name);
 int64_t OxysProcessInformation(uint64_t index, SyscallProcessInformation *information);
+
+/*
+ * The six window calls of sub-task 9.2, by which a program is a client of the
+ * window manager. OxysWindowCreate returns the window's number, or -1 with
+ * errno EINVAL for an extent outside the bounds, ENOMEM where there is no room,
+ * or ENOTSUP where the window manager does not have the screen — which is the
+ * shell-only and the diagnostics entries, where a program that wants a window
+ * should say so and stop. OxysWindowScreen fills the screen's bounds, so that
+ * a program places its windows by the screen it has and not by a guess. The rest return 0, save OxysWindowEvent, which
+ * returns 1 with the event filled, 0 where there is none and no wait was asked,
+ * or -1 with errno EINTR where a signal ended the wait. A window another
+ * process made is EBADF, as a descriptor the caller does not hold is. The
+ * pixels of OxysWindowBlit are 0x00RRGGBB, tightly packed, row by row.
+ */
+int64_t OxysWindowCreate(const SyscallWindowRectangle *geometry, const char *title);
+int64_t OxysWindowDestroy(int64_t window);
+int64_t OxysWindowMove(int64_t window, int32_t x, int32_t y);
+int64_t OxysWindowBlit(int64_t window, const SyscallWindowRectangle *area,
+                       const uint32_t *pixels);
+int64_t OxysWindowEvent(int64_t window, SyscallWindowEvent *event, uint64_t flags);
+int64_t OxysWindowScreen(SyscallWindowRectangle *geometry);
 
 #endif /* OXYS_LIBC_SYSCALL_H */
