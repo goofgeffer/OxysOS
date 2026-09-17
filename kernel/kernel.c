@@ -1011,8 +1011,8 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
      * The banner: one line, at the project owner's request of 2026-09-15,
      * where it had been three. The release is OXYS_VERSION_BANNER — the
      * ordinal form of docs/project/VERSIONING.md, Section 3, as the banner
-     * shows it, and "UNRELEASED" where this image belongs to no release, which
-     * is every image built so far. It said "Version 0.1.0" until the
+     * shows it — "1 ALPHA" since 2026-09-16 — and "UNRELEASED" where an image
+     * belongs to no release, which every image was until then. It said "Version 0.1.0" until the
      * versioning scheme was written, naming a release that had been withdrawn
      * three days after it was published: a boot banner is the one line of the
      * log a person reads without being asked to, and a version number in it

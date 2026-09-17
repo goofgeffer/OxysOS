@@ -233,13 +233,14 @@ named in [`VERSIONING.md`](VERSIONING.md), Section 11.1, because those are the
 ones that will leave this machine.
 
 
-## The register was cleared, and no build is recorded until the alpha
+## The register was cleared, and no build was recorded until the alpha
 
 **On 2026-09-13 the project owner directed that every row be removed and every
 archived image deleted.** Twelve rows and three ISOs went; `~/oxys-builds/` is
 empty, and [`builds.tsv`](builds.tsv) holds its licence tag, its schema and
-nothing else. **Recording does not resume until `Oxys 1 Alpha`**, which
-[`PLAN.md`](PLAN.md) fixes at sub-task 8.7.
+nothing else. **Recording did not resume until `Oxys 1 Alpha`**, which
+[`PLAN.md`](PLAN.md) fixed at sub-task 8.7 and which was cut on 2026-09-16: build 1
+of the register below is the alpha's image, [`RELEASE-1-ALPHA.md`](RELEASE-1-ALPHA.md).
 
 **The machinery is untouched, and that was the point.** `make build-record` works
 exactly as it did and

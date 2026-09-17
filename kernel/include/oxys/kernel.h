@@ -63,10 +63,14 @@ extern char KernelTextEnd[];
  *
  * OXYS_VERSION_STRING holds the *ordinal form* of the release this image belongs
  * to, as docs/project/VERSIONING.md, Section 3, defines it — "1", "1.1",
- * "4-workspace" — and "unreleased" where it belongs to none, which is the case
- * today. It held "0.1.0" until the versioning scheme was written, which was a
- * release that had been published and then withdrawn; see
- * docs/project/HISTORY.md, 2026-09-09.
+ * "4-workspace" — and "unreleased" where it belongs to none. It held "0.1.0"
+ * until the versioning scheme was written, which was a release that had been
+ * published and then withdrawn (docs/project/HISTORY.md, 2026-09-09), and
+ * "unreleased" from then until `Oxys 1 Alpha` was cut on 2026-09-16 at the
+ * close of Phase 8. It is "1-alpha" now, and stays so upon `main` until the
+ * next release is cut: an image built between releases belongs to the release
+ * it was built after, and says so, which VERSIONING.md, Section 9.3, is the
+ * authority for.
  *
  * The release's *name* is deliberately absent. Nothing inside the kernel has any
  * use for one: the banner is read by whoever is already looking at the machine,
@@ -74,11 +78,11 @@ extern char KernelTextEnd[];
  * name lives in the release notes and the tag annotation.
  */
 #define OXYS_SYSTEM_NAME    "Oxys-OS"
-#define OXYS_VERSION_STRING "unreleased"
+#define OXYS_VERSION_STRING "1-alpha"
 
 /* The same, as the boot banner shows it. The two change together; a release
  * is named in one place and shown in two. */
-#define OXYS_VERSION_BANNER "UNRELEASED"
+#define OXYS_VERSION_BANNER "1 ALPHA"
 
 #define DIRECT_MAP_BASE UINT64_C(0xFFFF800000000000)
 

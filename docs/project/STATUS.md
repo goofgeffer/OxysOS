@@ -25,7 +25,8 @@ the PCI bus, mounts and writes an EXT2 volume through a virtual filesystem layer
 draws upon a composited linear framebuffer, and loads and runs a statically
 linked ELF64 program at privilege level 3 — which returns to the kernel by system
 call, may make a child of itself and collect what it ended with, and is ended
-when it faults or when it asks.
+when it faults or when it asks. **`Oxys 1 Alpha`, the first release, was cut from
+this state on 2026-09-16**: [`RELEASE-1-ALPHA.md`](RELEASE-1-ALPHA.md).
 
 **And it runs programs a person would recognise.** Since sub-task 7.6 the kernel
 carries fourteen system calls rather than eight (eighteen since sub-task 8.5, nineteen since 8.6, twenty-seven since 8.7, twenty-nine with `link` and `procinfo` added after it) — `open`, `close`, `read`,
@@ -504,7 +505,7 @@ between them did — and reads, loads and runs one of them at privilege level 3.
 a volume upon a disk needs a working directory and a way to move a mount, and the
 first of those is sub-task 8.3's.
 
-**Phase 8 — the shell, complete but for the alpha it cuts.** Sub-task 8.1 is complete, and it is three
+**Phase 8 — the shell, complete; `Oxys 1 Alpha` cut at its close on 2026-09-16.** Sub-task 8.1 is complete, and it is three
 things where its line names one. **The terminal**: `kernel/terminal/terminal.c`,
 a queue of a kibibyte filled by polling the keyboard's events and the serial
 adapter's characters when a reader asks, the keyboard's cursor, home, end and
@@ -630,8 +631,8 @@ upon; `SHELL.md`, Sections 25 and 26.
 [`../design/SCHEDULER.md`](../design/SCHEDULER.md), Section 9.
 
 **Sub-task 8.7 is complete: job control, process groups and the terminal's
-signals — and Phase 8 with it, the alpha it cuts held back at the project
-owner's direction.** A signal is a bit in the target, set by the sender and
+signals — and Phase 8 with it; `Oxys 1 Alpha` was cut the same day,
+[`RELEASE-1-ALPHA.md`](RELEASE-1-ALPHA.md).** A signal is a bit in the target, set by the sender and
 acted upon by the target on its way out of the kernel: ignored, terminating,
 stopping until SIGCONT, or entering a handler upon the program's own stack
 that returns through a two-instruction restorer; SIGKILL and SIGSTOP cannot

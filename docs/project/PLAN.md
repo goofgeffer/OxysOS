@@ -46,7 +46,7 @@ rotates round-robin between the threads upon it, and is taken back by a local
 timer calibrated against the interval timer when a ten-millisecond quantum
 expires.
 
-**Phase 7 is complete, and Phase 8 is complete but for the alpha it cuts.** Sub-task 7.1 is complete: the nineteen string and memory
+**Phases 7 and 8 are complete, and `Oxys 1 Alpha` is cut.** Sub-task 7.1 is complete: the nineteen string and memory
 functions of ISO/IEC 9899:2011, Section 7.24, that do not require a locale or an
 `errno`, in [`../../libc/`](../../libc/) under the userland's permissive licence
 — and, because 7.2 could not be written until it was done,
@@ -231,8 +231,8 @@ session, which the shell had answered by refusing its pipelines, now runs them.
 [`../design/PROCESS.md`](../design/PROCESS.md), Section 17;
 [`../design/SCHEDULER.md`](../design/SCHEDULER.md), Section 9.
 
-**Sub-task 8.7 is complete, and Phase 8 with it — the release it was to cut
-is held back at the project owner's direction.** Signals: a bit in the
+**Sub-task 8.7 is complete, and Phase 8 with it — the release it cuts was cut the
+same day, below.** Signals: a bit in the
 target, set by the sender and cleared by the target on its own way out of the
 kernel, where its registers stand in a frame the kernel can edit; a handler
 entered upon the program's own stack below the red zone and returned through
@@ -254,10 +254,14 @@ Eight calls, twenty-seven in all; `<signal.h>` in the C library.
 [`../design/SHELL.md`](../design/SHELL.md), Sections 28 and 29;
 [`../design/LIBC.md`](../design/LIBC.md), Section 13.
 
-**Next: `Oxys 1 Alpha`, when the project owner says so**, and then Phase 9.
-The alpha is fixed at this sub-task below; the sub-task is done and the image
-is not yet cut, by decision of the project owner on 2026-09-16, and the build
-register stays suspended until it is.
+**`Oxys 1 Alpha` was cut on 2026-09-16**, at the close of Phase 8 and at the
+project owner's direction: tag `v1-alpha`, build 1 of the register, and the
+release notes [`RELEASE-1-ALPHA.md`](RELEASE-1-ALPHA.md), which say what it does,
+what it does not have, and that it has not been booted upon physical hardware.
+The build register resumes with it, numbering from 1.
+
+**Next: Phase 9** — the desktop, its system services and its configuration,
+beginning with sub-task 9.1.
 
 
 
@@ -272,14 +276,14 @@ Each is marked in the table of its phase, and
 can do that the one before it could not, and — for `Oxys 1` — what it will not
 have, Phases 12 and 13 falling after it.
 
-**The build register is suspended until the alpha.** At the project owner's
-direction on 2026-09-13 every row of [`BUILDS.md`](BUILDS.md) was removed and
-every archived image deleted, and no build is recorded again until `Oxys 1 Alpha`
-is cut at sub-task 8.7. The machinery is untouched — `make build-record` works,
-and `tools/builds.sh` is byte for byte the script it was — and **numbering
-restarts at 1**, so a build number is unique within a register and not across
-this project's life. That document holds the reasoning and what the restart
-costs.
+**The build register was suspended until the alpha, and resumed with it.** At
+the project owner's direction on 2026-09-13 every row of [`BUILDS.md`](BUILDS.md)
+was removed and every archived image deleted, and no build was recorded again
+until `Oxys 1 Alpha` was cut at sub-task 8.7, on 2026-09-16. The machinery was
+untouched — `make build-record` works, and `tools/builds.sh` is byte for byte the
+script it was — and **numbering restarted at 1**, the alpha's image being build
+1, so a build number is unique within a register and not across this project's
+life. That document holds the reasoning and what the restart costs.
 
 **The alpha and the beta are the first release's and are not expected to recur.**
 Every release after `Oxys 1` is preceded by internal debug builds, which are
@@ -896,7 +900,7 @@ system's — and the first of those is sub-task 8.3's.
 | 8.4 | Implement external program execution by `fork()` and `execve()`. | Implemented | `KernelVerifyShell`, `KernelVerifyDirectory` |
 | 8.5 | Implement input and output redirection. | Implemented | `KernelVerifyUtilities`, `KernelVerifyShell` |
 | 8.6 | Implement pipelines. | Implemented | `KernelVerifyVfs`, `KernelVerifyUtilities`, `KernelVerifyShell` |
-| 8.7 | Implement job control, process groups and terminal signal delivery. **`Oxys 1 Alpha` is cut here** — implemented, the alpha held back at the project owner's direction of 2026-09-16. | Implemented | `KernelVerifySignals`, `KernelVerifyShell` |
+| 8.7 | Implement job control, process groups and terminal signal delivery. **`Oxys 1 Alpha` is cut here** — cut on 2026-09-16, [`RELEASE-1-ALPHA.md`](RELEASE-1-ALPHA.md). | Implemented | `KernelVerifySignals`, `KernelVerifyShell` |
 
 **Specifications**: IEEE Std 1003.1-2017, Section 11 (the terminal) and `sh`;
 ECMA-48, Section 5.4 and Sections 8.3.18 to 8.3.22; XTerm Control Sequences.
@@ -1128,8 +1132,8 @@ the first that a control-C does not flush what was typed after it, and the
 last that the alpha is not yet cut. Section 29.
 
 **Sub-task 8.7 closes Phase 8 and is where the first release is cut** — the
-sub-task being complete since 2026-09-16 and the cut awaiting the project
-owner's word. `Oxys 1
+sub-task and the cut both of 2026-09-16, [`RELEASE-1-ALPHA.md`](RELEASE-1-ALPHA.md).
+`Oxys 1
 Alpha` is the first image worth handing to somebody, because it is the first one
 that does anything when they type at it.
 [`VERSIONING.md`](VERSIONING.md), Section 11.1, is the plan and Section 5.4 the

@@ -75,7 +75,7 @@ The expected output at the completion of Phase 1 was as follows; the banner is
 shown as it has read since 2026-09-15, one line where it was three:
 
 ```
-Oxys-OS x86-64 UNRELEASED, Multiboot2 magic value verified
+Oxys-OS x86-64 1 ALPHA, Multiboot2 magic value verified
 Multiboot2 information structure at physical address 0x11E4D8.
 Multiboot2 information structure total size: 0x5D8 bytes.
 Phase 1 initialisation complete.

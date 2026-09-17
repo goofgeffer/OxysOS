@@ -352,7 +352,9 @@ cannot be sorted or matched by a pattern.
 
 `OXYS_VERSION_STRING` in
 [`../../kernel/include/oxys/kernel.h`](../../kernel/include/oxys/kernel.h) holds
-the **ordinal form** of the release the image belongs to, and `"unreleased"` where
+the **ordinal form** of the release the image belongs to — `"1-alpha"` since the
+alpha was cut on 2026-09-16, and so upon every image built after it until the
+next release — and `"unreleased"` where
 it belongs to none. It is what the boot banner prints and what the `version`
 system call copies into a caller's buffer, and both were reporting `0.1.0` — a
 release that had been withdrawn — until this document was written.
@@ -393,18 +395,21 @@ branch.
 
 ## 11. The release record
 
-One row per release, newest first. **It is empty**, and the emptiness is the
-current state of the project rather than an omission.
+One row per release, newest first.
 
 | Ordinal | Full form | Editions | Date | Tag | Notes |
 | ------- | --------- | -------- | ---- | --- | ----- |
-| — | Nothing has been released. | — | — | — | — |
+| `1-alpha` | Oxys 1 Alpha | — | 2026-09-16 | `v1-alpha` | [`RELEASE-1-ALPHA.md`](RELEASE-1-ALPHA.md) |
 
-**The one tag this repository has ever carried was `v0.1.0`**, published and then
+**It held no row until 2026-09-16**, and the emptiness was the state of the
+project rather than an omission: the scheme was written before the first release
+rather than under the pressure of it.
+
+**The one tag this repository carried before `v1-alpha` was `v0.1.0`**, published and then
 withdrawn on 2026-09-09 at the project owner's direction, with the version badge
 that went with it; [`HISTORY.md`](HISTORY.md) records why. It is **not part of this
 scheme**, its number is not reused, and it is not the predecessor of anything. The
-first release under this scheme will be **Oxys 1 Alpha**, and there will be no
+first release under this scheme is **Oxys 1 Alpha**, and there is no
 Oxys 0 — a pre-release belongs to the ordinal it precedes and takes no ordinal of
 its own, so the sequence begins at 1 whatever is published first.
 
