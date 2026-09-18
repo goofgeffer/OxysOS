@@ -23,6 +23,7 @@ intended to be used differently.
 | A ported third-party tool, in the directory of its own that `PROJECT_GUIDELINES.md`, Section 2, requires | Whatever licence it arrived under, unchanged | The upstream project's own identifier |
 | `docs/`, every `README.md`, `PROJECT_GUIDELINES.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SECURITY.md`, this file | Creative Commons CC0 1.0 Universal | `CC0-1.0` |
 | `Makefile`, `build_*.sh`, `boot/grub/grub.cfg`, `.gitignore`, `.gitattributes`, `.github/` | CC0 1.0 Universal, as documentation of how the work is built rather than part of it | `CC0-1.0` |
+| `etc/` — the system configuration of sub-task 9.4 | CC0 1.0 Universal, as settings a person edits rather than work that is linked into anything | `CC0-1.0` |
 
 **The rule that decides a new directory** is what is linked, not what a subject
 is called. Code that becomes part of the kernel image is LGPL; code that is

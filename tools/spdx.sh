@@ -113,6 +113,10 @@ identifier_for() {
                                  echo 'CC0-1.0'; return ;;
         .github/*|tools/*)       echo 'CC0-1.0'; return ;;
 
+        # --- the system configuration of sub-task 9.4: settings a person
+        #     edits, linked into nothing ---
+        etc/*)                   echo 'CC0-1.0'; return ;;
+
         # --- the interface a program is entitled to, which is permissive so
         #     that an MIT C library may include it; it must be tested before the
         #     kernel rule below, which would otherwise claim it ---
@@ -141,7 +145,7 @@ comment_style_for() {
         *.asm)                        echo '; {} no'   ;;
         *.md)                         echo '<!-- --> no' ;;
         *.sh)                         echo '# {} yes'  ;;
-        *.yml|*.yaml|*.cfg|*.tsv|Makefile|.gitignore|.gitattributes)
+        *.yml|*.yaml|*.cfg|*.tsv|*.conf|Makefile|.gitignore|.gitattributes)
                                       echo '# {} no'   ;;
         *)                            echo ''          ;;
     esac
