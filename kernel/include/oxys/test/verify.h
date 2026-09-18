@@ -20,7 +20,7 @@
  *          KernelVerifyHeap, KernelVerifyStdio, KernelVerifyStartup,
  *          KernelVerifyUtilities, KernelVerifyLine, KernelVerifyShell,
  *          KernelVerifyTerminal, KernelVerifyWindows, KernelVerifyCircle,
- *          KernelVerifyClients, KernelVerifyInit,
+ *          KernelVerifyClients, KernelVerifyInit, KernelVerifyConfig,
  *          KernelVerifyPit, KernelVerifyKeyboard, KernelVerifySerial,
  *          KernelVerifyVga, KernelVerifyPci, KernelVerifyAta, KernelVerifyBlock,
  *          KernelVerifyBuffer, KernelVerifyExt2, KernelVerifyVfs,
@@ -148,6 +148,15 @@ void KernelVerifyClients(void);
  * after the root is mounted, as the tests that run a program do.
  */
 void KernelVerifyInit(void);
+
+/*
+ * Sub-task 9.4: the system configuration format and its parser. The parsing is
+ * asserted upon text composed in memory, as the line editor's editing is, and
+ * the reading of a file by config-check at privilege level 3 — which also
+ * asserts that the files `/etc` ships say what `init` and the desktop read.
+ * It runs after the root is mounted, as every test that opens a file does.
+ */
+void KernelVerifyConfig(void);
 
 /* Phase 6, sub-task 6.1: the descriptors, the task state segment, the interrupt
  * stack table and the three registers that configure SYSCALL. */

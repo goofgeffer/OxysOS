@@ -29,11 +29,21 @@
  * they are by what they do.
  */
 
+#include <config.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <syscall.h>
+
+/*
+ * Where the desktop's own configuration stands, of sub-task 9.4. Every key in
+ * it has a default here, so that a file which is absent, unreadable or wrong in
+ * a line leaves the desktop looking as it did rather than not appearing.
+ */
+#define DEMO_CONFIGURATION "/etc/desktop.conf"
+
+static OxysConfig DemoConfig;
 
 /* The palette, in the client's format: the accent the kernel's frame uses for
  * the focus, a warm white paper, a dark ink, and two more for the figure. */
@@ -57,6 +67,11 @@ static DemoWindow DemoPointer;
 static DemoWindow DemoKeys;
 
 static int32_t DemoScale = 2;
+
+/* The accent, which the configuration may replace; DEMO_ACCENT is the default
+ * and is what stands where the file says nothing or says something that is not
+ * three numbers. */
+static uint32_t DemoAccent = DEMO_ACCENT;
 
 static int32_t DemoPointerX;
 static int32_t DemoPointerY;
@@ -176,12 +191,12 @@ static void DemoDrawFigure(void)
         { 64, 0 },   { 45, 45 },   { 0, 64 },   { -45, 45 },
         { -64, 0 },  { -45, -45 }, { 0, -64 },  { 45, -45 }
     };
-    static const uint32_t colours[3] = { DEMO_ACCENT, DEMO_CORAL, DEMO_MINT };
+    const uint32_t colours[3] = { DemoAccent, DEMO_CORAL, DEMO_MINT };
 
     DemoFillRectangle(window, 0, 0, window->width, window->height, DEMO_PAPER);
     DemoFillDisc(window, centre_x, centre_y, large, DEMO_INK);
     DemoFillDisc(window, centre_x, centre_y, large - (3 * DemoScale), DEMO_PAPER);
-    DemoFillDisc(window, centre_x, centre_y, small, DEMO_ACCENT);
+    DemoFillDisc(window, centre_x, centre_y, small, DemoAccent);
 
     for (size_t index = 0U; index < 8U; ++index)
     {
@@ -203,7 +218,7 @@ static void DemoDrawPointer(void)
     if (DemoPointerInside)
     {
         DemoFillDisc(window, DemoPointerX, DemoPointerY,
-                     (DemoPointerHeld ? 12 : 7) * DemoScale, DEMO_ACCENT);
+                     (DemoPointerHeld ? 12 : 7) * DemoScale, DemoAccent);
     }
 
     DemoPresent(window);
@@ -216,7 +231,7 @@ static void DemoDrawKeys(void)
     DemoWindow *const window = &DemoKeys;
     const int32_t tile = 12 * DemoScale;
     const int32_t gap = 4 * DemoScale;
-    static const uint32_t colours[4] = { DEMO_ACCENT, DEMO_CORAL, DEMO_MINT, DEMO_INK };
+    const uint32_t colours[4] = { DemoAccent, DEMO_CORAL, DEMO_MINT, DEMO_INK };
 
     DemoFillRectangle(window, 0, 0, window->width, window->height, DEMO_PAPER);
 
@@ -273,6 +288,81 @@ static bool DemoHandleKey(const SyscallWindowEvent *event)
     return true;
 }
 
+/*
+ * Reads /etc/desktop.conf. Everything it sets has a default already in place,
+ * so a file that is absent or wrong leaves those defaults standing and the
+ * faults are reported upon the standard error, which is the serial line.
+ */
+static void DemoReadConfiguration(void)
+{
+    const char *accent;
+
+    if (!OxysConfigRead(&DemoConfig, DEMO_CONFIGURATION))
+    {
+        for (size_t index = 0U; index < OxysConfigFaultCount(&DemoConfig); ++index)
+        {
+            (void)fprintf(stderr, "windows: %s, line %lu: %s.\n", DEMO_CONFIGURATION,
+                          (unsigned long)OxysConfigFaultLine(&DemoConfig, index),
+                          OxysConfigFaultReason(&DemoConfig, index));
+        }
+    }
+
+    {
+        const long scale = OxysConfigNumber(&DemoConfig, "desktop", 0U, "scale", 0);
+
+        /* A scale outside what the screen can show is refused rather than
+         * obeyed: a window drawn at sixteen times the face would not fit upon
+         * any screen this system has, and a desktop nobody can see is worse
+         * than one that ignored a setting. */
+        DemoScale = ((scale >= 1) && (scale <= 4)) ? (int32_t)scale : 0;
+    }
+
+    accent = OxysConfigValue(&DemoConfig, "desktop", 0U, "accent");
+
+    if (accent != NULL)
+    {
+        unsigned long channel[3] = { 0UL, 0UL, 0UL };
+        size_t taken = 0U;
+        size_t at = 0U;
+        bool digits = false;
+
+        /* Three numbers, separated by whatever is not one — a comma, a space,
+         * or both, because a person writing `79, 134, 247` and a person
+         * writing `79 134 247` have each written the same colour. */
+        while ((accent[at] != '\0') && (taken < 3U))
+        {
+            if ((accent[at] >= '0') && (accent[at] <= '9'))
+            {
+                channel[taken] = (channel[taken] * 10UL) + (unsigned long)(accent[at] - '0');
+                digits = true;
+            }
+            else if (digits)
+            {
+                ++taken;
+                digits = false;
+            }
+
+            ++at;
+        }
+
+        if (digits)
+        {
+            ++taken;
+        }
+
+        if ((taken == 3U) && (channel[0] <= 255UL) && (channel[1] <= 255UL) &&
+            (channel[2] <= 255UL))
+        {
+            DemoAccent = (uint32_t)((channel[0] << 16) | (channel[1] << 8) | channel[2]);
+        }
+        else
+        {
+            (void)fprintf(stderr, "windows: %s: `accent` is not three numbers from 0 to 255; "
+                                  "the default stands.\n", DEMO_CONFIGURATION);
+        }
+    }
+}
+
 int main(void)
 {
     /*
@@ -292,7 +382,18 @@ int main(void)
         return EXIT_FAILURE;
     }
 
-    DemoScale = (screen.width >= 1024) ? 2 : 1;
+    /*
+     * The configuration of sub-task 9.4, read before anything is drawn. A scale
+     * of zero — the default the file ships with — means the program chooses
+     * from the screen it was given, which is what it did before there was a
+     * file to say otherwise.
+     */
+    DemoReadConfiguration();
+
+    if (DemoScale == 0)
+    {
+        DemoScale = (screen.width >= 1024) ? 2 : 1;
+    }
     left = screen.width / 16;
     top = screen.height / 12;
 

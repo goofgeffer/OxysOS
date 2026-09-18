@@ -651,3 +651,30 @@ and the serial socket types at the shell, which is where the shell is upon the
 default entry — `sendkey` would reach the window manager, which holds the
 keyboard there, and not the shell. That is how the runs of 2026-09-17 in
 [`TESTING-RECORD.md`](TESTING-RECORD.md) were made.
+
+## 10. Verification that the desktop's configuration is obeyed
+
+The self-test of sub-task 9.4 asserts the format and that the shipped files
+carry the keys the programs read;
+[`../design/CONFIG.md`](../design/CONFIG.md), Section 6, pairs each assertion
+with what it would catch. What only looking establishes is that a setting
+changed in a file changes what is drawn.
+
+1. **Change the accent.** In `/etc/desktop.conf` set `accent` to something no
+   part of the desktop uses — `230, 120, 40` is what the run of 2026-09-18
+   used — rebuild the image, and boot the default entry. The discs the desktop
+   draws in its own windows are that colour.
+2. **The frame does not change**, and that is the half of the assertion a
+   person is most likely to skip. The title band of the focused window stays
+   blue: the frame's colours are the window manager's, drawn by the kernel,
+   and the file says so where a person will read it. A change that altered the
+   band too would mean the desktop had been given the frame to draw, which is
+   sub-task 9.1's boundary gone.
+3. **Change the scale.** `scale = 1` draws the windows and their contents at
+   the face's own size upon a screen where `0` would have chosen two; `scale =
+   9` is refused and the default stands, which is the bound a person cannot
+   draw a window outside of.
+4. **Break a line.** Put `run` before any section, or leave a bracket unclosed,
+   and the faults are printed upon the serial line with their line numbers
+   while everything else in the file still takes effect — which is the format's
+   central promise and the one thing a single screenshot cannot show.

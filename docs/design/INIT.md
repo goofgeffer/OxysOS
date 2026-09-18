@@ -47,10 +47,11 @@ person asks. It also adds the two pages the kernel draws for itself — the boot
 screen and the power screen — because the moments before a desktop and after it
 are the two a person sees with no program running to draw them.
 
-**What it does not add** is a service configuration: what `init` starts is
-written into `init`, not read from a file. Sub-task 9.4 defines the configuration
-format and the `/etc` hierarchy, and that is where the list of what to run
-belongs; Section 7, limitation 1.
+**What it did not add** was a service configuration: what `init` started was
+written into `init`. Sub-task 9.4 supplied the format and the `/etc` hierarchy,
+and the list of what to run is `/etc/system.conf` since —
+[`CONFIG.md`](CONFIG.md), Section 4.1. Section 2.2 below describes the
+supervision as it now stands.
 
 ## 2. `init`
 
@@ -70,29 +71,33 @@ question too. Section 7, limitation 2.
 
 ### 2.2 What it supervises, and why supervision is the point
 
-`init` starts `/bin/windows` where there is a desktop to start it upon, and
-**starts it again whenever it ends** — because a person closed its last window,
-or because it faulted. That single behaviour is the whole of what `init` adds
-over a program the kernel could have launched itself: a desktop a person closed
-and could not get back is a desktop that is gone, and a machine whose desktop
-died in a fault with nothing to notice is a machine showing a bare ground for
-ever.
+`init` starts each service of `/etc/system.conf` — since sub-task 9.4; it was
+`/bin/windows`, written here, before — and **starts it again whenever it ends**,
+because a person closed its last window or because it faulted. That single
+behaviour is the whole of what `init` adds over a program the kernel could have
+launched itself: a desktop a person closed and could not get back is a desktop
+that is gone, and a machine whose desktop died in a fault with nothing to notice
+is a machine showing a bare ground for ever.
 
-It discovers whether there is a desktop at all by asking: `window_screen`
-reports `ENOTSUP` where the window manager does not have the screen, which is
-the two entries that give the shell the screen. There, `init` supervises nothing
-and only collects and waits.
+Two things bound it, both of them 9.4's and both recorded in
+[`CONFIG.md`](CONFIG.md), Section 4.1. A service marked `needs = display` is not
+started at all where the window manager does not have the screen — `init` asks
+`window_screen`, which reports `ENOTSUP` upon the two entries that give the
+shell the screen, and a service that needed one and was started there would be
+refused, exit, and be started again for ever. And a service that ends five times
+in a row is given up on, which is what stops a program that cannot run at all
+from being restarted for the machine's whole life.
 
 ### 2.3 The loop, and why the handlers only set a flag
 
 ```
 for (;;)
 {
-    if a shutdown was asked → stop the desktop, collect it, power()
+    if a shutdown was asked → stop every service, collect them, power()
     ended = waitpid(-1)
-    if ended is the desktop  → start it again
-    if ended < 0 and ECHILD  → pause()
-    otherwise                → an orphan was collected; go round
+    if ended is a service     → start it again, or give up upon it
+    if ended < 0 and ECHILD   → pause()
+    otherwise                 → an orphan was collected; go round
 }
 ```
 
@@ -305,19 +310,21 @@ would otherwise have been called a flake.
 
 ## 7. Limitations
 
-1. **What `init` starts is written into `init`.** There is no service
-   configuration and no `/etc`; the desktop's path is a constant in the program.
-   Sub-task 9.4 is the configuration format and the hierarchy it is read from,
-   and it is where a list of services belongs.
+1. ~~**What `init` starts is written into `init`.**~~ **Closed at sub-task
+   9.4**: the services are `[service]` blocks in `/etc/system.conf`, and
+   [`CONFIG.md`](CONFIG.md), Section 4.1, is what each key means. What `init`
+   still has written into it is the fallback it uses where that file cannot be
+   read at all, which is deliberate and is recorded there.
 2. **The shell is still the kernel's**, started in a loop the entry point holds
    upon the serial line, and is not `init`'s to supervise. Sub-task 9.6 puts a
    terminal emulator upon the desktop; that is when a shell becomes a thing
    `init` starts.
-3. **Supervision is a restart and nothing more.** There is no limit upon how
-   often a program may be restarted, so a desktop that faults immediately is
-   restarted immediately, for ever. What bounds it is a rate limit, and what a
-   rate limit needs is a clock a program can read, which this system does not
-   yet have.
+3. ~~**Supervision is a restart and nothing more.**~~ **Bounded at sub-task
+   9.4**: a service that ends five times in a row is given up on and `init` says
+   so. It is a count and not a rate, a rate needing a clock a program can read
+   which this system still does not have, and the count is cleared only by
+   `init` stopping the service itself — the one ending that says nothing about
+   whether the program works. [`CONFIG.md`](CONFIG.md), Section 4.1.
 4. **Nothing is told to stop but the desktop.** An orderly shutdown stops what
    `init` started and then stops the machine; a process that is nobody's child
    is not asked to finish, and a filesystem is not flushed — the ramdisk being

@@ -66,6 +66,7 @@ sub-task 8.1 the shell.
 | `/bin/windows` | Sub-task 9.2: the window demonstration, the first client of the window manager, which the kernel starts beside the shell upon the default entry. Not a utility, and here because the kernel reads it off this filesystem as it reads the shell. |
 | `/bin/init` | Sub-task 9.3: the first user process, which the kernel reads off this filesystem and starts, and which starts the desktop above. |
 | `/bin/shutdown` | Sub-task 9.3: asks `init` to stop the machine. |
+| `/etc` | The system configuration of sub-task 9.4: `system.conf`, from which `init` takes its services, and `desktop.conf`, from which the desktop takes its appearance. Staged from `etc/` in the repository; `../design/CONFIG.md`, Section 3. |
 | `/mnt` | Empty. Where a volume the machine carries is mounted; Section 6.3. |
 | `/lost+found` | `mke2fs` makes it. Nothing here uses it. |
 

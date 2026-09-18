@@ -2249,6 +2249,11 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
      */
     KernelVerifyInit();
 
+    /* Sub-task 9.4: the configuration format `init` reads its services from,
+     * asserted after it because the parsing is the library's and the files it
+     * reads are the ones `init` has just been started without. */
+    KernelVerifyConfig();
+
     /* Sub-task 8.6: the pipes the sessions above made, and the scheduler the
      * pipelines ran upon, which the shell is the first thing to sleep in. */
     VfsPipeReport();

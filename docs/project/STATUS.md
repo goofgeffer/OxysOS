@@ -654,8 +654,8 @@ with the `link` and `procinfo` calls, twenty-nine. [`../design/PROCESS.md`](../d
 [`../design/LIBC.md`](../design/LIBC.md), Section 13.
 
 **Phase 9 — the desktop, its system services and its configuration.** Begun:
-sub-tasks 9.1, 9.2 and 9.3 are complete, all on 2026-09-17, and the five after
-them are not. The
+sub-tasks 9.1, 9.2 and 9.3 are complete, all on 2026-09-17, and 9.4 on
+2026-09-18; the four after them are not. The
 window manager holds a fixed table of sixteen windows upon the compositor's back
 buffer, each a content surface its owner draws into and a queue of events its
 owner drains, with a frame the manager draws: a flat band, a one-pixel border, a
@@ -697,6 +697,18 @@ screen from the moment there is a back buffer until the desktop composes over
 it, where it had shown a banner and then nothing; the power screen is its
 counterpart. [`../design/INIT.md`](../design/INIT.md).
 
+**And since 9.4 it is told what to run rather than knowing.** `/etc/system.conf`
+holds a `[service]` block for each program `init` starts — its path, whether it
+is restarted, and whether it needs a display, which is what keeps the desktop
+off the entries that give the shell the screen — and `/etc/desktop.conf` holds
+the scale and the accent the desktop draws with. The format is a line at a time,
+so that a line which cannot be read costs that line and not the file: the faults
+are kept with their line numbers and reported, and the parse carries on. The
+parser is in the C library, its parsing apart from the file it reads as the line
+editor's editing is apart from the terminal. A service that ends five times in a
+row is given up on, there being no clock to make that a rate.
+[`../design/CONFIG.md`](../design/CONFIG.md).
+
 ## 3. Where it has been observed to work
 
 A sub-task marked *implemented* in [`PLAN.md`](PLAN.md) means the code exists and
@@ -736,6 +748,7 @@ The physical machine is one machine — the HP Laptop 14-dq0052dx specified in
 | 9.1 The window manager | Yes, at 1280 by 800, the mouse and the keyboard driven through the monitor and the screen captured at each step | **Yes**, at 640 by 480, typed at the PS/2 keyboard and captured | **Yes — 9.1**, at 1024 by 768, to the three windows and the prompt upon the serial line | — | **Not yet run** |
 | 9.2 The client protocol | Yes, the demonstration program driven through the monitor and captured at each step | **Yes**, at 640 by 480, the program's windows placed by the screen it asked for | **Yes — 9.2**, `window-check` passed and the prompt reached | — | **Not yet run** |
 | 9.3 `init`, the shutdown and the boot screen | Yes: the boot screen captured, the desktop started by `init`, the desktop killed and started again, `shutdown` halting and `shutdown -r` restarting | **Yes**, the desktop started by `init` at 640 by 480 | **Yes — 9.3**, seventy assertions and the prompt reached | — | **Not yet run** |
+| 9.4 The configuration and `/etc` | Yes: the desktop's accent changed in `/etc/desktop.conf` and seen to change, and `init` seen to give up on a service whose program is missing | **Yes**, seventy-one assertions | **Yes — 9.4**, seventy-one assertions and the prompt reached | — | **Not yet run** |
 
 **The rows marked "— 7.2" were all established by two boots of one image**,
 because a boot runs every self-test in the corpus and a clean one is therefore
@@ -940,7 +953,7 @@ functional. [`TESTING.md`](TESTING.md), Section 3.
 There is no test harness and there will be none before Phase 7, there being no
 userland to run one in. The kernel therefore asserts its own properties at boot,
 in the order the subsystems are initialised, and `make verify` fails if any of
-them reports a failure. Seventy assertions presently report passed or sound.
+them reports a failure. Seventy-one assertions presently report passed or sound.
 
 Those tests are in [`../../kernel/test/`](../../kernel/test/), one file per
 subsystem. Each subsystem's design document carries a table pairing every
@@ -973,7 +986,7 @@ design document ends with its particular ones.
 | A desktop: a root beneath every window, a panel above them, and a way to start a program from the screen. The default entry presents three demonstration windows upon a bare ground. | 9.5 |
 | The shell upon the screen and the window manager at once. With the window manager the shell is upon the serial line; a terminal emulator window is what puts it back upon the screen. | 9.6 |
 | ~~An orphan collected by nobody.~~ **Arrived at 9.3**: a process that ends gives its children to `init`, which collects them. What remains is that nothing but the desktop is told to stop at a shutdown, and that `init` may itself be killed. `INIT.md`, Section 7. | — |
-| A service configuration. What `init` starts is written into `init`; there is no `/etc` and no format to read a list of services from. | 9.4 |
+| ~~A service configuration.~~ **Arrived at 9.4**: `/etc/system.conf` names the services and `/etc/desktop.conf` the desktop's appearance. What remains is that nothing in `/etc` survives a reboot, the ramdisk being memory, and that the kernel reads none of it. `CONFIG.md`, Section 7. | — |
 | A reaper. A kernel thread that finishes cannot free its own stack — it is standing on it — and nothing else does. Its slot and its four pages are held until the machine stops. | Phase 7 |
 | Migration, work stealing, and more than one priority. A thread is placed once, at admission, upon the shortest queue its affinity permits, and stays there. | Later |
 | `CR4.SMEP`, `CR4.SMAP` and `IA32_EFER.NXE`. The user mappings that would be protected now exist. | 13.3 |

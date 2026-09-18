@@ -312,9 +312,25 @@ composes over it, in place of the banner and the black screen it showed before;
 the power screen is its counterpart, and neither is drawn upon the entries that
 give the shell the screen. [`../design/INIT.md`](../design/INIT.md).
 
-**Next: sub-task 9.4** — the system configuration format, its parser, and the
-`/etc` hierarchy the services and the desktop read at start; what `init` starts
-is written into `init` until then, which Section 7 of that document records.
+**Sub-task 9.4 is complete**, on 2026-09-18: the system configuration. A format
+read a line at a time — a comment, a bracketed section, `key = value`, and a
+section repeated is a list — chosen so that **a line which cannot be read costs
+that line and not the file**: the faults are kept with their line numbers and
+reported, and the parse carries on, because a configuration read at boot by the
+first user process cannot be allowed to fail whole. The parser is in the C
+library with its parsing held apart from the file it reads, as the line editor's
+editing is held apart from the terminal, so that the whole of the format is
+asserted before there is a program to read a file. `/etc` holds two files, kept
+in the repository and staged onto the ramdisk: `system.conf`, from which `init`
+now takes its services — `run`, `restart`, and `needs = display`, which is what
+keeps the desktop off the entries that give the shell the screen — and
+`desktop.conf`, from which the desktop takes its scale and its accent. A service
+that ends five times in a row is given up on, which is the bound
+[`../design/INIT.md`](../design/INIT.md) owed and which is a count and not a
+rate, there being no clock. [`../design/CONFIG.md`](../design/CONFIG.md).
+
+**Next: sub-task 9.5** — the session: the desktop root, the panel, the launcher,
+and the ownership of the display that decides who may draw upon it.
 
 
 
@@ -1239,7 +1255,7 @@ rather than left implied.
 | 9.1 | Implement a stacking window manager with focus and event routing. | Implemented | `KernelVerifyWindows`, `KernelVerifyCircle` |
 | 9.2 | Implement the client protocol by which user processes create, draw and receive events upon windows. *(The surface interface of 6.6 is revisited here against its first real client.)* | Implemented | `KernelVerifyClients`, `window-check` |
 | 9.3 | Implement `init`: the first user process, the supervision of the services below it, and the orderly shutdown of both. | Implemented | `KernelVerifyInit`, `init-check` |
-| 9.4 | Define the system configuration format, its parser, and the `/etc` hierarchy the services and the desktop read at start. | Planned | — |
+| 9.4 | Define the system configuration format, its parser, and the `/etc` hierarchy the services and the desktop read at start. | Implemented | `KernelVerifyConfig`, `config-check` |
 | 9.5 | Implement the session: the desktop root, the panel, the launcher, and the ownership of the display that decides who may draw upon it. | Planned | — |
 | 9.6 | Implement a terminal emulator window hosting the Phase 8 shell. | Planned | — |
 | 9.7 | Implement the utilities the desktop is not usable without: a file manager, a text viewer and a clock. **`Oxys 1 Beta` is cut here.** | Planned | — |
