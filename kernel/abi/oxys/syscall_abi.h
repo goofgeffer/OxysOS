@@ -16,6 +16,8 @@
  *          SYSCALL_LINK, SYSCALL_PROCINFO, SyscallProcessInformation,
  *          SYSCALL_WINDOW_CREATE, SYSCALL_WINDOW_DESTROY, SYSCALL_WINDOW_MOVE,
  *          SYSCALL_WINDOW_BLIT, SYSCALL_WINDOW_EVENT, SYSCALL_WINDOW_SCREEN,
+ *          SYSCALL_POWER, SYSCALL_PAUSE, SYSCALL_POWER_HALT, SYSCALL_POWER_REBOOT,
+ *          SYSCALL_EPERM,
  *          SyscallWindowRectangle,
  *          SyscallWindowEvent, SYSCALL_WINDOW_WAIT, SYSCALL_WINDOW_ANY, the
  *          SYSCALL_WINDOW_EVENT kinds,
@@ -326,7 +328,27 @@
 #define SYSCALL_WINDOW_BLIT    32U
 #define SYSCALL_WINDOW_EVENT   33U
 #define SYSCALL_WINDOW_SCREEN  34U
-#define SYSCALL_COUNT          35U
+
+/*
+ * The one call of sub-task 9.3: `power(action)` stops the machine — halted,
+ * with a page saying it is safe to switch off, or restarted through the
+ * keyboard controller's reset line. Only `init` may make it; every other
+ * process is EPERM and asks `init` instead, by a signal — SIGTERM to halt,
+ * SIGINT to restart — which is what `shutdown` does. An action that is neither
+ * is EINVAL. A call that succeeds does not return.
+ */
+#define SYSCALL_POWER          35U
+
+/*
+ * `pause()` of sub-task 9.3: suspends the caller until a signal, and returns
+ * EINTR. IEEE Std 1003.1-2017's `pause`. It is what `init` waits in when it has
+ * no child to `wait` upon.
+ */
+#define SYSCALL_PAUSE          36U
+#define SYSCALL_COUNT          37U
+
+#define SYSCALL_POWER_HALT   1U
+#define SYSCALL_POWER_REBOOT 2U
 
 /* The longest title a window keeps, the terminator not counted. */
 #define SYSCALL_WINDOW_TITLE_MAXIMUM 31U
@@ -532,6 +554,9 @@ typedef struct SyscallProcessInformation
  * group, that does not exist. */
 #define SYSCALL_EINTR          INT64_C(-22) /* A signal arrived while the call slept. */
 #define SYSCALL_ESRCH          INT64_C(-23) /* No such process or process group. */
+
+/* The one of sub-task 9.3: a call that only `init` may make, made by another. */
+#define SYSCALL_EPERM          INT64_C(-24) /* The caller is not permitted this. */
 
 /*
  * How a program opens a file: six of the flags the filesystem layer offers,

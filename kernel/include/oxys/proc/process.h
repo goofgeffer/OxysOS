@@ -9,7 +9,7 @@
  *          ProcessInitialise, ProcessCreate, ProcessDestroy, ThreadCreate,
  *          ThreadDestroy, ThreadSetCurrent, ThreadCurrent, ProcessRecordImage,
  *          ProcessCreateUserStack, ProcessReport, ProcessFork, ProcessExecute,
- *          ThreadLaunch,
+ *          ThreadLaunch, ProcessSetInit, ProcessInitId, ProcessAdoptOrphansOf,
  *          ProcessExit, ProcessWait, ProcessWaitFor, ProcessCurrent, ProcessEstablishBreak,
  *          ProcessSetBreak, ProcessBreak, ProcessArguments,
  *          ProcessCloseDescriptors, ProcessAdoptDescriptor,
@@ -762,6 +762,25 @@ void ThreadTrampolineEntry(void);
 
 /* How many programs have ended. */
 uint64_t ProcessTerminationCount(void);
+
+/*
+ * `init`, of sub-task 9.3: the first user process, which the kernel names by
+ * its identifier once it has started it. A process that ends with children
+ * has them given to `init` — ProcessAdoptOrphansOf, called at the ending —
+ * and `init` is woken where one of them had already ended, so that its `wait`
+ * collects the orphan at once. Returns how many were given. Nothing is given
+ * where there is no `init` yet, or where the ending process is `init` itself.
+ */
+void ProcessSetInit(uint64_t id);
+uint64_t ProcessInitId(void);
+size_t ProcessAdoptOrphansOf(uint64_t parent_id);
+uint64_t ProcessOrphanCount(void);
+
+/*
+ * Suspends the caller until a signal, of sub-task 9.3: POSIX's `pause`, for an
+ * `init` that has no child to `wait` upon and must not spin. Returns EINTR.
+ */
+int64_t ProcessPause(void);
 
 /* Emits the tables upon the diagnostic path. */
 void ProcessReport(void);

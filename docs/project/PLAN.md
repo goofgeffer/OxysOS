@@ -296,9 +296,25 @@ the shell by `ThreadLaunch` and waited for by nobody. Asserted by
 `window-check` at privilege level 3 with a kernel thread to read its pixels and
 wake it. [`../design/WINDOWS.md`](../design/WINDOWS.md), Sections 10 to 12.
 
-**Next: sub-task 9.3** — `init`: the first user process, the supervision of the
-services below it, and the orderly shutdown of both; the orphan the launched
-demonstration becomes when it ends is the first thing it collects.
+**Sub-task 9.3 is complete**: `init`, the first user process. The kernel now
+starts one program and names it to itself; `init` starts the desktop and starts
+it again whenever it ends, and collects every orphan — a process that ends gives
+its children to `init`, which is what [`../design/PROCESS.md`](../design/PROCESS.md),
+Section 19, had recorded as owed since 8.7. The machine can be stopped in order:
+`power` halts it or restarts it through the keyboard controller's reset line and
+is **reserved to `init` alone**, every other caller being `EPERM`, so `shutdown`
+finds `init` by name in the process table and asks it by a signal, and `init`
+stops the desktop before it stops the machine; `pause` was added for an `init`
+with nothing to collect, which must not spin. Thirty-seven calls. At the project
+owner's request the default entry now shows a **boot screen** — a mark, a
+wordmark and a line — from the moment there is a back buffer until the desktop
+composes over it, in place of the banner and the black screen it showed before;
+the power screen is its counterpart, and neither is drawn upon the entries that
+give the shell the screen. [`../design/INIT.md`](../design/INIT.md).
+
+**Next: sub-task 9.4** — the system configuration format, its parser, and the
+`/etc` hierarchy the services and the desktop read at start; what `init` starts
+is written into `init` until then, which Section 7 of that document records.
 
 
 
@@ -1200,8 +1216,10 @@ and not the framebuffer. The division of the graphical work between Phase 6 and
 this phase is argued in [`../design/ARCHITECTURE.md`](../design/ARCHITECTURE.md),
 Section 4.1, which records what it cost.
 
-**Sub-tasks 9.1 and 9.2 are complete**, both on 2026-09-17, and 9.1 is the
-first thing built against the preference below: [`../design/WINDOWS.md`](../design/WINDOWS.md),
+**Sub-tasks 9.1, 9.2 and 9.3 are complete**, all on 2026-09-17, and 9.1 is the
+first thing built against the preference below — with the boot screen and the
+power screen of 9.3 drawn to the same rule, a ring of discs and one line of
+text, [`../design/INIT.md`](../design/INIT.md), Section 5: [`../design/WINDOWS.md`](../design/WINDOWS.md),
 Section 4, is where the frame and the palette are judged against it, and
 records that a flat frame with a disc for its one control was reached and that
 rounded corners and any asymmetry were not. It also changed what the default
@@ -1220,7 +1238,7 @@ rather than left implied.
 | - | -------- | ----- | ----------- |
 | 9.1 | Implement a stacking window manager with focus and event routing. | Implemented | `KernelVerifyWindows`, `KernelVerifyCircle` |
 | 9.2 | Implement the client protocol by which user processes create, draw and receive events upon windows. *(The surface interface of 6.6 is revisited here against its first real client.)* | Implemented | `KernelVerifyClients`, `window-check` |
-| 9.3 | Implement `init`: the first user process, the supervision of the services below it, and the orderly shutdown of both. | Planned | — |
+| 9.3 | Implement `init`: the first user process, the supervision of the services below it, and the orderly shutdown of both. | Implemented | `KernelVerifyInit`, `init-check` |
 | 9.4 | Define the system configuration format, its parser, and the `/etc` hierarchy the services and the desktop read at start. | Planned | — |
 | 9.5 | Implement the session: the desktop root, the panel, the launcher, and the ownership of the display that decides who may draw upon it. | Planned | — |
 | 9.6 | Implement a terminal emulator window hosting the Phase 8 shell. | Planned | — |

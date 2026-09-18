@@ -53,7 +53,7 @@
  * be compared without the reader having to decide whether two phrasings are the
  * same thing.
  */
-static char OxysErrorSyscallMessages[ESRCH + 1][48] = {
+static char OxysErrorSyscallMessages[EPERM + 1][48] = {
     "No error",                          /* 0 */
     "No such system call",               /* ENOSYS */
     "An address the program may not use", /* EFAULT */
@@ -77,7 +77,8 @@ static char OxysErrorSyscallMessages[ESRCH + 1][48] = {
     "The volume or its device failed",    /* EIO */
     "The pipe is open for reading by nobody", /* EPIPE */
     "Interrupted by a signal",             /* EINTR */
-    "No such process"                      /* ESRCH */
+    "No such process",                     /* ESRCH */
+    "Not permitted"                        /* EPERM */
 };
 
 /*
@@ -108,7 +109,7 @@ static char OxysErrorUnknownMessage[] = "Unknown error";
 
 char *strerror(int errnum)
 {
-    if ((errnum >= 0) && (errnum <= ESRCH))
+    if ((errnum >= 0) && (errnum <= EPERM))
     {
         return OxysErrorSyscallMessages[errnum];
     }

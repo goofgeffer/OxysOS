@@ -20,7 +20,7 @@
  *          KernelVerifyHeap, KernelVerifyStdio, KernelVerifyStartup,
  *          KernelVerifyUtilities, KernelVerifyLine, KernelVerifyShell,
  *          KernelVerifyTerminal, KernelVerifyWindows, KernelVerifyCircle,
- *          KernelVerifyClients,
+ *          KernelVerifyClients, KernelVerifyInit,
  *          KernelVerifyPit, KernelVerifyKeyboard, KernelVerifySerial,
  *          KernelVerifyVga, KernelVerifyPci, KernelVerifyAta, KernelVerifyBlock,
  *          KernelVerifyBuffer, KernelVerifyExt2, KernelVerifyVfs,
@@ -139,6 +139,15 @@ void KernelVerifyCircle(void);
  * runs after the root is mounted, as the tests that run a program do.
  */
 void KernelVerifyClients(void);
+
+/*
+ * Sub-task 9.3: `init`. The adoption of a parent's children by `init` at the
+ * parent's ending, asserted upon fixture processes composed in the table; and
+ * the two calls `init` rests upon — `power`, refused every process but `init`,
+ * and `pause` — asserted by running init-check at privilege level 3. It runs
+ * after the root is mounted, as the tests that run a program do.
+ */
+void KernelVerifyInit(void);
 
 /* Phase 6, sub-task 6.1: the descriptors, the task state segment, the interrupt
  * stack table and the three registers that configure SYSCALL. */

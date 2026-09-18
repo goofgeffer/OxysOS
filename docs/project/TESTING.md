@@ -159,9 +159,12 @@ standard output stream of the invoking terminal.
 sub-task 9.1, the screen is the window manager's.** The boot log — the
 self-test verdicts and device reports, some four hundred lines — is carried by
 the serial line in every boot, which is what `make verify` and this target's
-`-serial stdio` read; the screen of the default entry shows three windows a
-person can operate, and the shell runs upon the serial line, which is where
-this target's terminal is attached. The **`Oxys-OS (Shell-only)`** entry gives
+`-serial stdio` read; the screen of the default entry shows a boot screen and
+then three windows a person can operate, and the shell runs upon the serial
+line, which is where this target's terminal is attached. **The banner is quiet
+upon that entry too, since sub-task 9.3** — the boot screen stands in its place
+from the moment there is a back buffer, [`../design/INIT.md`](../design/INIT.md),
+Section 5. The **`Oxys-OS (Shell-only)`** entry gives
 the shell the screen, quiet: the banner and a prompt and nothing between, which
 is what the default entry showed through Phase 8. The **`Oxys-OS (Shell
 Diagnostics)`** entry — named *diagnostics* until 9.1 — shows the log upon the

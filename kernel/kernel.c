@@ -85,10 +85,12 @@
 #include <oxys/dev/keyboard.h>
 #include <oxys/dev/mouse.h>
 #include <oxys/terminal/terminal.h>
+#include <oxys/dev/io.h>
 #include <oxys/dev/vga.h>
 #include <oxys/gfx/framebuffer.h>
 #include <oxys/gfx/graphics.h>
 #include <oxys/gfx/compositor.h>
+#include <oxys/gfx/font.h>
 #include <oxys/gfx/console.h>
 #include <oxys/gfx/cursor.h>
 #include <oxys/gfx/faultscreen.h>
@@ -130,6 +132,180 @@ static _Noreturn void KernelHalt(void)
     {
         __asm__ __volatile__("cli; hlt");
     }
+}
+
+/*
+ * The mark drawn upon the boot screen and the power screen: a ring of small
+ * discs about a larger ringed one, in a few colours — the figure the window
+ * demonstration draws, drawn here for the two screens the kernel paints itself.
+ * It is geometry and nothing else, which docs/project/INSPIRATIONS.md, Section
+ * 3, asks of the appearance, and it needs no font.
+ */
+static void KernelDrawMark(GraphicsSurface *surface, int32_t centre_x, int32_t centre_y,
+                           int32_t unit)
+{
+    static const int32_t points[8][2] = {
+        { 64, 0 },   { 45, 45 },   { 0, 64 },   { -45, 45 },
+        { -64, 0 },  { -45, -45 }, { 0, -64 },  { 45, -45 }
+    };
+    const uint32_t accent = FramebufferEncode(79U, 134U, 247U);
+    const uint32_t coral = FramebufferEncode(242U, 107U, 91U);
+    const uint32_t mint = FramebufferEncode(63U, 191U, 159U);
+    const uint32_t paper = FramebufferEncode(245U, 243U, 238U);
+    const uint32_t ink = FramebufferEncode(38U, 38U, 38U);
+    const uint32_t ring[3] = { accent, coral, mint };
+    const int32_t large = 4 * unit;
+    const int32_t small = unit;
+    const int32_t orbit = 7 * unit;
+
+    GraphicsFillCircle(surface, centre_x, centre_y, large, ink);
+    GraphicsFillCircle(surface, centre_x, centre_y, large - (unit / 2) - 1, paper);
+    GraphicsFillCircle(surface, centre_x, centre_y, small, accent);
+
+    for (size_t index = 0U; index < 8U; ++index)
+    {
+        GraphicsFillCircle(surface, centre_x + ((points[index][0] * orbit) / 64),
+                           centre_y + ((points[index][1] * orbit) / 64), small,
+                           ring[index % 3U]);
+    }
+}
+
+/* A line of the scaled face, centred upon x, in ink upon paper. */
+static void KernelDrawCentredText(GraphicsSurface *surface, int32_t centre_x, int32_t y,
+                                  const char *text, int32_t scale, uint32_t ink, uint32_t paper)
+{
+    int32_t length = 0;
+    int32_t x;
+
+    for (const char *at = text; *at != '\0'; ++at)
+    {
+        ++length;
+    }
+
+    x = centre_x - ((length * (int32_t)FONT_WIDTH * scale) / 2);
+
+    for (const char *at = text; *at != '\0'; ++at)
+    {
+        FontDrawGlyphScaled(surface, x, y, (uint8_t)*at, ink, paper, scale);
+        x += (int32_t)FONT_WIDTH * scale;
+    }
+}
+
+/*
+ * The boot screen: the mark and a wordmark upon the slate ground, drawn to the
+ * compositor's back buffer and presented once, since sub-task 9.3. The default
+ * entry boots quiet — the screen shows nothing of the log — so until the
+ * desktop drew there was nothing there; this is what a person sees while the
+ * kernel starts, in place of it. It is not drawn upon the entries that give the
+ * shell the screen, where the log or the prompt is what belongs there.
+ */
+static void KernelBootScreen(void)
+{
+    GraphicsSurface *const surface = CompositorSurface();
+    int32_t centre_x;
+    int32_t unit;
+    const uint32_t ground = FramebufferEncode(43U, 52U, 64U);
+    const uint32_t paper = FramebufferEncode(245U, 243U, 238U);
+    const uint32_t grey = FramebufferEncode(150U, 158U, 170U);
+
+    if (surface == NULL)
+    {
+        return;
+    }
+
+    centre_x = (int32_t)surface->width / 2;
+    unit = ((int32_t)surface->width >= 1024) ? 8 : 5;
+
+    GraphicsClear(surface, ground);
+    KernelDrawMark(surface, centre_x, (int32_t)surface->height / 2 - (12 * unit), unit);
+    KernelDrawCentredText(surface, centre_x, (int32_t)surface->height / 2 + (2 * unit),
+                          "OXYS-OS", (unit >= 8) ? 4 : 3, paper, ground);
+    KernelDrawCentredText(surface, centre_x, (int32_t)surface->height / 2 + (9 * unit),
+                          "version " OXYS_VERSION_BANNER, (unit >= 8) ? 2 : 1, grey, ground);
+    KernelDrawCentredText(surface, centre_x, (int32_t)surface->height - (10 * unit),
+                          "starting the desktop", (unit >= 8) ? 2 : 1, grey, ground);
+
+    CompositorInvalidateAll();
+    CompositorPresent();
+}
+
+/*
+ * The power call of sub-task 9.3, made by `init` alone: it stops the machine.
+ *
+ * SYSCALL_POWER_HALT draws a full-screen page saying the machine may be turned
+ * off and halts every processor — the graphical counterpart of the fault
+ * screen, drawn straight upon the framebuffer with the compositor suspended,
+ * because the machine is stopping and the back buffer holds a desktop that is
+ * no longer what should be shown. SYSCALL_POWER_REBOOT pulses the reset line of
+ * the 8042 keyboard controller, which the IBM Personal Computer AT technical
+ * reference assigns to bit 0 of the controller's output port and which command
+ * 0xFE asserts for a few microseconds; the processor restarts from its reset
+ * vector and this call does not return by any path.
+ *
+ * It does not return upon success. It returns SYSCALL_EINVAL for an action that
+ * is neither, having done nothing, so that `init` learns of a mistake rather
+ * than halting a machine upon one.
+ */
+int64_t KernelPower(uint64_t action)
+{
+    GraphicsSurface surface;
+    const uint32_t ground = FramebufferEncode(43U, 52U, 64U);
+    const uint32_t paper = FramebufferEncode(245U, 243U, 238U);
+    const uint32_t grey = FramebufferEncode(150U, 158U, 170U);
+
+    if ((action != SYSCALL_POWER_HALT) && (action != SYSCALL_POWER_REBOOT))
+    {
+        return SYSCALL_EINVAL;
+    }
+
+    /* The other processors are stopped first, as a panic stops them, so that
+     * none goes on drawing over the page or writing to a device mid-reset. */
+    IpiHaltOtherProcessors();
+
+    CompositorSuspend();
+
+    if (GraphicsSurfaceFromFramebuffer(&surface))
+    {
+        const int32_t centre_x = (int32_t)surface.width / 2;
+        const int32_t unit = ((int32_t)surface.width >= 1024) ? 8 : 5;
+
+        GraphicsClear(&surface, ground);
+        KernelDrawMark(&surface, centre_x, (int32_t)surface.height / 2 - (10 * unit), unit);
+        KernelDrawCentredText(&surface, centre_x, (int32_t)surface.height / 2 + (2 * unit),
+                              (action == SYSCALL_POWER_REBOOT) ? "RESTARTING" : "OXYS-OS",
+                              (unit >= 8) ? 4 : 3, paper, ground);
+        KernelDrawCentredText(
+            &surface, centre_x, (int32_t)surface.height / 2 + (9 * unit),
+            (action == SYSCALL_POWER_REBOOT) ? "the machine is restarting"
+                                             : "it is now safe to turn off the machine",
+            (unit >= 8) ? 2 : 1, grey, ground);
+    }
+
+    KernelWriteString(action == SYSCALL_POWER_REBOOT
+                          ? "\nThe machine is restarting.\n"
+                          : "\nIt is now safe to turn off the machine.\n");
+    SerialFlush();
+
+    if (action == SYSCALL_POWER_REBOOT)
+    {
+        /*
+         * The reset line, pulsed through the keyboard controller. The status
+         * register's bit 1 is the input-buffer-full flag; the command is
+         * written only when it is clear, so that it is not lost behind a byte
+         * the controller has not yet taken. A bounded wait, because a machine
+         * with no controller must fall through to the halt rather than spin.
+         */
+        for (uint32_t attempt = 0U; attempt < 100000U; ++attempt)
+        {
+            if ((PortReadByte(0x64U) & 0x02U) == 0U)
+            {
+                PortWriteByte(0x64U, 0xFEU);
+                break;
+            }
+        }
+    }
+
+    KernelHalt();
 }
 
 /*
@@ -904,9 +1080,26 @@ static void KernelAttachPointer(void)
 #define KERNEL_SHELL_PATH "/bin/sh"
 #define KERNEL_SHELL_NAME "sh"
 
-/* Where the window demonstration of sub-task 9.2 stands, and its name. */
-#define KERNEL_WINDOWS_PATH "/bin/windows"
-#define KERNEL_WINDOWS_NAME "windows"
+/*
+ * Whether this is the entry that gives the window manager the screen: the
+ * default one, which names no option at all. It is asked twice — once before
+ * the banner, to keep the screen clear for the boot screen, and once where the
+ * screen is given out — and is a function rather than a variable because the
+ * command line is the only thing it depends upon and that cannot change.
+ */
+static bool KernelDesktopEntry(void)
+{
+    return !KernelCommandLineHasOption("diagnostics") &&
+           !KernelCommandLineHasOption("shell-only") &&
+           !KernelCommandLineHasOption("graphics-figure");
+}
+
+/* Where `init` of sub-task 9.3 stands, and its name. It is the first user
+ * process, and it starts and supervises the desktop and collects the orphans;
+ * the kernel starts it and no other program, the window demonstration of 9.2
+ * being `init`'s to run since 9.3. */
+#define KERNEL_INIT_PATH "/bin/init"
+#define KERNEL_INIT_NAME "init"
 
 /*
  * Gives the window manager the screen: the compositor's back buffer, the
@@ -943,12 +1136,12 @@ static bool KernelStartWindowManager(void)
 /*
  * Starts a program from the root and does not wait for it, of sub-task 9.2:
  * what KernelRunShell does up to the start, and then ThreadLaunch in place of
- * ThreadStart. The process has no parent and is collected by nobody, which is
- * the orphan docs/design/PROCESS.md, Section 19, records and which `init` of
- * sub-task 9.3 exists to collect; until then a program started this way that
- * ends holds one slot of the process table until the machine stops.
+ * ThreadStart. Returns the new process's identifier, or zero where it could
+ * not be started. Since sub-task 9.3 this starts one program, `init`, whose
+ * children collect one another and whose own ending is the machine's; a
+ * program `init` launches has `init` for a parent and is collected.
  */
-static bool KernelLaunchProgram(const char *path, const char *name)
+static uint64_t KernelLaunchProgram(const char *path, const char *name)
 {
     ProcessArguments arguments;
     Process *process;
@@ -976,14 +1169,14 @@ static bool KernelLaunchProgram(const char *path, const char *name)
 
     if (process == NULL)
     {
-        return false;
+        return 0U;
     }
 
     if (ElfLoadFile(&process->space, path, &image) != ELF_OK)
     {
         ProcessDestroy(process);
 
-        return false;
+        return 0U;
     }
 
     ProcessRecordImage(process, &image);
@@ -993,7 +1186,7 @@ static bool KernelLaunchProgram(const char *path, const char *name)
     {
         ProcessDestroy(process);
 
-        return false;
+        return 0U;
     }
 
     thread = ThreadCreate(process, image.entry, stack);
@@ -1002,10 +1195,10 @@ static bool KernelLaunchProgram(const char *path, const char *name)
     {
         ProcessDestroy(process);
 
-        return false;
+        return 0U;
     }
 
-    return true;
+    return process->id;
 }
 
 /*
@@ -1252,6 +1445,22 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
      * that names nothing is worse than no number, because somebody would
      * eventually cite it.
      */
+    /*
+     * The screen falls silent before the banner upon the desktop entry, since
+     * sub-task 9.3, where every other entry hears it: that entry's screen is
+     * the boot screen's and then the desktop's, and the one line of text that
+     * used to stand upon it was the whole of what a person saw for the length
+     * of the boot — a banner, and then a black screen, and then windows. The
+     * serial line carries the banner in every case, this being a courtesy to a
+     * person and not a change to what the machine says of itself; the entries
+     * that give the shell the screen keep the banner, which is what a prompt
+     * belongs beneath.
+     */
+    if (KernelDesktopEntry())
+    {
+        KernelDisplaySetQuiet(true);
+    }
+
     KernelWriteString(OXYS_SYSTEM_NAME " x86-64 " OXYS_VERSION_BANNER
                       ", Multiboot2 magic value verified\n");
     VgaSetColour(VGA_COLOUR_LIGHT_GREY, VGA_COLOUR_BLACK);
@@ -1389,6 +1598,20 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
          */
         (void)CompositorInitialise();
         (void)ConsoleInitialise();
+
+        /*
+         * The boot screen, of sub-task 9.3, drawn the moment there is a back
+         * buffer to draw it into and upon the desktop entry alone. It stands
+         * for the whole of the boot: the display is quiet upon that entry, so
+         * nothing writes over it, and the self-tests that present do so with
+         * this in the buffer they present. The desktop composes over it at the
+         * end. Every other entry shows its log or its prompt, which is what
+         * belongs upon a screen the shell is about to take.
+         */
+        if (KernelDesktopEntry())
+        {
+            KernelBootScreen();
+        }
     }
 
     ConsoleReport();
@@ -2005,6 +2228,27 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
      */
     KernelVerifyShell();
 
+    /*
+     * Sub-task 9.3: `init` — the adoption of orphans, and the power and pause
+     * calls it rests upon, asserted last of all and before the real `init` is
+     * started below.
+     *
+     * It is last because it is the order the machine itself has — `init` is
+     * the thing started after everything — and because of what happened when
+     * it was not. Placed before the shell's sessions, it ran a program that
+     * forks a child which spins, and then sleeps in `pause` to be woken: the
+     * job-control session that follows delivers two control bytes through the
+     * bootstrap processor's tick, and is sensitive to where that tick falls
+     * against the shell's forking, as docs/design/SHELL.md, Section 28,
+     * records. Under Bochs, which is some hundred times slower than the
+     * machine this is developed upon, the shift was enough to make the
+     * session's third `cat` end by the wrong signal, and the shell self-test
+     * failed there and nowhere else. Nothing in this test or in that session
+     * was wrong; the two simply must not be interleaved, and the natural order
+     * is also the safe one.
+     */
+    KernelVerifyInit();
+
     /* Sub-task 8.6: the pipes the sessions above made, and the scheduler the
      * pipelines ran upon, which the shell is the first thing to sleep in. */
     VfsPipeReport();
@@ -2052,7 +2296,7 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
     {
         const bool shell_only = KernelCommandLineHasOption("shell-only") ||
                                 KernelCommandLineHasOption("diagnostics");
-        const bool windows = !shell_only && CompositorIsActive() && VfsRootIsMounted();
+        bool windows = !shell_only && CompositorIsActive() && VfsRootIsMounted();
 
         if (!shell_only && !windows)
         {
@@ -2115,19 +2359,16 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
                     KernelDisplay = KERNEL_DISPLAY_WINDOWS;
 
                     /*
-                     * Sub-task 9.2: the demonstration is a program, the first
-                     * client of the protocol, launched beside the shell and
-                     * waited for by nobody. A desktop with nothing upon it is
-                     * what its absence leaves, and is reported rather than
-                     * turned into the shell taking the screen: the manager
-                     * works without it.
+                     * The boot screen, of sub-task 9.3: the mark and the
+                     * wordmark upon the slate ground, in place of the blank
+                     * quiet screen a person saw while the desktop was got
+                     * ready. It is drawn only here, upon the entry that gives
+                     * the window manager the screen; the entries that give the
+                     * shell the screen show the log or the prompt, which is
+                     * what belongs there. The desktop composes over it when
+                     * `init` has started its first window.
                      */
-                    if (!KernelLaunchProgram(KERNEL_WINDOWS_PATH, KERNEL_WINDOWS_NAME))
-                    {
-                        KernelWriteString("The demonstration " KERNEL_WINDOWS_PATH
-                                          " could not be started; the screen is bare.\n");
-                    }
-
+                    KernelBootScreen();
                     WindowManagerReport();
                 }
                 else
@@ -2135,6 +2376,7 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
                     KernelWriteString("The window manager could not take the screen; the "
                                       "shell takes it.\n");
                     KernelDisplaySetQuiet(false);
+                    windows = false;
                 }
             }
 
@@ -2156,6 +2398,30 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
                     CursorShow();
                     CompositorPresent();
                     KernelDisplay = KERNEL_DISPLAY_POINTER;
+                }
+            }
+
+            /*
+             * `init`, of sub-task 9.3: the first user process, launched here
+             * and named to the kernel so that `power` may be reserved to it.
+             * It starts and supervises the desktop where there is one — the
+             * window demonstration of 9.2 is its child now, not the kernel's —
+             * and it collects the orphans a background job leaves, on every
+             * entry. It is launched beside the shell and waited for by nobody;
+             * a machine whose `init` could not be started keeps the shell,
+             * which is the interactive thing regardless, and says so.
+             */
+            {
+                const uint64_t init = KernelLaunchProgram(KERNEL_INIT_PATH, KERNEL_INIT_NAME);
+
+                if (init != 0U)
+                {
+                    ProcessSetInit(init);
+                }
+                else
+                {
+                    KernelWriteString("init " KERNEL_INIT_PATH " could not be started; "
+                                      "there is no supervisor and no shutdown.\n");
                 }
             }
 

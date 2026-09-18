@@ -1077,6 +1077,15 @@ that has ended held is given back at the ending and not at the collecting.
 `ProcessDestroy` releases them as well, for a process destroyed without having
 run. [`WINDOWS.md`](WINDOWS.md), Section 10.2.
 
+**Sub-task 9.3 gives back a third thing in the same place: the children.**
+`ProcessAdoptOrphansOf` hands every child of the ending process to `init` — the
+process the kernel was told of by `ProcessSetInit` — and wakes it where one of
+them had already ended and is waiting for a collector. `ProcessPause` arrived
+with it, suspending a caller until a signal, which is what an `init` with no
+child to `wait` upon waits in. [`INIT.md`](INIT.md), Sections 2 and 3, hold the
+reasoning; what belongs here is that the ending is where it happens, and that
+it is the same reason as for the descriptors and the windows.
+
 ## 19. Present limitations
 
 1. ~~**Nothing has run.**~~ A program has: see Section 10.2. What has not
@@ -1157,10 +1166,12 @@ run. [`WINDOWS.md`](WINDOWS.md), Section 10.2.
     delivering upon the exception's frame and deciding what a handler that
     returns to the faulting instruction should meet, which is a decision worth
     making when something wants it.
-15. **An orphan is nobody's.** A process whose parent has ended is left in the
-    table when it ends, its status collected by nobody, and a job the shell
-    leaves running at `exit` is such a process. There is no `init` to reparent
-    it to until Phase 9, which is when this becomes a leak somebody can see.
+15. ~~**An orphan is nobody's.**~~ **Closed at sub-task 9.3.** A process whose
+    parent has ended is given to `init`, which collects it;
+    [`INIT.md`](INIT.md), Section 3, holds the adoption and the three decisions
+    in it, and Section 18.6 below is where in this file it happens. What remains
+    is that `init` may itself be killed, and that nothing but the desktop is
+    told to stop at a shutdown — Section 7 of that document.
 16. **A signal is delivered to one thread — the process's only one.** Every
     process has one thread, and the pending set is the process's; a second
     thread would need the set divided, or a rule for which thread takes what.

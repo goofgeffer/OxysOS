@@ -9,7 +9,7 @@
  * Key definitions: errno, OxysErrnoAddress, ENOSYS, EFAULT, EINVAL, EBADF,
  *          ECHILD, ENOENT, ENOMEM, EEXIST, ENOTDIR, EISDIR, ENOTEMPTY, EROFS,
  *          ENAMETOOLONG, ELOOP, ENOSPC, EMFILE, EBUSY, EXDEV, ENOTSUP, EIO,
- *          EPIPE, EINTR, ESRCH,
+ *          EPIPE, EINTR, ESRCH, EPERM,
  *          EDOM, EILSEQ, ERANGE,
  *          OXYS_ERRNO_SYSCALL_LIMIT.
  * References:
@@ -140,6 +140,9 @@ int *OxysErrnoAddress(void);
 #define EINTR        22 /* A signal arrived while the call slept. */
 #define ESRCH        23 /* No such process or process group. */
 
+/* The one of sub-task 9.3. */
+#define EPERM        24 /* The caller is not permitted this: `power` from a process that is not init. */
+
 /* The three ISO/IEC 9899:2011, Section 7.5, paragraph 2, requires, above the
  * reserved range for the reason given at the head of this file. Nothing in this
  * system sets any of them yet: there is no mathematical library to report a
@@ -183,10 +186,11 @@ _Static_assert(EIO == -SYSCALL_EIO, "EIO does not name SYSCALL_EIO.");
 _Static_assert(EPIPE == -SYSCALL_EPIPE, "EPIPE does not name SYSCALL_EPIPE.");
 _Static_assert(EINTR == -SYSCALL_EINTR, "EINTR does not name SYSCALL_EINTR.");
 _Static_assert(ESRCH == -SYSCALL_ESRCH, "ESRCH does not name SYSCALL_ESRCH.");
+_Static_assert(EPERM == -SYSCALL_EPERM, "EPERM does not name SYSCALL_EPERM.");
 
 /* And that the reservation still holds. A failure result more negative than the
  * limit would be translated to ENOSYS rather than to its own name, silently. */
-_Static_assert(-SYSCALL_ESRCH <= OXYS_ERRNO_SYSCALL_LIMIT,
+_Static_assert(-SYSCALL_EPERM <= OXYS_ERRNO_SYSCALL_LIMIT,
                "A failure result lies beyond the range reserved for one.");
 _Static_assert(EDOM > OXYS_ERRNO_SYSCALL_LIMIT,
                "The numbers ISO C requires overlap the kernel's failure results.");

@@ -1374,6 +1374,15 @@ bool ThreadTerminateCurrent(int64_t status)
         WindowClientReleaseProcess(owner->id);
 
         /*
+         * And its children become `init`'s, since sub-task 9.3: a process that
+         * ends with children — a shell exiting with a background job running,
+         * the case Section 19, limitation 15, recorded — leaves them to be
+         * collected by the one process that collects everything, rather than
+         * to stand in the table until the machine stops.
+         */
+        (void)ProcessAdoptOrphansOf(owner->id);
+
+        /*
          * The terminal's foreground group is cleared where this was its last
          * member, of sub-task 8.7: a foreground group naming nobody would
          * stop every later reader with SIGTTIN, the shell that starts next
@@ -1420,6 +1429,103 @@ bool ThreadTerminateCurrent(int64_t status)
     }
 
     SchedulerExitCurrent();
+}
+
+/* -------------------------------------------------------- init, sub-task 9.3 */
+
+/* The identifier of `init`, or zero until the kernel has started it. */
+static uint64_t ProcessInit;
+static uint64_t ProcessOrphansAdopted;
+
+void ProcessSetInit(uint64_t id)
+{
+    ProcessInit = id;
+}
+
+uint64_t ProcessInitId(void)
+{
+    return ProcessInit;
+}
+
+uint64_t ProcessOrphanCount(void)
+{
+    return ProcessOrphansAdopted;
+}
+
+int64_t ProcessPause(void)
+{
+    Process *const process = ProcessCurrent();
+
+    /*
+     * Suspends the caller until a signal, of sub-task 9.3, so that `init` may
+     * wait for a shutdown request or an orphan it will collect without spinning
+     * — it has no children to `wait` upon on the entries with no desktop, and a
+     * busy loop there would take a processor for the machine's whole life. It
+     * returns EINTR always, as POSIX's `pause` returns upon a signal and never
+     * otherwise, and the signal is delivered on the way out. A wake that was
+     * not a signal — an orphan given to `init` — returns it to its loop, which
+     * `wait`s and pauses again.
+     */
+    if ((process == NULL) || !SchedulerCanSleep())
+    {
+        return SYSCALL_EINTR;
+    }
+
+    PerCpuPushInterruptState();
+
+    if (!SignalIsPending(process))
+    {
+        SchedulerSleep(process);
+    }
+
+    PerCpuPopInterruptState();
+
+    return SYSCALL_EINTR;
+}
+
+size_t ProcessAdoptOrphansOf(uint64_t parent_id)
+{
+    Process *const init = ProcessById(ProcessInit);
+    size_t adopted = 0U;
+    bool ended_child = false;
+
+    if ((init == NULL) || (init->state == PROCESS_EXITED) || (parent_id == ProcessInit) ||
+        (parent_id == 0U))
+    {
+        return 0U;
+    }
+
+    for (size_t index = 0U; index < PROCESS_CAPACITY; ++index)
+    {
+        Process *const candidate = &ProcessTable[index];
+
+        if (candidate->used && (candidate->parent_id == parent_id) && (candidate != init))
+        {
+            candidate->parent_id = ProcessInit;
+            ++adopted;
+
+            if (candidate->state == PROCESS_EXITED)
+            {
+                ended_child = true;
+            }
+        }
+    }
+
+    ProcessOrphansAdopted += adopted;
+
+    /*
+     * A child that had already ended was waiting for a parent that will now
+     * never collect it; `init` is woken so that its `wait` finds it at once,
+     * rather than at the next ending of one of its own children — which upon
+     * a quiet desktop could be never.
+     */
+    if (ended_child)
+    {
+        (void)SchedulerWake(init);
+        (void)SignalSend(init, SYSCALL_SIGCHLD);
+    }
+
+    return adopted;
 }
 
 uint64_t ProcessTerminationCount(void)
@@ -2661,6 +2767,23 @@ void ProcessReport(void)
     KernelWriteString(" and ");
     KernelWriteDecimal(ThreadCreations);
     KernelWriteString(" since the start.\n");
+
+    /* `init`, since sub-task 9.3, and the orphans it was given. */
+    KernelWriteString("Processes: init is ");
+
+    if (ProcessInit == 0U)
+    {
+        KernelWriteString("not started");
+    }
+    else
+    {
+        KernelWriteString("process ");
+        KernelWriteDecimal(ProcessInit);
+    }
+
+    KernelWriteString("; ");
+    KernelWriteDecimal(ProcessOrphansAdopted);
+    KernelWriteString(" orphan(s) given to it.\n");
 
     /*
      * The four calls, counted. The forks and the collections are printed

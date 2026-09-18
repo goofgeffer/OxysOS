@@ -8,6 +8,7 @@
  *          KernelTextStart, KernelTextEnd, KernelMain, KernelPanic,
  *          KernelWriteString, KernelDiagnosticChannelReset,
  *          KernelDisplaySetQuiet, KernelDisplayIsQuiet, KernelServiceDisplay,
+ *          KernelPower,
  *          OXYS_VERSION_BANNER.
  * References:
  *   - Intel 64 and IA-32 Architectures Software Developer's Manual, Volume 3A,
@@ -190,6 +191,16 @@ bool KernelDisplayIsQuiet(void);
  * owner given its turn, the changed region composed and presented.
  */
 void KernelServiceDisplay(void);
+
+/*
+ * Stops the machine, of sub-task 9.3: SYSCALL_POWER_HALT draws a page saying it
+ * may be turned off and halts, SYSCALL_POWER_REBOOT restarts it through the
+ * keyboard controller's reset line. It does not return upon success, and
+ * returns SYSCALL_EINVAL for any other action, having done nothing. The
+ * dispatch permits only `init` to reach it; graphics/client.c has no part in
+ * this, the power screen being the kernel's own like the fault screen.
+ */
+int64_t KernelPower(uint64_t action);
 
 /*
  * Writes an unsigned value in hexadecimal, prefixed by "0x", to both output

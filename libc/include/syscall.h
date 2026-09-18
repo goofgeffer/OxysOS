@@ -15,6 +15,7 @@
  *          OxysSetProcessGroup, OxysTerminalGroup, OxysSignalRestorer, OxysLink,
  *          OxysProcessInformation, OxysWindowCreate, OxysWindowDestroy,
  *          OxysWindowMove, OxysWindowBlit, OxysWindowEvent, OxysWindowScreen,
+ *          OxysPower, OxysPause,
  *          OxysWrite, OxysTicks,
  *          OxysVersion, OxysFork, OxysExecve, OxysExit, OxysWait, OxysBrk,
  *          OxysSbrk.
@@ -441,5 +442,15 @@ int64_t OxysWindowBlit(int64_t window, const SyscallWindowRectangle *area,
                        const uint32_t *pixels);
 int64_t OxysWindowEvent(int64_t window, SyscallWindowEvent *event, uint64_t flags);
 int64_t OxysWindowScreen(SyscallWindowRectangle *geometry);
+
+/*
+ * The two of sub-task 9.3. OxysPower stops the machine — SYSCALL_POWER_HALT or
+ * SYSCALL_POWER_REBOOT — and does not return upon success; it returns -1 with
+ * errno EPERM from any process but `init`, which is how `shutdown` learns to
+ * ask `init` by a signal instead, and EINVAL for an action that is neither.
+ * OxysPause suspends the caller until a signal and returns -1 with errno EINTR.
+ */
+int64_t OxysPower(uint64_t action);
+int64_t OxysPause(void);
 
 #endif /* OXYS_LIBC_SYSCALL_H */

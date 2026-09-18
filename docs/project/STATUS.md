@@ -31,7 +31,7 @@ pointer receiving the mouse. **`Oxys 1 Alpha`, the first release, was cut from
 this state on 2026-09-16**: [`RELEASE-1-ALPHA.md`](RELEASE-1-ALPHA.md).
 
 **And it runs programs a person would recognise.** Since sub-task 7.6 the kernel
-carries fourteen system calls rather than eight (eighteen since sub-task 8.5, nineteen since 8.6, twenty-seven since 8.7, twenty-nine with `link` and `procinfo` added after it, thirty-five with the six window calls of 9.2) — `open`, `close`, `read`,
+carries fourteen system calls rather than eight (eighteen since sub-task 8.5, nineteen since 8.6, twenty-seven since 8.7, twenty-nine with `link` and `procinfo` added after it, thirty-five with the six window calls of 9.2, thirty-seven with `power` and `pause` of 9.3) — `open`, `close`, `read`,
 `readdir`, `mkdir` and `unlink` joining them — each process holds a descriptor
 table of its own, and `execve` carries the argument and environment vectors it
 had refused since Phase 6. Above those stand `ls`, `cat`, `echo`, `mkdir` and
@@ -654,8 +654,8 @@ with the `link` and `procinfo` calls, twenty-nine. [`../design/PROCESS.md`](../d
 [`../design/LIBC.md`](../design/LIBC.md), Section 13.
 
 **Phase 9 — the desktop, its system services and its configuration.** Begun:
-sub-tasks 9.1 and 9.2 are complete, both on 2026-09-17, and the six after them
-are not. The
+sub-tasks 9.1, 9.2 and 9.3 are complete, all on 2026-09-17, and the five after
+them are not. The
 window manager holds a fixed table of sixteen windows upon the compositor's back
 buffer, each a content surface its owner draws into and a queue of events its
 owner drains, with a frame the manager draws: a flat band, a one-pixel border, a
@@ -682,6 +682,20 @@ launched beside the shell and drawing everything it shows from privilege level
 3; `window-check` asserts the protocol with a kernel thread reading its pixels
 and waking it. [`../design/WINDOWS.md`](../design/WINDOWS.md);
 [`../design/DRAWING.md`](../design/DRAWING.md), Section 4.1.
+
+**And since 9.3 there is a first user process.** The kernel starts one program,
+`/bin/init`, and tells itself which process that is; `init` starts the desktop,
+starts it again whenever it ends, and collects every orphan — a process that
+ends now gives its children to `init` rather than leaving them in the table for
+the machine's life, which `PROCESS.md` had recorded as owed since 8.7. The
+machine can be stopped: `power` halts it or restarts it through the keyboard
+controller's reset line, and **only `init` may call it** — `shutdown` finds
+`init` by name in the process table and asks it by a signal, so that the desktop
+is stopped before the machine is. `pause` was added for an `init` that has
+nothing to collect and must not spin. And the default entry's screen is a boot
+screen from the moment there is a back buffer until the desktop composes over
+it, where it had shown a banner and then nothing; the power screen is its
+counterpart. [`../design/INIT.md`](../design/INIT.md).
 
 ## 3. Where it has been observed to work
 
@@ -721,6 +735,7 @@ The physical machine is one machine — the HP Laptop 14-dq0052dx specified in
 | 8.7 Job control, process groups and the terminal's signals | Yes, and driven over the serial line with control-C and control-Z | **Yes, and driven at the PS/2 keyboard** | **Yes — 8.7**, to the prompt | — | **Not yet run** |
 | 9.1 The window manager | Yes, at 1280 by 800, the mouse and the keyboard driven through the monitor and the screen captured at each step | **Yes**, at 640 by 480, typed at the PS/2 keyboard and captured | **Yes — 9.1**, at 1024 by 768, to the three windows and the prompt upon the serial line | — | **Not yet run** |
 | 9.2 The client protocol | Yes, the demonstration program driven through the monitor and captured at each step | **Yes**, at 640 by 480, the program's windows placed by the screen it asked for | **Yes — 9.2**, `window-check` passed and the prompt reached | — | **Not yet run** |
+| 9.3 `init`, the shutdown and the boot screen | Yes: the boot screen captured, the desktop started by `init`, the desktop killed and started again, `shutdown` halting and `shutdown -r` restarting | **Yes**, the desktop started by `init` at 640 by 480 | **Yes — 9.3**, seventy assertions and the prompt reached | — | **Not yet run** |
 
 **The rows marked "— 7.2" were all established by two boots of one image**,
 because a boot runs every self-test in the corpus and a clean one is therefore
@@ -925,7 +940,7 @@ functional. [`TESTING.md`](TESTING.md), Section 3.
 There is no test harness and there will be none before Phase 7, there being no
 userland to run one in. The kernel therefore asserts its own properties at boot,
 in the order the subsystems are initialised, and `make verify` fails if any of
-them reports a failure. Sixty-nine assertions presently report passed or sound.
+them reports a failure. Seventy assertions presently report passed or sound.
 
 Those tests are in [`../../kernel/test/`](../../kernel/test/), one file per
 subsystem. Each subsystem's design document carries a table pairing every
@@ -957,6 +972,8 @@ design document ends with its particular ones.
 | ~~A program that owns a window.~~ **Arrived at 9.2**: six calls, and the demonstration is such a program. What remains is a face a program can draw text with, which 9.6 needs, and a shared mapping in place of the copy. `WINDOWS.md`, Section 12. | 9.6 for the face |
 | A desktop: a root beneath every window, a panel above them, and a way to start a program from the screen. The default entry presents three demonstration windows upon a bare ground. | 9.5 |
 | The shell upon the screen and the window manager at once. With the window manager the shell is upon the serial line; a terminal emulator window is what puts it back upon the screen. | 9.6 |
+| ~~An orphan collected by nobody.~~ **Arrived at 9.3**: a process that ends gives its children to `init`, which collects them. What remains is that nothing but the desktop is told to stop at a shutdown, and that `init` may itself be killed. `INIT.md`, Section 7. | — |
+| A service configuration. What `init` starts is written into `init`; there is no `/etc` and no format to read a list of services from. | 9.4 |
 | A reaper. A kernel thread that finishes cannot free its own stack — it is standing on it — and nothing else does. Its slot and its four pages are held until the machine stops. | Phase 7 |
 | Migration, work stealing, and more than one priority. A thread is placed once, at admission, upon the shortest queue its affinity permits, and stays there. | Later |
 | `CR4.SMEP`, `CR4.SMAP` and `IA32_EFER.NXE`. The user mappings that would be protected now exist. | 13.3 |

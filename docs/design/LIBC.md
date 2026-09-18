@@ -2270,3 +2270,24 @@ There is no drawing library above the calls and no face: a program draws
 rectangles and discs with arithmetic of its own, as `userland/windows/main.c`
 does, and cannot draw text. [`WINDOWS.md`](WINDOWS.md), Section 12, limitation
 4, is where that is owed, and 9.6 is where it is paid.
+
+## 15. Sub-task 9.3: `power` and `pause`
+
+**Implementation**: two wrappers in [`../../libc/syscall/calls.c`](../../libc/syscall/calls.c),
+declared in [`../../libc/include/syscall.h`](../../libc/include/syscall.h), over
+the calls 35 and 36 of `<oxys/syscall_abi.h>` — thirty-seven in all — and one
+more `errno`, `EPERM`, the twenty-fourth. The kernel's half is
+[`INIT.md`](INIT.md), Sections 2.4 and 4.
+
+`OxysPower` stops the machine and does not return upon success. It is the first
+call in this system a program may be refused for **being the wrong program**:
+`EPERM` where the caller is not `init`. Every refusal until now was a property
+of the arguments — a path that does not resolve, a descriptor that is not held —
+and `strerror` names this one "Not permitted".
+
+`OxysPause` is IEEE Std 1003.1-2017's `pause`: it suspends until a signal and
+returns -1 with `errno` `EINTR`, always. It exists because there is no `sleep`
+and no `alarm` — Section 13 records that the kernel keeps no timer a program may
+set — and an `init` with nothing to collect must wait for something rather than
+spin. There is no `<unistd.h>` to declare either in; they stand with the
+wrappers, where `OxysFork` and the rest stand, for the reason given there.

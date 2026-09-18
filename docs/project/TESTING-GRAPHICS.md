@@ -618,3 +618,36 @@ report after the banner names the three windows at their places.
 **The two entries that give the shell the screen** are judged by the absence:
 *Shell-only* shows the banner and a prompt with the pointer following the
 mouse, *Shell Diagnostics* the boot log first, and neither draws a window.
+
+## 9. Verification of the boot screen, the desktop `init` starts, and the power screen
+
+The self-tests of sub-task 9.3 assert the adoption of orphans and the two calls;
+[`../design/INIT.md`](../design/INIT.md), Section 6, pairs each with what it
+would catch. What only looking establishes is the three pages and the
+supervision, and all four are judged from one boot of the default entry.
+
+1. **The boot screen** stands from very early in the boot until the desktop
+   appears: the mark, `OXYS-OS`, the version, and `starting the desktop`, upon
+   the slate ground. There is no text of the boot log upon the screen at any
+   point, and no black screen between the two. Boot the **Shell-only** and
+   **Shell Diagnostics** entries to see the other half of the rule: neither
+   draws it, and each shows what it showed before.
+2. **The desktop is `init`'s.** At the prompt — the serial line's, upon the
+   default entry — `ps` shows `init`, and shows `windows` carrying `init`'s
+   identifier as its parent. That is the supervision, before anything is done
+   to it.
+3. **It is started again.** `kill -9` upon the desktop's identifier, and within
+   a second the three windows are back; `ps` shows a new `windows`, still
+   `init`'s child. Closing all three windows by their discs does the same
+   thing by the other route.
+4. **The power screen.** `shutdown` replaces the desktop with the mark,
+   `OXYS-OS` and `it is now safe to turn off the machine`, and the machine
+   stops; `shutdown -r` shows `RESTARTING` and the machine restarts, which
+   under QEMU with `-no-reboot` is QEMU exiting and under VirtualBox and Bochs
+   is the machine booting again.
+
+**Under QEMU without a person** the monitor drives the pointer and the captures
+and the serial socket types at the shell, which is where the shell is upon the
+default entry — `sendkey` would reach the window manager, which holds the
+keyboard there, and not the shell. That is how the runs of 2026-09-17 in
+[`TESTING-RECORD.md`](TESTING-RECORD.md) were made.

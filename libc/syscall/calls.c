@@ -14,7 +14,7 @@
  *          OxysGetProcessGroup, OxysSetProcessGroup, OxysTerminalGroup,
  *          OxysLink, OxysProcessInformation, OxysWindowCreate,
  *          OxysWindowDestroy, OxysWindowMove, OxysWindowBlit, OxysWindowEvent,
- *          OxysWindowScreen,
+ *          OxysWindowScreen, OxysPower, OxysPause,
  *          OxysExit, OxysWait, OxysBrk, OxysSbrk.
  * References:
  *   - kernel/abi/oxys/syscall_abi.h: the call numbers and what each call means.
@@ -397,4 +397,16 @@ int64_t OxysWindowScreen(SyscallWindowRectangle *geometry)
 {
     return OxysSyscallResult(OxysSyscallInvoke1(SYSCALL_WINDOW_SCREEN,
                                                 (uint64_t)(uintptr_t)geometry));
+}
+
+/* ------------------------------------------------------------ sub-task 9.3 */
+
+int64_t OxysPower(uint64_t action)
+{
+    return OxysSyscallResult(OxysSyscallInvoke1(SYSCALL_POWER, action));
+}
+
+int64_t OxysPause(void)
+{
+    return OxysSyscallResult(OxysSyscallInvoke0(SYSCALL_PAUSE));
 }

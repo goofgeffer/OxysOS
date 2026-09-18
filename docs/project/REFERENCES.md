@@ -758,6 +758,14 @@ Sections relied upon:
   1.193182 MHz, being the 14.31818 MHz reference oscillator divided by twelve,
   that oscillator running at four times the 3.579545 MHz NTSC colour subcarrier.
   The firmware leaves counter 0 running.
+- **The reset line**: bit 0 of the keyboard controller's output port is system
+  reset, and controller command `0xFE`, written to port `0x64`, pulses it low
+  for a few microseconds, after which the processor restarts from its reset
+  vector. The reference warns that the bit must not be *written* zero — the
+  `0xD1` form, which writes the output port whole — because that holds the
+  processor in reset rather than pulsing it, and nothing can then release it.
+  `KernelPower` uses the pulse and not the write; `docs/design/INIT.md`,
+  Section 4.2. Retrieved on 2026-09-17.
 - **The keyboard controller**: the 8042 is decoded at port `0x60` for data and
   `0x64` for the status register when read and the command register when written;
   status bit 0 is set while the output buffer holds a byte for the processor and

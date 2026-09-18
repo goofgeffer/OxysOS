@@ -27,7 +27,7 @@
  * kernel/arch/x86_64/syscall/syscall_entry.asm.
  *
  * Since sub-task 6.7 this file also holds the dispatch table and the validation
- * of a caller's arguments, and since sub-task 9.2 it dispatches the six window
+ * of a caller's arguments, and since sub-task 9.2 it dispatches the six window calls to graphics/client.c and since 9.3 the `power` call
  * calls to graphics/client.c, which validates them; the note above records
  * what it was when it was written and the reasons still hold for the part it
  * describes.
@@ -2069,7 +2069,9 @@ static const SyscallEntryDescriptor SyscallTable[SYSCALL_COUNT] = {
     { "window_move", 3U },
     { "window_blit", 3U },
     { "window_event", 3U },
-    { "window_screen", 1U }
+    { "window_screen", 1U },
+    { "power", 1U },
+    { "pause", 0U }
 };
 
 bool SyscallNumberIsValid(uint64_t number)
@@ -2263,6 +2265,34 @@ void SyscallDispatch(SyscallFrame *frame)
 
     case SYSCALL_WINDOW_SCREEN:
         frame->rax = (uint64_t)WindowClientScreen(frame->rdi);
+        break;
+
+    /*
+     * `power`, of sub-task 9.3, is the one call reserved to a single process:
+     * only `init` may stop the machine, every other caller is refused with
+     * EPERM and asks `init` by a signal instead. The authority is enforced
+     * here, at the boundary, because it is a property of the caller and not of
+     * the action — the kernel's own KernelPower does the work and knows nothing
+     * of who asked.
+     */
+    case SYSCALL_POWER:
+        if (ProcessCurrent() == NULL)
+        {
+            frame->rax = (uint64_t)SYSCALL_EPERM;
+        }
+        else if (ProcessCurrent()->id != ProcessInitId())
+        {
+            ++SyscallRefusals;
+            frame->rax = (uint64_t)SYSCALL_EPERM;
+        }
+        else
+        {
+            frame->rax = (uint64_t)KernelPower(frame->rdi);
+        }
+        break;
+
+    case SYSCALL_PAUSE:
+        frame->rax = (uint64_t)ProcessPause();
         break;
 
     default:
