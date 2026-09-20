@@ -137,7 +137,7 @@ int main(void)
                   "/etc/system.conf names no service at all");
 
     {
-        bool desktop = false;
+        bool session = false;
 
         for (size_t index = 0U; index < OxysConfigCount(&Config, "service"); ++index)
         {
@@ -145,17 +145,20 @@ int main(void)
 
             ConfigRequire(run != NULL, "a service in /etc/system.conf has no run");
 
-            if ((run != NULL) && (strcmp(run, "/bin/windows") == 0))
+            /* Since sub-task 9.5 the service `init` starts is the session,
+             * which then starts what its launcher offers; it was the window
+             * demonstration before. */
+            if ((run != NULL) && (strcmp(run, "/bin/session") == 0))
             {
                 const char *const needs = OxysConfigValue(&Config, "service", index, "needs");
 
-                desktop = true;
+                session = true;
                 ConfigRequire((needs != NULL) && (strcmp(needs, "display") == 0),
-                              "the desktop service does not say it needs a display");
+                              "the session service does not say it needs a display");
             }
         }
 
-        ConfigRequire(desktop, "/etc/system.conf does not name /bin/windows as a service");
+        ConfigRequire(session, "/etc/system.conf does not name /bin/session as a service");
     }
 
     ConfigRequire(OxysConfigRead(&Config, "/etc/desktop.conf"),
@@ -164,6 +167,21 @@ int main(void)
                   "/etc/desktop.conf does not carry the scale the desktop reads");
     ConfigRequire(OxysConfigValue(&Config, "desktop", 0U, "accent") != NULL,
                   "/etc/desktop.conf does not carry the accent the desktop reads");
+
+    /* --- The session's file, of sub-task 9.5, says what the session reads. --- */
+
+    ConfigRequire(OxysConfigRead(&Config, "/etc/session.conf"),
+                  "/etc/session.conf could not be read without fault");
+    ConfigRequire(OxysConfigValue(&Config, "session", 0U, "scale") != NULL,
+                  "/etc/session.conf does not carry the scale the session reads");
+    ConfigRequire(OxysConfigCount(&Config, "launch") >= 1U,
+                  "/etc/session.conf offers the launcher nothing to start");
+
+    for (size_t index = 0U; index < OxysConfigCount(&Config, "launch"); ++index)
+    {
+        ConfigRequire(OxysConfigValue(&Config, "launch", index, "run") != NULL,
+                      "a launcher entry in /etc/session.conf has no run");
+    }
 
     (void)printf("config-check: %d assertion(s) failed.\n", ConfigFailures);
 

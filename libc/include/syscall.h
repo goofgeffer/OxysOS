@@ -435,7 +435,19 @@ int64_t OxysProcessInformation(uint64_t index, SyscallProcessInformation *inform
  * process made is EBADF, as a descriptor the caller does not hold is. The
  * pixels of OxysWindowBlit are 0x00RRGGBB, tightly packed, row by row.
  */
-int64_t OxysWindowCreate(const SyscallWindowRectangle *geometry, const char *title);
+int64_t OxysWindowCreate(const SyscallWindowRectangle *geometry, const char *title,
+                         uint64_t layer);
+
+/*
+ * The two of sub-task 9.5. OxysWindowSession claims the session — the right to
+ * make a root and a panel — and returns -1 with errno EPERM where another
+ * process holds it; claiming it twice is not an error, and it is released when
+ * the claimant ends. OxysWindowText draws a run of text into a window's content
+ * with the system face, which is the one the window manager draws titles with
+ * and the only face this system has.
+ */
+int64_t OxysWindowSession(void);
+int64_t OxysWindowText(int64_t window, const SyscallWindowText *placement, const char *text);
 int64_t OxysWindowDestroy(int64_t window);
 int64_t OxysWindowMove(int64_t window, int32_t x, int32_t y);
 int64_t OxysWindowBlit(int64_t window, const SyscallWindowRectangle *area,

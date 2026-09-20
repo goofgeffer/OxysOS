@@ -7,6 +7,7 @@
  *          to a window by a held button, the frame drawn about each window, and
  *          the routing of keys and movements into the windows' queues.
  * Key functions: WindowManagerInitialise, WindowManagerShutdown, WindowCreate,
+ *          WindowLayerOf, WindowSetSession, WindowSession, WindowDrawText,
  *          WindowDestroy, WindowRaise, WindowFocus, WindowMove, WindowInvalidate,
  *          WindowWritePixels, WindowSetOwner, WindowDestroyOwnedBy,
  *          WindowReadEvent, WindowManagerHandleKey, WindowManagerHandleMouse,
@@ -85,6 +86,11 @@ typedef struct Window
     /* The owner's tag, since sub-task 9.2; zero is the kernel's own. */
     uint64_t owner;
 
+    /* The layer it stands in, since sub-task 9.5, and whether it carries a
+     * frame — which the layer decides and nothing else may. */
+    WindowLayer layer;
+    bool decorated;
+
     /* The content: a tightly packed surface over pixels from the heap. */
     GraphicsSurface surface;
     void *pixels;
@@ -108,6 +114,10 @@ static size_t WindowStack[WINDOW_CAPACITY];
 static size_t WindowStackCount;
 
 static size_t WindowFocused;
+
+/* The session, of sub-task 9.5: the one owner that may make a root or a panel.
+ * Zero is nobody. */
+static uint64_t WindowSessionOwner;
 
 /*
  * The window bound to the pointer by a button pressed within its content, and
@@ -164,8 +174,19 @@ static Window *WindowAt(size_t window)
     return &WindowTable[window];
 }
 
+/*
+ * An undecorated window's frame **is** its content: a root is the whole screen
+ * and a panel is a bar, and neither has a band or a border about it. Every
+ * routine that asks where a window is asks through these three, so the two
+ * kinds differ here and nowhere else.
+ */
 static GraphicsRectangle WindowFrameOf(const Window *window)
 {
+    if (!window->decorated)
+    {
+        return WindowMakeRectangle(window->x, window->y, window->width, window->height);
+    }
+
     return WindowMakeRectangle(window->x, window->y,
                                window->width + (2 * WINDOW_BORDER),
                                window->height + WINDOW_TITLE_HEIGHT + (2 * WINDOW_BORDER));
@@ -173,13 +194,25 @@ static GraphicsRectangle WindowFrameOf(const Window *window)
 
 static GraphicsRectangle WindowContentOf(const Window *window)
 {
+    if (!window->decorated)
+    {
+        return WindowMakeRectangle(window->x, window->y, window->width, window->height);
+    }
+
     return WindowMakeRectangle(window->x + WINDOW_BORDER,
                                window->y + WINDOW_BORDER + WINDOW_TITLE_HEIGHT,
                                window->width, window->height);
 }
 
+/* An undecorated window has no band, and the empty rectangle is what says so:
+ * every test against it — the drag, the close — then fails as it should. */
 static GraphicsRectangle WindowTitleBandOf(const Window *window)
 {
+    if (!window->decorated)
+    {
+        return WindowMakeRectangle(0, 0, 0, 0);
+    }
+
     return WindowMakeRectangle(window->x + WINDOW_BORDER, window->y + WINDOW_BORDER,
                                window->width, WINDOW_TITLE_HEIGHT);
 }
@@ -188,6 +221,12 @@ static GraphicsRectangle WindowTitleBandOf(const Window *window)
 static GraphicsRectangle WindowCloseReachOf(const Window *window)
 {
     const GraphicsRectangle frame = WindowFrameOf(window);
+
+    if (!window->decorated)
+    {
+        return WindowMakeRectangle(0, 0, 0, 0);
+    }
+
     const int32_t centre_x = frame.x + frame.width - WINDOW_BORDER - WINDOW_CLOSE_INSET;
     const int32_t centre_y = frame.y + WINDOW_BORDER + (WINDOW_TITLE_HEIGHT / 2);
 
@@ -378,13 +417,60 @@ static void WindowStackRemove(size_t window)
     --WindowStackCount;
 }
 
-static void WindowStackAppend(size_t window)
+/*
+ * Puts a window at the top of its own layer, which is what keeps the stack
+ * ordered by layer at every moment: the array is searched for the first entry
+ * of a higher layer and the window is inserted before it.
+ *
+ * The ordering is an invariant of the array rather than a rule applied when it
+ * is read, because every reader — the hit test, the composition, the focus
+ * passed to "the topmost remaining" — walks it in order and would each have to
+ * know the rule separately. One insertion knows it instead.
+ */
+static void WindowStackInsert(size_t window)
 {
-    WindowStack[WindowStackCount] = window;
+    const WindowLayer layer = WindowTable[window].layer;
+    size_t position = WindowStackCount;
+
+    for (size_t index = 0U; index < WindowStackCount; ++index)
+    {
+        if (WindowTable[WindowStack[index]].layer > layer)
+        {
+            position = index;
+            break;
+        }
+    }
+
+    for (size_t index = WindowStackCount; index > position; --index)
+    {
+        WindowStack[index] = WindowStack[index - 1U];
+    }
+
+    WindowStack[position] = window;
     ++WindowStackCount;
 }
 
 /* --------------------------------------------------------------- focus */
+
+/*
+ * The topmost window that may hold the focus, or WINDOW_NONE — which is every
+ * window but a root. A desktop whose last ordinary window closed would
+ * otherwise give the keys to the wallpaper.
+ */
+static size_t WindowTopmostFocusable(void)
+{
+    for (size_t position = WindowStackCount; position != 0U; --position)
+    {
+        const size_t identifier = WindowStack[position - 1U];
+
+        if (WindowTable[identifier].layer != WINDOW_LAYER_ROOT)
+        {
+            return identifier;
+        }
+    }
+
+    return WINDOW_NONE;
+}
 
 /*
  * Passes the focus, telling the loser before the gainer. The order is what
@@ -456,6 +542,17 @@ static void WindowDrawFrame(size_t identifier)
     const bool focused = (identifier == WindowFocused);
     const uint32_t band_colour = focused ? WindowColours.title_focused : WindowColours.title_unfocused;
     const uint32_t ink = focused ? WindowColours.text_focused : WindowColours.text_unfocused;
+
+    /* A root and a panel are their content and nothing else — no band, no
+     * border, no control — which is what makes a desktop look like a desktop
+     * and not like a window somebody maximised. */
+    if (!window->decorated)
+    {
+        (void)GraphicsBlit(WindowScreen, content.x, content.y, &window->surface,
+                           GraphicsSurfaceBounds(&window->surface));
+
+        return;
+    }
 
     GraphicsFillRectangle(WindowScreen, band, band_colour);
     GraphicsDrawRectangle(WindowScreen, frame, WindowColours.border);
@@ -536,7 +633,8 @@ bool WindowManagerIsActive(void)
     return WindowActive;
 }
 
-size_t WindowCreate(int32_t x, int32_t y, int32_t width, int32_t height, const char *title)
+size_t WindowCreate(int32_t x, int32_t y, int32_t width, int32_t height, const char *title,
+                    WindowLayer layer)
 {
     size_t identifier = WINDOW_NONE;
     Window *window;
@@ -544,7 +642,7 @@ size_t WindowCreate(int32_t x, int32_t y, int32_t width, int32_t height, const c
 
     if (!WindowActive || (title == NULL) || (width < WINDOW_MINIMUM_EXTENT) ||
         (height < WINDOW_MINIMUM_EXTENT) || (width > WINDOW_MAXIMUM_EXTENT) ||
-        (height > WINDOW_MAXIMUM_EXTENT))
+        (height > WINDOW_MAXIMUM_EXTENT) || (layer > WINDOW_LAYER_PANEL))
     {
         return WINDOW_NONE;
     }
@@ -582,11 +680,23 @@ size_t WindowCreate(int32_t x, int32_t y, int32_t width, int32_t height, const c
     }
 
     window->in_use = true;
+    window->layer = layer;
+    window->decorated = (layer == WINDOW_LAYER_NORMAL);
     window->width = width;
     window->height = height;
     window->x = x;
     window->y = y;
-    WindowConfine(window, &window->x, &window->y);
+
+    /*
+     * A root and a panel are placed where the session puts them and are not
+     * confined: the confinement keeps a title band reachable, and neither has
+     * one. A root confined would be a root that could not cover the screen,
+     * its own height being the screen's.
+     */
+    if (window->decorated)
+    {
+        WindowConfine(window, &window->x, &window->y);
+    }
 
     {
         size_t length = 0U;
@@ -607,11 +717,38 @@ size_t WindowCreate(int32_t x, int32_t y, int32_t width, int32_t height, const c
 
     GraphicsClear(&window->surface, WindowColours.paper);
 
-    WindowStackAppend(identifier);
+    WindowStackInsert(identifier);
     WindowDamageAdd(WindowFrameOf(window));
-    WindowTransferFocus(identifier);
+
+    /*
+     * A root never takes the focus. It is made first, before anything a person
+     * would type at, and a desktop whose keys went to the wallpaper because it
+     * was the last thing created is a desktop that ignores its first sentence.
+     * A panel does take it, a launcher being a thing a person may type into.
+     */
+    if (layer != WINDOW_LAYER_ROOT)
+    {
+        WindowTransferFocus(identifier);
+    }
 
     return identifier;
+}
+
+WindowLayer WindowLayerOf(size_t identifier)
+{
+    const Window *const window = WindowAt(identifier);
+
+    return (window == NULL) ? WINDOW_LAYER_NORMAL : window->layer;
+}
+
+void WindowSetSession(uint64_t owner)
+{
+    WindowSessionOwner = owner;
+}
+
+uint64_t WindowSession(void)
+{
+    return WindowSessionOwner;
 }
 
 void WindowDestroy(size_t identifier)
@@ -653,7 +790,7 @@ void WindowDestroy(size_t identifier)
 
         if (WindowStackCount != 0U)
         {
-            WindowTransferFocus(WindowStack[WindowStackCount - 1U]);
+            WindowTransferFocus(WindowTopmostFocusable());
         }
     }
 }
@@ -710,13 +847,25 @@ void WindowRaise(size_t identifier)
         return;
     }
 
-    if (WindowStack[WindowStackCount - 1U] == identifier)
+    /*
+     * Already at the top of its own layer, where what stands above it belongs
+     * to a higher one — which is what a raise means since sub-task 9.5. A
+     * raise that went to the top of the whole stack would put an ordinary
+     * window over the panel, and the first press upon any window would hide
+     * the panel for good.
+     */
     {
-        return;
+        const size_t position = WindowStackPositionOf(identifier);
+
+        if ((position == WINDOW_NONE) || (position + 1U == WindowStackCount) ||
+            (WindowTable[WindowStack[position + 1U]].layer > window->layer))
+        {
+            return;
+        }
     }
 
     WindowStackRemove(identifier);
-    WindowStackAppend(identifier);
+    WindowStackInsert(identifier);
     WindowDamageAdd(WindowFrameOf(window));
 }
 
@@ -833,6 +982,51 @@ bool WindowWritePixels(size_t identifier, GraphicsRectangle area, const uint32_t
     return true;
 }
 
+bool WindowDrawText(size_t identifier, int32_t x, int32_t y, const char *text, uint32_t ink,
+                    uint32_t paper, int32_t scale)
+{
+    Window *const window = WindowAt(identifier);
+    const uint32_t ink_pixel = (WindowEncode == NULL)
+                                   ? ink
+                                   : WindowEncode((uint8_t)((ink >> 16) & 0xFFU),
+                                                  (uint8_t)((ink >> 8) & 0xFFU),
+                                                  (uint8_t)(ink & 0xFFU));
+    const uint32_t paper_pixel = (WindowEncode == NULL)
+                                     ? paper
+                                     : WindowEncode((uint8_t)((paper >> 16) & 0xFFU),
+                                                    (uint8_t)((paper >> 8) & 0xFFU),
+                                                    (uint8_t)(paper & 0xFFU));
+    int32_t at = x;
+    int32_t drawn = 0;
+
+    if ((window == NULL) || (text == NULL) || (scale < 1) || (scale > 8))
+    {
+        return false;
+    }
+
+    /*
+     * Every glyph is clipped by the content's own surface, so text that runs
+     * past the right-hand edge is cut there rather than wrapping or writing
+     * into the row beneath — which is what a caller drawing a label into a
+     * window too narrow for it means, and is what it would see upon a screen.
+     */
+    for (const char *character = text; *character != '\0'; ++character)
+    {
+        FontDrawGlyphScaled(&window->surface, at, y, (uint8_t)*character, ink_pixel, paper_pixel,
+                            scale);
+        at += (int32_t)FONT_WIDTH * scale;
+        ++drawn;
+    }
+
+    if (drawn != 0)
+    {
+        WindowInvalidate(identifier, WindowMakeRectangle(x, y, drawn * (int32_t)FONT_WIDTH * scale,
+                                                         (int32_t)FONT_HEIGHT * scale));
+    }
+
+    return true;
+}
+
 const char *WindowTitle(size_t identifier)
 {
     const Window *const window = WindowAt(identifier);
@@ -939,8 +1133,18 @@ static void WindowBeginPress(int32_t x, int32_t y, uint8_t button, uint8_t butto
     }
 
     window = &WindowTable[identifier];
-    WindowRaise(identifier);
-    WindowTransferFocus(identifier);
+
+    /*
+     * A press upon the root raises nothing and focuses nothing: it is beneath
+     * everything already, and taking the focus would mean a person who clicked
+     * the wallpaper found their typing going nowhere. It still receives the
+     * press, a session being entitled to know that its desktop was clicked.
+     */
+    if (window->layer != WINDOW_LAYER_ROOT)
+    {
+        WindowRaise(identifier);
+        WindowTransferFocus(identifier);
+    }
 
     if (GraphicsRectangleContains(WindowCloseReachOf(window), x, y))
     {

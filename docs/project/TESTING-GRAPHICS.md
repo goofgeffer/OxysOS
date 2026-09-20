@@ -678,3 +678,30 @@ changed in a file changes what is drawn.
    and the faults are printed upon the serial line with their line numbers
    while everything else in the file still takes effect — which is the format's
    central promise and the one thing a single screenshot cannot show.
+
+## 11. Verification of the session
+
+The self-tests of sub-task 9.5 assert the layers, the focus rule, the text and
+the claim; [`../design/SESSION.md`](../design/SESSION.md), Section 6, pairs each
+with what it would catch. What only looking establishes is the desktop.
+
+1. **The desktop with nothing running.** Boot the default entry: the root
+   carries the mark and the wordmark the boot screen drew — the same figure and
+   the same ground, so that the hand-over is not a flash — and a panel stands
+   across the top with `OXYS` at its left.
+2. **The launcher.** Press the panel's button: a menu opens beneath it with one
+   row per `[launch]` block of `/etc/session.conf`. Press the button again, or
+   press the root, and it closes. Press a row and that program starts.
+3. **The layers, which is the one that matters.** With a program's windows upon
+   the screen, drag one upward by its title band: it passes **under** the
+   panel. Press each of the windows in turn to raise them: none of them ever
+   covers the panel, and none of them ever goes beneath the root. A build in
+   which the raise is not confined shows the opposite at the first press, and
+   the panel does not come back.
+4. **The root takes no keys.** Press the root, then type: nothing goes anywhere,
+   and the window that held the focus still holds it — a desktop whose keys went
+   to the wallpaper would swallow the first sentence a person typed.
+5. **Upon a small screen.** VirtualBox's 640 by 480 draws at scale one, and the
+   panel, the launcher and the mark must all still appear: it is the screen upon
+   which the panel was once refused for being shorter than a window may be, and
+   the failure showed as a bare ground and a line in the log from `init`.

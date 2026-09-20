@@ -180,8 +180,8 @@ void KernelVerifyWindows(void)
 
     /* --- Creation, the stack and the focus. --- */
 
-    a = WindowCreate(10, 10, 60, 40, "A");
-    b = WindowCreate(40, 30, 60, 40, "B");
+    a = WindowCreate(10, 10, 60, 40, "A", WINDOW_LAYER_NORMAL);
+    b = WindowCreate(40, 30, 60, 40, "B", WINDOW_LAYER_NORMAL);
 
     KernelWindowRequire((a != WINDOW_NONE) && (b != WINDOW_NONE) && (a != b),
                         "two windows could not be made, or were made the same");
@@ -391,7 +391,7 @@ void KernelVerifyWindows(void)
 
         for (size_t index = 0U; index < WINDOW_CAPACITY; ++index)
         {
-            made[index] = WindowCreate(0, 0, 16, 16, "n");
+            made[index] = WindowCreate(0, 0, 16, 16, "n", WINDOW_LAYER_NORMAL);
 
             if (made[index] != WINDOW_NONE)
             {
@@ -401,9 +401,9 @@ void KernelVerifyWindows(void)
 
         KernelWindowRequire(count == WINDOW_CAPACITY,
                             "the table did not take as many windows as its capacity");
-        KernelWindowRequire(WindowCreate(0, 0, 16, 16, "over") == WINDOW_NONE,
+        KernelWindowRequire(WindowCreate(0, 0, 16, 16, "over", WINDOW_LAYER_NORMAL) == WINDOW_NONE,
                             "the table took a window beyond its capacity");
-        KernelWindowRequire(WindowCreate(0, 0, 8, 8, "small") == WINDOW_NONE,
+        KernelWindowRequire(WindowCreate(0, 0, 8, 8, "small", WINDOW_LAYER_NORMAL) == WINDOW_NONE,
                             "a window below the least extent was made");
 
         for (size_t index = 0U; index < WINDOW_CAPACITY; ++index)
@@ -416,7 +416,7 @@ void KernelVerifyWindows(void)
     }
 
     {
-        const size_t c = WindowCreate(0, 0, 16, 16, "queue");
+        const size_t c = WindowCreate(0, 0, 16, 16, "queue", WINDOW_LAYER_NORMAL);
         const KeyEvent key = KernelKey('q');
 
         (void)KernelNextEventIs(c, WINDOW_EVENT_FOCUS_IN, &event);
@@ -436,11 +436,110 @@ void KernelVerifyWindows(void)
     KernelWindowRequire(WindowManagerCount() == 0U, "the self-test left a window behind");
     KernelWindowRequire(KernelScreenPaddingIsIntact(), "something wrote into the padding");
 
+    /* --- The layers of sub-task 9.5: a stack ordered, and a raise confined. --- */
+
+    {
+        const size_t root = WindowCreate(0, 0, 160, 120, "root", WINDOW_LAYER_ROOT);
+        const size_t middle = WindowCreate(20, 20, 40, 30, "middle", WINDOW_LAYER_NORMAL);
+        const size_t panel = WindowCreate(0, 0, 160, 20, "panel", WINDOW_LAYER_PANEL);
+        const size_t second = WindowCreate(30, 30, 40, 30, "second", WINDOW_LAYER_NORMAL);
+
+        KernelWindowRequire((root != WINDOW_NONE) && (middle != WINDOW_NONE) &&
+                                (panel != WINDOW_NONE) && (second != WINDOW_NONE),
+                            "a window of each layer could not be made");
+
+        /* The stack is ordered by layer whatever the order of creation: the
+         * second ordinary window was made after the panel and stands beneath
+         * it. */
+        KernelWindowRequire((WindowManagerStackAt(0U) == root) &&
+                                (WindowManagerStackAt(1U) == middle) &&
+                                (WindowManagerStackAt(2U) == second) &&
+                                (WindowManagerStackAt(3U) == panel),
+                            "the stack is not ordered by layer");
+
+        /* A raise moves a window to the top of its own layer and no further. */
+        WindowRaise(middle);
+        KernelWindowRequire((WindowManagerStackAt(2U) == middle) &&
+                                (WindowManagerStackAt(3U) == panel),
+                            "a raise put an ordinary window over the panel");
+
+        /* The root never takes the focus, and a press upon it neither raises
+         * nor focuses it — but it is still delivered. */
+        KernelWindowRequire(WindowManagerFocused() != root,
+                            "the root took the focus when it was made");
+
+        {
+            const MouseEvent press =
+                KernelMouse(150, 110, 0, 0, MOUSE_BUTTON_LEFT, MOUSE_BUTTON_LEFT);
+            const MouseEvent release = KernelMouse(150, 110, 0, 0, 0U, MOUSE_BUTTON_LEFT);
+
+            WindowManagerHandleMouse(&press);
+            WindowManagerHandleMouse(&release);
+
+            KernelWindowRequire(WindowManagerFocused() != root,
+                                "a press upon the root gave it the focus");
+            KernelWindowRequire(WindowManagerStackAt(0U) == root,
+                                "a press upon the root raised it out of its layer");
+            KernelWindowRequire(KernelNextEventIs(root, WINDOW_EVENT_BUTTON_PRESS, &event),
+                                "a press upon the root was not delivered to it");
+        }
+
+        /* A root and a panel carry no frame: the frame is the content. */
+        KernelWindowRequire(KernelRectangleEquals(WindowFrame(root), 0, 0, 160, 120) &&
+                                KernelRectangleEquals(WindowContentBounds(root), 0, 0, 160, 120),
+                            "a root carries a frame");
+        KernelWindowRequire(KernelRectangleEquals(WindowFrame(panel), 0, 0, 160, 20),
+                            "a panel carries a frame");
+        KernelWindowRequire(WindowLayerOf(root) == WINDOW_LAYER_ROOT,
+                            "a window does not report the layer it was made in");
+
+        /* The focus passed when a window is destroyed skips the root. */
+        WindowDestroy(panel);
+        WindowDestroy(second);
+        WindowDestroy(middle);
+        KernelWindowRequire(WindowManagerFocused() == WINDOW_NONE,
+                            "the focus passed to the root when the last window closed");
+
+        WindowDestroy(root);
+    }
+
+    /* --- The text of sub-task 9.5, drawn with the system face. --- */
+
+    {
+        const size_t window = WindowCreate(0, 0, 64, 32, "text", WINDOW_LAYER_NORMAL);
+        const GraphicsSurface *surface;
+        bool any_ink = false;
+
+        KernelWindowRequire(window != WINDOW_NONE, "a window for the text could not be made");
+        KernelWindowRequire(WindowDrawText(window, 0, 0, "A", 0x00FFFFFFU, 0U, 1),
+                            "text was refused a window that exists");
+        KernelWindowRequire(!WindowDrawText(window, 0, 0, "A", 0U, 0U, 0),
+                            "a scale of zero was accepted");
+        KernelWindowRequire(!WindowDrawText(window, 0, 0, NULL, 0U, 0U, 1),
+                            "text at no address was accepted");
+
+        surface = WindowSurface(window);
+
+        for (int32_t row = 0; (row < 8) && (surface != NULL); ++row)
+        {
+            for (int32_t column = 0; column < 8; ++column)
+            {
+                if (GraphicsPixelAt(surface, column, row) == 0x00FFFFFFU)
+                {
+                    any_ink = true;
+                }
+            }
+        }
+
+        KernelWindowRequire(any_ink, "the glyph drawn left no ink in the window's content");
+        WindowDestroy(window);
+    }
+
     /* The manager gives the test's surface up, since sub-task 9.2: the client
      * self-test takes it again for its own run, and the entry point gives the
      * manager the real screen or nothing. */
     WindowManagerShutdown();
-    KernelWindowRequire(!WindowManagerIsActive() && (WindowCreate(0, 0, 16, 16, "x") == WINDOW_NONE),
+    KernelWindowRequire(!WindowManagerIsActive() && (WindowCreate(0, 0, 16, 16, "x", WINDOW_LAYER_NORMAL) == WINDOW_NONE),
                         "a manager that gave its screen up still makes windows");
 
     KernelWriteString(KernelWindowSucceeded ? "Window manager self-test passed.\n"

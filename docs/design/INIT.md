@@ -316,9 +316,10 @@ would otherwise have been called a flake.
    still has written into it is the fallback it uses where that file cannot be
    read at all, which is deliberate and is recorded there.
 2. **The shell is still the kernel's**, started in a loop the entry point holds
-   upon the serial line, and is not `init`'s to supervise. Sub-task 9.6 puts a
-   terminal emulator upon the desktop; that is when a shell becomes a thing
-   `init` starts.
+   upon the serial line, and is not `init`'s to supervise. Sub-task 9.5's
+   launcher can start one — `/etc/session.conf` offers it — but a shell started
+   that way has no terminal to read, there being no emulator until 9.6; that is
+   when a shell becomes a thing `init` or the session starts in earnest.
 3. ~~**Supervision is a restart and nothing more.**~~ **Bounded at sub-task
    9.4**: a service that ends five times in a row is given up on and `init` says
    so. It is a count and not a rate, a rate needing a clock a program can read

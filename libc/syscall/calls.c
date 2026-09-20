@@ -14,7 +14,7 @@
  *          OxysGetProcessGroup, OxysSetProcessGroup, OxysTerminalGroup,
  *          OxysLink, OxysProcessInformation, OxysWindowCreate,
  *          OxysWindowDestroy, OxysWindowMove, OxysWindowBlit, OxysWindowEvent,
- *          OxysWindowScreen, OxysPower, OxysPause,
+ *          OxysWindowScreen, OxysPower, OxysPause, OxysWindowSession, OxysWindowText,
  *          OxysExit, OxysWait, OxysBrk, OxysSbrk.
  * References:
  *   - kernel/abi/oxys/syscall_abi.h: the call numbers and what each call means.
@@ -361,11 +361,12 @@ int64_t OxysProcessInformation(uint64_t index, SyscallProcessInformation *inform
 
 /* ------------------------------------------------------------ sub-task 9.2 */
 
-int64_t OxysWindowCreate(const SyscallWindowRectangle *geometry, const char *title)
+int64_t OxysWindowCreate(const SyscallWindowRectangle *geometry, const char *title,
+                         uint64_t layer)
 {
-    return OxysSyscallResult(OxysSyscallInvoke2(SYSCALL_WINDOW_CREATE,
+    return OxysSyscallResult(OxysSyscallInvoke3(SYSCALL_WINDOW_CREATE,
                                                 (uint64_t)(uintptr_t)geometry,
-                                                (uint64_t)(uintptr_t)title));
+                                                (uint64_t)(uintptr_t)title, layer));
 }
 
 int64_t OxysWindowDestroy(int64_t window)
@@ -409,4 +410,18 @@ int64_t OxysPower(uint64_t action)
 int64_t OxysPause(void)
 {
     return OxysSyscallResult(OxysSyscallInvoke0(SYSCALL_PAUSE));
+}
+
+/* ------------------------------------------------------------ sub-task 9.5 */
+
+int64_t OxysWindowSession(void)
+{
+    return OxysSyscallResult(OxysSyscallInvoke0(SYSCALL_WINDOW_SESSION));
+}
+
+int64_t OxysWindowText(int64_t window, const SyscallWindowText *placement, const char *text)
+{
+    return OxysSyscallResult(OxysSyscallInvoke3(SYSCALL_WINDOW_TEXT, (uint64_t)window,
+                                                (uint64_t)(uintptr_t)placement,
+                                                (uint64_t)(uintptr_t)text));
 }

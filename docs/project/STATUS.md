@@ -654,8 +654,8 @@ with the `link` and `procinfo` calls, twenty-nine. [`../design/PROCESS.md`](../d
 [`../design/LIBC.md`](../design/LIBC.md), Section 13.
 
 **Phase 9 — the desktop, its system services and its configuration.** Begun:
-sub-tasks 9.1, 9.2 and 9.3 are complete, all on 2026-09-17, and 9.4 on
-2026-09-18; the four after them are not. The
+sub-tasks 9.1, 9.2 and 9.3 are complete, all on 2026-09-17, 9.4 on 2026-09-18
+and 9.5 on 2026-09-20; the three after them are not. The
 window manager holds a fixed table of sixteen windows upon the compositor's back
 buffer, each a content surface its owner draws into and a queue of events its
 owner drains, with a frame the manager draws: a flat band, a one-pixel border, a
@@ -709,6 +709,19 @@ editor's editing is apart from the terminal. A service that ends five times in a
 row is given up on, there being no clock to make that a rate.
 [`../design/CONFIG.md`](../design/CONFIG.md).
 
+**And since 9.5 there is a desktop.** A window now stands in one of three
+layers — a root beneath everything, the programs' windows, a panel above
+everything — and stacks among its own layer and never outside it, so that a
+panel cannot be buried by a press nor a root raised over the windows it is
+beneath. One program at a time may claim the display, and only that one may make
+a root or a panel; every other is refused for being the wrong program. A program
+may draw text with the system's one face, which stays in the kernel because the
+library is under another licence. `/bin/session` is that program: it paints the
+root with the mark the boot screen draws, holds a panel across the top, and
+opens a launcher whose entries come from `/etc/session.conf` — from which the
+window demonstration and the shell are started.
+[`../design/SESSION.md`](../design/SESSION.md).
+
 ## 3. Where it has been observed to work
 
 A sub-task marked *implemented* in [`PLAN.md`](PLAN.md) means the code exists and
@@ -749,6 +762,7 @@ The physical machine is one machine — the HP Laptop 14-dq0052dx specified in
 | 9.2 The client protocol | Yes, the demonstration program driven through the monitor and captured at each step | **Yes**, at 640 by 480, the program's windows placed by the screen it asked for | **Yes — 9.2**, `window-check` passed and the prompt reached | — | **Not yet run** |
 | 9.3 `init`, the shutdown and the boot screen | Yes: the boot screen captured, the desktop started by `init`, the desktop killed and started again, `shutdown` halting and `shutdown -r` restarting | **Yes**, the desktop started by `init` at 640 by 480 | **Yes — 9.3**, seventy assertions and the prompt reached | — | **Not yet run** |
 | 9.4 The configuration and `/etc` | Yes: the desktop's accent changed in `/etc/desktop.conf` and seen to change, and `init` seen to give up on a service whose program is missing | **Yes**, seventy-one assertions | **Yes — 9.4**, seventy-one assertions and the prompt reached | — | **Not yet run** |
+| 9.5 The session | Yes: the root and panel captured, the launcher opened and a program started from it, and a window dragged upward seen to pass under the panel | **Yes**, at 640 by 480 — and it is where the panel's height was found to fall below the least extent a window may have | **Yes — 9.5**, seventy-one assertions and the prompt reached | — | **Not yet run** |
 
 **The rows marked "— 7.2" were all established by two boots of one image**,
 because a boot runs every self-test in the corpus and a clean one is therefore
@@ -987,6 +1001,7 @@ design document ends with its particular ones.
 | The shell upon the screen and the window manager at once. With the window manager the shell is upon the serial line; a terminal emulator window is what puts it back upon the screen. | 9.6 |
 | ~~An orphan collected by nobody.~~ **Arrived at 9.3**: a process that ends gives its children to `init`, which collects them. What remains is that nothing but the desktop is told to stop at a shutdown, and that `init` may itself be killed. `INIT.md`, Section 7. | — |
 | ~~A service configuration.~~ **Arrived at 9.4**: `/etc/system.conf` names the services and `/etc/desktop.conf` the desktop's appearance. What remains is that nothing in `/etc` survives a reboot, the ramdisk being memory, and that the kernel reads none of it. `CONFIG.md`, Section 7. | — |
+| A window a person can put away: no minimise, no resize, no task list, so the panel shows a launcher and nothing else. | 9.7 for what would fill a panel |
 | A reaper. A kernel thread that finishes cannot free its own stack — it is standing on it — and nothing else does. Its slot and its four pages are held until the machine stops. | Phase 7 |
 | Migration, work stealing, and more than one priority. A thread is placed once, at admission, upon the shortest queue its affinity permits, and stays there. | Later |
 | `CR4.SMEP`, `CR4.SMAP` and `IA32_EFER.NXE`. The user mappings that would be protected now exist. | 13.3 |

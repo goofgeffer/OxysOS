@@ -7,7 +7,8 @@
  *          holds the keyboard, and the routing of every key and every movement
  *          of the mouse to the window it belongs to.
  * Key definitions: WINDOW_CAPACITY, WINDOW_NONE, WindowEvent, WindowEventKind,
- *          WindowManagerInitialise, WindowCreate, WindowDestroy, WindowRaise,
+ *          WindowLayer, WindowManagerInitialise, WindowCreate, WindowDestroy,
+ *          WindowRaise, WindowSetSession, WindowSession, WindowDrawText,
  *          WindowFocus, WindowMove, WindowSurface, WindowInvalidate,
  *          WindowReadEvent, WindowManagerHandleKey, WindowManagerHandleMouse,
  *          WindowManagerCompose, WindowManagerWindowAt, WindowManagerReport,
@@ -117,6 +118,30 @@
  */
 #define WINDOW_TITLE_HEIGHT 24
 #define WINDOW_BORDER       1
+
+/*
+ * The three layers a window may stand in, of sub-task 9.5, ordered from the
+ * bottom of the screen upward. A window stacks among its own layer and never
+ * outside it: raising the topmost ordinary window does not put it over the
+ * panel, and nothing a program does puts it under the root.
+ *
+ * Without the layers a panel is an ordinary window that the next press
+ * anywhere puts behind something, and a root is an ordinary window that the
+ * next raise buries the desktop beneath. Both are things a person would call
+ * broken and neither can be expressed by an order alone.
+ *
+ * **The root and the panel carry no frame.** A root is the whole screen and a
+ * panel is a bar; a title band and a close control upon either would be a
+ * control for closing the desktop. The layer decides it, rather than a second
+ * argument, because a decorated root and an undecorated ordinary window are
+ * both things nobody has asked for and neither should be reachable.
+ */
+typedef enum WindowLayer
+{
+    WINDOW_LAYER_ROOT = 0,   /* Beneath everything: the desktop itself. */
+    WINDOW_LAYER_NORMAL = 1, /* The programs' windows. */
+    WINDOW_LAYER_PANEL = 2   /* Above everything: the panel and what it opens. */
+} WindowLayer;
 
 /* The smallest content a window may have, and the largest. The bound above is
  * the coordinate limit of the primitives; the one below is a window a person
@@ -231,14 +256,53 @@ bool WindowManagerIsActive(void);
 /*
  * Makes a window whose frame's top left is at (x, y) upon the screen and whose
  * content is `width` by `height`, titled as given, filled with the paper
- * colour, placed upon the top of the stack, and given the focus.
+ * colour, placed upon the top of its layer, and given the focus — save a root,
+ * which never takes it.
  *
  * Returns WINDOW_NONE where the table is full, the extent is outside the bounds
- * above, or the heap cannot supply the content. A window is not refused for
- * lying partly off the screen — the frame is confined as WindowMove confines a
- * moved one.
+ * above, or the heap cannot supply the content. An ordinary window is not
+ * refused for lying partly off the screen — the frame is confined as WindowMove
+ * confines a moved one — and a root or a panel is not confined at all, having
+ * no band to keep reachable and being placed by the one program that knows
+ * where they belong.
  */
-size_t WindowCreate(int32_t x, int32_t y, int32_t width, int32_t height, const char *title);
+size_t WindowCreate(int32_t x, int32_t y, int32_t width, int32_t height, const char *title,
+                    WindowLayer layer);
+
+/* The layer a window stands in. WINDOW_LAYER_NORMAL for one that does not
+ * exist, that being the layer a caller asking about nothing means least by. */
+WindowLayer WindowLayerOf(size_t window);
+
+/*
+ * The session, of sub-task 9.5: the one owner that may make a root or a panel.
+ *
+ * The manager keeps a number and attaches no meaning to it, as it does for a
+ * window's owner; graphics/client.c sets it to the process that claimed the
+ * session and refuses the two layers to every other. Zero is nobody, which is
+ * what it is before a session has claimed it and after the claimant has ended.
+ */
+void WindowSetSession(uint64_t owner);
+uint64_t WindowSession(void);
+
+/*
+ * Draws text into a window's content with the system face, of sub-task 9.5:
+ * `text` at (x, y) in the content's coordinates, each glyph enlarged by
+ * `scale`, in the two colours given — which are a client's 0x00RRGGBB and are
+ * encoded here as a blitted pixel is. The region drawn is marked as changed.
+ *
+ * It exists because the face is a system resource and there is exactly one of
+ * it: the window manager already draws every title with it, and a system in
+ * which each program carries its own face is a system whose text does not match
+ * itself. The face is also the kernel's under the kernel's licence and `libc/`
+ * is under another, so a copy in the library would be a relicensing this
+ * project may not perform; docs/design/SESSION.md, Section 4.
+ *
+ * Returns false where the window does not exist or the text is unreadable.
+ * Characters the face does not cover are drawn as nothing rather than refused,
+ * a label with one odd character in it being a label a person can still read.
+ */
+bool WindowDrawText(size_t window, int32_t x, int32_t y, const char *text, uint32_t ink,
+                    uint32_t paper, int32_t scale);
 
 /*
  * Destroys a window, giving its content back to the heap, marking where it

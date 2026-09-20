@@ -17,6 +17,9 @@
  *          SYSCALL_WINDOW_CREATE, SYSCALL_WINDOW_DESTROY, SYSCALL_WINDOW_MOVE,
  *          SYSCALL_WINDOW_BLIT, SYSCALL_WINDOW_EVENT, SYSCALL_WINDOW_SCREEN,
  *          SYSCALL_POWER, SYSCALL_PAUSE, SYSCALL_POWER_HALT, SYSCALL_POWER_REBOOT,
+ *          SYSCALL_WINDOW_SESSION, SYSCALL_WINDOW_TEXT, SyscallWindowText,
+ *          SYSCALL_WINDOW_TEXT_MAXIMUM,
+ *          SYSCALL_WINDOW_LAYER_ROOT, SYSCALL_WINDOW_LAYER_NORMAL, SYSCALL_WINDOW_LAYER_PANEL,
  *          SYSCALL_EPERM,
  *          SyscallWindowRectangle,
  *          SyscallWindowEvent, SYSCALL_WINDOW_WAIT, SYSCALL_WINDOW_ANY, the
@@ -289,7 +292,8 @@
  *                                      or ENOTSUP where the window manager
  *                                      does not have it. A program places its
  *                                      windows by this and not by a guess.
- *   window_create(geometry, title)     A window whose frame's top left is at
+ *   window_create(geometry, title, layer)
+ *                                      A window whose frame's top left is at
  *                                      (x, y) upon the screen and whose content
  *                                      is width by height, titled; the number,
  *                                      or EINVAL for an extent outside the
@@ -345,7 +349,58 @@
  * no child to `wait` upon.
  */
 #define SYSCALL_PAUSE          36U
-#define SYSCALL_COUNT          37U
+
+/*
+ * The two calls of sub-task 9.5, by which one program becomes the session.
+ *
+ *   window_session()                   Claims the session — the right to make a
+ *                                      root and a panel. It is exclusive and
+ *                                      first come: a second claimant is EPERM
+ *                                      while the first holds it, and the claim
+ *                                      is released when the claimant's process
+ *                                      ends. Claiming it twice is not an error.
+ *   window_text(window, placement, text)
+ *                                      Draws `text` into a window's content
+ *                                      with the system face, at the placement's
+ *                                      position, colours and scale. The face is
+ *                                      the one the window manager draws titles
+ *                                      with, and there is exactly one of it;
+ *                                      docs/design/SESSION.md, Section 4.
+ */
+#define SYSCALL_WINDOW_SESSION 37U
+#define SYSCALL_WINDOW_TEXT    38U
+#define SYSCALL_COUNT          39U
+
+/* The layer a window stands in, given to window_create. A root and a panel may
+ * be made by the session alone and carry no frame; every other program's
+ * windows are SYSCALL_WINDOW_LAYER_NORMAL, and a window stacks among its own
+ * layer and never outside it. */
+#define SYSCALL_WINDOW_LAYER_ROOT   0U
+#define SYSCALL_WINDOW_LAYER_NORMAL 1U
+#define SYSCALL_WINDOW_LAYER_PANEL  2U
+
+/*
+ * Where and how window_text draws: the position within the content, the two
+ * colours as a client's 0x00RRGGBB, and the scale each glyph is enlarged by.
+ *
+ * They are one structure rather than five arguments because a system call
+ * carries six registers and three of them are the window, the structure and
+ * the text; a call that spent them all upon colours would have no room for the
+ * next thing it needs.
+ */
+/* The longest run of text one call draws. A label, a title or a line of a
+ * launcher; a paragraph is several calls, and a bound the kernel copies into a
+ * fixed buffer is a bound it can be honest about. */
+#define SYSCALL_WINDOW_TEXT_MAXIMUM 127U
+
+typedef struct SyscallWindowText
+{
+    int32_t x;
+    int32_t y;
+    uint32_t ink;
+    uint32_t paper;
+    int32_t scale;
+} SyscallWindowText;
 
 #define SYSCALL_POWER_HALT   1U
 #define SYSCALL_POWER_REBOOT 2U

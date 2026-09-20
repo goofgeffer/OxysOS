@@ -2064,14 +2064,16 @@ static const SyscallEntryDescriptor SyscallTable[SYSCALL_COUNT] = {
     { "tcgroup", 1U },
     { "link", 2U },
     { "procinfo", 2U },
-    { "window_create", 2U },
+    { "window_create", 3U },
     { "window_destroy", 1U },
     { "window_move", 3U },
     { "window_blit", 3U },
     { "window_event", 3U },
     { "window_screen", 1U },
     { "power", 1U },
-    { "pause", 0U }
+    { "pause", 0U },
+    { "window_session", 0U },
+    { "window_text", 3U }
 };
 
 bool SyscallNumberIsValid(uint64_t number)
@@ -2243,7 +2245,7 @@ void SyscallDispatch(SyscallFrame *frame)
      * the protocol is in one file and this switch stays a switch.
      */
     case SYSCALL_WINDOW_CREATE:
-        frame->rax = (uint64_t)WindowClientCreate(frame->rdi, frame->rsi);
+        frame->rax = (uint64_t)WindowClientCreate(frame->rdi, frame->rsi, frame->rdx);
         break;
 
     case SYSCALL_WINDOW_DESTROY:
@@ -2293,6 +2295,14 @@ void SyscallDispatch(SyscallFrame *frame)
 
     case SYSCALL_PAUSE:
         frame->rax = (uint64_t)ProcessPause();
+        break;
+
+    case SYSCALL_WINDOW_SESSION:
+        frame->rax = (uint64_t)WindowClientSession();
+        break;
+
+    case SYSCALL_WINDOW_TEXT:
+        frame->rax = (uint64_t)WindowClientText(frame->rdi, frame->rsi, frame->rdx);
         break;
 
     default:

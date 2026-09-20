@@ -9,6 +9,7 @@
  *          an event arrives.
  * Key definitions: WindowClientCreate, WindowClientDestroy, WindowClientMove,
  *          WindowClientBlit, WindowClientEvent, WindowClientScreen,
+ *          WindowClientSession, WindowClientText,
  *          WindowClientReleaseProcess,
  *          WindowClientWakeAll, WindowClientReport.
  * References:
@@ -42,12 +43,14 @@
 
 #include <oxys/types.h>
 
-int64_t WindowClientCreate(uint64_t geometry_address, uint64_t title_address);
 int64_t WindowClientDestroy(uint64_t window);
 int64_t WindowClientMove(uint64_t window, int64_t x, int64_t y);
 int64_t WindowClientBlit(uint64_t window, uint64_t area_address, uint64_t pixels_address);
 int64_t WindowClientEvent(uint64_t window, uint64_t event_address, uint64_t flags);
+int64_t WindowClientCreate(uint64_t geometry_address, uint64_t title_address, uint64_t layer);
 int64_t WindowClientScreen(uint64_t geometry_address);
+int64_t WindowClientSession(void);
+int64_t WindowClientText(uint64_t window, uint64_t placement_address, uint64_t text_address);
 
 /*
  * Destroys every window a process owns, at its ending. Called by the process

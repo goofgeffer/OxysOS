@@ -64,9 +64,10 @@ sub-task 8.1 the shell.
 | `/bin/head`, `/bin/tail`, `/bin/grep`, `/bin/sort`, `/bin/mv`, `/bin/ps` | The six of 2026-09-16, after sub-task 8.7: the first lines, the last, the lines holding a string, the lines in order, a rename, and the processes. [`../design/SHELL.md`](../design/SHELL.md), Section 30. |
 | `/bin/sh` | The shell of Phase 8 — begun at sub-task 8.1 and complete at 8.7 — which the kernel reads off this filesystem and starts when the boot finishes. [`../design/SHELL.md`](../design/SHELL.md). |
 | `/bin/windows` | Sub-task 9.2: the window demonstration, the first client of the window manager, which the kernel starts beside the shell upon the default entry. Not a utility, and here because the kernel reads it off this filesystem as it reads the shell. |
+| `/bin/session` | Sub-task 9.5: the session, which `init` starts upon the default entry — it claims the display, paints the root, holds the panel and runs the launcher. |
 | `/bin/init` | Sub-task 9.3: the first user process, which the kernel reads off this filesystem and starts, and which starts the desktop above. |
 | `/bin/shutdown` | Sub-task 9.3: asks `init` to stop the machine. |
-| `/etc` | The system configuration of sub-task 9.4: `system.conf`, from which `init` takes its services, and `desktop.conf`, from which the desktop takes its appearance. Staged from `etc/` in the repository; `../design/CONFIG.md`, Section 3. |
+| `/etc` | The system configuration of sub-task 9.4: `system.conf`, from which `init` takes its services, and `desktop.conf`, from which the demonstration takes its appearance, and — from 9.5 — `session.conf`, from which the session takes its launcher. Staged from `etc/` in the repository; `../design/CONFIG.md`, Section 3. |
 | `/mnt` | Empty. Where a volume the machine carries is mounted; Section 6.3. |
 | `/lost+found` | `mke2fs` makes it. Nothing here uses it. |
 

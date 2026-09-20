@@ -12,11 +12,11 @@ the program that asserts its line editor; 8.5 added `touch`, `cp` and `rmdir`, a
 `grep`, `sort`, `mv` and `ps`, so that `/bin` held
 seventeen; and sub-task 9.2 added `windows`, the demonstration the default
 entry presents and the first client of the window manager, the eighteenth, with
-`window-check` beside it; and sub-task 9.3 added `init`, the first user process,
-and `shutdown`, by which a person asks it to stop the machine, so that `/bin`
-holds twenty; and sub-task 9.4 gave `init` its list of services and the desktop
-its appearance from `/etc` rather than from a constant, with `config-check`
-beside them. See
+`window-check` beside it; sub-task 9.4 gave `init` its list of services and the
+desktop its appearance from `/etc` rather than from a constant, with
+`config-check` beside them; and sub-task 9.5 added `session`, the program that
+claims the display and is what `init` now starts, so that `/bin` holds
+twenty-one. See
 [`../docs/storage/INITRD.md`](../docs/storage/INITRD.md), and Section 2 of it for
 why the six `-check` programs are **not** carried there: each exists to make a
 machine-readable statement about a system call, so each is embedded in the kernel
@@ -66,6 +66,7 @@ which is what makes the boundary worth having somewhere a person can see.
 | [`mv/main.c`](mv/main.c) | 2026-09-16: a rename by `link` and `unlink`, or a move into a directory; not atomic, not lossy, not across volumes. |
 | [`ps/main.c`](ps/main.c) | 2026-09-16: the processes, one slot of the kernel's table per `procinfo` call — identifier, parent, group, state, pages, name. |
 | [`windows/main.c`](windows/main.c) | Sub-task 9.2: the window demonstration, the first client of the window manager — three windows composed in the program's own memory and carried across by `OxysWindowBlit`, their events read by `OxysWindowEvent` with `SYSCALL_WINDOW_ANY` and a wait: a figure of discs, a disc that follows the pointer and grows while a button is held, and a tile per key typed. Placed by `OxysWindowScreen`. No text, there being no face in userland; `../docs/design/WINDOWS.md`, Section 7. |
+| [`session/main.c`](session/main.c) | Sub-task 9.5: the session. It claims the display, paints the root with the mark the boot screen draws, holds the panel across the top, and opens a launcher whose entries it reads from `/etc/session.conf` — starting what a person chooses and reaping it when it ends. It is not a window manager and not a supervisor: the stacking is the kernel's, and `init` starts it again if it ends. `../docs/design/SESSION.md`. |
 | [`init/main.c`](init/main.c) | Sub-task 9.3: the first user process. It starts the desktop where `window_screen` says there is one and starts it again whenever it ends, collects every orphan the kernel reparents to it, and — upon SIGTERM or SIGINT — stops the desktop, collects it, and calls `power`. Its handlers only set a flag; the loop does the work, a shutdown from inside a signal frame being the disorder it exists to prevent. `../docs/design/INIT.md`. |
 | [`shutdown/main.c`](shutdown/main.c) | Sub-task 9.3: asks `init` to stop the machine — `-h` to halt, the default, `-r` to restart — by finding the process named `init` with `procinfo`, as `ps` walks the table, and sending it a signal. It does not call `power`: the kernel reserves that to `init`, which alone knows what it started. |
 | [`init-check/main.c`](init-check/main.c) | Sub-task 9.3: asserts that `power` is `EPERM` to a process that is not `init` — for every action, the authority being checked before the action — and that `pause` reports `EINTR` when a signal arrives and delivers it. `../docs/design/INIT.md`, Section 6. |

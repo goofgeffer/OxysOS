@@ -329,8 +329,24 @@ that ends five times in a row is given up on, which is the bound
 [`../design/INIT.md`](../design/INIT.md) owed and which is a count and not a
 rate, there being no clock. [`../design/CONFIG.md`](../design/CONFIG.md).
 
-**Next: sub-task 9.5** — the session: the desktop root, the panel, the launcher,
-and the ownership of the display that decides who may draw upon it.
+**Sub-task 9.5 is complete**, on 2026-09-20: the session. Three stacking layers
+— a root beneath every window, the programs' windows, a panel above them all —
+because an order alone cannot express either: under the old rule a panel is a
+window the next press buries and a root is one the next raise hides, and a
+session cannot prevent it, not seeing the presses that raise other programs'
+windows. A **claim upon the display**, exclusive and released when its holder
+ends, so that exactly one program may make a root or a panel and every other is
+refused `EPERM` — for being the wrong program, as `power` refuses one that is
+not `init`. A call by which a program draws text with the system's one face,
+which stays in the kernel because a second face in an `MIT` library would be a
+relicensing this project may not perform. And `/bin/session` itself: the root
+carrying the boot screen's mark, the panel with its launcher, and the entries
+the launcher offers read from `/etc/session.conf`.
+[`../design/SESSION.md`](../design/SESSION.md).
+
+**Next: sub-task 9.6** — a terminal emulator window hosting the Phase 8 shell,
+which is what puts the shell upon the screen and makes what starts it `init`'s
+question; [`../design/INIT.md`](../design/INIT.md), Section 7, limitation 2.
 
 
 
@@ -1256,7 +1272,7 @@ rather than left implied.
 | 9.2 | Implement the client protocol by which user processes create, draw and receive events upon windows. *(The surface interface of 6.6 is revisited here against its first real client.)* | Implemented | `KernelVerifyClients`, `window-check` |
 | 9.3 | Implement `init`: the first user process, the supervision of the services below it, and the orderly shutdown of both. | Implemented | `KernelVerifyInit`, `init-check` |
 | 9.4 | Define the system configuration format, its parser, and the `/etc` hierarchy the services and the desktop read at start. | Implemented | `KernelVerifyConfig`, `config-check` |
-| 9.5 | Implement the session: the desktop root, the panel, the launcher, and the ownership of the display that decides who may draw upon it. | Planned | — |
+| 9.5 | Implement the session: the desktop root, the panel, the launcher, and the ownership of the display that decides who may draw upon it. | Implemented | `KernelVerifyWindows`, `window-check` |
 | 9.6 | Implement a terminal emulator window hosting the Phase 8 shell. | Planned | — |
 | 9.7 | Implement the utilities the desktop is not usable without: a file manager, a text viewer and a clock. **`Oxys 1 Beta` is cut here.** | Planned | — |
 | 9.8 | Implement the settings application, by which the configuration of 9.4 is edited rather than hand-written. | Planned | — |

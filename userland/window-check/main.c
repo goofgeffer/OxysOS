@@ -9,8 +9,9 @@
  *          the content is refused, that the focus passes between two windows
  *          of one process and back when one is destroyed, that a window the
  *          caller does not hold is refused, that the screen's bounds are the
- *          self-test's surface, and that a wait for an event sleeps until the
- *          kernel's self-test injects one.
+ *          self-test's surface, that the session of sub-task 9.5 is claimed
+ *          and the two layers it guards refused until it is, and that a wait
+ *          for an event sleeps until the kernel's self-test injects one.
  * Key functions: main, WindowRequire.
  * References:
  *   - kernel/abi/oxys/syscall_abi.h: the five calls and the two structures.
@@ -80,7 +81,7 @@ int main(void)
 
     /* --- A window is made, and is told it holds the focus. --- */
 
-    first = OxysWindowCreate(&geometry, "check");
+    first = OxysWindowCreate(&geometry, "check", SYSCALL_WINDOW_LAYER_NORMAL);
     WindowRequire(first >= 0, "the first window could not be made");
     WindowRequire((OxysWindowEvent(first, &event, 0U) == 1) &&
                       (event.kind == SYSCALL_WINDOW_EVENT_FOCUS_IN),
@@ -120,7 +121,7 @@ int main(void)
     /* --- The focus passes between two windows of one process, and back. --- */
 
     geometry = CheckRectangle(30, 30, CHECK_WIDTH, CHECK_HEIGHT);
-    second = OxysWindowCreate(&geometry, "two");
+    second = OxysWindowCreate(&geometry, "two", SYSCALL_WINDOW_LAYER_NORMAL);
     WindowRequire((second >= 0) && (second != first), "the second window could not be made");
     /* Read as "any", which a program with two windows must be able to do:
      * two events, one from each window, in either order. */
@@ -178,7 +179,90 @@ int main(void)
     WindowRequire((OxysWindowMove(first, 100000, 0) == -1) && (errno == EINVAL),
                   "a move beyond the coordinate limit was not EINVAL");
 
-    /* --- The wait: asleep until the kernel's self-test injects a key. --- */
+    /* --- The session of sub-task 9.5, and the layers it alone may use. --- */
+
+    {
+        SyscallWindowRectangle full = CheckRectangle(0, 0, 32, 32);
+
+        /* This program has not claimed the session, and the two layers are
+         * refused it — for being the wrong program, which is EPERM, and not
+         * for asking wrongly, which would be EINVAL. */
+        errno = 0;
+        WindowRequire((OxysWindowCreate(&full, "root", SYSCALL_WINDOW_LAYER_ROOT) == -1) &&
+                          (errno == EPERM),
+                      "a root was made by a program that does not hold the session");
+        errno = 0;
+        WindowRequire((OxysWindowCreate(&full, "panel", SYSCALL_WINDOW_LAYER_PANEL) == -1) &&
+                          (errno == EPERM),
+                      "a panel was made by a program that does not hold the session");
+        errno = 0;
+        WindowRequire((OxysWindowCreate(&full, "odd", 9U) == -1) && (errno == EINVAL),
+                      "a layer that does not exist was not EINVAL");
+
+        /* Claiming it is permitted — nothing holds it during this test — and
+         * claiming it twice is not an error. */
+        WindowRequire(OxysWindowSession() == 0, "the session could not be claimed");
+        WindowRequire(OxysWindowSession() == 0, "claiming the session twice was refused");
+
+        /* And then the two layers are permitted. */
+        {
+            const int64_t root = OxysWindowCreate(&full, "root", SYSCALL_WINDOW_LAYER_ROOT);
+
+            WindowRequire(root >= 0, "the session could not make a root");
+            WindowRequire(OxysWindowDestroy(root) == 0, "the session's root could not be destroyed");
+        }
+    }
+
+    /*
+     * --- The text of sub-task 9.5, into a window of its own. ---
+     *
+     * Not into the first window: the kernel's self-test reads that window's
+     * pixels while this program sleeps, and text drawn over them would be a
+     * failure of this program's making reported as a failure of the blit.
+     */
+    {
+        SyscallWindowRectangle small = CheckRectangle(0, 0, 32, 32);
+        const int64_t scratch = OxysWindowCreate(&small, "text", SYSCALL_WINDOW_LAYER_NORMAL);
+        SyscallWindowText placement;
+
+        placement.x = 1;
+        placement.y = 1;
+        placement.ink = 0x00FFFFFFU;
+        placement.paper = 0U;
+        placement.scale = 1;
+
+        WindowRequire(scratch >= 0, "a window for the text could not be made");
+        WindowRequire(OxysWindowText(scratch, &placement, "text") == 0,
+                      "text was refused a window this program holds");
+
+        errno = 0;
+        WindowRequire((OxysWindowText(999, &placement, "text") == -1) && (errno == EBADF),
+                      "text into a window naming nothing was not EBADF");
+        errno = 0;
+        WindowRequire((OxysWindowText(scratch, &placement, NULL) == -1) && (errno == EFAULT),
+                      "text from an address the program may not use was not EFAULT");
+
+        placement.scale = 0;
+        errno = 0;
+        WindowRequire((OxysWindowText(scratch, &placement, "text") == -1) && (errno == EINVAL),
+                      "a scale of zero was not EINVAL");
+
+        WindowRequire(OxysWindowDestroy(scratch) == 0, "the text's window could not be destroyed");
+    }
+
+    /*
+     * --- The wait: asleep until the kernel's self-test injects a key. ---
+     *
+     * The queue is drained first. Making and destroying the windows above
+     * passed the focus away from this window and back, and each passing is an
+     * event; a wait that met one of those would return at once with something
+     * this program had caused itself, and would assert nothing about being
+     * woken.
+     */
+    while (OxysWindowEvent(first, &event, 0U) == 1)
+    {
+    }
+
 
     WindowRequire((OxysWindowEvent(first, &event, SYSCALL_WINDOW_WAIT) == 1) &&
                       (event.kind == SYSCALL_WINDOW_EVENT_KEY) &&

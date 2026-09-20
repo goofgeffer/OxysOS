@@ -288,7 +288,7 @@ void KernelVerifyClients(void)
 
     /* The kernel's own window, owner zero, which the program must not be able
      * to touch and the program's ending must not take. Number 0, being first. */
-    VerifyHandKernelWindow = WindowCreate(100, 60, 40, 30, "kernel");
+    VerifyHandKernelWindow = WindowCreate(100, 60, 40, 30, "kernel", WINDOW_LAYER_NORMAL);
     VerifyClientsRequire(VerifyHandKernelWindow == 0U, "the kernel's window is not number 0");
 
     /* The calls refuse the kernel's own flow of control, which owns nothing. */

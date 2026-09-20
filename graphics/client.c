@@ -9,6 +9,7 @@
  *          program waits in until an event arrives.
  * Key functions: WindowClientCreate, WindowClientDestroy, WindowClientMove,
  *          WindowClientBlit, WindowClientEvent, WindowClientScreen,
+ *          WindowClientSession, WindowClientText,
  *          WindowClientReleaseProcess,
  *          WindowClientWakeAll, WindowClientReport.
  * References:
@@ -110,7 +111,7 @@ static bool WindowClientReadRectangle(uint64_t address, GraphicsRectangle *recta
     return true;
 }
 
-int64_t WindowClientCreate(uint64_t geometry_address, uint64_t title_address)
+int64_t WindowClientCreate(uint64_t geometry_address, uint64_t title_address, uint64_t layer)
 {
     GraphicsRectangle geometry;
     char title[WINDOW_TITLE_CAPACITY + 1U];
@@ -124,6 +125,27 @@ int64_t WindowClientCreate(uint64_t geometry_address, uint64_t title_address)
         ++WindowClientRefusals;
 
         return SYSCALL_ENOTSUP;
+    }
+
+    if (layer > SYSCALL_WINDOW_LAYER_PANEL)
+    {
+        ++WindowClientRefusals;
+
+        return SYSCALL_EINVAL;
+    }
+
+    /*
+     * The root and the panel are the session's alone, of sub-task 9.5. Two
+     * programs each painting a root would each paint the whole screen and each
+     * be right to; what a person would see is whichever composed last, and
+     * nothing would say why. The refusal is EPERM rather than EINVAL because
+     * the argument is not wrong — the caller is.
+     */
+    if ((layer != SYSCALL_WINDOW_LAYER_NORMAL) && (caller != WindowSession()))
+    {
+        ++WindowClientRefusals;
+
+        return SYSCALL_EPERM;
     }
 
     if (!WindowClientReadRectangle(geometry_address, &geometry) ||
@@ -142,7 +164,8 @@ int64_t WindowClientCreate(uint64_t geometry_address, uint64_t title_address)
         return SYSCALL_EINVAL;
     }
 
-    window = WindowCreate(geometry.x, geometry.y, geometry.width, geometry.height, title);
+    window = WindowCreate(geometry.x, geometry.y, geometry.width, geometry.height, title,
+                          (WindowLayer)layer);
 
     if (window == WINDOW_NONE)
     {
@@ -475,9 +498,92 @@ int64_t WindowClientScreen(uint64_t geometry_address)
     return SYSCALL_OK;
 }
 
+int64_t WindowClientSession(void)
+{
+    const uint64_t caller = WindowClientCaller();
+    const uint64_t holder = WindowSession();
+
+    ++WindowClientCalls;
+
+    if (!WindowManagerIsActive() || (caller == 0U))
+    {
+        ++WindowClientRefusals;
+
+        return SYSCALL_ENOTSUP;
+    }
+
+    /*
+     * First come, and held until the claimant ends. Claiming it twice is not an
+     * error: a session that restarted a part of itself should not have to know
+     * whether it had claimed already.
+     */
+    if (holder == caller)
+    {
+        return SYSCALL_OK;
+    }
+
+    if (holder != 0U)
+    {
+        ++WindowClientRefusals;
+
+        return SYSCALL_EPERM;
+    }
+
+    WindowSetSession(caller);
+
+    return SYSCALL_OK;
+}
+
+int64_t WindowClientText(uint64_t window, uint64_t placement_address, uint64_t text_address)
+{
+    const size_t owned = WindowClientOwned(window);
+    const SyscallWindowText *placement;
+    char text[SYSCALL_WINDOW_TEXT_MAXIMUM + 1U];
+
+    ++WindowClientCalls;
+
+    if (owned == WINDOW_NONE)
+    {
+        return SYSCALL_EBADF;
+    }
+
+    if (!SyscallUserRangeIsReadable(placement_address, (uint64_t)sizeof *placement) ||
+        !SyscallCopyUserString(text_address, text, sizeof text))
+    {
+        ++WindowClientRefusals;
+
+        return SYSCALL_EFAULT;
+    }
+
+    placement = (const SyscallWindowText *)(uintptr_t)placement_address;
+
+    if (!WindowDrawText(owned, placement->x, placement->y, text, placement->ink, placement->paper,
+                        placement->scale))
+    {
+        ++WindowClientRefusals;
+
+        return SYSCALL_EINVAL;
+    }
+
+    return SYSCALL_OK;
+}
+
 void WindowClientReleaseProcess(uint64_t process_id)
 {
-    if ((process_id != 0U) && (WindowDestroyOwnedBy(process_id) != 0U))
+    if (process_id == 0U)
+    {
+        return;
+    }
+
+    /* The session goes with the process that claimed it, since sub-task 9.5:
+     * a claim held by a process that has ended is a screen nobody may take
+     * again, and a desktop that could never be started a second time. */
+    if (WindowSession() == process_id)
+    {
+        WindowSetSession(0U);
+    }
+
+    if (WindowDestroyOwnedBy(process_id) != 0U)
     {
         WindowClientWakeAll();
     }

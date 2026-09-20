@@ -3,6 +3,9 @@
 # The Window Manager
 
 **Phase**: 9, sub-tasks 9.1 and 9.2, of [`../project/PLAN.md`](../project/PLAN.md).
+**The layers, the session's claim and the drawing of text are sub-task 9.5's**
+and are [`SESSION.md`](SESSION.md); what is here is the manager they were added
+to.
 Section 2 is what a window is; Section 3 is the stack, the focus and where an
 event goes, which is the whole of what a window manager decides; Section 4 is
 the appearance, judged against the preference
@@ -414,10 +417,12 @@ of its two control bytes — and the boot rerun alone was clean;
    pixels a tick, in an interrupt handler. Three windows do not approach that;
    a desktop might, and the manager will then need a thread and the lock
    limitation 1 names.
-3. **No resize, no hide, no minimum stacking layer.** A window is the size it was
-   made, is always shown, and stacks among its peers; a panel that must stay
-   above every window, or a root that must stay below them all, is sub-task
-   9.5's to add, and a resize is a client's to ask for at 9.2.
+3. **No resize and no hide** — ~~and no minimum stacking layer~~. A window is
+   still the size it was made and is always shown. **The layers arrived at
+   sub-task 9.5**: a root beneath every window and a panel above them all,
+   each window stacking among its own layer and never outside it;
+   [`SESSION.md`](SESSION.md), Section 2, and why an order alone could not
+   express it.
 4. **One damaged rectangle**, as the compositor's, and for its reason: two
    windows at opposite corners changed in one tick compose the screen between
    them.
@@ -427,8 +432,10 @@ of its two control bytes — and the boot rerun alone was clean;
 6. **The title is cut, not refused, at thirty-one characters**, and clipped
    short of the close control at whatever width the window has.
 7. **The focus follows a press and nothing else.** No key moves it between
-   windows, and no window can ask for it; both are decisions for the session of
-   9.5.
+   windows, and no window can ask for it. Sub-task 9.5 added one rule and no
+   more: **a root never takes it**, and the focus passed on when a window is
+   destroyed skips it — [`SESSION.md`](SESSION.md), Section 2.3. A key that
+   moved it, and a window that could ask, are still nobody's.
 8. **Rounded corners and asymmetry are wanted and absent**, Section 4.
 9. **The screen's mode is still the boot loader's.** VirtualBox gives 640 by
    480, and the demonstration scales its text to fit; nothing else does.
@@ -601,10 +608,13 @@ established nothing.
    format is the client's is the day it is measured to matter.
 3. **No resize, no title change, no hide.** A window is the size it was made
    and named what it was named. Section 9, limitation 3, for the manager's half.
-4. **No face in userland.** A program cannot draw text: the font of sub-task 6.4
-   is the kernel's, under the kernel's licence, and `libc/` is under another.
-   The terminal emulator of 9.6 cannot exist without one, and that is where a
-   userland face arrives.
+4. ~~**No face in userland.**~~ **Answered at sub-task 9.5, the other way
+   about**: `window_text` draws a run of text into a window with the system's
+   own face, rather than a second face arriving in the library. The face is the
+   kernel's under the kernel's licence and `libc/` is under another, so a copy
+   there would be a relicensing this project may not perform; and there is
+   exactly one face, which is what keeps a launcher's labels and the titles
+   above them the same. [`SESSION.md`](SESSION.md), Section 4.
 5. **The demonstration is an orphan**, Section 10.4, until `init` of 9.3.
 6. **One process, one thread.** A second thread of one process reading the same
    window's queue would race the first upon it; there are no such threads, and

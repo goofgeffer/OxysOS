@@ -167,7 +167,7 @@ static bool DemoMake(DemoWindow *window, int32_t x, int32_t y, int32_t width, in
     geometry.y = y;
     geometry.width = width;
     geometry.height = height;
-    window->number = OxysWindowCreate(&geometry, title);
+    window->number = OxysWindowCreate(&geometry, title, SYSCALL_WINDOW_LAYER_NORMAL);
 
     return window->number >= 0;
 }
