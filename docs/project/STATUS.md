@@ -743,6 +743,15 @@ had drawn a ring of discs this project made before there was artwork. The ring
 outlived its reason by a day: the boot screen and the desktop carried the
 owner's mark while the window a person actually opens carried the stand-in.
 
+**And a machine that loses its userland now says so upon its own screen.** The
+desktop entry quiets the console and gives the framebuffer to the window
+manager; every path that then gave up — no `init`, no shell, a shell that
+faulted — wrote its reason to the serial line while the screen kept a boot
+screen nothing was drawing, and the echo loop beneath took out a row of the mark
+for each line. The screen is handed back first now, and cleared: the reason
+stands at the top of an empty screen with a prompt or an echo loop under it.
+[`../design/INIT.md`](../design/INIT.md), Section 5.3.
+
 **The same day found and fixed a defect a person could reach from the
 launcher.** Two processes reading the terminal at once stopped the machine:
 each kept the other runnable, neither reached the halt that lets the timer tick

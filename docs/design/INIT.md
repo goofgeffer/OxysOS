@@ -217,7 +217,10 @@ It is drawn **as soon as the compositor exists**, not at the end of the boot,
 and that is what makes it the whole of what a person sees rather than a flash
 before the desktop. Nothing overwrites it: the display is quiet upon that entry,
 so nothing the kernel prints reaches the screen, and the graphics self-tests
-that present do so with the boot screen in the buffer they present.
+that present do so with the boot screen in the buffer they present. What takes
+it down is the desktop composing over it, or the screen going back to the
+console because no desktop is coming — Section 5.3, which is where that used to
+happen a row at a time and without a word.
 
 The entries that give the shell the screen do not draw it. A boot log or a
 prompt is what belongs upon a screen the shell is about to take, and a splash
@@ -230,12 +233,50 @@ compositor suspended — the fault screen's arrangement, for the fault screen's
 reason: the machine is stopping, and the back buffer holds a desktop that is no
 longer what should be shown.
 
-Both pages are the same few elements — a ring of discs about a ringed disc, a
-wordmark, one line of grey text — and both are drawn with the primitives and the
-one face this system has.
-[`../project/INSPIRATIONS.md`](../project/INSPIRATIONS.md), Section 3, asks that
-the character be carried by geometry; a ring of circles is that, and it needs no
-artwork this project does not have.
+Both pages are the same few elements — the mark of
+[`../../art/logo.h`](../../art/logo.h), a wordmark, one line of dim text — and
+both are drawn with the primitives and the one face this system has. They were a
+ring of discs about a ringed disc until 2026-09-21, this project's own stand-in
+for artwork it did not have; [`../project/INSPIRATIONS.md`](../project/INSPIRATIONS.md),
+Section 3, asks that the character be carried by geometry, and the mark is the
+project owner's answer to the same question.
+
+### 5.3 Giving the screen back, and saying so first
+
+The boot screen is drawn upon a screen the window manager holds and the console
+does not. Three things can then happen that mean the desktop will never appear:
+`init` cannot be started, the shell cannot be started, or the shell ends by a
+fault. Each of them is a path back to the kernel's echo loop, which writes upon
+the console.
+
+**Until 2026-09-21 that hand-back happened after the explanation rather than
+before it**, and with nothing cleared. The reason was written while the display
+was still quiet, so it reached the serial line and not the screen; the console
+then resumed at the row its cursor had stopped on when it went quiet, and wrote
+into a boot screen nothing was drawing any more — one row of the mark taken out
+for each line printed or typed.
+
+**Reported from a laptop by the project owner**: the startup background frozen,
+black lines overwriting it a row at a time, and no word anywhere of what had
+gone wrong. Every part of that was a component behaving correctly without
+having been told the screen had changed hands.
+
+`KernelScreenBackToConsole` is that telling, and it runs before the first word
+is written: the keyboard returns to the terminal, the tick stops composing, the
+pointer is hidden — one that no longer follows the hand being worse than none —
+the quiet is lifted, and the console is cleared, which resets its cursor and its
+erase limit. What the person then sees is the reason at the top of an empty
+screen, and a prompt or an echo loop beneath it. It does nothing where the
+console already holds the screen, a shell's log there not being something to
+erase, and that also makes it idempotent — which is what lets each of the three
+paths call it without knowing what the others did.
+
+**What it does not do is keep the desktop.** A machine whose shell has died
+still has a window manager and may still have a session drawing into it, and the
+screen goes to the console regardless, because the echo loop is what follows and
+the echo loop needs a console. That was already true before this change; it was
+merely invisible, the screen keeping the last frame composed before the tick
+stopped. Section 7, limitation 8.
 
 ## 6. Verification
 
@@ -317,7 +358,7 @@ would otherwise have been called a flake.
    read at all, which is deliberate and is recorded there.
 2. **The shell is still the kernel's**, started in a loop the entry point holds
    upon the serial line, and is not `init`'s to supervise. Sub-task 9.5's
-   launcher can start one — `/etc/session.conf` offers it — but a shell started
+   launcher could start one, and deliberately does not offer it: a shell started
    that way has no terminal to read, there being no emulator until 9.6; that is
    when a shell becomes a thing `init` or the session starts in earnest.
 3. ~~**Supervision is a restart and nothing more.**~~ **Bounded at sub-task
@@ -342,3 +383,10 @@ would otherwise have been called a flake.
    reset register are the two that would be tried next.
 7. **The boot screen says one thing and never changes.** There is no progress
    in it, nothing being measured; it is a page, not an indicator.
+8. **Giving the screen back ends the desktop rather than keeping it.** The three
+   paths of Section 5.3 lead to the kernel's echo loop, which needs the console,
+   so the console takes the screen even where a window manager and a session are
+   still perfectly able to draw. What would be better is a machine that loses
+   its shell and keeps its desktop; what stands is a machine that says which of
+   them it lost. The echo loop is Phase 3's and has outlived every reason for it
+   but this one.

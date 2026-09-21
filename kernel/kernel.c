@@ -1159,6 +1159,57 @@ static bool KernelStartWindowManager(void)
 }
 
 /*
+ * Gives the screen back to the console, before anything is written upon it
+ * rather than after.
+ *
+ * The desktop entry quiets the console, hands the framebuffer to the window
+ * manager, and draws the boot screen upon it. Every path that then gives up —
+ * an `init` that could not be started, a shell that could not be started, a
+ * shell that ended by a fault — wrote its reason first and reclaimed the
+ * screen afterwards. The reason therefore went to the serial line alone, and
+ * the screen kept a boot screen that nothing was drawing any longer. The echo
+ * loop beneath then wrote into it from wherever the console's cursor had
+ * stopped when it went quiet, taking out one row of the mark for each line.
+ *
+ * **Reported from a laptop on 2026-09-21**: the boot screen standing frozen,
+ * black lines eating into it a row at a time as the reporter typed, and
+ * nothing anywhere saying what had happened. Each of those was the correct
+ * behaviour of a part that had not been told the screen had changed hands —
+ * which is the shape of every defect that looks inexplicable from the front.
+ *
+ * So, in this order: the keyboard returns to the terminal, the window manager
+ * having taken it; the tick stops composing, there being nothing left to
+ * compose; the pointer is hidden, a pointer that no longer follows the hand
+ * being worse than none; the quiet is lifted, so that what follows is read by
+ * the person in front of the machine and not only by whoever holds the serial
+ * line; and the console is cleared, which resets its cursor and its erase
+ * limit so that the next line is written at the top of an empty screen.
+ *
+ * It does nothing where the console already has the screen: a shell's log upon
+ * it is not something to erase. That also makes it idempotent, which is what
+ * lets every path that gives up call it without knowing what the others did.
+ */
+static void KernelScreenBackToConsole(void)
+{
+    if (KernelDisplay != KERNEL_DISPLAY_WINDOWS)
+    {
+        return;
+    }
+
+    TerminalAttachKeyboard(true);
+    KernelDisplay = KERNEL_DISPLAY_IDLE;
+
+    if (MouseIsPresent())
+    {
+        CursorHide();
+    }
+
+    KernelDisplaySetQuiet(false);
+    ConsoleClear();
+    CompositorPresent();
+}
+
+/*
  * Starts a program from the root and does not wait for it, of sub-task 9.2:
  * what KernelRunShell does up to the start, and then ThreadLaunch in place of
  * ThreadStart. Returns the new process's identifier, or zero where it could
@@ -2450,8 +2501,16 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
                 }
                 else
                 {
+                    /*
+                     * The desktop will not appear: `init` is what starts the
+                     * session, and nothing else does. So the screen goes back
+                     * to the console before this is written, or it would be
+                     * written behind a boot screen that is now the last thing
+                     * this machine ever draws.
+                     */
+                    KernelScreenBackToConsole();
                     KernelWriteString("init " KERNEL_INIT_PATH " could not be started; "
-                                      "there is no supervisor and no shutdown.\n");
+                                      "there is no supervisor, no desktop and no shutdown.\n");
                 }
             }
 
@@ -2461,6 +2520,7 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
 
                 if (!KernelRunShell(&status))
                 {
+                    KernelScreenBackToConsole();
                     KernelWriteString("The shell " KERNEL_SHELL_PATH " could not be started.\n");
                     break;
                 }
@@ -2473,6 +2533,7 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
                      * would be that. A status the shell chose, since 8.3's
                      * `exit [n]`, is an ending and not a failure, whatever the
                      * number. */
+                    KernelScreenBackToConsole();
                     KernelWriteString("The shell ended by a fault, status ");
                     KernelWriteHexadecimal((uint64_t)status);
                     KernelWriteString(", and is not started again.\n");
@@ -2484,9 +2545,18 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
                 KernelWriteString("; starting it again.\n");
             }
 
-            /* The echo loop below drains the mouse and the keyboard for itself. */
+            /*
+             * The echo loop below drains the mouse and the keyboard for itself,
+             * and needs the console rather than the window manager to write
+             * upon. Every path that breaks out of the loop above has already
+             * asked for it; this is the path that did not break — the shell
+             * upon a display the window manager never took — and the call is
+             * the same call, which is why it is idempotent.
+             */
+            KernelScreenBackToConsole();
             KernelDisplay = KERNEL_DISPLAY_IDLE;
             TerminalAttachKeyboard(true);
+            KernelDisplaySetQuiet(false);
             KernelDisplaySetQuiet(false);
         }
     }
