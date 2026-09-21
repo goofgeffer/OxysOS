@@ -347,10 +347,15 @@ self-test asserts without a person. **Since sub-task 9.2 they are drawn by a
 program**, `/bin/windows`, started by the entry point beside the shell and
 drawing through the protocol of Section 10; at 9.1 they were kernel code.
 
-- **Oxys** — a figure: a ring of discs about a ringed disc, in the palette's few
-  colours. At 9.1 this window held nine lines of instruction; it holds a figure
-  now because there is no face in userland yet, Section 12, limitation 4, and
-  the windows say what they are by what they do.
+- **Oxys** — the mark of [`../../art/logo.h`](../../art/logo.h), the disc in the
+  accent and the figure in the ink, with the ground skipped so the paper shows
+  through. At 9.1 this window held nine lines of instruction; it holds a picture
+  because there is no face in userland yet, Section 12, limitation 4, and the
+  windows say what they are by what they do. It held a ring of discs this
+  project drew for itself until 2026-09-21 — a stand-in that outlived its
+  reason by a day, the boot screen and the desktop having carried the owner's
+  mark since the day before while the window a person actually opens carried
+  the stand-in.
 - **Pointer** — a disc that follows the pointer and grows while a button is
   held. Drag out of the window with the button held and the disc goes out of
   sight while the window still receives: the binding, made visible.

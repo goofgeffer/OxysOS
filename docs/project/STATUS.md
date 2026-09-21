@@ -669,7 +669,7 @@ window or, upon the disc, asks it to close, and the manager destroys nothing.
 It is serviced from the bootstrap processor's tick beside the terminal, which
 gives up the keyboard for it. **What the default entry boots changed**: it now
 gives the window manager the screen, the keyboard and the mouse, with the shell
-upon the serial line and three windows a person can operate — the notes, the
+upon the serial line and three windows a person can operate — the mark, the
 pointer's position with a disc that follows it, and the characters typed — and
 the **Shell-only** and **Shell Diagnostics** entries give the shell the screen
 as every entry did through Phase 8. **Since 9.2 a process owns a window**:
@@ -737,6 +737,11 @@ it from a file rather than repeat it. The program held three numbers of its own
 until then, and by that day they were a blue from the scheme before this one —
 which is what a program looks like when the system changes its mind and the
 program does not.
+
+The demonstration's own window draws the mark itself since 2026-09-21, where it
+had drawn a ring of discs this project made before there was artwork. The ring
+outlived its reason by a day: the boot screen and the desktop carried the
+owner's mark while the window a person actually opens carried the stand-in.
 
 **The same day found and fixed a defect a person could reach from the
 launcher.** Two processes reading the terminal at once stopped the machine:

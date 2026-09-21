@@ -158,6 +158,10 @@ fail() {
     printf 'ERROR    %s\n' "$1" >&2
 }
 
+note() {
+    printf 'NOTE     %s\n' "$1"
+}
+
 usage() {
     sed -n '/^# Usage:/,/^#$/p' "$0" | sed 's/^# \{0,2\}//'
 }
@@ -627,7 +631,30 @@ do_check() {
     # a check slow enough to be skipped is a check nobody runs, which is the
     # rule the whole of tools/ is built on. `check --deep` verifies the bytes;
     # run it when bit rot rather than an accidental delete is the worry.
-    if [ -n "$(rows | awk -F'\t' '$12 != "-"')" ]; then
+    #
+    # **The archive belongs to a machine and the record belongs to the
+    # project.** The register travels in git to every clone and to the CI
+    # runner; the images do not, and are not meant to — being kept out of git is
+    # the whole reason they are elsewhere. A machine without the archive is
+    # therefore not a machine that has lost it, and a check that could not tell
+    # those apart failed every CI run from the day the first image was kept:
+    # `build 1 records an archived image, but /home/runner/oxys-builds/… is not
+    # there`, upon a runner that had never had it and never could. **Observed
+    # 2026-09-21**, by the project owner, in a CI log.
+    #
+    # The line is the archive root's existence. Where the archive is, every
+    # image the record claims must be in it — the accident above. Where it is
+    # not, the rows are reported as unchecked rather than as passed, which is
+    # the honest thing to say and is visible in the log. Deleting the whole root
+    # is then indistinguishable from never having had it; that is true, and it
+    # is a deliberate act rather than the accident this guards.
+    local archived
+    archived="$(rows | awk -F'\t' -v OFS='\t' '$12 != "-" { print $1, $2, $3, $4, $5, $6 }')"
+
+    if [ -n "$archived" ] && [ ! -d "$ARCHIVE_ROOT" ]; then
+        note "$ARCHIVE_ROOT is not upon this machine, so $(printf '%s\n' "$archived" | wc -l) row(s) claiming a kept image are not checked here."
+        note 'The archive is a machine'"'"'s and the record is the project'"'"'s; OXYS_BUILD_ARCHIVE names the archive.'
+    elif [ -n "$archived" ]; then
         while IFS=$'\t' read -r number _ commit _ compiler _; do
             [ -n "$number" ] || continue
             local kept
@@ -648,7 +675,7 @@ do_check() {
                     errors=$(( errors + 1 ))
                 fi
             fi
-        done < <(rows | awk -F'\t' -v OFS='\t' '$12 != "-" { print $1, $2, $3, $4, $5, $6 }')
+        done < <(printf '%s\n' "$archived")
     fi
     [ "$errors" -eq 0 ]
 }

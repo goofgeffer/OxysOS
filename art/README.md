@@ -70,19 +70,26 @@ protocol carries.
 ## What reads it
 
 [`../kernel/kernel.c`](../kernel/kernel.c), for the boot screen and the power
-screen, and [`../userland/session/main.c`](../userland/session/main.c), for the
-desktop root. Both draw the same mark at the same size, which is what makes the
-hand-over from the boot screen to the desktop look like one machine starting
-rather than two pictures replacing each other.
+screen; [`../userland/session/main.c`](../userland/session/main.c), for the
+desktop root; and [`../userland/windows/main.c`](../userland/windows/main.c),
+for the window the demonstration opens. All three draw the same bitmap at the
+same size, which is what makes the hand-over from the boot screen to the
+desktop look like one machine starting rather than pictures replacing each
+other.
 
-`palette.h` is read by those two and by
-[`../userland/windows/main.c`](../userland/windows/main.c), which takes its
-paper, its ink and its accent from here. That program held its own copy of the
-three until 2026-09-21, and the copy was a blue from the scheme that preceded
-the yellow one: it had looked like the system for as long as the system did not
-change, and on the day it changed it looked like nothing. The coral and the mint
-it draws beside them stay its own, because a colour belongs here when two things
-must agree about it and nothing else draws those.
+The third was added on 2026-09-21, a day after the other two. It had a ring of
+discs this project drew before there was artwork to draw, and the ring outlived
+its reason: for that day the screen a person boots to carried the owner's mark
+and the window a person opens carried the stand-in. A directory of artwork
+makes a mark easy to share and does nothing at all about a program that never
+asked for it.
+
+`palette.h` is read by the same three. `/bin/windows` takes its paper, its ink
+and its accent from here; it held its own copy of the three until the same day,
+and the copy was a blue from the scheme that preceded the yellow one, which had
+looked like the system for exactly as long as the system did not change. The
+coral and the mint it draws beside them stay its own, because a colour belongs
+here when two things must agree about it and nothing else draws those.
 
 `/etc/desktop.conf` ships `accent = system` to name this header from a file —
 [`../docs/design/CONFIG.md`](../docs/design/CONFIG.md), Section 4.2.

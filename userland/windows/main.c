@@ -4,7 +4,7 @@
  * File: userland/windows/main.c
  * Purpose: The demonstration the default boot entry presents since sub-task
  *          9.2 — three windows a person can operate, drawn by a program at
- *          privilege level 3 through the client protocol: a figure, a disc
+ *          privilege level 3 through the client protocol: the mark, a disc
  *          that follows the pointer and grows while a button is held, and a
  *          row of tiles that the keys typed add to and remove from.
  * Key functions: main, DemoDrawFigure, DemoDrawPointer, DemoDrawKeys,
@@ -14,6 +14,9 @@
  *     the event, and the pixel format 0x00RRGGBB.
  *   - docs/design/WINDOWS.md, Section 10: the protocol, and Section 7 what
  *     this program stands in for until there is a desktop.
+ *   - art/logo.h and art/palette.h: the mark this program draws and the
+ *     colours it draws in, both public domain so that this program and the
+ *     LGPL kernel may draw the same ones.
  *   - J. E. Bresenham, "A linear algorithm for incremental digital display of
  *     circular arcs", CACM 20(2), 1977: the disc, drawn here as the kernel
  *     draws its close control, and written again rather than shared because a
@@ -30,6 +33,7 @@
  */
 
 #include <config.h>
+#include <logo.h>
 #include <palette.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -188,36 +192,47 @@ static bool DemoMake(DemoWindow *window, int32_t x, int32_t y, int32_t width, in
 }
 
 /*
- * The figure: a ring of discs about a larger one, in the palette's few
- * colours — geometry as the character, and nothing that is not geometry.
+ * The mark: the disc and the figure of art/logo.h, one source pixel to a square
+ * of DemoScale — the same bitmap at the same size as the kernel's boot screen
+ * and the session's root, so that the three things upon the screen that show
+ * the mark show one mark.
+ *
+ * This window held a ring of discs of this program's own until 2026-09-21. It
+ * was drawn before there was artwork to draw, and it outlived the reason for
+ * it: the boot screen and the desktop had been carrying the owner's mark for a
+ * day while the window a person actually opens carried the stand-in.
+ *
+ * LOGO_NOTHING is skipped rather than filled, so the paper shows through where
+ * the artwork's white ground was. That is the whole reason the bitmap carries
+ * three states and not two, art/README.md.
+ *
+ * The disc takes the accent, which is what the configuration sets and what
+ * every other coloured thing this program draws takes: a person who writes
+ * three numbers into /etc/desktop.conf sees them here, and the default is
+ * OXYS_DISC, the colour the mark was actually drawn in.
  */
 static void DemoDrawFigure(void)
 {
     DemoWindow *const window = &DemoFigure;
-    const int32_t centre_x = window->width / 2;
-    const int32_t centre_y = window->height / 2;
-    const int32_t large = 22 * DemoScale;
-    const int32_t small = 7 * DemoScale;
-    const int32_t orbit = 40 * DemoScale;
-    /* Eight points about the centre, as (x, y) in sixty-fourths of the orbit:
-     * the cosine and sine of the eight compass directions, without floating
-     * point, which this program does not use either. */
-    static const int32_t points[8][2] = {
-        { 64, 0 },   { 45, 45 },   { 0, 64 },   { -45, 45 },
-        { -64, 0 },  { -45, -45 }, { 0, -64 },  { 45, -45 }
-    };
-    const uint32_t colours[3] = { DemoAccent, DEMO_CORAL, DEMO_MINT };
+    const int32_t left = (window->width - (LOGO_WIDTH * DemoScale)) / 2;
+    const int32_t top = (window->height - (LOGO_HEIGHT * DemoScale)) / 2;
 
     DemoFillRectangle(window, 0, 0, window->width, window->height, DEMO_PAPER);
-    DemoFillDisc(window, centre_x, centre_y, large, DEMO_INK);
-    DemoFillDisc(window, centre_x, centre_y, large - (3 * DemoScale), DEMO_PAPER);
-    DemoFillDisc(window, centre_x, centre_y, small, DemoAccent);
 
-    for (size_t index = 0U; index < 8U; ++index)
+    for (int32_t y = 0; y < LOGO_HEIGHT; ++y)
     {
-        DemoFillDisc(window, centre_x + ((points[index][0] * orbit) / 64),
-                     centre_y + ((points[index][1] * orbit) / 64), small,
-                     colours[index % 3U]);
+        for (int32_t x = 0; x < LOGO_WIDTH; ++x)
+        {
+            const unsigned state = LogoAt((int)x, (int)y);
+
+            if (state == LOGO_NOTHING)
+            {
+                continue;
+            }
+
+            DemoFillRectangle(window, left + (x * DemoScale), top + (y * DemoScale), DemoScale,
+                              DemoScale, (state == LOGO_INK) ? DEMO_INK : DemoAccent);
+        }
     }
 
     DemoPresent(window);
@@ -432,10 +447,10 @@ int main(void)
     left = screen.width / 16;
     top = screen.height / 12;
 
-    if (!DemoMake(&DemoFigure, left, top, 240 * DemoScale, 100 * DemoScale, "Oxys") ||
+    if (!DemoMake(&DemoFigure, left, top, 240 * DemoScale, 130 * DemoScale, "Oxys") ||
         !DemoMake(&DemoPointer, screen.width / 2, screen.height / 4, 180 * DemoScale,
                   130 * DemoScale, "Pointer") ||
-        !DemoMake(&DemoKeys, left + (28 * DemoScale), top + (140 * DemoScale), 240 * DemoScale,
+        !DemoMake(&DemoKeys, left + (28 * DemoScale), top + (170 * DemoScale), 240 * DemoScale,
                   40 * DemoScale, "Keys"))
     {
         (void)fprintf(stderr, "windows: a window could not be made.\n");

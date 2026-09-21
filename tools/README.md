@@ -40,6 +40,17 @@ one rather than merely advising against it, an ISO in git history being a mistak
 that cannot be taken back. `check` then fails when a row claims an image the
 archive does not hold, and `check --deep` re-hashes the bytes.
 
+**That check is a machine's and the register is the project's**, and the
+difference had to be learnt. The register travels in git to every clone and to
+the CI runner; the images do not, and are not meant to. So the check failed
+every CI run from the day the first image was kept — `build 1 records an
+archived image, but /home/runner/oxys-builds/… is not there`, upon a runner
+that had never had it and never could. It now reports those rows as unchecked
+where the archive root is not upon the machine at all, and still fails where
+the root is there and an image it claims is gone, which is the accident it was
+written for. Deleting the whole root is then indistinguishable from never
+having had it, which is true and is a deliberate act rather than an accident.
+
 **The register was emptied on 2026-09-13** at the project owner's direction —
 every row, and every archived image with them — and nothing is recorded again
 until `Oxys 1 Alpha`. **This script did not change at all**, which is the part
