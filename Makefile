@@ -98,11 +98,11 @@ LINKER_SCRIPT := linker.ld
 # it; `kernel/include/` holds the kernel's own corpus, under the kernel's
 # licence. LICENSING.md, Section 2.1, required the division. The two roots carry
 # no file of the same name, so nothing here depends upon the order.
-INCLUDE_DIRS := -Ikernel/abi -Ikernel/include
+INCLUDE_DIRS := -Ikernel/abi -Ikernel/include -Iart
 
 # What the C library is compiled against, in addition to the two roots above. It
 # is a separate variable because only the C library's own rule uses it.
-LIBC_INCLUDE_DIRS := -Ilibc/include
+LIBC_INCLUDE_DIRS := -Ilibc/include -Iart
 
 CFLAGS := -std=c11 -pedantic \
           -ffreestanding -fno-builtin -fno-stack-protector -fno-pic -fno-pie \

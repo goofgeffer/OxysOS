@@ -29,6 +29,12 @@ cross-*/
 x86_64-elf-*/
 sysroot/
 
+#special
+use_this.png
+use_this.jpg
+use_this.jpeg
+use_this.bmp
+
 # Object files and dependency files
 *.d
 *.deps

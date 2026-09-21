@@ -210,6 +210,13 @@ sufficient would be a worse failure than not having written it.
    one glob to a line, rather than in the script. `PROJECT_GUIDELINES.md`,
    Section 2, requires a port to keep the licence it arrived under; adding one
    should not mean editing a program.
+5. **A file that cannot carry a comment carries its tag beside it**, in a
+   companion `<name>.license`. That is the REUSE Specification's answer to the
+   same problem and not this project's invention, and it is why `art/logo.png`
+   is not an exemption: a picture has a licence like everything else, and a tag
+   written into the PNG would be either a chunk nothing here reads or bytes
+   that stop it being a PNG. An exemption would have said the file has no
+   licence, which is a different and untrue thing.
 5. **A new check must name the defect it would have caught.** That is the bar the
    existing ones meet, and it is what keeps this directory from accumulating
    opinions.

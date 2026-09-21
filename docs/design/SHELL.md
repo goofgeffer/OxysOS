@@ -186,6 +186,43 @@ the shell's whichever of the two has the keyboard, and the shell upon the
 default entry is reached that way. The two entries that give the shell the
 screen never detach it. [`WINDOWS.md`](WINDOWS.md), Section 5.2.
 
+### 2.6 One terminal, one reader — and the livelock that proved it
+
+The header of [`../../kernel/terminal/terminal.c`](../../kernel/terminal/terminal.c)
+has said since sub-task 8.1 that there is one reader, and that two "would race
+upon the read index and each would receive part of what the other was owed".
+That understated it. **Two readers do not share the bytes; they stop the
+machine**, and on 2026-09-21 one did.
+
+**How.** The wait of `TerminalWaitForInput` stays *runnable*: it yields while
+another thread can run, and halts only when none can. The halt is not an
+idleness — it is the mechanism. The timer tick is what polls the keyboard and
+the serial adapter into the queue, and the tick lands upon a processor that has
+halted with interrupts enabled. So a single reader halts, the tick polls, a byte
+arrives, and it wakes. **Two readers each keep the other runnable**: neither
+ever reaches the halt, the tick never lands, nothing is ever polled, and no byte
+arrives for either — upon a processor whose interrupts are masked for the
+greater part of every switch between them. The screen stops, the serial line
+stops, and the pointer stops.
+
+**What made it reachable** was sub-task 9.5's launcher. A shell started from it
+claims the terminal in `ShellJobsInitialise`, before it prints anything, and
+the shell the kernel had started was already inside the wait — where the
+foreground group was never looked at again, having been judged once on the way
+in.
+
+**The fix is where the omission was.** The check and the wait are one loop now,
+in `SyscallDoRead`: the wait returns the moment its caller is no longer the
+foreground group, and the loop puts such a reader where sub-task 8.7 always
+meant it to go — stopped by SIGTTIN until `fg` or a `tcgroup` gives the terminal
+back. One reader remains and makes progress.
+
+**What it is not** is a lock upon the queue, and the distinction is worth
+keeping. The single-reader rule still holds and is still unenforced by any
+mutual exclusion; what is enforced now is that a reader which has lost the
+terminal stops waiting for it.
+[`CONCURRENCY.md`](CONCURRENCY.md), Section 10, limitation 1, keeps the queue.
+
 ## 3. The line editor
 
 ### 3.1 What the keys do

@@ -1581,40 +1581,80 @@ static int64_t SyscallDoRead(uint64_t descriptor, uint64_t address, uint64_t len
          * that ignores or catches SIGTTIN is refused with EIO instead, as
          * IEEE Std 1003.1-2017, Section 11.1.4, has it.
          */
+        /*
+         * The check and the wait are **one loop**, since 2026-09-21, and that
+         * is the whole of what keeps one terminal to one reader.
+         *
+         * They were two: the foreground group was judged once and the wait
+         * entered afterwards, so a reader that lost the terminal *while it
+         * waited* went on waiting. Sub-task 9.5's launcher made that
+         * reachable — a second shell started from it claims the terminal in
+         * `ShellJobsInitialise`, before its first prompt — and the machine
+         * livelocked, which is worse than either program misbehaving.
+         *
+         * The livelock is worth recording exactly, because nothing about it
+         * looks like a loop. TerminalWaitForInput stays *runnable*: it yields
+         * while another thread can run and halts only when none can, and the
+         * halt is what lets the timer tick land and poll the devices. Two
+         * readers each keep the other runnable, so neither ever halts, the
+         * tick never polls, no byte ever arrives, and both wait for ever —
+         * upon a processor whose interrupts are masked for the greater part
+         * of every switch. The screen stops, the serial line stops, and the
+         * pointer stops, which is how it was reported.
+         *
+         * So the wait now returns the moment the caller is no longer the
+         * foreground group, and the loop puts it where such a reader belongs:
+         * stopped by SIGTTIN, until `fg` or a `tcgroup` gives the terminal
+         * back. One reader remains, and it makes progress.
+         */
         for (;;)
         {
             const uint64_t foreground = TerminalForegroundGroup();
 
-            if ((foreground == 0U) || (process->group == foreground))
+            if ((foreground != 0U) && (process->group != foreground))
             {
-                break;
+                if (SignalDisposition(process, SYSCALL_SIGTTIN) != SYSCALL_SIGNAL_DEFAULT)
+                {
+                    return SYSCALL_EIO;
+                }
+
+                SignalStopCurrent(process, SYSCALL_SIGTTIN);
+
+                /* Continued — and a signal sent meanwhile, a `kill` of the
+                 * stopped job say, is acted upon before the read is tried
+                 * again: the call reports EINTR, the way out delivers, and a
+                 * signal that entered no handler restarts the call. */
+                if (SignalIsPending(process))
+                {
+                    return SYSCALL_EINTR;
+                }
+
+                continue;
             }
 
-            if (SignalDisposition(process, SYSCALL_SIGTTIN) != SYSCALL_SIGNAL_DEFAULT)
+            /* The wait polls the devices, and a control-C at the head of the
+             * queue becomes a signal to the foreground group during it —
+             * which may be this very process, in which case the bytes behind
+             * the control-C are not its to read: the signal comes first, and
+             * the bytes wait for whoever reads next. */
+            if (!TerminalWaitForInput())
             {
-                return SYSCALL_EIO;
+                if (SignalIsPending(process))
+                {
+                    return SYSCALL_EINTR;
+                }
+
+                /* The terminal was taken while this reader waited. Round the
+                 * loop, where the check above stops it. */
+                continue;
             }
 
-            SignalStopCurrent(process, SYSCALL_SIGTTIN);
-
-            /* Continued — and a signal sent meanwhile, a `kill` of the
-             * stopped job say, is acted upon before the read is tried
-             * again: the call reports EINTR, the way out delivers, and a
-             * signal that entered no handler restarts the call. */
             if (SignalIsPending(process))
             {
                 return SYSCALL_EINTR;
             }
-        }
 
-        /* The wait polls the devices, and a control-C at the head of the queue
-         * becomes a signal to the foreground group during it — which may be
-         * this very process, in which case the bytes behind the control-C are
-         * not its to read: the signal comes first, and the bytes wait for
-         * whoever reads next. */
-        if (!TerminalWaitForInput() || SignalIsPending(process))
-        {
-            return SYSCALL_EINTR;
+            break;
         }
 
         read = (uint64_t)TerminalRead(buffer, (size_t)length);

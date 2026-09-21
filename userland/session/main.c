@@ -33,6 +33,8 @@
  */
 
 #include <config.h>
+#include <logo.h>
+#include <palette.h>
 #include <errno.h>
 #include <signal.h>
 #include <stdbool.h>
@@ -62,15 +64,19 @@
 /* How many programs the launcher may offer. */
 #define SESSION_ENTRIES_MAXIMUM 8
 
-/* The palette, in the client's format. The ground is the one the kernel's boot
- * screen uses, so that the boot screen and the desktop are the same colour and
- * the hand-over between them is not a flash. */
-#define SESSION_GROUND UINT32_C(0x002B3440)
-#define SESSION_PANEL  UINT32_C(0x00202830)
-#define SESSION_INK    UINT32_C(0x00E6E9EE)
-#define SESSION_DIM    UINT32_C(0x00969EAA)
-#define SESSION_ACCENT UINT32_C(0x004F86F7)
-#define SESSION_PAPER  UINT32_C(0x00F5F3EE)
+/*
+ * The palette, in the client's format, and every colour of it from art/
+ * palette.h — the same header the kernel's boot screen and the window
+ * manager's frames read. A second set of numbers here would be a desktop that
+ * drifted from the screen shown a second before it.
+ */
+#define SESSION_GROUND OXYS_RGB(OXYS_GROUND_RED, OXYS_GROUND_GREEN, OXYS_GROUND_BLUE)
+#define SESSION_PANEL  OXYS_RGB(OXYS_BAR_RED, OXYS_BAR_GREEN, OXYS_BAR_BLUE)
+#define SESSION_QUIET  OXYS_RGB(OXYS_BAR_QUIET_RED, OXYS_BAR_QUIET_GREEN, OXYS_BAR_QUIET_BLUE)
+#define SESSION_INK    OXYS_RGB(OXYS_INK_RED, OXYS_INK_GREEN, OXYS_INK_BLUE)
+#define SESSION_DIM    OXYS_RGB(OXYS_DIM_RED, OXYS_DIM_GREEN, OXYS_DIM_BLUE)
+#define SESSION_DISC   OXYS_RGB(OXYS_DISC_RED, OXYS_DISC_GREEN, OXYS_DISC_BLUE)
+#define SESSION_PAPER  OXYS_RGB(OXYS_PAPER_RED, OXYS_PAPER_GREEN, OXYS_PAPER_BLUE)
 
 typedef struct SessionEntry
 {
@@ -175,41 +181,61 @@ static void SessionText(int64_t window, int32_t x, int32_t y, const char *text, 
  */
 static void SessionDrawRoot(void)
 {
-    const int32_t unit = 6 * SessionScale;
     const int32_t centre_x = SessionScreen.width / 2;
-    const int32_t centre_y = (SessionScreen.height / 2) - (4 * unit);
-    static const int32_t points[8][2] = {
-        { 64, 0 },   { 45, 45 },   { 0, 64 },   { -45, 45 },
-        { -64, 0 },  { -45, -45 }, { 0, -64 },  { 45, -45 }
-    };
-    const uint32_t ring[3] = { SESSION_ACCENT, UINT32_C(0x00F26B5B), UINT32_C(0x003FBF9F) };
+    const int32_t centre_y = SessionScreen.height / 2;
+    const int32_t left = centre_x - ((LOGO_WIDTH * SessionScale) / 2);
+    const int32_t top = centre_y - (24 * SessionScale) - ((LOGO_HEIGHT * SessionScale) / 2);
 
     SessionFill(SessionRoot, 0, 0, SessionScreen.width, SessionScreen.height, SESSION_GROUND);
 
-    /* The mark, as squares rather than discs: a program has no circle, the
-     * primitives being the kernel's, and a ring of squares about a square is
-     * the same figure at this size. docs/design/SESSION.md, Section 3.2. */
-    for (size_t index = 0U; index < 8U; ++index)
+    /*
+     * The mark of art/logo.h, drawn a run at a time rather than a pixel at a
+     * time: a row of the bitmap is walked, and each run of one state becomes
+     * one fill. The mark is ninety-six pixels square and every fill crosses
+     * the system-call boundary, so a pixel at a time would be nine thousand
+     * calls for a picture drawn once.
+     *
+     * It is the same mark, at the same size and in the same colours, as the
+     * boot screen the kernel drew a moment before — art/palette.h and
+     * art/logo.h are one copy shared by both, which is what keeps the
+     * hand-over from looking like two pictures replacing each other rather
+     * than one machine finishing what it started.
+     */
+    for (int32_t row = 0; row < LOGO_HEIGHT; ++row)
     {
-        SessionFill(SessionRoot, centre_x + ((points[index][0] * (7 * unit)) / 64) - (unit / 2),
-                    centre_y + ((points[index][1] * (7 * unit)) / 64) - (unit / 2), unit, unit,
-                    ring[index % 3U]);
-    }
+        int32_t column = 0;
 
-    SessionFill(SessionRoot, centre_x - unit, centre_y - unit, 2 * unit, 2 * unit, SESSION_PAPER);
-    SessionFill(SessionRoot, centre_x - (unit / 2), centre_y - (unit / 2), unit, unit,
-                SESSION_ACCENT);
+        while (column < LOGO_WIDTH)
+        {
+            const unsigned state = LogoAt(column, row);
+            int32_t run = 1;
+
+            while (((column + run) < LOGO_WIDTH) && (LogoAt(column + run, row) == state))
+            {
+                ++run;
+            }
+
+            if (state != LOGO_NOTHING)
+            {
+                SessionFill(SessionRoot, left + (column * SessionScale),
+                            top + (row * SessionScale), run * SessionScale, SessionScale,
+                            (state == LOGO_INK) ? SESSION_INK : SESSION_DISC);
+            }
+
+            column += run;
+        }
+    }
 
     /* Centred by measurement rather than by guess: the face is eight pixels
      * wide and every glyph of it the same, so a run of `n` characters at a
      * scale is exactly `n * 8 * scale` across. */
     {
         static const char wordmark[] = "OXYS-OS";
-        const int32_t scale = SessionScale * 2;
+        const int32_t scale = SessionScale * 3;
         const int32_t width = (int32_t)(sizeof wordmark - 1U) * 8 * scale;
 
-        SessionText(SessionRoot, centre_x - (width / 2), centre_y + (10 * unit), wordmark,
-                    SESSION_DIM, SESSION_GROUND, scale);
+        SessionText(SessionRoot, centre_x - (width / 2), centre_y + (36 * SessionScale), wordmark,
+                    SESSION_INK, SESSION_GROUND, scale);
     }
 }
 
@@ -233,9 +259,9 @@ static void SessionDrawPanel(bool open)
 
     SessionFill(SessionPanel, 0, 0, SessionScreen.width, height, SESSION_PANEL);
     SessionFill(SessionPanel, 0, 0, SESSION_LAUNCH_WIDTH * SessionScale, height,
-                open ? SESSION_ACCENT : SESSION_PANEL);
-    SessionText(SessionPanel, inset * 2, inset, "OXYS", open ? SESSION_PAPER : SESSION_INK,
-                open ? SESSION_ACCENT : SESSION_PANEL, SessionScale);
+                open ? SESSION_QUIET : SESSION_PANEL);
+    SessionText(SessionPanel, inset * 2, inset, "OXYS", SESSION_INK,
+                open ? SESSION_QUIET : SESSION_PANEL, SessionScale);
 
     /* The line beneath, which is what separates the panel from a window that
      * happens to be the same colour standing under it. */

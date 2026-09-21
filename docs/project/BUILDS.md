@@ -352,12 +352,12 @@ regenerates it and fails if what is here differs.*
 
 | | |
 | --- | --- |
-| Builds recorded | 2 |
-| Verified | 2 passed, 0 not |
+| Builds recorded | 3 |
+| Verified | 3 passed, 0 not |
 | Compilers | gcc |
 | Environments | QEMU, VirtualBox |
 | First | 2026-09-17T01:34Z |
-| Latest | 2026-09-17T01:38Z |
+| Latest | 2026-09-21T22:51Z |
 
 ## The builds
 
@@ -365,5 +365,6 @@ regenerates it and fails if what is here differs.*
 | - | ---------- | ------ | -------- | ------ | --- | ------ | ------------ | ---- |
 | 1 | 2026-09-17T01:34Z | `6bcb5fd` | gcc 13.2.0 | 3060288 | 10287104 | passed (66 assertions) | QEMU;VirtualBox | Oxys 1 Alpha: the release image, cut at the close of Phase 8; booted under QEMU by make verify and under VirtualBox at the keyboard |
 | 2 | 2026-09-17T01:38Z | `ee505ef` | gcc 13.2.0 | 3060288 | 10287104 | passed (66 assertions) |  | The register's policy: every build recorded from now on; the image this documentation change was verified with |
+| 3 | 2026-09-21T22:51Z | `4c51c4f` *(modified)* | gcc 13.2.0 | 3354208 | 10582016 | passed (71 assertions) |  | The appearance of 2026-09-21 and the terminal livelock fixed with it, from a working tree in progress. The note was written by a mistyped `record --help`, which the script took for a note; it is corrected and the row kept, the image and its verdict being real. |
 
 <!-- END GENERATED -->

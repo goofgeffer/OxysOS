@@ -722,6 +722,23 @@ opens a launcher whose entries come from `/etc/session.conf` — from which the
 window demonstration and the shell are started.
 [`../design/SESSION.md`](../design/SESSION.md).
 
+**And since 2026-09-21 it looks like something**, at the project owner's
+direction: a yellow ground, a lighter and more orange yellow for the panel and
+for the band of the window holding the focus, a dark brown ink, and the owner's
+own mark in place of the ring of discs this project drew for itself. The mark
+and the palette are one bitmap and one header in [`../../art/`](../../art/),
+public domain so that the kernel — which is LGPL — and the session — which is
+MIT — may both draw them, which is what makes the boot screen and the desktop
+the same picture rather than two.
+
+**The same day found and fixed a defect a person could reach from the
+launcher.** Two processes reading the terminal at once stopped the machine:
+each kept the other runnable, neither reached the halt that lets the timer tick
+poll the devices, and nothing arrived for either. A read judged the foreground
+group once on the way in and never again; it is one loop now, and a reader that
+loses the terminal is stopped by SIGTTIN as sub-task 8.7 always meant it to be.
+[`../design/SHELL.md`](../design/SHELL.md), Section 2.6.
+
 ## 3. Where it has been observed to work
 
 A sub-task marked *implemented* in [`PLAN.md`](PLAN.md) means the code exists and

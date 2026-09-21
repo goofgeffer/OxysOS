@@ -127,13 +127,29 @@ the machine starts and what they see when it has started are recognisably the
 same system — the same slate, the same figure, the same wordmark. The hand-over
 from the boot screen to the desktop is then not a flash of a different colour.
 
-**The mark is squares where the boot screen's is discs.** A program has no
-circle: the primitives are the kernel's, and what crosses the protocol is
-pixels. A ring of squares about a square is the same figure at this size, and
-the alternative — a `window_circle` call — would be the beginning of putting the
-whole drawing library across the boundary, which
-[`WINDOWS.md`](WINDOWS.md), Section 10.1, decided against for reasons that have
-not changed.
+**Both draw the same bitmap.** From 2026-09-21 the mark is the project owner's
+own, [`../../art/logo.png`](../../art/logo.png), reduced to ninety-six pixels
+square and classified into three states at two bits to a pixel by
+[`../../art/logo.h`](../../art/logo.h): nothing, the disc, and the ink the
+figure is drawn in. The kernel includes that header and so does the session, and
+[`../../art/README.md`](../../art/README.md) records why it is public domain —
+neither an LGPL kernel nor an MIT program may take artwork from the other.
+
+Three states and not a mask of one bit, for the reason the pointer of sub-task
+6.5 has a coverage byte: the mark is a figure **upon** a disc, and where the
+bitmap says nothing the ground behind shows through, so the same file sits upon
+the yellow of the boot screen and the yellow of the desktop without a colour
+reserved to mean "absent".
+
+**The session draws it a run at a time and the kernel a pixel at a time**, and
+the difference is the boundary. Every fill the session makes is a system call,
+so a row is walked and each run of one state becomes one call; the kernel is
+already inside its own drawing code and has nothing to save. The picture is the
+same either way.
+
+It replaced a ring of coloured squares the session drew for itself — squares
+because a program has no circle, the primitives being the kernel's. That
+limitation is gone with it: the mark is now a bitmap and needs no curve.
 
 ### 3.3 The panel and the launcher
 
@@ -304,10 +320,11 @@ sliding **under** the panel rather than over it.
    system has no users and no privilege beyond `init`'s; a credential is Phase
    13's to introduce, and until then the claim prevents an accident and not an
    intent.
-6. **The root's mark is squares.** Section 3.2: a program has no circle. The
-   boot screen's discs and the desktop's squares are the same figure drawn by
-   two different draughtsmen, and they will not match exactly until a program
-   can draw an arc.
+6. ~~**The root's mark is squares.**~~ **Closed on 2026-09-21**: both draw the
+   one bitmap of [`../../art/logo.h`](../../art/logo.h), in the one palette of
+   [`../../art/palette.h`](../../art/palette.h), so the boot screen and the
+   desktop cannot differ. What a program still has no way to draw is a curve of
+   its own; nothing asks for one now that the mark is a picture.
 7. **Nothing is drawn while a program is starting.** A person who chooses an
    entry sees the launcher close and then, a moment later, a window; there is no
    sign in between that anything is happening.

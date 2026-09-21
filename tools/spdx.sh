@@ -117,6 +117,10 @@ identifier_for() {
         #     edits, linked into nothing ---
         etc/*)                   echo 'CC0-1.0'; return ;;
 
+        # --- the mark: public domain so that the kernel, which is LGPL, and
+        #     the session, which is MIT, may both draw it ---
+        art/*)                   echo 'CC0-1.0'; return ;;
+
         # --- the interface a program is entitled to, which is permissive so
         #     that an MIT C library may include it; it must be tested before the
         #     kernel rule below, which would otherwise claim it ---
@@ -247,6 +251,15 @@ main() {
         fi
 
         actual="$(existing_identifier "$path")"
+
+        # A file that cannot carry a comment carries its tag in a companion
+        # `<name>.license` beside it, which is the REUSE Specification's answer
+        # to the same problem and is not this project's invention. The first
+        # such file is art/logo.png: a tag written into a PNG would either be a
+        # chunk no tool here reads or bytes that stop it being a PNG.
+        if [ -z "$actual" ] && [ -z "$(comment_style_for "$path")" ] && [ -f "$path.license" ]; then
+            actual="$(existing_identifier "$path.license")"
+        fi
 
         if [ "$actual" = "$expected" ]; then
             correct=$((correct + 1))

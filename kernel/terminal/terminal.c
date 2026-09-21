@@ -63,6 +63,7 @@
 #include <oxys/dev/keyboard.h>
 #include <oxys/dev/serial.h>
 #include <oxys/proc/sched.h>
+#include <oxys/proc/process.h>
 #include <oxys/proc/signal.h>
 #include <oxys/arch/cpu/percpu.h>
 
@@ -366,6 +367,31 @@ bool TerminalHasInput(void)
     return TerminalQueued() > 0U;
 }
 
+/*
+ * Whether the caller may still wait: it is the foreground group, or there is
+ * none. Since 2026-09-21, and it is tested within the wait and not only before
+ * it.
+ *
+ * A reader that lost the terminal while it waited went on waiting, and two
+ * readers of one terminal do not merely share the bytes — they livelock the
+ * processor. The wait below stays runnable and halts only when nothing else
+ * can run, and that halt is what lets the timer tick land and poll the
+ * devices; two waiters each keep the other runnable, so neither halts, nothing
+ * is ever polled, and no byte arrives for either. The machine stops with its
+ * screen, its serial line and its pointer frozen.
+ */
+static bool TerminalCallerMayWait(void)
+{
+    const Process *const process = ProcessCurrent();
+
+    if ((TerminalForeground == 0U) || (process == NULL))
+    {
+        return true;
+    }
+
+    return process->group == TerminalForeground;
+}
+
 bool TerminalWaitForInput(void)
 {
     /* A signal already pending — a control-C intercepted by the tick before this
@@ -377,6 +403,13 @@ bool TerminalWaitForInput(void)
 
     while (!TerminalHasInput())
     {
+        /* The terminal was taken by another group; this reader is no longer
+         * entitled to the bytes and must not go on waiting for them. */
+        if (!TerminalCallerMayWait())
+        {
+            return false;
+        }
+
         /*
          * A signal pending upon the reader ends the wait, since sub-task 8.7:
          * the read reports EINTR and the signal is delivered on the way out,

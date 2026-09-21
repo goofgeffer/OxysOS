@@ -105,7 +105,14 @@ pixels:
   should read as light without reading as unserious.
 - **Colour used sparingly and deliberately.** A small palette, mostly quiet,
   with colour reserved for the few things that must be distinguished at a
-  glance. A palette is a decision of Phase 9 and is not made here.
+  glance. A palette is a decision of Phase 9 and is not made here. **It was
+  made on 2026-09-21**, at the project owner's direction: a yellow ground, a
+  lighter and more orange yellow for the panel and for the band of the window
+  holding the focus, a paler one for every other band, and a dark brown ink.
+  [`../../art/palette.h`](../../art/palette.h) is the whole of it — one header
+  the kernel and the session both read, so that a colour cannot be decided
+  twice — and [`../design/SESSION.md`](../design/SESSION.md), Section 3.2, is
+  where it is drawn.
 - **Legibility first.** Where a playful choice and a legible one disagree, the
   legible one is taken. A desktop that is pleasant to look at and hard to read
   has failed at the thing it exists to do.
@@ -121,8 +128,9 @@ by default, and an appearance arrived at by default is indistinguishable,
 afterwards, from one that was chosen. This section is what makes the difference
 visible.
 
-This remains a preference of taste and is stated as one. It is not a decision
-already made about any particular pixel. **Sub-task 9.1 is the first thing
+This remains a preference of taste and is stated as one, and the colours and the
+mark it is now carried out in are the project owner's own —
+[`../../art/README.md`](../../art/README.md). **Sub-task 9.1 is the first thing
 built against it**, on 2026-09-17, and
 [`../design/WINDOWS.md`](../design/WINDOWS.md), Section 4, is where the window's
 frame and the palette are judged against this section: a flat band, a one-pixel

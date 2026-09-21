@@ -91,6 +91,8 @@
 #include <oxys/gfx/graphics.h>
 #include <oxys/gfx/compositor.h>
 #include <oxys/gfx/font.h>
+#include <logo.h>
+#include <palette.h>
 #include <oxys/gfx/console.h>
 #include <oxys/gfx/cursor.h>
 #include <oxys/gfx/faultscreen.h>
@@ -142,31 +144,45 @@ static _Noreturn void KernelHalt(void)
  * 3, asks of the appearance, and it needs no font.
  */
 static void KernelDrawMark(GraphicsSurface *surface, int32_t centre_x, int32_t centre_y,
-                           int32_t unit)
+                           int32_t scale)
 {
-    static const int32_t points[8][2] = {
-        { 64, 0 },   { 45, 45 },   { 0, 64 },   { -45, 45 },
-        { -64, 0 },  { -45, -45 }, { 0, -64 },  { 45, -45 }
-    };
-    const uint32_t accent = FramebufferEncode(79U, 134U, 247U);
-    const uint32_t coral = FramebufferEncode(242U, 107U, 91U);
-    const uint32_t mint = FramebufferEncode(63U, 191U, 159U);
-    const uint32_t paper = FramebufferEncode(245U, 243U, 238U);
-    const uint32_t ink = FramebufferEncode(38U, 38U, 38U);
-    const uint32_t ring[3] = { accent, coral, mint };
-    const int32_t large = 4 * unit;
-    const int32_t small = unit;
-    const int32_t orbit = 7 * unit;
+    const uint32_t disc = FramebufferEncode(OXYS_DISC_RED, OXYS_DISC_GREEN, OXYS_DISC_BLUE);
+    const uint32_t ink = FramebufferEncode(OXYS_INK_RED, OXYS_INK_GREEN, OXYS_INK_BLUE);
+    const int32_t left = centre_x - ((LOGO_WIDTH * scale) / 2);
+    const int32_t top = centre_y - ((LOGO_HEIGHT * scale) / 2);
 
-    GraphicsFillCircle(surface, centre_x, centre_y, large, ink);
-    GraphicsFillCircle(surface, centre_x, centre_y, large - (unit / 2) - 1, paper);
-    GraphicsFillCircle(surface, centre_x, centre_y, small, accent);
-
-    for (size_t index = 0U; index < 8U; ++index)
+    /*
+     * The mark of art/logo.h, a pixel of it drawn as a square of `scale` by
+     * `scale`. Nothing is drawn where the bitmap says nothing, so the ground
+     * behind shows through and the disc keeps its shape without a colour
+     * reserved to mean "absent" — the reason the pointer of sub-task 6.5 has a
+     * coverage mask, arriving again for a picture with three states rather
+     * than two.
+     *
+     * A pixel at a time, and no faster. It is drawn twice in the life of a
+     * machine — once upon the boot screen and once upon the page that says the
+     * machine may be turned off — and a specialisation for that would be a
+     * specialisation nobody could measure.
+     */
+    for (int32_t row = 0; row < LOGO_HEIGHT; ++row)
     {
-        GraphicsFillCircle(surface, centre_x + ((points[index][0] * orbit) / 64),
-                           centre_y + ((points[index][1] * orbit) / 64), small,
-                           ring[index % 3U]);
+        for (int32_t column = 0; column < LOGO_WIDTH; ++column)
+        {
+            const unsigned state = LogoAt(column, row);
+            GraphicsRectangle pixel;
+
+            if (state == LOGO_NOTHING)
+            {
+                continue;
+            }
+
+            pixel.x = left + (column * scale);
+            pixel.y = top + (row * scale);
+            pixel.width = scale;
+            pixel.height = scale;
+
+            GraphicsFillRectangle(surface, pixel, (state == LOGO_INK) ? ink : disc);
+        }
     }
 }
 
@@ -203,27 +219,35 @@ static void KernelBootScreen(void)
 {
     GraphicsSurface *const surface = CompositorSurface();
     int32_t centre_x;
-    int32_t unit;
-    const uint32_t ground = FramebufferEncode(43U, 52U, 64U);
-    const uint32_t paper = FramebufferEncode(245U, 243U, 238U);
-    const uint32_t grey = FramebufferEncode(150U, 158U, 170U);
+    int32_t centre_y;
+    int32_t scale;
+    const uint32_t ground = FramebufferEncode(OXYS_GROUND_RED, OXYS_GROUND_GREEN, OXYS_GROUND_BLUE);
+    const uint32_t ink = FramebufferEncode(OXYS_INK_RED, OXYS_INK_GREEN, OXYS_INK_BLUE);
+    const uint32_t dim = FramebufferEncode(OXYS_DIM_RED, OXYS_DIM_GREEN, OXYS_DIM_BLUE);
 
     if (surface == NULL)
     {
         return;
     }
 
+    /*
+     * The scale is a whole number of pixels to a pixel of the mark, and is
+     * two upon a screen wide enough for the mark at that size to leave room
+     * for the words beneath it. A fractional scale would need a filter, and a
+     * filtered mark at this size is a blurred mark.
+     */
     centre_x = (int32_t)surface->width / 2;
-    unit = ((int32_t)surface->width >= 1024) ? 8 : 5;
+    centre_y = (int32_t)surface->height / 2;
+    scale = ((int32_t)surface->width >= 1024) ? 2 : 1;
 
     GraphicsClear(surface, ground);
-    KernelDrawMark(surface, centre_x, (int32_t)surface->height / 2 - (12 * unit), unit);
-    KernelDrawCentredText(surface, centre_x, (int32_t)surface->height / 2 + (2 * unit),
-                          "OXYS-OS", (unit >= 8) ? 4 : 3, paper, ground);
-    KernelDrawCentredText(surface, centre_x, (int32_t)surface->height / 2 + (9 * unit),
-                          "version " OXYS_VERSION_BANNER, (unit >= 8) ? 2 : 1, grey, ground);
-    KernelDrawCentredText(surface, centre_x, (int32_t)surface->height - (10 * unit),
-                          "starting the desktop", (unit >= 8) ? 2 : 1, grey, ground);
+    KernelDrawMark(surface, centre_x, centre_y - (24 * scale), scale);
+    KernelDrawCentredText(surface, centre_x, centre_y + (36 * scale), "OXYS-OS", 3 * scale, ink,
+                          ground);
+    KernelDrawCentredText(surface, centre_x, centre_y + (64 * scale),
+                          "version " OXYS_VERSION_BANNER, scale, dim, ground);
+    KernelDrawCentredText(surface, centre_x, (int32_t)surface->height - (40 * scale),
+                          "starting the desktop", scale, dim, ground);
 
     CompositorInvalidateAll();
     CompositorPresent();
@@ -249,9 +273,9 @@ static void KernelBootScreen(void)
 int64_t KernelPower(uint64_t action)
 {
     GraphicsSurface surface;
-    const uint32_t ground = FramebufferEncode(43U, 52U, 64U);
-    const uint32_t paper = FramebufferEncode(245U, 243U, 238U);
-    const uint32_t grey = FramebufferEncode(150U, 158U, 170U);
+    const uint32_t ground = FramebufferEncode(OXYS_GROUND_RED, OXYS_GROUND_GREEN, OXYS_GROUND_BLUE);
+    const uint32_t ink = FramebufferEncode(OXYS_INK_RED, OXYS_INK_GREEN, OXYS_INK_BLUE);
+    const uint32_t dim = FramebufferEncode(OXYS_DIM_RED, OXYS_DIM_GREEN, OXYS_DIM_BLUE);
 
     if ((action != SYSCALL_POWER_HALT) && (action != SYSCALL_POWER_REBOOT))
     {
@@ -267,18 +291,19 @@ int64_t KernelPower(uint64_t action)
     if (GraphicsSurfaceFromFramebuffer(&surface))
     {
         const int32_t centre_x = (int32_t)surface.width / 2;
-        const int32_t unit = ((int32_t)surface.width >= 1024) ? 8 : 5;
+        const int32_t centre_y = (int32_t)surface.height / 2;
+        const int32_t scale = ((int32_t)surface.width >= 1024) ? 2 : 1;
 
         GraphicsClear(&surface, ground);
-        KernelDrawMark(&surface, centre_x, (int32_t)surface.height / 2 - (10 * unit), unit);
-        KernelDrawCentredText(&surface, centre_x, (int32_t)surface.height / 2 + (2 * unit),
+        KernelDrawMark(&surface, centre_x, centre_y - (24 * scale), scale);
+        KernelDrawCentredText(&surface, centre_x, centre_y + (36 * scale),
                               (action == SYSCALL_POWER_REBOOT) ? "RESTARTING" : "OXYS-OS",
-                              (unit >= 8) ? 4 : 3, paper, ground);
+                              3 * scale, ink, ground);
         KernelDrawCentredText(
-            &surface, centre_x, (int32_t)surface.height / 2 + (9 * unit),
+            &surface, centre_x, centre_y + (64 * scale),
             (action == SYSCALL_POWER_REBOOT) ? "the machine is restarting"
                                              : "it is now safe to turn off the machine",
-            (unit >= 8) ? 2 : 1, grey, ground);
+            scale, dim, ground);
     }
 
     KernelWriteString(action == SYSCALL_POWER_REBOOT
@@ -1122,13 +1147,13 @@ static bool KernelStartWindowManager(void)
         return false;
     }
 
-    palette.ground = FramebufferEncode(43U, 52U, 64U);
-    palette.paper = FramebufferEncode(245U, 243U, 238U);
-    palette.border = FramebufferEncode(32U, 38U, 46U);
-    palette.title_focused = FramebufferEncode(79U, 134U, 247U);
-    palette.title_unfocused = FramebufferEncode(217U, 214U, 207U);
-    palette.text_focused = FramebufferEncode(255U, 255U, 255U);
-    palette.text_unfocused = FramebufferEncode(74U, 74U, 74U);
+    palette.ground = FramebufferEncode(OXYS_GROUND_RED, OXYS_GROUND_GREEN, OXYS_GROUND_BLUE);
+    palette.paper = FramebufferEncode(OXYS_PAPER_RED, OXYS_PAPER_GREEN, OXYS_PAPER_BLUE);
+    palette.border = FramebufferEncode(OXYS_BORDER_RED, OXYS_BORDER_GREEN, OXYS_BORDER_BLUE);
+    palette.title_focused = FramebufferEncode(OXYS_BAR_RED, OXYS_BAR_GREEN, OXYS_BAR_BLUE);
+    palette.title_unfocused = FramebufferEncode(OXYS_BAR_QUIET_RED, OXYS_BAR_QUIET_GREEN, OXYS_BAR_QUIET_BLUE);
+    palette.text_focused = FramebufferEncode(OXYS_INK_RED, OXYS_INK_GREEN, OXYS_INK_BLUE);
+    palette.text_unfocused = FramebufferEncode(OXYS_DIM_RED, OXYS_DIM_GREEN, OXYS_DIM_BLUE);
 
     return WindowManagerInitialise(screen, &palette, FramebufferEncode);
 }
