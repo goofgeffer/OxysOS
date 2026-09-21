@@ -108,7 +108,7 @@ default of.**
 | File | Read by | What it says |
 | ---- | ------- | ------------ |
 | `/etc/system.conf` | `/bin/init` | `[system]`, a banner it prints; and a `[service]` block for each program `init` starts, with `run`, `name`, `restart` and `needs`. |
-| `/etc/desktop.conf` | `/bin/windows` | `[desktop]`, the scale its windows are drawn at and the accent its contents are drawn with. |
+| `/etc/desktop.conf` | `/bin/windows` | `[desktop]`, the scale its windows are drawn at and the accent its contents are drawn with — `system` for the palette's. |
 
 They are **files in the repository**, at [`../../etc/`](../../etc/), staged onto
 the initial ramdisk by the `Makefile` rather than written by a recipe: the thing
@@ -175,6 +175,24 @@ is worse than one that ignored a setting.
 window manager's, [`WINDOWS.md`](WINDOWS.md), Section 4, and the kernel does not
 read this file — a kernel that parsed text a person may edit would be a kernel
 whose boot depends upon it. The file says so where a person will read it.
+
+`accent = system`, which is what the file ships with since 2026-09-21, is the
+accent [`../../art/palette.h`](../../art/palette.h) carries — the colour the
+boot screen, the window frames and the session already draw, and so the one key
+in this file whose value is decided somewhere else. Three numbers instead still
+override it, and a value that is neither is still reported and the default left
+standing.
+
+**A colour has no spare number to mean "the one the system chose" the way
+`scale = 0` does**: `0, 0, 0` is black, and black is a colour somebody may
+actually want. The sentinel is therefore a word. The file carried the three
+numbers themselves until that date, and by then they were a blue left over from
+the scheme that preceded the yellow one — a file holding its own copy of a
+colour the system has already decided is a file that is right until the day the
+system changes its mind and wrong from then on, with nothing saying so. That is
+Section 6.1's failure reached from the other end: there the file and the program
+disagreed about the name of a key, here they would have disagreed about the
+value of one.
 
 ## 5. The parser, and the seam
 
@@ -251,6 +269,14 @@ window frame's band stayed blue, the frame being the window manager's and not
 the program's, exactly as the file says. The procedure is
 [`../project/TESTING-GRAPHICS.md`](../project/TESTING-GRAPHICS.md), Section 10.
 
+**The sentinel was established the same way, and in both directions**, on
+2026-09-21: with `accent = system` the discs drew the tan of the mark, which is
+the colour [`../../art/palette.h`](../../art/palette.h) carries; with
+`accent = 20, 200, 20` written in its place and the image rebuilt they drew
+green. A sentinel observed only one way is a sentinel that may simply be the
+default standing because the file is not being read at all, and that looks
+identical from the outside.
+
 ## 7. Limitations
 
 1. **The kernel reads none of it.** The window manager's palette, the boot
@@ -258,6 +284,11 @@ the program's, exactly as the file says. The procedure is
    kernel that parsed text a person may edit would be a kernel whose boot
    depends upon that text being right; what belongs in a file is what a program
    reads.
+   Since 2026-09-21 the desktop draws its accent from those same constants,
+   [`../../art/palette.h`](../../art/palette.h) being compiled into the kernel
+   and into the program alike: that is agreement reached at build time rather
+   than by reading, it costs a rebuild to change where a file costs a restart,
+   and it leaves the kernel depending upon no text a person may edit.
 2. **There is no include, no override and no per-user file.** One file per
    subject, read once at start. A program that wants its configuration again
    must be started again, nothing yet asking to be told that a file changed.

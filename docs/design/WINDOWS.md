@@ -189,18 +189,27 @@ that is not a rectangle, and the one thing a person is asked to find. It is draw
 by a primitive and not by an image, and the project owner's icons, when they
 exist, may replace it; nothing here depends upon its being a disc.
 
-**The palette**, supplied by the entry point in the framebuffer's encoding and
-recorded here because a palette is a decision of this phase:
+**The palette**, supplied by the entry point in the framebuffer's encoding.
+**The numbers are not here and are not in the kernel**: they are
+[`../../art/palette.h`](../../art/palette.h), which the boot screen, the session
+and `/bin/windows` read as well, so that the frame a window is drawn in and the
+ground it stands upon are one decision rather than four.
 
-| Use | Colour | Why this one |
-| --- | ------ | ------------ |
-| The ground | `43, 52, 64` — a dark slate | Quiet, and dark enough that a window of warm white reads as the thing upon it. |
-| A window's paper | `245, 243, 238` — a warm white | Not pure white, which glares beside black text at this face's weight. |
-| The border | `32, 38, 46` | Darker than the ground by a little, so that a window upon the ground has an edge and a window upon a window has one too. |
-| The band of the focus holder | `79, 134, 247` — one blue | The one colour reserved for the one thing that must be distinguished at a glance, which is where the keys go. |
-| The band of every other window | `217, 214, 207` — a warm grey | Between the paper and the ground; a window that is not the focus is present and not asserting itself. |
-| Title and disc upon the focus holder | white | Legibility upon the blue. |
-| Title and disc upon the others | `74, 74, 74` | Legibility upon the grey. |
+They were written into this table and into the entry point until 2026-09-21.
+When the project owner asked for a yellow scheme the entry point changed and
+this table did not, and for a day it described a dark slate and a blue band that
+nothing drew — which is the argument for the header stated as a thing that
+actually happened.
+
+| Use | Which colour | Why this one |
+| --- | ------------ | ------------ |
+| The ground | `OXYS_GROUND` — a yellow | What everything stands upon, and the same one the boot screen and the desktop use, so that starting looks like one machine rather than three pictures. |
+| A window's paper | `OXYS_PAPER` — a warm white | Not pure white, which glares beside dark text at this face's weight. |
+| The border | `OXYS_BORDER` — a dark brown | Darker than the ground and than the bar, so that a window has an edge upon either. |
+| The band of the focus holder | `OXYS_BAR` — a lighter, more orange yellow | It differs from the ground in lightness and in hue at once, so neither a person who sees colour poorly nor a screen that renders it badly is left with two identical yellows. |
+| The band of every other window | `OXYS_BAR_QUIET` — the same, paler | "Which window takes the keys" is answered by how strong a colour is rather than by which colour it is. |
+| Title and disc upon the focus holder | `OXYS_INK` — a dark brown | Legibility upon the bar; black upon a saturated yellow is harsher than anything else here. |
+| Title and disc upon the others | `OXYS_DIM` | Present, and not being read. |
 
 **The title is the face of sub-task 6.4 at twice its size**, sixteen pixels
 high in a band of twenty-four. There is one face and no other, and the section's

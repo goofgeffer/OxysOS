@@ -30,6 +30,7 @@
  */
 
 #include <config.h>
+#include <palette.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -45,11 +46,25 @@
 
 static OxysConfig DemoConfig;
 
-/* The palette, in the client's format: the accent the kernel's frame uses for
- * the focus, a warm white paper, a dark ink, and two more for the figure. */
-#define DEMO_PAPER  UINT32_C(0x00F5F3EE)
-#define DEMO_ACCENT UINT32_C(0x004F86F7)
-#define DEMO_INK    UINT32_C(0x00262626)
+/*
+ * The palette, in the client's format. The three that the system has an opinion
+ * about come from art/palette.h — the same header the kernel's boot screen, the
+ * window manager's frames and the session all read — and not from numbers of
+ * this program's own.
+ *
+ * They were its own until 2026-09-21, and carried a blue accent from the scheme
+ * that preceded the yellow one: a program holding its own copy of a colour the
+ * system has already decided is a program that looks like the system until the
+ * day the system changes, and then looks like nothing.
+ *
+ * The coral and the mint stay here, because the palette has no equivalent of
+ * them and should not: they are this demonstration's decoration and mean
+ * nothing elsewhere. A colour belongs in the shared header when two things must
+ * agree about it, and nothing else draws these.
+ */
+#define DEMO_PAPER  OXYS_RGB(OXYS_PAPER_RED, OXYS_PAPER_GREEN, OXYS_PAPER_BLUE)
+#define DEMO_ACCENT OXYS_RGB(OXYS_DISC_RED, OXYS_DISC_GREEN, OXYS_DISC_BLUE)
+#define DEMO_INK    OXYS_RGB(OXYS_INK_RED, OXYS_INK_GREEN, OXYS_INK_BLUE)
 #define DEMO_CORAL  UINT32_C(0x00F26B5B)
 #define DEMO_MINT   UINT32_C(0x003FBF9F)
 
@@ -318,6 +333,26 @@ static void DemoReadConfiguration(void)
     }
 
     accent = OxysConfigValue(&DemoConfig, "desktop", 0U, "accent");
+
+    /*
+     * `system` is the accent art/palette.h carries, and is what the file ships
+     * with: the desktop then draws the colour the boot screen, the frames and
+     * the session already draw, and a change to the palette reaches all four.
+     *
+     * A colour has no spare number to mean this the way `scale = 0` does — 0, 0,
+     * 0 is black and somebody may want black — so the word is the sentinel, and
+     * anything that is not it is still read as three numbers.
+     *
+     * The file carried those three numbers until 2026-09-21, and they were a
+     * blue left from the scheme before the yellow one. A file holding its own
+     * copy of a colour the system has already decided is a file that is right
+     * until the day the system changes and wrong from then on, with nothing
+     * saying so.
+     */
+    if ((accent != NULL) && (strcmp(accent, "system") == 0))
+    {
+        accent = NULL;
+    }
 
     if (accent != NULL)
     {

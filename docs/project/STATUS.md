@@ -731,6 +731,13 @@ public domain so that the kernel — which is LGPL — and the session — which
 MIT — may both draw them, which is what makes the boot screen and the desktop
 the same picture rather than two.
 
+The demonstration `/bin/windows` draws takes its paper, its ink and its accent
+from that same header, and `/etc/desktop.conf` ships `accent = system` to name
+it from a file rather than repeat it. The program held three numbers of its own
+until then, and by that day they were a blue from the scheme before this one —
+which is what a program looks like when the system changes its mind and the
+program does not.
+
 **The same day found and fixed a defect a person could reach from the
 launcher.** Two processes reading the terminal at once stopped the machine:
 each kept the other runnable, neither reached the halt that lets the timer tick

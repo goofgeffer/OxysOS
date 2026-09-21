@@ -12,12 +12,14 @@ the artwork living beside whichever program draws it —
 
 ## Purpose
 
-The mark of Oxys-OS, and the bitmap generated from it.
+The mark of Oxys-OS, the bitmap generated from it, and the colours the system
+draws itself in.
 
 | File | What it is |
 | ---- | ---------- |
 | [`logo.png`](logo.png) | The mark as the project owner drew it: a disc with a figure upon it, on a white ground. It is the source and nothing reads it at build time. |
 | [`logo.h`](logo.h) | The same, cropped to the disc, reduced to ninety-six pixels square, and classified into three states at two bits to a pixel. This is what is compiled in. |
+| [`palette.h`](palette.h) | The colours this system draws itself in: the ground, the two bars, the ink, the dim, the paper, the border and the disc, with `OXYS_RGB` to pack three channels into the pixel a program's window takes. Nothing is generated; these are numbers somebody chose. |
 
 ## Why the artwork is CC0 and lives here
 
@@ -72,3 +74,15 @@ screen, and [`../userland/session/main.c`](../userland/session/main.c), for the
 desktop root. Both draw the same mark at the same size, which is what makes the
 hand-over from the boot screen to the desktop look like one machine starting
 rather than two pictures replacing each other.
+
+`palette.h` is read by those two and by
+[`../userland/windows/main.c`](../userland/windows/main.c), which takes its
+paper, its ink and its accent from here. That program held its own copy of the
+three until 2026-09-21, and the copy was a blue from the scheme that preceded
+the yellow one: it had looked like the system for as long as the system did not
+change, and on the day it changed it looked like nothing. The coral and the mint
+it draws beside them stay its own, because a colour belongs here when two things
+must agree about it and nothing else draws those.
+
+`/etc/desktop.conf` ships `accent = system` to name this header from a file —
+[`../docs/design/CONFIG.md`](../docs/design/CONFIG.md), Section 4.2.
