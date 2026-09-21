@@ -352,12 +352,12 @@ regenerates it and fails if what is here differs.*
 
 | | |
 | --- | --- |
-| Builds recorded | 6 |
-| Verified | 6 passed, 0 not |
+| Builds recorded | 7 |
+| Verified | 7 passed, 0 not |
 | Compilers | gcc |
 | Environments | QEMU, VirtualBox |
 | First | 2026-09-17T01:34Z |
-| Latest | 2026-09-21T23:26Z |
+| Latest | 2026-09-21T23:57Z |
 
 ## The builds
 
@@ -369,5 +369,6 @@ regenerates it and fails if what is here differs.*
 | 4 | 2026-09-21T23:00Z | `3a98088` | gcc 13.2.0 | 3354208 | 10582016 | passed (71 assertions) |  | The shell taken out of the launcher; the first image whose launcher offers only what has a window |
 | 5 | 2026-09-21T23:15Z | `3a1d910` | gcc 13.2.0 | 3354208 | 10582016 | passed (71 assertions) |  | The desktop drawing its accent from art/palette.h, named from /etc/desktop.conf by the word system |
 | 6 | 2026-09-21T23:26Z | `b1f1f65` | gcc 13.2.0 | 3354208 | 10582016 | passed (71 assertions) |  | The demonstration's window drawing the mark of art/logo.h, and the archive check reporting rather than failing where the archive is not |
+| 7 | 2026-09-21T23:57Z | `bb2e6de` | gcc 13.2.0 | 3354936 | 10584064 | passed (71 assertions) |  | The screen handed back to the console before the reason is written, and cleared when it is |
 
 <!-- END GENERATED -->
