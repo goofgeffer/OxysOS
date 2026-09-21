@@ -23,3 +23,4 @@ number	date	commit	dirty	compiler	cc_version	kernel	iso	result	assertions	enviro
 3	2026-09-21T22:51Z	4c51c4f	yes	gcc	13.2.0	3354208	10582016	passed	71		-	The appearance of 2026-09-21 and the terminal livelock fixed with it, from a working tree in progress. The note was written by a mistyped `record --help`, which the script took for a note; it is corrected and the row kept, the image and its verdict being real.
 4	2026-09-21T23:00Z	3a98088	no	gcc	13.2.0	3354208	10582016	passed	71		-	The shell taken out of the launcher; the first image whose launcher offers only what has a window
 5	2026-09-21T23:15Z	3a1d910	no	gcc	13.2.0	3354208	10582016	passed	71		-	The desktop drawing its accent from art/palette.h, named from /etc/desktop.conf by the word system
+6	2026-09-21T23:26Z	b1f1f65	no	gcc	13.2.0	3354208	10582016	passed	71		-	The demonstration's window drawing the mark of art/logo.h, and the archive check reporting rather than failing where the archive is not

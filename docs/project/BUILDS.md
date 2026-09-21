@@ -352,12 +352,12 @@ regenerates it and fails if what is here differs.*
 
 | | |
 | --- | --- |
-| Builds recorded | 5 |
-| Verified | 5 passed, 0 not |
+| Builds recorded | 6 |
+| Verified | 6 passed, 0 not |
 | Compilers | gcc |
 | Environments | QEMU, VirtualBox |
 | First | 2026-09-17T01:34Z |
-| Latest | 2026-09-21T23:15Z |
+| Latest | 2026-09-21T23:26Z |
 
 ## The builds
 
@@ -368,5 +368,6 @@ regenerates it and fails if what is here differs.*
 | 3 | 2026-09-21T22:51Z | `4c51c4f` *(modified)* | gcc 13.2.0 | 3354208 | 10582016 | passed (71 assertions) |  | The appearance of 2026-09-21 and the terminal livelock fixed with it, from a working tree in progress. The note was written by a mistyped `record --help`, which the script took for a note; it is corrected and the row kept, the image and its verdict being real. |
 | 4 | 2026-09-21T23:00Z | `3a98088` | gcc 13.2.0 | 3354208 | 10582016 | passed (71 assertions) |  | The shell taken out of the launcher; the first image whose launcher offers only what has a window |
 | 5 | 2026-09-21T23:15Z | `3a1d910` | gcc 13.2.0 | 3354208 | 10582016 | passed (71 assertions) |  | The desktop drawing its accent from art/palette.h, named from /etc/desktop.conf by the word system |
+| 6 | 2026-09-21T23:26Z | `b1f1f65` | gcc 13.2.0 | 3354208 | 10582016 | passed (71 assertions) |  | The demonstration's window drawing the mark of art/logo.h, and the archive check reporting rather than failing where the archive is not |
 
 <!-- END GENERATED -->
