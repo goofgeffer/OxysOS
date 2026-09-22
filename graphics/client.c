@@ -589,9 +589,63 @@ void WindowClientReleaseProcess(uint64_t process_id)
     }
 }
 
+
+/*
+ * Whether any window of this process has an event waiting, for `poll` of
+ * sub-task 9.6. It takes nothing from any queue: a poller is told that a
+ * `window_event` would return at once, and the event itself is that call's to
+ * deliver.
+ *
+ * A process owning no window has nothing waiting and is not an error here. The
+ * call above refuses a poller that owns none at all, for the same reason
+ * `window_event` with SYSCALL_WINDOW_ANY does: waiting for an event upon no
+ * window is waiting for something nothing will ever send.
+ */
+bool WindowClientHasEvent(uint64_t caller)
+{
+    if (caller == 0U)
+    {
+        return false;
+    }
+
+    for (size_t index = 0U; index < WINDOW_CAPACITY; ++index)
+    {
+        if (WindowExists(index) && (WindowOwner(index) == caller) &&
+            (WindowEventsQueued(index) > 0U))
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/* Whether this process owns any window at all. A poller that owns none is
+ * refused, the wait it asked for having nothing that could end it. */
+bool WindowClientOwnsAny(uint64_t caller)
+{
+    if (caller == 0U)
+    {
+        return false;
+    }
+
+    for (size_t index = 0U; index < WINDOW_CAPACITY; ++index)
+    {
+        if (WindowExists(index) && (WindowOwner(index) == caller))
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
 void WindowClientWakeAll(void)
 {
     (void)SchedulerWake(&WindowClientChannel);
+
+    /* And whoever is polling, who sleeps upon one channel of its own rather
+     * than upon this one; <oxys/proc/sched.h>. */
+    (void)SchedulerWakePollers();
 }
 
 uint64_t WindowClientCallCount(void)

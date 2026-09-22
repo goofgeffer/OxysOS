@@ -448,6 +448,14 @@ int64_t OxysWindowCreate(const SyscallWindowRectangle *geometry, const char *tit
  */
 int64_t OxysWindowSession(void);
 int64_t OxysWindowText(int64_t window, const SyscallWindowText *placement, const char *text);
+
+/*
+ * OxysPoll waits until one of the things named can be read without sleeping and
+ * reports how many can, writing each entry's `ready`. SYSCALL_POLL_WINDOWS in
+ * place of a descriptor names the caller's window events;
+ * SYSCALL_POLL_NO_WAIT asks for the answer now rather than for a wait.
+ */
+int64_t OxysPoll(SyscallPollEntry *entries, uint64_t count, uint64_t options);
 int64_t OxysWindowDestroy(int64_t window);
 int64_t OxysWindowMove(int64_t window, int32_t x, int32_t y);
 int64_t OxysWindowBlit(int64_t window, const SyscallWindowRectangle *area,

@@ -245,10 +245,34 @@ static void ShellJobContinued(ShellJob *job)
     job->reported = true;
 }
 
-/* Gives the terminal back to the shell: what every foreground job's end does. */
+/*
+ * Whether this shell has a terminal, and therefore job control.
+ *
+ * It is false where `tcgroup` refused the shell at start, which since sub-task
+ * 9.6 is what a shell whose standard input is not the terminal is told: the one
+ * in the terminal emulator's window, whose input is a pipe, and one a person
+ * ran with its input redirected from a file.
+ *
+ * **Without it the shell puts nothing in a group of its own.** That is not a
+ * degraded version of job control but the absence of it: with no terminal there
+ * is no foreground group to give a job, so `fg`, `bg` and control-Z have
+ * nothing to act upon, and every child stays in the shell's own group — which
+ * is what lets the emulator interrupt a running command by interrupting that
+ * group. A shell that went on setting groups without a terminal would put its
+ * children where nothing could reach them.
+ *
+ * docs/design/TERMINAL.md, Section 5, and docs/design/SHELL.md, Section 28.
+ */
+static bool ShellHasTerminal;
+
+/* Gives the terminal back to the shell: what every foreground job's end does,
+ * where there is a terminal to give. */
 static void ShellJobReclaimTerminal(void)
 {
-    (void)OxysTerminalGroup(ShellOwnGroup);
+    if (ShellHasTerminal)
+    {
+        (void)OxysTerminalGroup(ShellOwnGroup);
+    }
 }
 
 /* --------------------------------------------------------------- the table */
@@ -256,12 +280,14 @@ static void ShellJobReclaimTerminal(void)
 void ShellJobsInitialise(void)
 {
     ShellOwnGroup = OxysGetProcessGroup(0);
+    ShellHasTerminal = (ShellOwnGroup > 0) && (OxysTerminalGroup(ShellOwnGroup) >= 0);
 
-    if (ShellOwnGroup > 0)
-    {
-        (void)OxysTerminalGroup(ShellOwnGroup);
-    }
-
+    /*
+     * The two the terminal sends to the foreground group are ignored whether or
+     * not this shell has a terminal. In a window they arrive because the
+     * emulator sends them to the group the shell leads, and a shell that took
+     * the default action would end at the first control-C typed at its prompt.
+     */
     (void)signal(SIGINT, SIG_IGN);
     (void)signal(SIGTSTP, SIG_IGN);
 }
@@ -303,11 +329,14 @@ void ShellJobPrepareChild(const ShellJob *job, bool background)
      * otherwise inherit the indifference. */
     const int64_t group = (job->group != 0) ? job->group : 0;
 
-    (void)OxysSetProcessGroup(0, group);
-
-    if (!background)
+    if (ShellHasTerminal)
     {
-        (void)OxysTerminalGroup((group != 0) ? group : OxysGetProcessId());
+        (void)OxysSetProcessGroup(0, group);
+
+        if (!background)
+        {
+            (void)OxysTerminalGroup((group != 0) ? group : OxysGetProcessId());
+        }
     }
 
     (void)signal(SIGINT, SIG_DFL);
@@ -321,11 +350,14 @@ void ShellJobAddMember(ShellJob *job, int64_t pid)
         job->group = pid;
     }
 
-    (void)OxysSetProcessGroup(pid, job->group);
-
-    if (!job->background)
+    if (ShellHasTerminal)
     {
-        (void)OxysTerminalGroup(job->group);
+        (void)OxysSetProcessGroup(pid, job->group);
+
+        if (!job->background)
+        {
+            (void)OxysTerminalGroup(job->group);
+        }
     }
 
     if (job->member_count < SHELL_COMMAND_MAXIMUM)
@@ -348,6 +380,22 @@ void ShellJobAnnounce(const ShellJob *job)
  * the table for `fg` and `bg`; an ended one is released. Returns the status
  * the shell reports for the pipeline.
  */
+/*
+ * Whom a wait for this job's members asks for.
+ *
+ * With a terminal each job leads a group of its own and the wait names that
+ * group. Without one — the shell in a window, whose standard input is a pipe —
+ * nothing was put in a group at all, so the members are in the shell's own and
+ * a wait naming the job's leader would find no child of that group and report
+ * that there is none to collect. It did, in the first terminal window this
+ * system ever opened: every command ran, printed, and was followed by `sh: a
+ * member of the job could not be collected: No child to collect.`
+ */
+static int64_t ShellJobWaitTarget(const ShellJob *job)
+{
+    return ShellHasTerminal ? -job->group : -ShellOwnGroup;
+}
+
 int ShellJobWaitForeground(ShellJob *job)
 {
     int result;
@@ -355,7 +403,8 @@ int ShellJobWaitForeground(ShellJob *job)
     while (job->state == SHELL_JOB_RUNNING)
     {
         int64_t status = 0;
-        const int64_t ended = OxysWaitFor(-job->group, &status, SYSCALL_WAIT_UNTRACED);
+        const int64_t ended = OxysWaitFor(ShellJobWaitTarget(job), &status,
+                                          SYSCALL_WAIT_UNTRACED);
         size_t member;
 
         if (ended < 0)
@@ -371,9 +420,20 @@ int ShellJobWaitForeground(ShellJob *job)
             break;
         }
 
-        if ((ended > 0) && (ShellJobByPid(ended, &member) == job))
+        /*
+         * Recorded against whichever job the child belongs to and not against
+         * this one alone. Where the wait names the shell's whole group it may
+         * collect a background job's member, and a status dropped on the floor
+         * is a job that never ends.
+         */
+        if (ended > 0)
         {
-            ShellJobRecord(job, member, status);
+            ShellJob *const owner = ShellJobByPid(ended, &member);
+
+            if (owner != NULL)
+            {
+                ShellJobRecord(owner, member, status);
+            }
         }
     }
 
@@ -502,7 +562,20 @@ static ShellJob *ShellJobNamed(const char *operand)
 
 int ShellJobForeground(const char *operand)
 {
-    ShellJob *const job = ShellJobNamed(operand);
+    ShellJob *job;
+
+    /* `fg` asks for a job to be given the terminal, and a shell with no
+     * terminal has none to give. It is said plainly rather than attempted and
+     * silently doing nothing: a person typing `fg` in a window and seeing
+     * nothing happen would have no way to learn why. */
+    if (!ShellHasTerminal)
+    {
+        (void)fprintf(stderr, "sh: this shell has no terminal, so there is no job control.\n");
+
+        return 1;
+    }
+
+    job = ShellJobNamed(operand);
 
     if (job == NULL)
     {
@@ -524,7 +597,18 @@ int ShellJobForeground(const char *operand)
 
 int ShellJobBackground(const char *operand)
 {
-    ShellJob *const job = ShellJobNamed(operand);
+    ShellJob *job;
+
+    /* As `fg`: a stopped job is one control-Z made, and without a terminal
+     * nothing can stop a job in the first place. */
+    if (!ShellHasTerminal)
+    {
+        (void)fprintf(stderr, "sh: this shell has no terminal, so there is no job control.\n");
+
+        return 1;
+    }
+
+    job = ShellJobNamed(operand);
 
     if (job == NULL)
     {
@@ -635,6 +719,22 @@ int ShellJobKill(int argc, char **argv)
 
             if (job == NULL)
             {
+                status = 1;
+                continue;
+            }
+
+            /*
+             * A job is named by its group, and without job control there are
+             * no groups: every child is in the shell's own, so `-job->group`
+             * would name a group nothing is in. `kill %1` is therefore refused
+             * here rather than sending a signal to nobody; `kill <pid>` still
+             * works, the pid being a process and not a group.
+             */
+            if (!ShellHasTerminal)
+            {
+                (void)fprintf(stderr,
+                              "sh: this shell has no terminal, so there is no job control; "
+                              "name the process rather than the job.\n");
                 status = 1;
                 continue;
             }

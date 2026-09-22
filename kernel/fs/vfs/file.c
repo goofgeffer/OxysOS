@@ -294,6 +294,39 @@ bool VfsClose(int descriptor)
     return true;
 }
 
+
+/*
+ * Whether a read of this descriptor would return without sleeping, for `poll`
+ * of sub-task 9.6. It changes nothing and refuses nothing: a descriptor that
+ * is not open is simply not ready, a poller being told about its own mistake
+ * by the call above rather than by this one.
+ *
+ * Everything that is not a pipe is ready. A read of a file upon a volume
+ * returns bytes or an end of file without sleeping — the block layer's waits
+ * are the device's and not a program's — and answering "not ready" for one
+ * would make a poller sleep for a readiness nothing would ever announce.
+ */
+bool VfsDescriptorIsReadable(int descriptor)
+{
+    const VfsFile *const file = VfsFileOf(descriptor);
+
+    if (file == NULL)
+    {
+        return false;
+    }
+
+    if ((file->flags & VFS_OPEN_READ) == 0U)
+    {
+        return false;
+    }
+
+    if (file->pipe != NULL)
+    {
+        return VfsPipeIsReadable(file);
+    }
+
+    return true;
+}
 bool VfsRead(int descriptor, void *buffer, uint64_t length, uint64_t *read)
 {
     VfsFile *const file = VfsFileOf(descriptor);

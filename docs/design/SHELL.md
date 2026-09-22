@@ -1476,6 +1476,39 @@ is the conversion that writes a count; the self-test's count of `help`'s lines
 caught it, the file `help | wc -l` wrote holding something other than the
 number.
 
+
+### 28.5 A shell with no terminal, of sub-task 9.6
+
+Everything above requires a terminal, and since sub-task 9.6 the shell may not
+have one: `/bin/terminal` gives it a pair of pipes, which is what lets an
+unmodified shell run in a window.
+
+The shell learns this from the kernel rather than by guessing. `tcgroup` upon a
+process whose standard input is not the terminal is `ENOTTY`, so
+`ShellJobsInitialise`'s claim is refused and `ShellHasTerminal` is false from
+that moment. What follows is **the absence of job control and not a degraded
+version of it**:
+
+- nothing is put into a group of its own — every child stays in the shell's
+  group, which is what lets the emulator interrupt a running command by
+  interrupting that group;
+- `fg`, `bg` and `kill %n` say `this shell has no terminal, so there is no job
+  control` rather than appearing to work and doing nothing;
+- the foreground wait names the shell's own group rather than the job's leader,
+  and records a collected child against whichever job holds it.
+
+**That last was found by looking.** With the wait still naming `-job->group` —
+a group nothing had been put into — every command in the first terminal window
+this system opened ran, printed its output, and was followed by `sh: a member of
+the job could not be collected: No child to collect.` Nothing was wrong with the
+wait and nothing was wrong with the fork; the shell was asking after a group that
+the same condition had stopped it from making.
+
+The two dispositions stay ignored whether or not there is a terminal. In a
+window control-C arrives because the emulator sends it to the group the shell
+leads, and a shell that took the default action would end at the first one typed
+at its prompt. [`TERMINAL.md`](TERMINAL.md), Section 5.
+
 ## 29. Verification of sub-task 8.7, and its limitations
 
 `signal-check` and `KernelVerifySignals`, [`PROCESS.md`](PROCESS.md), Section

@@ -752,6 +752,20 @@ for each line. The screen is handed back first now, and cleared: the reason
 stands at the top of an empty screen with a prompt or an echo loop under it.
 [`../design/INIT.md`](../design/INIT.md), Section 5.3.
 
+**And since sub-task 9.6 a person may type at this system's own screen.**
+`/bin/terminal` is a window with an unmodified `/bin/sh` beneath it upon a pair
+of pipes: the shell edits its line, echoes and prompts exactly as it does upon
+the serial line, and does not know it is in a window. What decides where a
+character stands is a grid in the C library, asserted by the kernel's self-test
+without a window at all. Two things were added for it. **`poll`** — a program
+with a window and a pipe to wait upon had no way to wait upon both, and sleeping
+in either alone is deafness to the other. And a **refusal**: `tcgroup` from a
+process whose standard input is not the terminal is now `ENOTTY`, which is what
+stops a shell in a window taking the terminal from the shell at the keyboard.
+That shell therefore has no job control — no `fg`, no `bg`, no control-Z — and
+control-C is a signal the emulator sends to the group the shell leads.
+[`../design/TERMINAL.md`](../design/TERMINAL.md).
+
 **The same day found and fixed a defect a person could reach from the
 launcher.** Two processes reading the terminal at once stopped the machine:
 each kept the other runnable, neither reached the halt that lets the timer tick
@@ -801,6 +815,7 @@ The physical machine is one machine — the HP Laptop 14-dq0052dx specified in
 | 9.3 `init`, the shutdown and the boot screen | Yes: the boot screen captured, the desktop started by `init`, the desktop killed and started again, `shutdown` halting and `shutdown -r` restarting | **Yes**, the desktop started by `init` at 640 by 480 | **Yes — 9.3**, seventy assertions and the prompt reached | — | **Not yet run** |
 | 9.4 The configuration and `/etc` | Yes: the desktop's accent changed in `/etc/desktop.conf` and seen to change, and `init` seen to give up on a service whose program is missing | **Yes**, seventy-one assertions | **Yes — 9.4**, seventy-one assertions and the prompt reached | — | **Not yet run** |
 | 9.5 The session | Yes: the root and panel captured, the launcher opened and a program started from it, and a window dragged upward seen to pass under the panel | **Yes**, at 640 by 480 — and it is where the panel's height was found to fall below the least extent a window may have | **Yes — 9.5**, seventy-one assertions and the prompt reached | — | **Not yet run** |
+| 9.6 The terminal emulator | Yes: the launcher opened, `Terminal` chosen, and `ls` and `echo hi` typed at the window with their output drawn in it | **Yes**, at 640 by 480, the boot reaching the desktop | **Yes — 9.6**, seventy-two assertions and the prompt reached | — | **Not yet run** |
 
 **The rows marked "— 7.2" were all established by two boots of one image**,
 because a boot runs every self-test in the corpus and a clean one is therefore
@@ -1005,7 +1020,7 @@ functional. [`TESTING.md`](TESTING.md), Section 3.
 There is no test harness and there will be none before Phase 7, there being no
 userland to run one in. The kernel therefore asserts its own properties at boot,
 in the order the subsystems are initialised, and `make verify` fails if any of
-them reports a failure. Seventy-one assertions presently report passed or sound.
+them reports a failure. Seventy-two assertions presently report passed or sound.
 
 Those tests are in [`../../kernel/test/`](../../kernel/test/), one file per
 subsystem. Each subsystem's design document carries a table pairing every

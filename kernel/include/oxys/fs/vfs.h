@@ -515,6 +515,15 @@ bool VfsHold(int descriptor);
  * and not by the return value.
  */
 bool VfsRead(int descriptor, void *buffer, uint64_t length, uint64_t *read);
+
+/*
+ * Whether a read of this descriptor would return without sleeping, which is
+ * what `poll` of sub-task 9.6 asks. A descriptor that is not open, or not open
+ * for reading, is not ready rather than an error: the call above judges the
+ * caller's arguments, and this judges the file. Everything that is not a pipe
+ * is ready, a read of it not being a thing that sleeps.
+ */
+bool VfsDescriptorIsReadable(int descriptor);
 bool VfsWrite(int descriptor, const void *buffer, uint64_t length, uint64_t *written);
 
 /*

@@ -279,6 +279,40 @@
 #define SYSCALL_PROCINFO  28U
 
 /*
+ * The one call of sub-task 9.6. `poll` waits until one of the things a program
+ * is watching is ready to be read — IEEE Std 1003.1-2017's `poll()`, narrowed
+ * to readability, which is the whole of what has a caller.
+ *
+ * It exists because the terminal emulator is the first program in this system
+ * that must wait upon **two** things at once: the keys its window receives,
+ * and the bytes the shell beneath it writes. Either alone has a call that
+ * sleeps — `window_event` with SYSCALL_WINDOW_WAIT, and `read` of a pipe — and
+ * a program that slept in one would be deaf to the other. Waiting in neither
+ * means spinning, and a window that spins is a machine that never halts, which
+ * docs/design/WINDOWS.md, Section 10, spent a sub-task avoiding.
+ *
+ * `entries` is an array of `count` SyscallPollEntry, at most
+ * SYSCALL_POLL_MAXIMUM. Each names a descriptor, or SYSCALL_POLL_WINDOWS for
+ * the caller's window events, and each has its `ready` written: 1 where it can
+ * be read without sleeping, 0 where it cannot. The call returns the number of
+ * entries that are ready, which is at least 1 unless it was told not to wait.
+ *
+ * `options` may hold SYSCALL_POLL_NO_WAIT, upon which a call that would sleep
+ * returns 0 instead — the shape `waitpid`'s SYSCALL_WAIT_NO_HANG has, and for
+ * the same reason: a program that wants to know rather than to wait should not
+ * have to name a timeout this system has no clock to keep.
+ *
+ * **A descriptor at its end is ready, not unready.** A pipe whose last writer
+ * has closed reads zero and does so at once, and a poll that called that "not
+ * ready" would sleep for ever upon a thing that will never say anything again.
+ * That is how a program learns the shell it started has ended.
+ *
+ * A file that is not a pipe is always ready: a read of it does not sleep.
+ * Nothing yet polls one, and refusing it would be a rule with no reason.
+ */
+#define SYSCALL_POLL      39U
+
+/*
  * The window calls of sub-task 9.2: the client protocol by which a program
  * creates, draws upon and receives events upon a window of the window manager.
  *
@@ -369,7 +403,7 @@
  */
 #define SYSCALL_WINDOW_SESSION 37U
 #define SYSCALL_WINDOW_TEXT    38U
-#define SYSCALL_COUNT          39U
+#define SYSCALL_COUNT          40U
 
 /* The layer a window stands in, given to window_create. A root and a panel may
  * be made by the session alone and carry no frame; every other program's
@@ -458,6 +492,29 @@ typedef struct SyscallWindowEvent
     uint8_t key_extended;  /* 1 where the scancode was prefixed by 0xE0. */
     uint8_t reserved;
 } SyscallWindowEvent;
+
+/*
+ * What `poll` watches, and what it reports of each.
+ *
+ * `descriptor` is one of the caller's, or SYSCALL_POLL_WINDOWS, which is not a
+ * descriptor and is the one thing in this system a program waits upon that is
+ * not one. Making a window's events reachable through a descriptor is what
+ * would remove the exception; it would mean a kind of open file that is a
+ * queue, and nothing but this asks for it yet.
+ *
+ * `ready` is written by the call and its value before is ignored, so that an
+ * array polled twice needs no clearing between.
+ */
+#define SYSCALL_POLL_WINDOWS INT64_C(-1)
+#define SYSCALL_POLL_MAXIMUM 8U
+#define SYSCALL_POLL_NO_WAIT UINT64_C(0x1)
+
+typedef struct SyscallPollEntry
+{
+    int64_t descriptor;
+    uint32_t ready;
+    uint32_t reserved;
+} SyscallPollEntry;
 
 /* The flag of window_event: sleep until an event arrives. */
 #define SYSCALL_WINDOW_WAIT UINT64_C(0x1)
@@ -612,6 +669,13 @@ typedef struct SyscallProcessInformation
 
 /* The one of sub-task 9.3: a call that only `init` may make, made by another. */
 #define SYSCALL_EPERM          INT64_C(-24) /* The caller is not permitted this. */
+
+/* The one of sub-task 9.6: a call that requires a terminal, made by a process
+ * whose standard input is not one. `tcgroup` is the only such call, and the
+ * refusal is what keeps a shell in a window from taking the terminal away from
+ * the shell upon the serial line — which it did, and which stopped the machine
+ * before 2026-09-21. IEEE Std 1003.1-2017 gives ENOTTY the same meaning. */
+#define SYSCALL_ENOTTY         INT64_C(-25) /* The caller's standard input is not the terminal. */
 
 /*
  * How a program opens a file: six of the flags the filesystem layer offers,

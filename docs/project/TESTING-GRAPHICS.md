@@ -705,3 +705,41 @@ with what it would catch. What only looking establishes is the desktop.
    panel, the launcher and the mark must all still appear: it is the screen upon
    which the panel was once refused for being shorter than a window may be, and
    the failure showed as a bare ground and a line in the log from `init`.
+
+## 12. Verification of the terminal emulator
+
+What the self-test cannot reach is the window a person types at. The grid, the
+key translation and `poll` are asserted without one —
+[`../design/TERMINAL.md`](../design/TERMINAL.md), Section 6 — and what is left
+is the whole of what only looking establishes.
+
+1. **A shell appears.** Boot the default entry, press the panel's button and
+   choose `Terminal`. A window titled `Terminal` opens with the shell's prompt
+   at its top left and a block cursor after it. A window with no prompt in it is
+   a shell that did not start; the reason is upon the serial line.
+2. **It runs what is typed.** Type `ls` and press Return: the entries of the
+   root are drawn in the window, one to a line, and a new prompt follows them.
+   Then `echo hi`, which must draw `hi` and nothing else. **Watch for a
+   diagnostic after the output**: `sh: a member of the job could not be
+   collected` is the shell asking after a process group it was not allowed to
+   make, and it is what the foreground wait was corrected for.
+3. **The line editor works.** Type some characters and backspace over them: each
+   disappears as it would upon the serial line, including one that had wrapped
+   onto the next row — the backspace crossing to the row above is the property,
+   and it is the one the kernel's console had to be corrected for once already.
+   Press the up arrow: the previous line comes back.
+4. **It scrolls.** Type enough lines to fill the window: the text moves up by one
+   row at a time and the prompt stays at the foot. A screen that appears to
+   freeze at the last row after the first scroll is a grid that marked one row
+   as changed where it should have marked every row.
+5. **Control-C interrupts.** Run `cat` with no argument, so that it reads, and
+   press control-C: the prompt comes back. The shell itself must survive it —
+   a window that closes at control-C is a shell that took the default action
+   instead of ignoring it.
+6. **The window closes with the shell, and the shell with the window.** Type
+   `exit`: the window goes. Open another and press the close control instead:
+   the window goes and the shell beneath it is ended rather than left behind,
+   which `ps` at the kernel's shell upon the serial line will say.
+7. **Upon a small screen.** VirtualBox's 640 by 480 draws at scale one, with a
+   grid of its own size: the window must still fit within the screen with its
+   frame, and the text must still be legible at a single scale.

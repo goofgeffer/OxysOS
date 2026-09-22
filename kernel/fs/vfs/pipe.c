@@ -198,6 +198,34 @@ bool VfsPipeCreate(int *read_end, int *write_end)
 
 /* ------------------------------------------------------------ the transfer */
 
+
+/*
+ * Whether a read of this end would return without sleeping, for `poll` of
+ * sub-task 9.6.
+ *
+ * **A pipe at its end is ready.** With no writer left a read returns zero at
+ * once, and calling that "not ready" would leave a poller asleep upon a thing
+ * that will never say anything again — which is exactly how a program learns
+ * the program it started has ended. The end of a file is an answer and not an
+ * absence of one.
+ *
+ * The end that writes is never ready to read, whatever it holds: a caller
+ * polling it has made a mistake that would otherwise become a read refused
+ * much later, for a reason having nothing to do with the poll.
+ */
+bool VfsPipeIsReadable(const VfsFile *file)
+{
+    const VfsPipe *pipe;
+
+    if ((file == NULL) || (file->pipe == NULL) || ((file->flags & VFS_OPEN_READ) == 0U))
+    {
+        return false;
+    }
+
+    pipe = file->pipe;
+
+    return (VfsPipeHeld(pipe) > 0U) || (pipe->writers == 0U);
+}
 bool VfsPipeRead(VfsFile *file, void *buffer, uint64_t length, uint64_t *read)
 {
     VfsPipe *const pipe = file->pipe;
@@ -335,8 +363,11 @@ bool VfsPipeWrite(VfsFile *file, const void *buffer, uint64_t length, uint64_t *
 
             PerCpuPopInterruptState();
 
-            /* A reader asleep for bytes is told there are some. */
+            /* A reader asleep for bytes is told there are some, and so is
+             * anybody polling: a poller sleeps upon one channel of its own and
+             * not upon this pipe, <oxys/proc/sched.h>. */
             (void)SchedulerWake(pipe);
+            (void)SchedulerWakePollers();
 
             continue;
         }
@@ -405,6 +436,10 @@ void VfsPipeReleaseEnd(VfsFile *file)
      * only meet once the last reader has.
      */
     (void)SchedulerWake(pipe);
+
+    /* And whoever is polling, for whom the going of the last writer is the end
+     * of the file and is a thing to be told about rather than to wait through. */
+    (void)SchedulerWakePollers();
 
     if ((pipe->readers == 0U) && (pipe->writers == 0U))
     {

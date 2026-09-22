@@ -11,7 +11,8 @@
  *          WindowClientBlit, WindowClientEvent, WindowClientScreen,
  *          WindowClientSession, WindowClientText,
  *          WindowClientReleaseProcess,
- *          WindowClientWakeAll, WindowClientReport.
+ *          WindowClientWakeAll, WindowClientHasEvent, WindowClientOwnsAny,
+ *          WindowClientReport.
  * References:
  *   - kernel/abi/oxys/syscall_abi.h: the five calls, their arguments and their
  *     results, which are the whole of what a program is entitled to know.
@@ -68,6 +69,12 @@ void WindowClientReleaseProcess(uint64_t process_id);
  * are few.
  */
 void WindowClientWakeAll(void);
+
+/* Whether any window of this process has an event waiting, and whether it owns
+ * any window at all: what `poll` of sub-task 9.6 asks before it sleeps. Neither
+ * takes anything from a queue. */
+bool WindowClientHasEvent(uint64_t caller);
+bool WindowClientOwnsAny(uint64_t caller);
 
 /* Accounting, for the report and for the self-test. */
 uint64_t WindowClientCallCount(void);

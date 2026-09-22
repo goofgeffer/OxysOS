@@ -770,6 +770,31 @@ void SchedulerSleep(const void *channel)
     PerCpuPopInterruptState();
 }
 
+
+/*
+ * The poll channel of sub-task 9.6. Its address is the channel and its value
+ * is never read: one object, so that a program waiting upon several things
+ * waits upon one address, and every source that can make one of those things
+ * ready wakes this as well as its own. sched.h records what that costs.
+ */
+static uint8_t SchedulerPollChannel;
+
+bool SchedulerSleepAsPoller(void)
+{
+    if (!SchedulerCanSleep())
+    {
+        return false;
+    }
+
+    SchedulerSleep(&SchedulerPollChannel);
+
+    return true;
+}
+
+size_t SchedulerWakePollers(void)
+{
+    return SchedulerWake(&SchedulerPollChannel);
+}
 size_t SchedulerWake(const void *channel)
 {
     size_t woken = 0U;

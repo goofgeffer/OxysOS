@@ -2330,6 +2330,13 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
      * reads are the ones `init` has just been started without. */
     KernelVerifyConfig();
 
+    /* Sub-task 9.6: the terminal emulator's grid and keys, and the `poll` it
+     * waits in. It runs after the configuration's test for the reason that one
+     * runs after `init`'s — poll-check forks, waits and sleeps, and a test that
+     * does those is placed where it cannot move the tick under the shell's
+     * job-control session; docs/design/INIT.md, Section 6.2. */
+    KernelVerifyTerm();
+
     /* Sub-task 8.6: the pipes the sessions above made, and the scheduler the
      * pipelines ran upon, which the shell is the first thing to sleep in. */
     VfsPipeReport();

@@ -328,16 +328,11 @@ sliding **under** the panel rather than over it.
 7. **Nothing is drawn while a program is starting.** A person who chooses an
    entry sees the launcher close and then, a moment later, a window; there is no
    sign in between that anything is happening.
-8. **The launcher offers no shell**, and the reason is not that it was
-   forgotten. A shell has no window: it reads the terminal the kernel assembles
-   from the keyboard and the serial line, and upon the default entry that
-   terminal belongs to the shell the kernel itself started. One launched here
-   claims the terminal in its own start-up, before it prints anything, so what a
-   person sees is nothing at all while the shell they were typing at is stopped
-   beneath them. Until 2026-09-21 it did worse and stopped the machine —
-   [`SHELL.md`](SHELL.md), Section 2.6 — and that is fixed; taking the terminal
-   is not. Sub-task 9.6 gives the shell an emulator of its own, and the entry
-   belongs here then. The argument is written into
-   [`../../etc/session.conf`](../../etc/session.conf) as well, where somebody
-   would otherwise add it back, rather than only here where they would not be
-   reading at the time.
+8. ~~**The launcher offers no shell.**~~ **Closed at sub-task 9.6**: it offers
+   `/bin/terminal`, which gives the shell a window of its own and a pair of
+   pipes where its terminal would be, and the kernel now refuses `tcgroup` to a
+   process whose standard input is not the terminal — so a shell started
+   anywhere can no longer take the terminal from the shell at the keyboard.
+   What that shell does not have is job control, which
+   [`TERMINAL.md`](TERMINAL.md), Section 7, limitation 1, owes to a
+   pseudo-terminal this system does not yet have.

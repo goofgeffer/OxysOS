@@ -51,6 +51,7 @@
 #include <oxys/proc/process.h>
 #include <oxys/fs/vfs.h>
 #include <oxys/fs/pipe.h>
+#include <oxys/proc/sched.h>
 #include <oxys/proc/signal.h>
 #include <oxys/arch/syscall/sigframe.h>
 #include <oxys/terminal/terminal.h>
@@ -1125,12 +1126,177 @@ static int64_t SyscallDoSetProcessGroup(uint64_t pid, uint64_t group)
  * members read the terminal without being stopped. */
 static int64_t SyscallDoTerminalGroup(uint64_t group)
 {
+    const Process *const process = ProcessCurrent();
+
+    /*
+     * **A program with no terminal may not name the terminal's foreground
+     * group**, since sub-task 9.6. The terminal is what descriptor 0 reaches
+     * when nothing else is placed there, as SyscallDoRead has it, so a process
+     * with a file at 0 — a pipe from the terminal emulator, a file the shell
+     * redirected — is not at the terminal and this is ENOTTY. IEEE Std
+     * 1003.1-2017 gives `tcsetpgrp` the same refusal for the same reason.
+     *
+     * It is a refusal and not a courtesy. Without it, a shell started anywhere
+     * takes the terminal from the shell a person is typing at, because
+     * `ShellJobsInitialise` claims it before the first prompt and cannot know
+     * it is not the one at the keyboard. That is the trap `/etc/session.conf`
+     * described and kept the launcher clear of, and the livelock of
+     * docs/design/SHELL.md, Section 2.6, was reached through it. The shell in
+     * a window is now refused here and runs without job control, which is
+     * docs/design/TERMINAL.md, Section 5.
+     */
+    if ((process == NULL) ||
+        (ProcessDescriptorFile(process, SYSCALL_DESCRIPTOR_INPUT) != VFS_NO_DESCRIPTOR))
+    {
+        return SYSCALL_ENOTTY;
+    }
+
     if (group != 0U)
     {
         TerminalSetForegroundGroup(group);
     }
 
     return (int64_t)TerminalForegroundGroup();
+}
+
+/* ------------------------------------------------ the call of sub-task 9.6 */
+
+/*
+ * `poll`: waits until one of the things the caller is watching can be read.
+ *
+ * The array is copied in whole before anything is judged and copied out whole
+ * afterwards, as every structure crossing this boundary is: a call that wrote
+ * its answers into the caller's memory as it went would leave half an answer
+ * behind when it refused the second half.
+ *
+ * The loop is the discipline <oxys/proc/sched.h> sets out — test, then sleep
+ * within one masked section — with the test being a scan of the whole array
+ * rather than one condition. A poller woken by a source it was not watching
+ * finds nothing and sleeps again; that is the price of one channel, and
+ * SchedulerSleepAsPoller's comment states it.
+ */
+static int64_t SyscallDoPoll(uint64_t entries_address, uint64_t count, uint64_t options)
+{
+    Process *const process = ProcessCurrent();
+    SyscallPollEntry entries[SYSCALL_POLL_MAXIMUM];
+    const uint64_t bytes = count * (uint64_t)sizeof entries[0];
+    uint8_t *const destination = (uint8_t *)(uintptr_t)entries_address;
+    const uint8_t *const source = (const uint8_t *)(uintptr_t)entries_address;
+    uint8_t *const copy = (uint8_t *)entries;
+    bool watches_windows = false;
+
+    if (process == NULL)
+    {
+        return SYSCALL_EINVAL;
+    }
+
+    if ((count == 0U) || (count > SYSCALL_POLL_MAXIMUM))
+    {
+        return SYSCALL_EINVAL;
+    }
+
+    if ((options & ~SYSCALL_POLL_NO_WAIT) != 0U)
+    {
+        return SYSCALL_EINVAL;
+    }
+
+    if (!SyscallUserRangeIsWritable(entries_address, bytes))
+    {
+        ++SyscallFaults;
+
+        return SYSCALL_EFAULT;
+    }
+
+    for (uint64_t index = 0U; index < bytes; ++index)
+    {
+        copy[index] = source[index];
+    }
+
+    /*
+     * Every entry is judged before anything sleeps, so that a poller which
+     * named a descriptor it does not hold is told so rather than left waiting
+     * upon the others. A descriptor that is closed while the poll sleeps is a
+     * different thing and is not this: it simply stops being ready.
+     */
+    for (uint64_t index = 0U; index < count; ++index)
+    {
+        if (entries[index].descriptor == SYSCALL_POLL_WINDOWS)
+        {
+            if (!WindowClientOwnsAny(process->id))
+            {
+                return SYSCALL_EBADF;
+            }
+
+            watches_windows = true;
+
+            continue;
+        }
+
+        if ((entries[index].descriptor < 0) ||
+            (ProcessDescriptorFile(process, entries[index].descriptor) == VFS_NO_DESCRIPTOR))
+        {
+            return SYSCALL_EBADF;
+        }
+    }
+
+    (void)watches_windows;
+
+    for (;;)
+    {
+        uint64_t ready = 0U;
+
+        PerCpuPushInterruptState();
+
+        for (uint64_t index = 0U; index < count; ++index)
+        {
+            bool now;
+
+            if (entries[index].descriptor == SYSCALL_POLL_WINDOWS)
+            {
+                now = WindowClientHasEvent(process->id);
+            }
+            else
+            {
+                now = VfsDescriptorIsReadable(
+                    ProcessDescriptorFile(process, entries[index].descriptor));
+            }
+
+            entries[index].ready = now ? 1U : 0U;
+            entries[index].reserved = 0U;
+
+            if (now)
+            {
+                ++ready;
+            }
+        }
+
+        if ((ready > 0U) || ((options & SYSCALL_POLL_NO_WAIT) != 0U))
+        {
+            PerCpuPopInterruptState();
+
+            for (uint64_t index = 0U; index < bytes; ++index)
+            {
+                destination[index] = copy[index];
+            }
+
+            return (int64_t)ready;
+        }
+
+        if (!SchedulerSleepAsPoller())
+        {
+            /* The kernel's own flow of control, which nothing can wake. */
+            PerCpuPopInterruptState();
+
+            return SYSCALL_ENOTSUP;
+        }
+
+        PerCpuPopInterruptState();
+
+        if (SignalIsPending(process))
+        {
+            return SYSCALL_EINTR;
+        }
+    }
 }
 
 /* ------------------------------------------ the two calls of 2026-09-16 */
@@ -2113,7 +2279,8 @@ static const SyscallEntryDescriptor SyscallTable[SYSCALL_COUNT] = {
     { "power", 1U },
     { "pause", 0U },
     { "window_session", 0U },
-    { "window_text", 3U }
+    { "window_text", 3U },
+    { "poll", 3U }
 };
 
 bool SyscallNumberIsValid(uint64_t number)
@@ -2343,6 +2510,10 @@ void SyscallDispatch(SyscallFrame *frame)
 
     case SYSCALL_WINDOW_TEXT:
         frame->rax = (uint64_t)WindowClientText(frame->rdi, frame->rsi, frame->rdx);
+        break;
+
+    case SYSCALL_POLL:
+        frame->rax = (uint64_t)SyscallDoPoll(frame->rdi, frame->rsi, frame->rdx);
         break;
 
     default:

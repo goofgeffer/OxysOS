@@ -111,7 +111,7 @@ static bool TerminalKeyboardDetached;
  * byte is the one ECMA-48 assigns to the movement: A for CUU, B for CUD, C for
  * CUF, D for CUB. Home, End and Delete are xterm's, as the header records.
  */
-static const char *TerminalSequenceFor(uint8_t scancode)
+const char *TerminalSequenceForScancode(uint8_t scancode)
 {
     switch (scancode)
     {
@@ -213,7 +213,7 @@ static size_t TerminalTranslate(const KeyEvent *event)
 
     if (event->extended)
     {
-        const char *const sequence = TerminalSequenceFor(event->scancode);
+        const char *const sequence = TerminalSequenceForScancode(event->scancode);
         size_t appended = 0U;
 
         if (sequence == NULL)

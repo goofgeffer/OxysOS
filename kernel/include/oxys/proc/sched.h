@@ -12,6 +12,7 @@
  *          SchedulerInitialise, SchedulerPrepareProcessor, SchedulerEnterIdle,
  *          SchedulerAdmit, SchedulerYield, SchedulerBlockCurrent,
  *          SchedulerCanSleep, SchedulerSleep, SchedulerWake, SchedulerWakeThread,
+ *          SchedulerSleepAsPoller, SchedulerWakePollers,
  *          SchedulerExitCurrent, SchedulerWithdraw,
  *          SchedulerDetachThisProcessor,
  *          SchedulerSetAffinity,
@@ -219,6 +220,25 @@ void SchedulerBlockCurrent(void);
 bool SchedulerCanSleep(void);
 void SchedulerSleep(const void *channel);
 size_t SchedulerWake(const void *channel);
+
+/*
+ * The poll channel of sub-task 9.6, and why it is one channel and not many.
+ *
+ * `poll` waits upon several things at once and SchedulerSleep waits upon one
+ * address, so a poller sleeps here and every source that can make a thing
+ * ready to read wakes here as well as upon its own channel: a pipe written, a
+ * pipe's last writer closed, a window event routed. A poller woken by a source
+ * it was not watching finds nothing ready and sleeps again, which costs it one
+ * scan of its own array.
+ *
+ * The alternative is a queue of waiters upon each object, which is what a
+ * system with many pollers needs and which this one would be carrying for a
+ * single program. The cost of the choice is stated rather than hidden: with n
+ * pollers and a busy pipe, every write wakes n threads and n-1 of them go back
+ * to sleep.
+ */
+bool SchedulerSleepAsPoller(void);
+size_t SchedulerWakePollers(void);
 
 /*
  * Wakes one thread from whatever channel it sleeps upon, of sub-task 8.7: what

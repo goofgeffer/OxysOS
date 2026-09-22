@@ -9,7 +9,7 @@
  * Key definitions: errno, OxysErrnoAddress, ENOSYS, EFAULT, EINVAL, EBADF,
  *          ECHILD, ENOENT, ENOMEM, EEXIST, ENOTDIR, EISDIR, ENOTEMPTY, EROFS,
  *          ENAMETOOLONG, ELOOP, ENOSPC, EMFILE, EBUSY, EXDEV, ENOTSUP, EIO,
- *          EPIPE, EINTR, ESRCH, EPERM,
+ *          EPIPE, EINTR, ESRCH, EPERM, ENOTTY,
  *          EDOM, EILSEQ, ERANGE,
  *          OXYS_ERRNO_SYSCALL_LIMIT.
  * References:
@@ -143,6 +143,9 @@ int *OxysErrnoAddress(void);
 /* The one of sub-task 9.3. */
 #define EPERM        24 /* The caller is not permitted this: `power` from a process that is not init. */
 
+/* The one of sub-task 9.6. */
+#define ENOTTY       25 /* The caller's standard input is not the terminal: `tcgroup` from a program a terminal emulator started. */
+
 /* The three ISO/IEC 9899:2011, Section 7.5, paragraph 2, requires, above the
  * reserved range for the reason given at the head of this file. Nothing in this
  * system sets any of them yet: there is no mathematical library to report a
@@ -187,10 +190,11 @@ _Static_assert(EPIPE == -SYSCALL_EPIPE, "EPIPE does not name SYSCALL_EPIPE.");
 _Static_assert(EINTR == -SYSCALL_EINTR, "EINTR does not name SYSCALL_EINTR.");
 _Static_assert(ESRCH == -SYSCALL_ESRCH, "ESRCH does not name SYSCALL_ESRCH.");
 _Static_assert(EPERM == -SYSCALL_EPERM, "EPERM does not name SYSCALL_EPERM.");
+_Static_assert(ENOTTY == -SYSCALL_ENOTTY, "ENOTTY does not name SYSCALL_ENOTTY.");
 
 /* And that the reservation still holds. A failure result more negative than the
  * limit would be translated to ENOSYS rather than to its own name, silently. */
-_Static_assert(-SYSCALL_EPERM <= OXYS_ERRNO_SYSCALL_LIMIT,
+_Static_assert(-SYSCALL_ENOTTY <= OXYS_ERRNO_SYSCALL_LIMIT,
                "A failure result lies beyond the range reserved for one.");
 _Static_assert(EDOM > OXYS_ERRNO_SYSCALL_LIMIT,
                "The numbers ISO C requires overlap the kernel's failure results.");

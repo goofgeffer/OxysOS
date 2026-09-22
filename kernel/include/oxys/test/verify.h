@@ -20,7 +20,7 @@
  *          KernelVerifyHeap, KernelVerifyStdio, KernelVerifyStartup,
  *          KernelVerifyUtilities, KernelVerifyLine, KernelVerifyShell,
  *          KernelVerifyTerminal, KernelVerifyWindows, KernelVerifyCircle,
- *          KernelVerifyClients, KernelVerifyInit, KernelVerifyConfig,
+ *          KernelVerifyClients, KernelVerifyInit, KernelVerifyConfig, KernelVerifyTerm,
  *          KernelVerifyPit, KernelVerifyKeyboard, KernelVerifySerial,
  *          KernelVerifyVga, KernelVerifyPci, KernelVerifyAta, KernelVerifyBlock,
  *          KernelVerifyBuffer, KernelVerifyExt2, KernelVerifyVfs,
@@ -157,6 +157,13 @@ void KernelVerifyInit(void);
  * It runs after the root is mounted, as every test that opens a file does.
  */
 void KernelVerifyConfig(void);
+
+/*
+ * Sub-task 9.6: the character grid and the key translation of the terminal
+ * emulator, driven in memory, and then poll-check at privilege level 3 for the
+ * call the emulator waits in.
+ */
+void KernelVerifyTerm(void);
 
 /* Phase 6, sub-task 6.1: the descriptors, the task state segment, the interrupt
  * stack table and the three registers that configure SYSCALL. */

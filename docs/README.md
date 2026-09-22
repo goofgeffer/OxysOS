@@ -67,6 +67,7 @@ complementary, and neither replaces the other.
 | [`INIT.md`](design/INIT.md) | `init`, the first user process of sub-task 9.3: what it supervises, the orphans the kernel gives it, the stopping of the machine and the one call reserved to it, and the boot screen and power screen the kernel draws for itself. |
 | [`CONFIG.md`](design/CONFIG.md) | The system configuration format of sub-task 9.4, the `/etc` hierarchy, and the parser in the C library that reads it: what `init` takes its list of services from and the desktop its appearance. |
 | [`SESSION.md`](design/SESSION.md) | The session of sub-task 9.5: the stacking layers that put a root beneath every window and a panel above them, the claim that decides who may draw either, the text a program may draw with the system's face, and the desktop, panel and launcher a person meets. |
+| [`TERMINAL.md`](design/TERMINAL.md) | The terminal emulator of sub-task 9.6: a window with a shell beneath it, the grid that decides what stands where, the `poll` a program waits in when it must wait upon two things, and why the shell in a window has no job control. |
 
 ### [`devices/`](devices/)
 

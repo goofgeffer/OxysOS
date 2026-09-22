@@ -168,6 +168,11 @@ VfsFile *VfsFileOf(int descriptor);
  * pipe.c; each is reached from the function of the same name in file.c when
  * the open file is an end of a pipe. */
 bool VfsPipeRead(VfsFile *file, void *buffer, uint64_t length, uint64_t *read);
+
+/* Whether a read of this end would return without sleeping, for `poll` of
+ * sub-task 9.6. An end whose last writer has closed is readable: the zero a
+ * read returns there is an answer. */
+bool VfsPipeIsReadable(const VfsFile *file);
 bool VfsPipeWrite(VfsFile *file, const void *buffer, uint64_t length, uint64_t *written);
 void VfsPipeReleaseEnd(VfsFile *file);
 

@@ -15,6 +15,7 @@
  *          OxysLink, OxysProcessInformation, OxysWindowCreate,
  *          OxysWindowDestroy, OxysWindowMove, OxysWindowBlit, OxysWindowEvent,
  *          OxysWindowScreen, OxysPower, OxysPause, OxysWindowSession, OxysWindowText,
+ *          OxysPoll,
  *          OxysExit, OxysWait, OxysBrk, OxysSbrk.
  * References:
  *   - kernel/abi/oxys/syscall_abi.h: the call numbers and what each call means.
@@ -424,4 +425,15 @@ int64_t OxysWindowText(int64_t window, const SyscallWindowText *placement, const
     return OxysSyscallResult(OxysSyscallInvoke3(SYSCALL_WINDOW_TEXT, (uint64_t)window,
                                                 (uint64_t)(uintptr_t)placement,
                                                 (uint64_t)(uintptr_t)text));
+}
+
+/*
+ * `poll` of sub-task 9.6. The array is the caller's and is written by the
+ * kernel, which is why it is not const: every entry's `ready` comes back
+ * whether or not the call waited.
+ */
+int64_t OxysPoll(SyscallPollEntry *entries, uint64_t count, uint64_t options)
+{
+    return OxysSyscallResult(OxysSyscallInvoke3(SYSCALL_POLL, (uint64_t)(uintptr_t)entries,
+                                                count, options));
 }

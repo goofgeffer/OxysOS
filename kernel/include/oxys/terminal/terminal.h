@@ -11,7 +11,7 @@
  *          TerminalPoll, TerminalRead, TerminalWaitForInput, TerminalHasInput,
  *          TerminalFlush, TerminalBytesQueued, TerminalBytesDelivered,
  *          TerminalBytesDiscarded, TerminalKeysTranslated,
- *          TerminalAttachKeyboard, TerminalReport.
+ *          TerminalAttachKeyboard, TerminalSequenceForScancode, TerminalReport.
  * References:
  *   - ECMA-48, 5th edition (1991), Section 5.4: the structure of a control
  *     sequence, CSI followed by parameter bytes and a final byte; and Sections
@@ -182,6 +182,15 @@ void TerminalAttachKeyboard(bool attached);
 bool TerminalKeyboardIsAttached(void);
 
 /* Emits a summary upon both output devices. */
+/*
+ * The control sequence an extended scancode is translated into, or null where
+ * it is translated into none. Exposed since sub-task 9.6 so that the self-test
+ * can compare this table with the C library's copy of it — the copy a program
+ * under MIT needs, not being able to link this — rather than compare each
+ * against a third table of its own, which would drift with neither.
+ */
+const char *TerminalSequenceForScancode(uint8_t scancode);
+
 void TerminalReport(void);
 
 #endif /* OXYS_TERMINAL_TERMINAL_H */

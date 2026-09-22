@@ -357,10 +357,13 @@ would otherwise have been called a flake.
    still has written into it is the fallback it uses where that file cannot be
    read at all, which is deliberate and is recorded there.
 2. **The shell is still the kernel's**, started in a loop the entry point holds
-   upon the serial line, and is not `init`'s to supervise. Sub-task 9.5's
-   launcher could start one, and deliberately does not offer it: a shell started
-   that way has no terminal to read, there being no emulator until 9.6; that is
-   when a shell becomes a thing `init` or the session starts in earnest.
+   upon the serial line, and is not `init`'s to supervise. Sub-task 9.6 gives
+   the launcher `/bin/terminal`, so a person may now have a shell upon the
+   screen without the kernel's — but that one is the emulator's child and not
+   `init`'s either. What is owed is the kernel's loop becoming a service in
+   `/etc/system.conf` like any other, which needs the shell to have a terminal
+   that is not the kernel's one: [`TERMINAL.md`](TERMINAL.md), Section 7,
+   limitation 1.
 3. ~~**Supervision is a restart and nothing more.**~~ **Bounded at sub-task
    9.4**: a service that ends five times in a row is given up on and `init` says
    so. It is a count and not a rate, a rate needing a clock a program can read
