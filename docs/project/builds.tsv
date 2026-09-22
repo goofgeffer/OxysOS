@@ -25,3 +25,4 @@ number	date	commit	dirty	compiler	cc_version	kernel	iso	result	assertions	enviro
 5	2026-09-21T23:15Z	3a1d910	no	gcc	13.2.0	3354208	10582016	passed	71		-	The desktop drawing its accent from art/palette.h, named from /etc/desktop.conf by the word system
 6	2026-09-21T23:26Z	b1f1f65	no	gcc	13.2.0	3354208	10582016	passed	71		-	The demonstration's window drawing the mark of art/logo.h, and the archive check reporting rather than failing where the archive is not
 7	2026-09-21T23:57Z	bb2e6de	no	gcc	13.2.0	3354936	10584064	passed	71		-	The screen handed back to the console before the reason is written, and cleared when it is
+8	2026-09-22T22:17Z	182a724	no	gcc	13.2.0	3438440	10665984	passed	72		-	Sub-task 9.6: the terminal emulator, the poll it waits in, and the tcgroup refusal
