@@ -450,6 +450,16 @@ int64_t OxysWindowSession(void);
 int64_t OxysWindowText(int64_t window, const SyscallWindowText *placement, const char *text);
 
 /*
+ * The two of 2026-09-23. OxysWindowState minimises, restores, or makes a window
+ * full or not — SYSCALL_WINDOW_STATE_MINIMISE, _RESTORE, _FULL, _NOT_FULL —
+ * for its owner, or for the session upon any ordinary window. OxysWindowList,
+ * the session's alone, fills up to `capacity` entries and returns how many
+ * ordinary windows there are, which may be more.
+ */
+int64_t OxysWindowState(int64_t window, uint64_t action);
+int64_t OxysWindowList(SyscallWindowEntry *entries, uint64_t capacity);
+
+/*
  * OxysPoll waits until one of the things named can be read without sleeping and
  * reports how many can, writing each entry's `ready`. SYSCALL_POLL_WINDOWS in
  * place of a descriptor names the caller's window events;

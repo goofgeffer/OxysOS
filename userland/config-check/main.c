@@ -183,6 +183,26 @@ int main(void)
                       "a launcher entry in /etc/session.conf has no run");
     }
 
+    /*
+     * The background, of 2026-09-23, names a file that is there. A path typed
+     * wrongly costs the desktop its picture and says so only upon a standard
+     * error nobody watches; the picture itself is judged by the kernel's
+     * self-test of the image, which reads the same file.
+     */
+    {
+        const char *const background = OxysConfigValue(&Config, "session", 0U, "background");
+        const int64_t descriptor =
+            (background != NULL) ? OxysOpen(background, SYSCALL_OPEN_READ, 0U) : -1;
+
+        ConfigRequire(descriptor >= 0, "/etc/session.conf names no background, or one that is "
+                                       "not upon the ramdisk");
+
+        if (descriptor >= 0)
+        {
+            (void)OxysClose((int)descriptor);
+        }
+    }
+
     (void)printf("config-check: %d assertion(s) failed.\n", ConfigFailures);
 
     return ConfigFailures;

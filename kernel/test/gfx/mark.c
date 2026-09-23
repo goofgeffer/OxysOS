@@ -112,6 +112,37 @@ static void VerifyMarkSampling(void)
                                   (4U * LOGO_LEVELS)),
                       "the mark reduced by half was not the average of the pixels beneath");
 
+    /*
+     * Enlarged by two, of 2026-09-23, the pixels of a row are not in equal
+     * pairs: somewhere along the middle row, which crosses the edge of the disc
+     * and the figure, two screen pixels over one pixel of the table differ.
+     * Enlargement by repetition makes every pair equal, which is the staircase
+     * of the enlargement's size upon a window made full; and no pixel of the
+     * enlargement has more ink than coverage.
+     */
+    {
+        bool interpolated = false;
+        bool within = true;
+
+        for (int column = 0; column < (2 * LOGO_EXTENT); column += 2)
+        {
+            unsigned first_covered;
+            unsigned first_inked;
+            unsigned second_covered;
+            unsigned second_inked;
+
+            LogoSample(column, LOGO_EXTENT, 2 * LOGO_EXTENT, &first_covered, &first_inked);
+            LogoSample(column + 1, LOGO_EXTENT, 2 * LOGO_EXTENT, &second_covered, &second_inked);
+
+            interpolated = interpolated || (first_covered != second_covered) ||
+                           (first_inked != second_inked);
+            within = within && (first_inked <= first_covered) && (second_inked <= second_covered);
+        }
+
+        VerifyMarkRequire(interpolated, "the mark enlarged by two repeated its pixels in pairs");
+        VerifyMarkRequire(within, "the mark enlarged has a pixel with more ink than coverage");
+    }
+
     LogoSample(LOGO_EXTENT, 0, LOGO_EXTENT, &covered, &inked);
     VerifyMarkRequire((covered == 0U) && (inked == 0U), "a position outside the mark was covered");
 }
@@ -148,7 +179,8 @@ void KernelVerifyMark(void)
 
     KernelWriteString(VerifyMarkSucceeded
                           ? "Mark self-test passed: no pixel inked beyond its coverage, a disc "
-                            "with a figure and a smooth edge upon nothing, sampled one to one and "
-                            "averaged when halved, and mixed exactly at either end.\n"
+                            "with a figure and a smooth edge upon nothing, sampled one to one, "
+                            "averaged when halved and interpolated when doubled, and mixed exactly "
+                            "at either end.\n"
                           : "Mark self-test FAILED.\n");
 }

@@ -250,6 +250,34 @@ static void VerifyTermGrid(void)
     VerifyTermRequire(TermCursorColumn(&VerifyTermScreen) == 9U,
                       "a tab did not advance to the next multiple of eight");
     VerifyTermRequire(VerifyTermRowIs(0U, "ab      c"), "a tab did not leave spaces behind it");
+
+    /*
+     * --- The resize of 2026-09-23, which a window made full asks for. ---
+     *
+     * Three rows of text with the cursor upon the third, cut to two rows: the
+     * top row goes and the cursor's row stays, because the line a person is
+     * typing is the line that must survive. Cut to three columns as well, and
+     * then grown again: what was cut is gone and the new cells are spaces —
+     * a grown row that showed the tail it had before would show text nobody
+     * wrote in that place.
+     */
+    VerifyTermRequire(TermInitialise(&VerifyTermScreen, 8U, 3U), "the grid could not be reset");
+    VerifyTermPut("one\r\ntwo\r\nthree");
+    VerifyTermRequire(TermResize(&VerifyTermScreen, 3U, 2U) &&
+                          VerifyTermRowIs(0U, "two") && VerifyTermRowIs(1U, "thr") &&
+                          (TermCursorRow(&VerifyTermScreen) == 1U) &&
+                          (TermCursorColumn(&VerifyTermScreen) == 2U),
+                      "a grid made smaller did not keep the cursor's row, or kept the wrong "
+                      "text");
+    VerifyTermRequire(TermResize(&VerifyTermScreen, 6U, 4U) && VerifyTermRowIs(0U, "two") &&
+                          VerifyTermRowIs(1U, "thr") && VerifyTermRowIs(3U, "") &&
+                          (TermColumns(&VerifyTermScreen) == 6U) &&
+                          (TermRows(&VerifyTermScreen) == 4U) &&
+                          TermRowChanged(&VerifyTermScreen, 3U),
+                      "a grid made larger did not pad with spaces, or did not owe its rows");
+    VerifyTermRequire(!TermResize(&VerifyTermScreen, TERM_COLUMNS_MAXIMUM + 1U, 4U) &&
+                          (TermColumns(&VerifyTermScreen) == 6U),
+                      "a resize beyond the bound was accepted, or changed the grid");
 }
 
 /* ------------------------------------------------------------------ the keys */

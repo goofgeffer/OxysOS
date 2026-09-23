@@ -8,7 +8,9 @@ kernel's half and the part that could not be expressed by an order alone;
 Section 3 is the session itself — the root, the panel, the launcher; Section 4
 is the text a program may draw and why the face is the kernel's; Section 5 is
 the ownership of the display; Section 6 is the verification; Section 7 the
-limitations; Section 8 is the icons, and the resolution of both pictures.
+limitations; Section 8 is the icons, and the resolution of both pictures;
+Section 9 is the background, and Section 10 the list of windows upon the panel,
+both of 2026-09-23.
 
 **Authority**: `PROJECT_GUIDELINES.md`, Sections 2, 3 and 6.
 
@@ -170,6 +172,12 @@ It replaced a ring of coloured squares the session drew for itself — squares
 because a program has no circle, the primitives being the kernel's. That
 limitation is gone with it: the mark is now a bitmap and needs no curve.
 
+**Since 2026-09-23 a background, where one is named, is the whole of the
+root**, and the mark and the wordmark are not drawn upon it, Section 9. The
+boot screen still carries the mark; the hand-over is then a change of picture,
+which is what naming a background asks for. Without one, or with one that
+cannot be read, the root is what this section describes.
+
 ### 3.3 The panel and the launcher
 
 A bar across the top, with the launcher's name at its left, and a line beneath
@@ -319,12 +327,14 @@ sliding **under** the panel rather than over it.
 
 ## 7. Limitations
 
-1. **The panel shows a launcher and nothing else.** No clock, no list of what is
-   running, no indicator: a clock is sub-task 9.7's, and a task list needs a
-   window to be put away, which is limitation 2.
-2. **No minimise, no resize, no hide.** A window is the size it was made and is
-   always shown. The manager grew layers here and nothing else;
-   [`WINDOWS.md`](WINDOWS.md), Section 9, limitation 3, keeps the rest.
+1. **The panel shows a launcher and a list of windows, and nothing else.** No
+   clock and no indicator: a clock is sub-task 9.7's. ~~No list of what is
+   running~~ — **closed on 2026-09-23**, Section 10: once a window could be put
+   away, the list became the only way to bring it back.
+2. ~~**No minimise**~~ **and no resize by hand**. Minimise and full screen
+   arrived on 2026-09-23, [`WINDOWS.md`](WINDOWS.md), Section 13; a frame edge
+   a person drags is still [`WINDOWS.md`](WINDOWS.md), Section 13.7,
+   limitation 1.
 3. **The launcher is read once, at start.** A `/etc/session.conf` edited upon
    the running machine takes effect when the session is started again, which
    `init` does when it ends. Nothing yet asks to be told that a file changed —
@@ -472,10 +482,10 @@ reverted.
 
 ### 8.2 Limitations of the pictures
 
-1. **Enlargement repeats.** Above the scale of two the mark and the icons are
-   enlarged by repeating pixels, and a step shows again. No screen this system
-   has run upon is drawn at a larger scale; a table of higher resolution, or a
-   filter, is the remedy when one is.
+1. **An icon enlarged repeats its pixels.** Above the scale of two, and in no
+   case seen yet, a step shows. ~~The mark likewise~~ — **since 2026-09-23 the
+   mark is interpolated** when drawn larger than its table, `LogoInterpolate`,
+   which a window made full asks for; the icons have no such need yet.
 2. **One icon per program, at one extent.** A file carries one picture, so a
    slot of another size is filled by reducing or repeating it rather than by a
    picture drawn for that size.
@@ -483,3 +493,136 @@ reverted.
    that draws the mark upon a colour other than the one it passes as the
    ground gets a fringe of the one it passed. Nothing can check that but
    looking, Section 3.2.
+
+## 9. The background, of 2026-09-23
+
+The project owner drew a background for the desktop. It ships as a file upon
+the system's own filesystem — `/share/backgrounds/background.oxim` of the
+ramdisk — and `/etc/session.conf` names it:
+
+```
+[session]
+background = /share/backgrounds/background.oxim
+```
+
+The session reads it once at start and covers the root with it. The source
+and the one command that converts it are in
+[`../../art/README.md`](../../art/README.md).
+
+**A file, for the icons' reason**, Section 8: a person changes the desktop's
+picture by editing a line, not by rebuilding the system.
+
+**A format of its own**, [`../../libc/include/image.h`](../../libc/include/image.h),
+beside the icon's. The drawing is 2048 by 1448 — three million pixels, twelve
+megabytes held the icon's way, six times the ramdisk. It is flat colour, and
+its pixels are twelve thousand runs of one colour: seventy kilobytes as runs.
+Folding runs into the icon's format would give every icon a decoder it does not
+need, and every reader of icons a length it could no longer check by
+multiplying. **A run never crosses the end of a row**, so each row is judged
+alone: a run allowed to cross would let one miscounted run shift every row
+after it sideways, which draws — a picture sheared from that row down.
+
+**Kept at the resolution it was drawn at, and scaled by the session.** There is
+no one screen: 1280 by 800 under QEMU, 1024 by 768 under Bochs, 640 by 480 under
+VirtualBox. A picture reduced for one would be enlarged for the others. The
+scaler, `OxysImageScalerRow`, produces one row of the screen at a time, reading
+forward through the runs, averaging every pixel of the drawing beneath a pixel
+of the screen; it holds one row of the drawing and three sums per column of the
+screen, never the drawing decoded.
+
+**Covering, not stretching and not letterboxing.** The drawing is scaled by the
+larger of the two ratios, so it reaches all four edges, and is cut equally from
+the two sides that overhang. Stretched, the drawing's disc would be an ellipse
+upon every screen of another shape; letterboxed, there would be bars of a colour
+the drawing never had. What covering costs is the edges: at 4 by 3 the sides
+are cut, at 16 by 10 the top and the foot.
+
+**A background that cannot be read costs the background and not the desktop.**
+The fault is said upon the standard error and the root is the ground and the
+mark, which is what a session that names none draws.
+
+The root is composed in bands of as many rows as sixty-five thousand pixels
+hold and blitted a band at a time: at 1280 by 800, sixteen blits.
+
+### 9.1 Verification of the background
+
+| Property asserted | The silent failure it would catch |
+| ----------------- | --------------------------------- |
+| An image composed to the format is read with its extent; one byte short, one byte over, an unknown version, a reserved byte set, a run of nothing, a pixel with a transparency and an extent of zero are each refused, and a refusal empties the image | A picture drawn from whatever followed the file in memory, or from the last image read |
+| A run crossing the end of its row is refused, though the file is exactly two rows long | Six pixels decoded into a row of four — past the scaler's buffer upon an image as wide as the bound. **Observed** as a damage, Section 9.2 |
+| Reduced, a pixel is the average of the pixels beneath | A scaler that samples one pixel and loses every thin line of the drawing |
+| A wide image covering a square is its middle, rows in order | A stretched background, or one letterboxed, or upside down |
+| Enlarged, the pixel beneath is repeated; a screen of no width, or wider than the bound, is refused | A scaler reading beyond the image, or writing beyond its sums |
+| The shipped file is upon the ramdisk, parses, is the drawing's extent, scales to every row of a 1280 by 800 screen, and is more than one colour | A background converted wrongly, or empty, which parses and draws a flat field |
+| `/etc/session.conf` names a background that opens | A path typed wrongly, which costs the picture and says so only upon a standard error |
+
+The first six are [`../../kernel/test/libc/image.c`](../../kernel/test/libc/image.c);
+the last is `config-check`.
+
+### 9.2 The damage applied, and what the tests said
+
+The parser's refusal of a run longer than what remains of its row was removed,
+in the build that damaged the window manager, [`WINDOWS.md`](WINDOWS.md),
+Section 13.6. The run said `a run crossing the end of its row was accepted` and
+`Image self-test FAILED.`; it was reverted.
+
+**The assertion was first written too weakly, and this is recorded.** Its first
+composition was runs of three, three and two in rows of four. Without the check
+a parser still refuses that file — the second row wants two more pixels and the
+file has ended — so the assertion would have passed with the check gone. It was
+changed, before the damage was applied, to three, three and four, which a
+parser without the check accepts outright.
+
+### 9.3 Limitations of the background
+
+1. **One picture, chosen at start.** Changing it needs the session started
+   again; nothing yet asks to be told that a file changed, limitation 3.
+2. **No transparency and no palette.** A photograph, which has few runs, would
+   be nearly four bytes a pixel and would not fit the ramdisk at this
+   resolution; a compressed format is the remedy the day one is wanted.
+3. **Enlargement repeats.** Upon a screen larger than the drawing, the scaler
+   repeats its pixels. No screen here is.
+4. **The edges are cut**, Section 9; nothing lets a person choose where.
+
+## 10. The list of windows, of 2026-09-23
+
+Once a window could be minimised — [`WINDOWS.md`](WINDOWS.md), Section 13 — it
+needed a way back: a hidden window is neither drawn nor hit, so nothing upon the
+screen could be pressed to show it. That way is **a button per ordinary window
+upon the panel**, after the launcher's name, in the order of the windows'
+numbers.
+
+**Every window is listed, not only the minimised ones.** A list that changed its
+length whenever a window was hidden would be a list a person could not learn
+the places of.
+
+**One button does both.** Pressed, it restores its window — shows it, raises it
+and gives it the focus — unless that window already holds the focus, when it
+minimises it. The window holding the focus is drawn upon the quiet colour the
+open launcher is, and a minimised one with its title dimmed; a title is cut to
+the button. A list longer than the panel is cut at the screen's edge.
+
+**The list is asked for, and redrawn, when the root is told.** The kernel puts
+`WINDOW_EVENT_WINDOWS` into the root's queue whenever the windows, their states
+or the focus among them change; the session then asks with `window_list`, which
+is its alone, and draws the panel. There is no polling: a desktop that asked
+every second would redraw the panel every second for a list that seldom changes.
+
+**This needed the panel to stop taking the focus**, [`WINDOWS.md`](WINDOWS.md),
+Section 13.3: a press upon the list that took the focus would lose, before the
+session read the press, the one thing the button must know — whether its window
+held the focus.
+
+It is not asserted by a self-test of its own: it is drawing and one choice,
+and the calls beneath it are asserted in [`WINDOWS.md`](WINDOWS.md),
+Section 13.5. What only looking establishes is
+[`../project/TESTING-GRAPHICS.md`](../project/TESTING-GRAPHICS.md), Section 11.
+
+### 10.1 Limitations of the list
+
+1. **Sixteen entries**, the window manager's capacity, and as many buttons as
+   the panel's width holds.
+2. **No icon upon a button.** The list does not know which program owns a
+   window, and so not which icon is its.
+3. **A title is cut, not scrolled or shortened with care**; two windows whose
+   titles begin alike look alike.

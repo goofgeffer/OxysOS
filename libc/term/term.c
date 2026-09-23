@@ -5,7 +5,7 @@
  * Purpose: The character grid of sub-task 9.6 — what a terminal emulator's
  *          display holds and where its cursor stands, given the bytes a program
  *          writes to it. It draws nothing and reads nothing.
- * Key functions: TermInitialise, TermWriteByte, TermWrite, TermRow,
+ * Key functions: TermInitialise, TermResize, TermWriteByte, TermWrite, TermRow,
  *          TermRowChanged, TermRowDrawn, TermScroll.
  * References:
  *   - libc/include/term.h: what this is, and why it is here rather than in
@@ -102,6 +102,51 @@ bool TermInitialise(TermScreen *screen, uint32_t columns, uint32_t rows)
     for (uint32_t row = 0U; row < rows; ++row)
     {
         TermClearRow(screen, row);
+    }
+
+    return true;
+}
+
+bool TermResize(TermScreen *screen, uint32_t columns, uint32_t rows)
+{
+    uint32_t dropped;
+
+    if ((screen == NULL) || (columns == 0U) || (rows == 0U) ||
+        (columns > TERM_COLUMNS_MAXIMUM) || (rows > TERM_ROWS_MAXIMUM))
+    {
+        return false;
+    }
+
+    /* The rows above the cursor's that no longer fit, taken from the top. */
+    dropped = ((screen->cursor_row + 1U) > rows) ? ((screen->cursor_row + 1U) - rows) : 0U;
+
+    /*
+     * In place, top to bottom: row `row` is written from row `row + dropped`,
+     * which is never above it, so every row is read before it is overwritten.
+     * A cell beyond the old grid in either direction is a space.
+     */
+    for (uint32_t row = 0U; row < rows; ++row)
+    {
+        const uint32_t source = row + dropped;
+
+        for (uint32_t column = 0U; column < columns; ++column)
+        {
+            screen->cell[row][column] = ((source < screen->rows) && (column < screen->columns))
+                                            ? screen->cell[source][column]
+                                            : ' ';
+        }
+
+        screen->cell[row][columns] = '\0';
+        screen->changed[row] = true;
+    }
+
+    screen->columns = columns;
+    screen->rows = rows;
+    screen->cursor_row -= dropped;
+
+    if (screen->cursor_column >= columns)
+    {
+        screen->cursor_column = columns - 1U;
     }
 
     return true;

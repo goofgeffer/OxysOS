@@ -15,7 +15,8 @@ is for; Section 6 is the verification; Section 7 is the demonstration a person
 operates and the menu that reaches it. **Sections 10 to 12 are sub-task 9.2**:
 the protocol by which a program is a client of all of the above, what the first
 real client decided about the interface Section 2 had judged, the verification
-of it, and its limitations.
+of it, and its limitations. **Section 13 is minimise and full screen**, of
+2026-09-23.
 
 **Authority**: `PROJECT_GUIDELINES.md`, Sections 2, 3 and 6.
 
@@ -431,8 +432,9 @@ of its two control bytes — and the boot rerun alone was clean;
    pixels a tick, in an interrupt handler. Three windows do not approach that;
    a desktop might, and the manager will then need a thread and the lock
    limitation 1 names.
-3. **No resize and no hide** — ~~and no minimum stacking layer~~. A window is
-   still the size it was made and is always shown. **The layers arrived at
+3. **No resize by hand** — ~~no hide~~, ~~no minimum stacking layer~~. A window is
+   the size it was made or, since 2026-09-23, the work area — **minimise and
+   full screen arrived then**, Section 13. **The layers arrived at
    sub-task 9.5**: a root beneath every window and a panel above them all,
    each window stacking among its own layer and never outside it;
    [`SESSION.md`](SESSION.md), Section 2, and why an order alone could not
@@ -448,7 +450,8 @@ of its two control bytes — and the boot rerun alone was clean;
 7. **The focus follows a press and nothing else.** No key moves it between
    windows, and no window can ask for it. Sub-task 9.5 added one rule and no
    more: **a root never takes it**, and the focus passed on when a window is
-   destroyed skips it — [`SESSION.md`](SESSION.md), Section 2.3. A key that
+   destroyed skips it — [`SESSION.md`](SESSION.md), Section 2.3; and since
+   2026-09-23 **a panel never takes it** either, Section 13.3. A key that
    moved it, and a window that could ask, are still nobody's.
 8. **Rounded corners and asymmetry are wanted and absent**, Section 4.
 9. **The screen's mode is still the boot loader's.** VirtualBox gives 640 by
@@ -620,7 +623,8 @@ established nothing.
 2. **The copy converts pixel by pixel.** `FramebufferEncode` per pixel, so that
    there is one encoder; a row-wide copy for the common case of a screen whose
    format is the client's is the day it is measured to matter.
-3. **No resize, no title change, no hide.** A window is the size it was made
+3. **No resize by hand, no title change** — ~~no hide~~, closed on 2026-09-23 by
+   `window_state`, Section 13.4. A window is the size it was made or the work area
    and named what it was named. Section 9, limitation 3, for the manager's half.
 4. ~~**No face in userland.**~~ **Answered at sub-task 9.5, the other way
    about**: `window_text` draws a run of text into a window with the system's
@@ -633,3 +637,140 @@ established nothing.
 6. **One process, one thread.** A second thread of one process reading the same
    window's queue would race the first upon it; there are no such threads, and
    the lock that the queue would then need is limitation 1 of Section 9.
+
+## 13. Minimise and full screen, of 2026-09-23
+
+At the project owner's request a window may be **minimised** — hidden until it
+is chosen again — and made **full**, filling the screen below the panel. Both
+are the manager's, in [`../../graphics/window.c`](../../graphics/window.c);
+the session's list that brings a minimised window back is
+[`SESSION.md`](SESSION.md), Section 10.
+
+### 13.1 The two controls
+
+Beside the close control, from the right: **full screen**, a square outline
+that becomes two overlapping squares while the window is full, and
+**minimise**, a bar along the foot of its reach. Each reach is the close
+control's square, their centres twenty-six pixels apart so that no pixel is in
+two — a press upon a pixel two controls shared would do whichever the code
+tested first, which is nothing a person can see. The glyphs are drawn with the
+primitives in the band's ink, clipped to the band, and the title is clipped
+short of the leftmost control.
+
+**A frame narrower than 120 pixels carries the close control alone.** Three
+controls are seventy-eight pixels of a band, and a window much narrower would be
+all controls: a press meant to drag it would make it full. Every window a
+program of this system makes is wider, and the manager's own self-test, whose
+windows are sixty-two pixels wide, keeps its drags exactly where they were.
+
+**Unlike the close, the two act.** A close is asked of the owner because it
+may lose something the owner holds; neither of these loses anything, so there
+is nothing to ask. The owner of a window made full learns of it by the event it
+must draw upon; the owner of a minimised window learns nothing, a program that
+drew differently while it could not be seen being a program drawing for nobody.
+
+### 13.2 What each does
+
+**Minimise** hides the window: it is not composed, not returned by a hit test,
+cannot hold the focus, and gives up the pointer if a press had bound it. It
+keeps its content, its queue and its owner, so that bringing it back is
+showing it and not making it again. **Restore** shows it if it was hidden and
+raises and focuses it whether it was or not — which is what choosing a window
+from a list means.
+
+**Full** gives the window the **work area**: the screen less any window of the
+panel layer standing across its whole width at its top. The panel is recognised
+by where it stands and not by a declaration, so that the launcher — of the same
+layer, and not across the whole width — does not leave a hole above a window
+made full while it was open. The frame keeps its title band, so the control
+that made the window full is there to undo it; and the position and extent the
+window had are kept and given back when it is undone. **A full window is not
+dragged**: a drag would leave it the size of the screen and somewhere else.
+
+**The content is a new surface.** What stood in the old one is copied where it
+fits and the rest is the paper colour, so a window made full is never blank
+while its owner draws — and a window whose owner has stopped drawing still
+shows what it showed. The owner is then sent `WINDOW_EVENT_RESIZE`, carrying
+the new width and height in `x` and `y`. Where the heap cannot supply the
+larger surface nothing changes and the call is `ENOMEM`: a window that lost its
+content halfway to becoming larger would have none at all.
+
+**A root is told.** Every creation and destruction of an ordinary window, every
+minimise, restore and full screen, and every passing of the focus between
+ordinary windows puts `WINDOW_EVENT_WINDOWS` into the queue of each root —
+**once**: a notice already waiting is not doubled, because it says only "look
+again", and a focus passed back and forth thirty-two times before the session
+read its queue would otherwise fill the queue and drop the press that followed.
+
+### 13.3 The panel no longer takes the focus
+
+Until 2026-09-23 a panel-layer window took the focus when it was made and when
+it was pressed, "a launcher being a thing a person may type into". Nothing upon
+the panel reads a key, and the rule cost two things. A launcher that took the
+focus when it opened handed it, when it closed, to the topmost window that
+could hold it — the panel itself — so a person who used the launcher found
+their typing going nowhere. And the list of windows upon the panel must know
+which window holds the focus, which a press upon the list that took it would
+destroy. **Only an ordinary window takes the focus now**; a press upon the panel
+raises it within its layer and leaves the focus where it was.
+
+### 13.4 The two calls
+
+`window_state(window, action)`, call 40, takes `SYSCALL_WINDOW_STATE_MINIMISE`,
+`_RESTORE`, `_FULL` or `_NOT_FULL`. **The owner may, and so may the session, for
+any ordinary window** — the session is what brings a minimised window back, and
+the program that owns it cannot be seen to be asked. Ownership is judged before
+the layer, so that a program asking about a window it does not hold learns
+`EBADF` and nothing of what the number names; a root or a panel is `EINVAL`.
+
+`window_list(entries, capacity)`, call 41, is the session's alone — the titles
+of every program's windows are not every program's business — and returns one
+`SyscallWindowEntry` per ordinary window, in the order of their numbers, with
+whether each is minimised, focused and full. It returns how many there are,
+which may exceed the capacity, so that a caller can tell it saw only some.
+
+### 13.5 Verification
+
+| Property asserted | The silent failure it would catch |
+| ----------------- | --------------------------------- |
+| The root is told once that ordinary windows were made, however many changes there were | A queue of notices filling the root's queue and dropping the press after them — **observed** as a damage, Section 13.6 |
+| The panel takes the focus neither when made nor when pressed, and is still told of the press | Typing going nowhere after the launcher closes; a list of windows that cannot say which is focused |
+| The full-screen control gives the frame the screen below the panel and the content the frame less band and border | A full window under the panel, or over it, or a pixel short of the edge |
+| The owner is told the new extent; what stood in the content is kept | A program drawing at the old size into a larger window; a full window blank until its owner draws |
+| A full window is not dragged | A window the size of the screen, elsewhere |
+| Pressed again, it gives back its position and extent, and says so | A window that cannot be put back |
+| A minimised window is not hit, not drawn, and gives up the focus to the topmost window left; the root is told | A hidden window that takes presses or keys — **observed** as a damage, Section 13.6 |
+| A restored window is shown, raised within its layer and focused | A window chosen from the list that stays behind the one in front of it |
+| A root and a panel are refused both | A desktop minimised, with nothing to bring it back |
+| A frame narrower than 120 carries the close control alone | A narrow window whose band is all controls |
+| `window_state` upon a window the program holds does all four; an action that is none is `EINVAL`; a window naming nothing is `EBADF` | The call as a way to act upon another program's window |
+| `window_list` is `EPERM` to a program not holding the session, and names a window of the program that does | Every program able to read every title upon the screen |
+
+The first nine are [`../../kernel/test/gfx/windows.c`](../../kernel/test/gfx/windows.c),
+upon a surface in memory; the last two are `window-check`, at privilege level 3.
+
+### 13.6 The damage applied, and what the tests said
+
+In one build, reverted: the root's notice doubled rather than coalesced, and a
+minimised window left among those that may hold the focus. The run said
+`the root was not told, once, that ordinary windows were made`, then — the
+second notice standing in front of the press — `a press upon the root was not
+delivered to it`, and `a minimised window kept the focus, or it went somewhere
+but the topmost window left`. `Window manager self-test FAILED.`
+
+### 13.7 Limitations
+
+1. **No resize by hand.** A window is the size it was made or the work area; a
+   frame edge a person drags is not yet a thing.
+2. **Full is not full screen in the strict sense.** The title band and the
+   panel remain, the first so that the control that undoes it is there, the
+   second so that the list of windows is. A mode with neither, and a key that
+   leaves it, is not implemented.
+3. **The panel is recognised by where it stands.** A panel-layer window across
+   the whole width at the top is taken to be the panel; a session that put its
+   panel at the foot would have full windows cover it.
+4. **The resize event is advisory.** A program that ignores it keeps drawing at
+   the old extent: into a larger content that is permitted, into a smaller one
+   every blit is refused. Every program of this system handles it.
+5. **Minimising does not tell the owner**, Section 13.1; a program cannot learn
+   it is hidden except by asking for the list, which it may not.

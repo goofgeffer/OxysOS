@@ -24,7 +24,7 @@ source are the same file, and a change to one is a change git can show.
 | ---- | ------- | ------------ |
 | [`system.conf`](system.conf) | `/bin/init` | The banner `init` prints, and a `[service]` block for each program it starts: `run`, `name`, `restart` and `needs`. |
 | [`desktop.conf`](desktop.conf) | `/bin/windows` | The scale the desktop draws its windows at, and the accent it draws their contents with — `system` means the one `art/palette.h` carries. |
-| [`session.conf`](session.conf) | `/bin/session` | How large the desktop is drawn, and a `[launch]` block for each program the launcher offers. |
+| [`session.conf`](session.conf) | `/bin/session` | How large the desktop is drawn, the picture that covers it, and a `[launch]` block for each program the launcher offers. |
 
 ## The format, in one paragraph
 

@@ -9,7 +9,8 @@
  *          an event arrives.
  * Key definitions: WindowClientCreate, WindowClientDestroy, WindowClientMove,
  *          WindowClientBlit, WindowClientEvent, WindowClientScreen,
- *          WindowClientSession, WindowClientText,
+ *          WindowClientSession, WindowClientText, WindowClientState,
+ *          WindowClientList,
  *          WindowClientReleaseProcess,
  *          WindowClientWakeAll, WindowClientHasEvent, WindowClientOwnsAny,
  *          WindowClientReport.
@@ -52,6 +53,11 @@ int64_t WindowClientCreate(uint64_t geometry_address, uint64_t title_address, ui
 int64_t WindowClientScreen(uint64_t geometry_address);
 int64_t WindowClientSession(void);
 int64_t WindowClientText(uint64_t window, uint64_t placement_address, uint64_t text_address);
+
+/* The two of 2026-09-23: window_state and window_list, as the ABI describes
+ * them. */
+int64_t WindowClientState(uint64_t window, uint64_t action);
+int64_t WindowClientList(uint64_t entries_address, uint64_t capacity);
 
 /*
  * Destroys every window a process owns, at its ending. Called by the process

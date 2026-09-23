@@ -8,7 +8,7 @@
  *          that follows the pointer and grows while a button is held, and a
  *          row of tiles that the keys typed add to and remove from.
  * Key functions: main, DemoDrawFigure, DemoDrawPointer, DemoDrawKeys,
- *          DemoFillDisc, DemoPresent, DemoHandleKey.
+ *          DemoFillDisc, DemoPresent, DemoHandleKey, DemoResize.
  * References:
  *   - kernel/abi/oxys/syscall_abi.h: the five window calls, the rectangle,
  *     the event, and the pixel format 0x00RRGGBB.
@@ -192,6 +192,33 @@ static bool DemoMake(DemoWindow *window, int32_t x, int32_t y, int32_t width, in
 }
 
 /*
+ * Gives a window's buffer the extent the manager has just given its content,
+ * of 2026-09-23. False where there is no memory for it, upon which the window
+ * keeps its old buffer and the program stops drawing into it — a blit of the
+ * old extent into a larger content is permitted and one into a smaller is not,
+ * so the number is set to -1 rather than risk the second.
+ */
+static bool DemoResize(DemoWindow *window, int32_t width, int32_t height)
+{
+    uint32_t *const pixels = malloc((size_t)width * (size_t)height * sizeof(uint32_t));
+
+    if (pixels == NULL)
+    {
+        (void)fprintf(stderr, "windows: no memory for a window of the new extent.\n");
+        window->number = -1;
+
+        return false;
+    }
+
+    free(window->pixels);
+    window->pixels = pixels;
+    window->width = width;
+    window->height = height;
+
+    return true;
+}
+
+/*
  * The mark: the disc and the figure of art/logo.h, LOGO_UNITS units of DemoScale
  * across — the same table at the same size as the kernel's boot screen
  * and the session's root, so that the three things upon the screen that show
@@ -214,7 +241,13 @@ static bool DemoMake(DemoWindow *window, int32_t x, int32_t y, int32_t width, in
 static void DemoDrawFigure(void)
 {
     DemoWindow *const window = &DemoFigure;
-    const int32_t size = LOGO_UNITS * DemoScale;
+    /* The mark grows with the window, by the smaller of the two ratios of the
+     * window to the extent it was made at, so that a window made full shows
+     * the mark larger rather than small in the middle of a large paper; at
+     * the extent it was made at, it is the size the boot screen draws. */
+    const int32_t width_ratio = (LOGO_UNITS * DemoScale * window->width) / (240 * DemoScale);
+    const int32_t height_ratio = (LOGO_UNITS * DemoScale * window->height) / (130 * DemoScale);
+    const int32_t size = (width_ratio < height_ratio) ? width_ratio : height_ratio;
     const int32_t left = (window->width - size) / 2;
     const int32_t top = (window->height - size) / 2;
 
@@ -500,6 +533,29 @@ int main(void)
 
                 (void)OxysWindowDestroy(closed->number);
                 closed->number = -1;
+            }
+            else if (event.kind == SYSCALL_WINDOW_EVENT_RESIZE)
+            {
+                DemoWindow *const resized =
+                    (event.window == (uint32_t)DemoFigure.number)    ? &DemoFigure
+                    : (event.window == (uint32_t)DemoPointer.number) ? &DemoPointer
+                                                                     : &DemoKeys;
+
+                if (DemoResize(resized, event.x, event.y))
+                {
+                    if (resized == &DemoFigure)
+                    {
+                        DemoDrawFigure();
+                    }
+                    else if (resized == &DemoPointer)
+                    {
+                        pointer_changed = true;
+                    }
+                    else
+                    {
+                        keys_changed = true;
+                    }
+                }
             }
             else if (event.window == (uint32_t)DemoPointer.number)
             {

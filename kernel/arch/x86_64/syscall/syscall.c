@@ -2280,7 +2280,9 @@ static const SyscallEntryDescriptor SyscallTable[SYSCALL_COUNT] = {
     { "pause", 0U },
     { "window_session", 0U },
     { "window_text", 3U },
-    { "poll", 3U }
+    { "poll", 3U },
+    { "window_state", 2U },
+    { "window_list", 2U }
 };
 
 bool SyscallNumberIsValid(uint64_t number)
@@ -2514,6 +2516,14 @@ void SyscallDispatch(SyscallFrame *frame)
 
     case SYSCALL_POLL:
         frame->rax = (uint64_t)SyscallDoPoll(frame->rdi, frame->rsi, frame->rdx);
+        break;
+
+    case SYSCALL_WINDOW_STATE:
+        frame->rax = (uint64_t)WindowClientState(frame->rdi, frame->rsi);
+        break;
+
+    case SYSCALL_WINDOW_LIST:
+        frame->rax = (uint64_t)WindowClientList(frame->rdi, frame->rsi);
         break;
 
     default:

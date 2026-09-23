@@ -463,6 +463,16 @@ void KernelVerifyWindows(void)
                                 (WindowManagerStackAt(3U) == panel),
                             "a raise put an ordinary window over the panel");
 
+        /*
+         * The root has been told the windows changed — two ordinary windows
+         * were made — and told once: the notice says only "look again", and a
+         * queue of them would fill the root's queue and drop the press that
+         * follows. Drained here so that the press below is the next event.
+         */
+        KernelWindowRequire(KernelNextEventIs(root, WINDOW_EVENT_WINDOWS, &event) &&
+                                (WindowEventsQueued(root) == 0U),
+                            "the root was not told, once, that ordinary windows were made");
+
         /* The root never takes the focus, and a press upon it neither raises
          * nor focuses it — but it is still delivered. */
         KernelWindowRequire(WindowManagerFocused() != root,
@@ -500,6 +510,168 @@ void KernelVerifyWindows(void)
         KernelWindowRequire(WindowManagerFocused() == WINDOW_NONE,
                             "the focus passed to the root when the last window closed");
 
+        WindowDestroy(root);
+    }
+
+    /* --- Minimise and full screen, of 2026-09-23. --- */
+
+    {
+        const size_t root = WindowCreate(0, 0, 160, 120, "root", WINDOW_LAYER_ROOT);
+        const size_t wide = WindowCreate(10, 30, 130, 40, "wide", WINDOW_LAYER_NORMAL);
+        const size_t other = WindowCreate(0, 40, 40, 30, "other", WINDOW_LAYER_NORMAL);
+        const size_t panel = WindowCreate(0, 0, 160, 20, "panel", WINDOW_LAYER_PANEL);
+        bool resized = false;
+
+        KernelWindowRequire((root != WINDOW_NONE) && (wide != WINDOW_NONE) &&
+                                (other != WINDOW_NONE) && (panel != WINDOW_NONE),
+                            "the windows for minimise and full screen could not be made");
+
+        /* The panel takes the focus neither when it is made nor when it is
+         * pressed: nothing upon it reads a key, and a press upon the list of
+         * windows that took the focus would lose the one thing the list must
+         * know. */
+        KernelWindowRequire(WindowManagerFocused() == other,
+                            "the panel took the focus when it was made");
+
+        {
+            const MouseEvent press =
+                KernelMouse(100, 10, 0, 0, MOUSE_BUTTON_LEFT, MOUSE_BUTTON_LEFT);
+            const MouseEvent release = KernelMouse(100, 10, 0, 0, 0U, MOUSE_BUTTON_LEFT);
+
+            WindowManagerHandleMouse(&press);
+            WindowManagerHandleMouse(&release);
+            KernelWindowRequire((WindowManagerFocused() == other) &&
+                                    KernelNextEventIs(panel, WINDOW_EVENT_BUTTON_PRESS, &event),
+                                "a press upon the panel took the focus, or was not delivered");
+        }
+
+        KernelFillContent(root, UINT32_C(0x00ABCDEF));
+        KernelFillContent(wide, UINT32_C(0x00FEDCBA));
+        GraphicsFillRectangle(WindowSurface(wide), (GraphicsRectangle){ 0, 0, 1, 1 },
+                              UINT32_C(0x00123456));
+
+        /*
+         * The full-screen control, pressed: the frame is the screen below the
+         * panel, the content the frame less its band and border, and the owner
+         * is told the new extent. What stood in the content is kept where it
+         * fits — without it a window made full would be blank until its owner
+         * drew, and one whose owner had ended would stay blank.
+         */
+        {
+            const MouseEvent press = KernelMouse(101, 43, 0, 0, MOUSE_BUTTON_LEFT, MOUSE_BUTTON_LEFT);
+            const MouseEvent release = KernelMouse(101, 43, 0, 0, 0U, MOUSE_BUTTON_LEFT);
+
+            WindowManagerHandleMouse(&press);
+            WindowManagerHandleMouse(&release);
+        }
+
+        while (WindowReadEvent(wide, &event))
+        {
+            resized = resized ||
+                      ((event.kind == WINDOW_EVENT_RESIZE) && (event.x == 158) && (event.y == 74));
+        }
+
+        KernelWindowRequire(WindowIsFull(wide) &&
+                                KernelRectangleEquals(WindowFrame(wide), 0, 20, 160, 100) &&
+                                KernelRectangleEquals(WindowContentBounds(wide), 1, 45, 158, 74),
+                            "the full-screen control did not give the window the screen below "
+                            "the panel");
+        KernelWindowRequire(resized, "a window made full was not told its new extent");
+        KernelWindowRequire(GraphicsPixelAt(WindowSurface(wide), 0, 0) == UINT32_C(0x00123456),
+                            "a window made full lost what stood in its content");
+
+        /* A full window is not dragged by its band: a drag would leave it the
+         * size of the screen and somewhere else. */
+        {
+            const MouseEvent press = KernelMouse(20, 30, 0, 0, MOUSE_BUTTON_LEFT, MOUSE_BUTTON_LEFT);
+            const MouseEvent move = KernelMouse(30, 40, 10, 10, MOUSE_BUTTON_LEFT, 0U);
+            const MouseEvent release = KernelMouse(30, 40, 0, 0, 0U, MOUSE_BUTTON_LEFT);
+
+            WindowManagerHandleMouse(&press);
+            WindowManagerHandleMouse(&move);
+            WindowManagerHandleMouse(&release);
+            KernelWindowRequire(KernelRectangleEquals(WindowFrame(wide), 0, 20, 160, 100),
+                                "a full window was dragged by its band");
+        }
+
+        /* Pressed again, it gives back the position and extent it had. */
+        {
+            const MouseEvent press = KernelMouse(119, 33, 0, 0, MOUSE_BUTTON_LEFT, MOUSE_BUTTON_LEFT);
+            const MouseEvent release = KernelMouse(119, 33, 0, 0, 0U, MOUSE_BUTTON_LEFT);
+
+            WindowManagerHandleMouse(&press);
+            WindowManagerHandleMouse(&release);
+        }
+
+        resized = false;
+
+        while (WindowReadEvent(wide, &event))
+        {
+            resized = resized ||
+                      ((event.kind == WINDOW_EVENT_RESIZE) && (event.x == 130) && (event.y == 40));
+        }
+
+        KernelWindowRequire(!WindowIsFull(wide) &&
+                                KernelRectangleEquals(WindowFrame(wide), 10, 30, 132, 66) &&
+                                resized,
+                            "leaving full screen did not give back the position and extent, "
+                            "or did not say so");
+
+        /*
+         * The minimise control: the window is not drawn, not hit, and gives up
+         * the focus; the root is told. Where it stood, the root shows through.
+         */
+        while (WindowReadEvent(root, &event))
+        {
+        }
+
+        {
+            const MouseEvent press = KernelMouse(75, 43, 0, 0, MOUSE_BUTTON_LEFT, MOUSE_BUTTON_LEFT);
+            const MouseEvent release = KernelMouse(75, 43, 0, 0, 0U, MOUSE_BUTTON_LEFT);
+
+            WindowManagerHandleMouse(&press);
+            WindowManagerHandleMouse(&release);
+        }
+
+        (void)WindowManagerCompose();
+        KernelWindowRequire(WindowIsMinimised(wide) && (WindowManagerWindowAt(120, 60) == root),
+                            "the minimise control did not hide the window from the pointer");
+        KernelWindowRequire(KernelScreenPixel(120, 60) == UINT32_C(0x00ABCDEF),
+                            "a minimised window was still drawn");
+        KernelWindowRequire(WindowManagerFocused() == other,
+                            "a minimised window kept the focus, or it went somewhere but the "
+                            "topmost window left");
+        KernelWindowRequire(KernelNextEventIs(root, WINDOW_EVENT_WINDOWS, &event),
+                            "the root was not told that a window was minimised");
+
+        /* Restored, it is shown, raised within its layer and focused. */
+        KernelWindowRequire(WindowRestore(wide) && !WindowIsMinimised(wide) &&
+                                (WindowManagerFocused() == wide) &&
+                                (WindowManagerStackAt(2U) == wide),
+                            "a restored window was not shown, raised and focused");
+
+        /* A root and a panel are neither minimised nor made full: a desktop
+         * minimised has nothing to bring it back. */
+        KernelWindowRequire(!WindowMinimise(root) && !WindowMinimise(panel) &&
+                                !WindowSetFull(root, true) && !WindowSetFull(panel, true),
+                            "a root or a panel was minimised or made full");
+
+        /* A frame narrower than WINDOW_CONTROLS_MINIMUM_WIDTH carries the close
+         * control alone: a press where the full-screen control would be is a
+         * press upon the band. */
+        {
+            const MouseEvent press = KernelMouse(2, 53, 0, 0, MOUSE_BUTTON_LEFT, MOUSE_BUTTON_LEFT);
+            const MouseEvent release = KernelMouse(2, 53, 0, 0, 0U, MOUSE_BUTTON_LEFT);
+
+            WindowManagerHandleMouse(&press);
+            WindowManagerHandleMouse(&release);
+            KernelWindowRequire(!WindowIsFull(other) && !WindowIsMinimised(other),
+                                "a window too narrow for the controls was given them");
+        }
+
+        WindowDestroy(panel);
+        WindowDestroy(other);
+        WindowDestroy(wide);
         WindowDestroy(root);
     }
 

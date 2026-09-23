@@ -13,7 +13,9 @@
  *          WindowReadEvent, WindowManagerHandleKey, WindowManagerHandleMouse,
  *          WindowManagerCompose, WindowManagerWindowAt, WindowManagerReport,
  *          WindowSetOwner, WindowDestroyOwnedBy, WindowWritePixels,
- *          WindowManagerShutdown, WindowEncodeFunction.
+ *          WindowManagerShutdown, WindowEncodeFunction, WindowMinimise,
+ *          WindowRestore, WindowSetFull, WindowIsMinimised, WindowIsFull,
+ *          WindowManagerWorkArea.
  * References:
  *   - docs/design/WINDOWS.md: the design, the appearance it commits to, and
  *     every assertion made upon it.
@@ -69,8 +71,11 @@
  *
  *   A button pressed in a window's title band is the manager's and not the
  *   owner's: it raises and focuses the window and begins a drag that moves it,
- *   or — upon the close control — puts a close event into the window's queue.
- *   The manager destroys nothing upon that event. What a close means is the
+ *   or — upon the close control — puts a close event into the window's queue;
+ *   or, since 2026-09-23, upon the full-screen or the minimise control beside
+ *   it, makes the window full or hides it, which lose nothing and so are the
+ *   manager's to do rather than the owner's to be asked.
+ *   The manager destroys nothing upon a close. What a close means is the
  *   owner's decision, an editor with an unsaved file being the standing example
  *   of a window that must be asked and not removed.
  *
@@ -177,7 +182,17 @@ typedef enum WindowEventKind
     WINDOW_EVENT_FOCUS_OUT,
 
     /* The close control was pressed. The owner decides what that means. */
-    WINDOW_EVENT_CLOSE
+    WINDOW_EVENT_CLOSE,
+
+    /* The content was given a new extent — by full screen, or by leaving it —
+     * and the owner must draw it again: `x` and `y` carry the new width and
+     * height. What stood in the content was kept where it fitted, and the rest
+     * is the paper colour; neither is what the owner would have drawn. */
+    WINDOW_EVENT_RESIZE,
+
+    /* Sent to a root: the set of ordinary windows, their states or the focus
+     * among them changed, and a session listing them should look again. */
+    WINDOW_EVENT_WINDOWS
 } WindowEventKind;
 
 /*
@@ -342,6 +357,36 @@ void WindowFocus(size_t window);
  * above it. Both where the window was and where it now is are marked changed.
  */
 void WindowMove(size_t window, int32_t x, int32_t y);
+
+/*
+ * Minimise and full screen, of 2026-09-23. Each is refused, returning false,
+ * for a window that does not exist or carries no frame — a root or a panel
+ * minimised would be a desktop that vanished with nothing to bring it back.
+ *
+ * WindowMinimise hides the window: it is not composed, not hit, and gives up
+ * the focus and the pointer, but keeps its content, its queue and its owner.
+ * WindowRestore shows it again if it was hidden, and raises and focuses it
+ * whether it was or not, which is what choosing a window from a list means.
+ *
+ * WindowSetFull gives the window the work area — the screen less the panel
+ * across its top — keeping the frame's title band, so that the control that
+ * made it full is still there to undo it; and gives it back the position and
+ * extent it had before when undone. The content is a new surface of the new
+ * extent, what stood in the old one is kept where it fits, and the owner is
+ * sent WINDOW_EVENT_RESIZE to draw it again. False, with nothing changed,
+ * where the heap cannot supply the larger content.
+ *
+ * Every one of the three tells the roots, WINDOW_EVENT_WINDOWS.
+ */
+bool WindowMinimise(size_t window);
+bool WindowRestore(size_t window);
+bool WindowSetFull(size_t window, bool full);
+bool WindowIsMinimised(size_t window);
+bool WindowIsFull(size_t window);
+
+/* The screen less any panel standing across the whole width of its top: what
+ * a full window is given. */
+GraphicsRectangle WindowManagerWorkArea(void);
 
 /* The frame's rectangle upon the screen, and the content's. */
 GraphicsRectangle WindowFrame(size_t window);

@@ -790,6 +790,22 @@ screen of 1024 or wider and averaged upon VirtualBox's 640 by 480, its edge
 mixed with the ground. Observed under QEMU, VirtualBox and Bochs.
 [`../design/SESSION.md`](../design/SESSION.md), Section 3.2.
 
+**The desktop carries a background, and a window may be minimised and made
+full**, since 2026-09-23. The background is a file upon the system's own
+filesystem, `/share/backgrounds/background.oxim`, named by `/etc/session.conf`
+and scaled by the session to cover whatever screen it has; it is in a
+run-length format of its own, `libc/include/image.h`, because the drawing is
+three million pixels and seventy kilobytes as runs. Each frame carries a
+full-screen and a minimise control beside the close; full gives the window the
+screen below the panel and sends its owner the new extent, which the terminal
+answers with more rows and columns and the demonstration with a larger mark,
+now interpolated; minimise hides it, and the panel lists every window so that
+a hidden one can be brought back. The panel no longer takes the focus. Two
+calls were added, `window_state` and `window_list`. Observed under QEMU,
+VirtualBox and Bochs.
+[`../design/SESSION.md`](../design/SESSION.md), Sections 9 and 10;
+[`../design/WINDOWS.md`](../design/WINDOWS.md), Section 13.
+
 **The same day found and fixed a defect a person could reach from the
 launcher.** Two processes reading the terminal at once stopped the machine:
 each kept the other runnable, neither reached the halt that lets the timer tick
@@ -839,7 +855,7 @@ The physical machine is one machine — the HP Laptop 14-dq0052dx specified in
 | 9.3 `init`, the shutdown and the boot screen | Yes: the boot screen captured, the desktop started by `init`, the desktop killed and started again, `shutdown` halting and `shutdown -r` restarting | **Yes**, the desktop started by `init` at 640 by 480 | **Yes — 9.3**, seventy assertions and the prompt reached | — | **Not yet run** |
 | 9.4 The configuration and `/etc` | Yes: the desktop's accent changed in `/etc/desktop.conf` and seen to change, and `init` seen to give up on a service whose program is missing | **Yes**, seventy-one assertions | **Yes — 9.4**, seventy-one assertions and the prompt reached | — | **Not yet run** |
 | 9.5 The session | Yes: the root and panel captured, the launcher opened and a program started from it, and a window dragged upward seen to pass under the panel | **Yes**, at 640 by 480 — and it is where the panel's height was found to fall below the least extent a window may have | **Yes — 9.5**, seventy-one assertions and the prompt reached | — | **Not yet run** |
-| 9.6 The terminal emulator | Yes: the launcher opened with the terminal's icon beside its name, `Terminal` chosen, and `ls` and `echo hi` typed at the window with their output drawn in it | **Yes**, at 640 by 480, the boot reaching the desktop | **Yes — 9.6**, seventy-four assertions and the prompt reached | — | **Not yet run** |
+| 9.6 The terminal emulator | Yes: the launcher opened with the terminal's icon beside its name, `Terminal` chosen, and `ls` and `echo hi` typed at the window with their output drawn in it | **Yes**, at 640 by 480, the boot reaching the desktop | **Yes — 9.6**, seventy-five assertions and the prompt reached | — | **Not yet run** |
 
 **The rows marked "— 7.2" were all established by two boots of one image**,
 because a boot runs every self-test in the corpus and a clean one is therefore
@@ -1044,7 +1060,7 @@ functional. [`TESTING.md`](TESTING.md), Section 3.
 There is no test harness and there will be none before Phase 7, there being no
 userland to run one in. The kernel therefore asserts its own properties at boot,
 in the order the subsystems are initialised, and `make verify` fails if any of
-them reports a failure. Seventy-four assertions presently report passed or sound.
+them reports a failure. Seventy-five assertions presently report passed or sound.
 
 Those tests are in [`../../kernel/test/`](../../kernel/test/), one file per
 subsystem. Each subsystem's design document carries a table pairing every

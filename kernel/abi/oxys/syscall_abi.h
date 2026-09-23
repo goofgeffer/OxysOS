@@ -18,6 +18,8 @@
  *          SYSCALL_WINDOW_BLIT, SYSCALL_WINDOW_EVENT, SYSCALL_WINDOW_SCREEN,
  *          SYSCALL_POWER, SYSCALL_PAUSE, SYSCALL_POWER_HALT, SYSCALL_POWER_REBOOT,
  *          SYSCALL_WINDOW_SESSION, SYSCALL_WINDOW_TEXT, SyscallWindowText,
+ *          SYSCALL_WINDOW_STATE, SYSCALL_WINDOW_LIST, SyscallWindowEntry, the
+ *          SYSCALL_WINDOW_STATE actions,
  *          SYSCALL_WINDOW_TEXT_MAXIMUM,
  *          SYSCALL_WINDOW_LAYER_ROOT, SYSCALL_WINDOW_LAYER_NORMAL, SYSCALL_WINDOW_LAYER_PANEL,
  *          SYSCALL_EPERM,
@@ -403,7 +405,35 @@
  */
 #define SYSCALL_WINDOW_SESSION 37U
 #define SYSCALL_WINDOW_TEXT    38U
-#define SYSCALL_COUNT          40U
+
+/*
+ * The two calls of 2026-09-23, by which a window is minimised, restored, and
+ * made to fill the screen, and by which the session lists the windows it must
+ * offer a person a way back to.
+ *
+ *   window_state(window, action)       Minimises, restores, or makes full or
+ *                                      not, by the action. The window's owner
+ *                                      may, and so may the session, for any
+ *                                      ordinary window — a minimised window is
+ *                                      brought back by the session's list, not
+ *                                      by the program that owns it, which
+ *                                      cannot be seen to be asked. A root or a
+ *                                      panel is EINVAL, as is an action that
+ *                                      is none of the four; EBADF for a window
+ *                                      the caller may not act upon; ENOMEM
+ *                                      where full screen needs more memory
+ *                                      than there is.
+ *   window_list(entries, capacity)     The session alone: writes up to
+ *                                      `capacity` entries, one per ordinary
+ *                                      window in the order of their numbers,
+ *                                      and returns how many there are — which
+ *                                      may exceed the capacity, so that a
+ *                                      caller can tell that it saw only some.
+ *                                      EPERM from any other process.
+ */
+#define SYSCALL_WINDOW_STATE   40U
+#define SYSCALL_WINDOW_LIST    41U
+#define SYSCALL_COUNT          42U
 
 /* The layer a window stands in, given to window_create. A root and a panel may
  * be made by the session alone and carry no frame; every other program's
@@ -463,6 +493,26 @@ typedef struct SyscallWindowRectangle
 #define SYSCALL_WINDOW_EVENT_FOCUS_IN       5U /* This window gained the focus. */
 #define SYSCALL_WINDOW_EVENT_FOCUS_OUT      6U /* This window lost the focus. */
 #define SYSCALL_WINDOW_EVENT_CLOSE          7U /* The close control was pressed; the program decides. */
+#define SYSCALL_WINDOW_EVENT_RESIZE         8U /* The content has a new extent, in x and y; draw it again. */
+#define SYSCALL_WINDOW_EVENT_WINDOWS        9U /* To a root: the list of windows changed. */
+
+/* The actions of window_state. */
+#define SYSCALL_WINDOW_STATE_MINIMISE  1U
+#define SYSCALL_WINDOW_STATE_RESTORE   2U /* Shown if hidden, and raised and focused. */
+#define SYSCALL_WINDOW_STATE_FULL      3U
+#define SYSCALL_WINDOW_STATE_NOT_FULL  4U
+
+/* One window, as window_list reports it. */
+#define SYSCALL_WINDOW_ENTRY_MINIMISED 0x01U
+#define SYSCALL_WINDOW_ENTRY_FOCUSED   0x02U
+#define SYSCALL_WINDOW_ENTRY_FULL      0x04U
+
+typedef struct SyscallWindowEntry
+{
+    uint32_t window;
+    uint32_t flags;
+    char title[SYSCALL_WINDOW_TITLE_MAXIMUM + 1U];
+} SyscallWindowEntry;
 
 /* The buttons of a pointer event, as bits. */
 #define SYSCALL_WINDOW_BUTTON_LEFT   0x01U

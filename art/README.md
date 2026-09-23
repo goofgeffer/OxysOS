@@ -11,9 +11,11 @@ the artwork living beside whichever program draws it —
 [`../LICENSING.md`](../LICENSING.md), Section 1.
 
 ## Purpose
-
 The mark of Oxys-OS, the bitmap generated from it, the colours the system
-draws itself in, and the icons its launcher draws — which are files, and are
+draws itself in, the icons its launcher draws, and the background the desktop
+is covered with. The icons and the background are files upon the system's own
+filesystem — `/share/icons` and `/share/backgrounds` of the ramdisk — and are
+the things here that are not compiled in.
 the one thing here that is not compiled in.
 
 | File | What it is |
@@ -193,3 +195,57 @@ version 1.
 The header's five significant bytes are `OXIC`, the version 2, the width 0x30,
 the height 0x30 and a reserved zero; the pixels are little-endian, which is why
 the `awk` writes blue, green, red and then the transparency.
+
+## `backgrounds/` — the picture the desktop is covered with, which is a file
+
+| File | What it is |
+| ---- | ---------- |
+| [`backgrounds/background.png`](backgrounds/background.png) | The background as the project owner drew it, 2048 by 1448. It is the source and nothing reads it at build time. |
+| [`backgrounds/background.oxim`](backgrounds/background.oxim) | The same, at the same resolution, in the run-length format [`../libc/include/image.h`](../libc/include/image.h) sets out: seventy kilobytes. This is what the ramdisk carries at `/share/backgrounds/background.oxim`, what `/etc/session.conf` names, and what the session reads. |
+
+**A file, for the icons' reason and one more.** The session reads it once at
+start and a person changes it by editing one line of `/etc/session.conf`; and a
+background compiled in would be the size of the drawing in the session's own
+image, where a file costs the ramdisk and nothing else.
+
+**At the resolution it was drawn at, and scaled by the session.** The picture
+is not reduced to a screen size here, because there is no one screen size —
+1280 by 800 under QEMU, 1024 by 768 under Bochs, 640 by 480 under VirtualBox —
+and a picture reduced for one is enlarged for the others. The session's scaler
+covers whatever screen it has, averaging as it reduces. What that costs is
+nothing, for a drawing of flat colour: its three million pixels are twelve
+thousand runs.
+
+**Covering, not stretching.** The drawing is wider than 4 by 3 and narrower than
+16 by 10, so upon every screen above it is cut at two edges — the sides at 4 by
+3, the top and the foot at 16 by 10 — and is never distorted. A drawing whose
+important part is near an edge loses it upon some screen; draw with a margin.
+
+The conversion is one command, for the reason every conversion here is:
+
+```sh
+in=art/backgrounds/background.png; out=art/backgrounds/background.oxim
+W=$(identify -format '%w' "$in"); H=$(identify -format '%h' "$in")
+{ printf 'OXIM\001\000\000\000'
+  printf "\\$(printf %03o $((W & 255)))\\$(printf %03o $((W >> 8)))"
+  printf "\\$(printf %03o $((H & 255)))\\$(printf %03o $((H >> 8)))"; } > "$out"
+convert "$in" -background white -alpha remove -depth 8 rgb:- | xxd -p -c 3 |
+  awk -v W=$W '
+    function flush() { printf "%02x%02x%s%s%s00", n % 256, int(n / 256),
+                         substr(p,5,2), substr(p,3,2), substr(p,1,2); }
+    { if (n > 0 && ($0 != p || x == 0 || n == 65535)) { flush(); n = 0 }
+      if (n == 0) p = $0; n++; x = (x + 1) % W }
+    END { if (n > 0) flush() }' | xxd -r -p >> "$out"
+```
+
+Three things in that are the judgement. **A run is ended at the end of every
+row** — the `x == 0` — because the format refuses a run that crosses one, and a
+converter that let one cross would make a file every reader rejects rather than
+a picture sheared by one. **A run is ended at 65535**, the largest count the
+format's sixteen bits hold. And **transparency is flattened upon white**: a
+background has nothing behind it, the format has no transparency, and the
+drawing arrived opaque in any case.
+
+The drawing arrives in this repository by being copied from the project
+owner's own `use_this.png` at its root, which git ignores so that the copy
+handed over is never committed beside the one kept here.

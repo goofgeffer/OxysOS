@@ -15,6 +15,7 @@
  *          OxysLink, OxysProcessInformation, OxysWindowCreate,
  *          OxysWindowDestroy, OxysWindowMove, OxysWindowBlit, OxysWindowEvent,
  *          OxysWindowScreen, OxysPower, OxysPause, OxysWindowSession, OxysWindowText,
+ *          OxysWindowState, OxysWindowList,
  *          OxysPoll,
  *          OxysExit, OxysWait, OxysBrk, OxysSbrk.
  * References:
@@ -436,4 +437,17 @@ int64_t OxysPoll(SyscallPollEntry *entries, uint64_t count, uint64_t options)
 {
     return OxysSyscallResult(OxysSyscallInvoke3(SYSCALL_POLL, (uint64_t)(uintptr_t)entries,
                                                 count, options));
+}
+
+/* --------------------------------------------------------- 2026-09-23 */
+
+int64_t OxysWindowState(int64_t window, uint64_t action)
+{
+    return OxysSyscallResult(OxysSyscallInvoke2(SYSCALL_WINDOW_STATE, (uint64_t)window, action));
+}
+
+int64_t OxysWindowList(SyscallWindowEntry *entries, uint64_t capacity)
+{
+    return OxysSyscallResult(OxysSyscallInvoke2(SYSCALL_WINDOW_LIST,
+                                                (uint64_t)(uintptr_t)entries, capacity));
 }

@@ -67,6 +67,31 @@
 #define WINDOW_CLOSE_INSET  14
 #define WINDOW_CLOSE_REACH  12
 
+/*
+ * The two controls beside it, of 2026-09-23: full screen and minimise, each a
+ * reach of the same square, their centres this far apart so that the squares
+ * do not overlap — a press upon the pixel between two controls belonging to
+ * both would do whichever this code tested first, which a person cannot see.
+ * The index of a control is its place counted from the right edge.
+ */
+#define WINDOW_CONTROL_SPACING ((2 * WINDOW_CLOSE_REACH) + 2)
+#define WINDOW_CONTROL_CLOSE    0
+#define WINDOW_CONTROL_FULL     1
+#define WINDOW_CONTROL_MINIMISE 2
+#define WINDOW_CONTROL_COUNT    3
+
+/* The glyphs of the two: a square outline, and a bar, of this half-extent. */
+#define WINDOW_GLYPH_HALF 5
+
+/*
+ * The narrowest frame that carries the two. Three controls in a band are
+ * seventy-eight pixels of it, and a window much narrower than this would be
+ * all controls and no band to drag it by — a press meant to move the window
+ * would make it full instead. Every window a program of this system makes is
+ * wider; a narrower one keeps its close control and nothing else.
+ */
+#define WINDOW_CONTROLS_MINIMUM_WIDTH 120
+
 /* The title: the face at twice its size, this far in from the left. */
 #define WINDOW_TITLE_SCALE  2
 #define WINDOW_TITLE_INSET  8
@@ -90,6 +115,20 @@ typedef struct Window
      * frame — which the layer decides and nothing else may. */
     WindowLayer layer;
     bool decorated;
+
+    /*
+     * Minimised: not drawn, not hit, not focusable, but still a window, with
+     * its content, its queue and its owner — the session's list of windows is
+     * how it is brought back. Full: filling the screen below the panel, with
+     * the geometry it had before kept so that leaving full screen puts it back
+     * where the person left it.
+     */
+    bool minimised;
+    bool full;
+    int32_t restore_x;
+    int32_t restore_y;
+    int32_t restore_width;
+    int32_t restore_height;
 
     /* The content: a tightly packed surface over pixels from the heap. */
     GraphicsSurface surface;
@@ -217,21 +256,32 @@ static GraphicsRectangle WindowTitleBandOf(const Window *window)
                                window->width, WINDOW_TITLE_HEIGHT);
 }
 
-/* The square about the close control within which a press closes. */
-static GraphicsRectangle WindowCloseReachOf(const Window *window)
+/*
+ * The square about a control within which a press is that control's, counted
+ * from the right: WINDOW_CONTROL_CLOSE, then full screen, then minimise.
+ */
+static GraphicsRectangle WindowControlReachOf(const Window *window, int32_t control)
 {
     const GraphicsRectangle frame = WindowFrameOf(window);
 
-    if (!window->decorated)
+    if (!window->decorated ||
+        ((control != WINDOW_CONTROL_CLOSE) && (frame.width < WINDOW_CONTROLS_MINIMUM_WIDTH)))
     {
         return WindowMakeRectangle(0, 0, 0, 0);
     }
 
-    const int32_t centre_x = frame.x + frame.width - WINDOW_BORDER - WINDOW_CLOSE_INSET;
+    const int32_t centre_x = frame.x + frame.width - WINDOW_BORDER - WINDOW_CLOSE_INSET -
+                             (control * WINDOW_CONTROL_SPACING);
     const int32_t centre_y = frame.y + WINDOW_BORDER + (WINDOW_TITLE_HEIGHT / 2);
 
     return WindowMakeRectangle(centre_x - WINDOW_CLOSE_REACH, centre_y - WINDOW_CLOSE_REACH,
                                (2 * WINDOW_CLOSE_REACH) + 1, (2 * WINDOW_CLOSE_REACH) + 1);
+}
+
+/* The square about the close control within which a press closes. */
+static GraphicsRectangle WindowCloseReachOf(const Window *window)
+{
+    return WindowControlReachOf(window, WINDOW_CONTROL_CLOSE);
 }
 
 /*
@@ -354,6 +404,45 @@ static void WindowEnqueueKind(size_t window, WindowEventKind kind)
     WindowEnqueue(window, &event);
 }
 
+/*
+ * Tells every root that the set of ordinary windows, or their states, or the
+ * focus among them, has changed — which is what the session's list of windows
+ * is drawn from, and the only way a minimised window is brought back.
+ *
+ * **One notice waiting is enough.** It says only "look again", so a second one
+ * queued behind the first would say nothing the first did not; and a focus
+ * that passed back and forth thirty-two times before the session read its
+ * queue would otherwise fill the root's queue, and the next press upon the
+ * desktop would be the event dropped.
+ */
+static void WindowNotifyRoots(void)
+{
+    for (size_t identifier = 0U; identifier < WINDOW_CAPACITY; ++identifier)
+    {
+        const Window *const root = WindowAt(identifier);
+        bool waiting = false;
+
+        if ((root == NULL) || (root->layer != WINDOW_LAYER_ROOT))
+        {
+            continue;
+        }
+
+        for (size_t index = 0U; index < root->count; ++index)
+        {
+            if (root->events[(root->head + index) % WINDOW_EVENT_CAPACITY].kind ==
+                WINDOW_EVENT_WINDOWS)
+            {
+                waiting = true;
+            }
+        }
+
+        if (!waiting)
+        {
+            WindowEnqueueKind(identifier, WINDOW_EVENT_WINDOWS);
+        }
+    }
+}
+
 /* A pointer event, with the position made relative to the window's content. */
 static void WindowEnqueuePointer(size_t window, WindowEventKind kind, int32_t x, int32_t y,
                                  uint8_t button, uint8_t buttons)
@@ -453,9 +542,10 @@ static void WindowStackInsert(size_t window)
 /* --------------------------------------------------------------- focus */
 
 /*
- * The topmost window that may hold the focus, or WINDOW_NONE — which is every
- * window but a root. A desktop whose last ordinary window closed would
- * otherwise give the keys to the wallpaper.
+ * The topmost window that may hold the focus — an ordinary window that is not
+ * minimised — or WINDOW_NONE. A desktop whose last ordinary window
+ * closed would otherwise give the keys to the wallpaper; and a minimised
+ * window given them would take a person's typing where they cannot see it go.
  */
 static size_t WindowTopmostFocusable(void)
 {
@@ -463,7 +553,8 @@ static size_t WindowTopmostFocusable(void)
     {
         const size_t identifier = WindowStack[position - 1U];
 
-        if (WindowTable[identifier].layer != WINDOW_LAYER_ROOT)
+        if ((WindowTable[identifier].layer == WINDOW_LAYER_NORMAL) &&
+            !WindowTable[identifier].minimised)
         {
             return identifier;
         }
@@ -500,6 +591,14 @@ static void WindowTransferFocus(size_t window)
         WindowEnqueueKind(window, WINDOW_EVENT_FOCUS_IN);
         WindowDamageAdd(WindowTitleBandOf(&WindowTable[window]));
     }
+
+    /* The list of windows marks the one holding the focus, so a passing
+     * between ordinary windows is a change to it. */
+    if (((WindowAt(previous) != NULL) && (WindowTable[previous].layer == WINDOW_LAYER_NORMAL)) ||
+        ((WindowAt(window) != NULL) && (WindowTable[window].layer == WINDOW_LAYER_NORMAL)))
+    {
+        WindowNotifyRoots();
+    }
 }
 
 /* ------------------------------------------------------------- drawing */
@@ -507,15 +606,17 @@ static void WindowTransferFocus(size_t window)
 static void WindowDrawTitle(const Window *window, GraphicsRectangle band, uint32_t ink,
                             uint32_t paper)
 {
-    const GraphicsRectangle reach = WindowCloseReachOf(window);
+    const GraphicsRectangle leftmost = WindowControlReachOf(window, WINDOW_CONTROL_COUNT - 1);
+    const GraphicsRectangle reach =
+        GraphicsRectangleIsEmpty(leftmost) ? WindowCloseReachOf(window) : leftmost;
     int32_t x = band.x + WINDOW_TITLE_INSET;
     const int32_t y = band.y + ((WINDOW_TITLE_HEIGHT - (FONT_HEIGHT * WINDOW_TITLE_SCALE)) / 2);
 
     /*
-     * The title is clipped to the band short of the close control, so that a
-     * long title stops before it rather than running beneath it. A title that
-     * ran beneath the control would leave a person unsure whether the disc was
-     * a control or a letter.
+     * The title is clipped to the band short of the leftmost control, so that
+     * a long title stops before the controls rather than running beneath them.
+     * A title that ran beneath a control would leave a person unsure whether
+     * the glyph was a control or a letter.
      */
     if (!GraphicsPushClip(WindowScreen,
                           WindowMakeRectangle(band.x, band.y, reach.x - band.x, band.height)))
@@ -528,6 +629,72 @@ static void WindowDrawTitle(const Window *window, GraphicsRectangle band, uint32
         FontDrawGlyphScaled(WindowScreen, x, y, (uint8_t)*at, ink, paper, WINDOW_TITLE_SCALE);
         x += FONT_WIDTH * WINDOW_TITLE_SCALE;
     }
+
+    (void)GraphicsPopClip(WindowScreen);
+}
+
+/*
+ * The glyphs of the full-screen and minimise controls: a square outline, which
+ * becomes two overlapping squares while the window is full, the second being
+ * what leaving full screen goes back to; and a bar along the foot of the reach.
+ * Drawn in the band's ink with the primitives, so they need no face and match
+ * whatever colour the band is.
+ */
+static void WindowDrawControls(const Window *window, uint32_t ink, uint32_t paper)
+{
+    const GraphicsRectangle full = WindowControlReachOf(window, WINDOW_CONTROL_FULL);
+    const GraphicsRectangle minimise = WindowControlReachOf(window, WINDOW_CONTROL_MINIMISE);
+    const int32_t full_x = full.x + WINDOW_CLOSE_REACH;
+    const int32_t full_y = full.y + WINDOW_CLOSE_REACH;
+    const int32_t bar_x = minimise.x + WINDOW_CLOSE_REACH;
+    const int32_t bar_y = minimise.y + WINDOW_CLOSE_REACH;
+    const int32_t side = (2 * WINDOW_GLYPH_HALF) + 1;
+
+    if (GraphicsRectangleIsEmpty(full))
+    {
+        return;
+    }
+
+    /* Clipped to the band, so that upon a window narrower than its controls
+     * they are cut rather than drawn over whatever stands beside it. */
+    if (!GraphicsPushClip(WindowScreen, WindowTitleBandOf(window)))
+    {
+        return;
+    }
+
+    if (window->full)
+    {
+        GraphicsDrawRectangle(WindowScreen,
+                              WindowMakeRectangle(full_x - WINDOW_GLYPH_HALF + 3,
+                                                  full_y - WINDOW_GLYPH_HALF, side - 3, side - 3),
+                              ink);
+        GraphicsFillRectangle(WindowScreen,
+                              WindowMakeRectangle(full_x - WINDOW_GLYPH_HALF,
+                                                  full_y - WINDOW_GLYPH_HALF + 3, side - 3,
+                                                  side - 3),
+                              paper);
+        GraphicsDrawRectangle(WindowScreen,
+                              WindowMakeRectangle(full_x - WINDOW_GLYPH_HALF,
+                                                  full_y - WINDOW_GLYPH_HALF + 3, side - 3,
+                                                  side - 3),
+                              ink);
+    }
+    else
+    {
+        GraphicsDrawRectangle(WindowScreen,
+                              WindowMakeRectangle(full_x - WINDOW_GLYPH_HALF,
+                                                  full_y - WINDOW_GLYPH_HALF, side, side),
+                              ink);
+        GraphicsDrawRectangle(WindowScreen,
+                              WindowMakeRectangle(full_x - WINDOW_GLYPH_HALF,
+                                                  full_y - WINDOW_GLYPH_HALF + 1, side, 1),
+                              ink);
+    }
+
+    GraphicsFillRectangle(WindowScreen,
+                          WindowMakeRectangle(bar_x - WINDOW_GLYPH_HALF,
+                                              bar_y + WINDOW_GLYPH_HALF - 1, side, 2),
+                          ink);
 
     (void)GraphicsPopClip(WindowScreen);
 }
@@ -559,6 +726,7 @@ static void WindowDrawFrame(size_t identifier)
     WindowDrawTitle(window, band, ink, band_colour);
     GraphicsFillCircle(WindowScreen, reach.x + WINDOW_CLOSE_REACH, reach.y + WINDOW_CLOSE_REACH,
                        WINDOW_CLOSE_RADIUS, ink);
+    WindowDrawControls(window, ink, band_colour);
     (void)GraphicsBlit(WindowScreen, content.x, content.y, &window->surface,
                        GraphicsSurfaceBounds(&window->surface));
 }
@@ -682,6 +850,8 @@ size_t WindowCreate(int32_t x, int32_t y, int32_t width, int32_t height, const c
     window->in_use = true;
     window->layer = layer;
     window->decorated = (layer == WINDOW_LAYER_NORMAL);
+    window->minimised = false;
+    window->full = false;
     window->width = width;
     window->height = height;
     window->x = x;
@@ -724,11 +894,21 @@ size_t WindowCreate(int32_t x, int32_t y, int32_t width, int32_t height, const c
      * A root never takes the focus. It is made first, before anything a person
      * would type at, and a desktop whose keys went to the wallpaper because it
      * was the last thing created is a desktop that ignores its first sentence.
-     * A panel does take it, a launcher being a thing a person may type into.
+     * A panel does not either, since 2026-09-23: nothing upon the panel reads
+     * a key, and a launcher that took the focus when it opened handed it, when
+     * it closed, to the topmost window that could hold it — the panel itself —
+     * so that a person who had used the launcher found their typing going
+     * nowhere. The list of windows upon the panel needs it too: a press upon it
+     * that took the focus would destroy the one thing the list must know.
      */
-    if (layer != WINDOW_LAYER_ROOT)
+    if (layer == WINDOW_LAYER_NORMAL)
     {
         WindowTransferFocus(identifier);
+    }
+
+    if (layer == WINDOW_LAYER_NORMAL)
+    {
+        WindowNotifyRoots();
     }
 
     return identifier;
@@ -792,6 +972,13 @@ void WindowDestroy(size_t identifier)
         {
             WindowTransferFocus(WindowTopmostFocusable());
         }
+    }
+
+    /* The table entry is released but not cleared, so its layer is still the
+     * one it was made in. */
+    if (window->layer == WINDOW_LAYER_NORMAL)
+    {
+        WindowNotifyRoots();
     }
 }
 
@@ -900,6 +1087,250 @@ void WindowMove(size_t identifier, int32_t x, int32_t y)
     window->x = x;
     window->y = y;
     WindowDamageAdd(WindowFrameOf(window));
+}
+
+/* ------------------------------------------ minimise and full screen */
+
+GraphicsRectangle WindowManagerWorkArea(void)
+{
+    GraphicsRectangle area;
+    int32_t top = 0;
+
+    if (!WindowActive)
+    {
+        return WindowEmptyRectangle();
+    }
+
+    area = GraphicsSurfaceBounds(WindowScreen);
+
+    /*
+     * A panel is recognised by where it stands and not by a declaration: a
+     * window of the panel layer across the whole width at the top edge. The
+     * launcher the panel opens is of the same layer and is not across the
+     * whole width, so a window made full while the launcher was open does not
+     * leave a hole the height of the launcher above it.
+     */
+    for (size_t identifier = 0U; identifier < WINDOW_CAPACITY; ++identifier)
+    {
+        const Window *const window = WindowAt(identifier);
+
+        if ((window != NULL) && (window->layer == WINDOW_LAYER_PANEL) && (window->x <= 0) &&
+            (window->y <= 0) && ((window->x + window->width) >= area.width) &&
+            ((window->y + window->height) > top))
+        {
+            top = window->y + window->height;
+        }
+    }
+
+    if (top >= area.height)
+    {
+        top = 0;
+    }
+
+    area.y = top;
+    area.height -= top;
+
+    return area;
+}
+
+/*
+ * Gives a window a new frame position and content extent. The content is a
+ * new surface: what stood in the old one is copied where it fits and the rest
+ * is the paper, and the owner is told to draw it again. False, with nothing
+ * changed, where the extent is outside the bounds or the heap cannot supply it
+ * — a window that lost its content halfway through becoming larger would be a
+ * window with no pixels at all.
+ */
+static bool WindowResizeContent(size_t identifier, int32_t x, int32_t y, int32_t width,
+                                int32_t height)
+{
+    Window *const window = &WindowTable[identifier];
+    const size_t row_bytes = (size_t)width * WindowScreen->bytes_per_pixel;
+    GraphicsSurface surface;
+    WindowEvent event;
+    void *pixels;
+
+    if ((width < WINDOW_MINIMUM_EXTENT) || (height < WINDOW_MINIMUM_EXTENT) ||
+        (width > WINDOW_MAXIMUM_EXTENT) || (height > WINDOW_MAXIMUM_EXTENT))
+    {
+        return false;
+    }
+
+    pixels = KernelAllocate(row_bytes * (size_t)height);
+
+    if (pixels == NULL)
+    {
+        return false;
+    }
+
+    if (!GraphicsSurfaceInitialise(&surface, pixels, (uint32_t)width, (uint32_t)height,
+                                   (uint32_t)row_bytes, WindowScreen->bytes_per_pixel))
+    {
+        KernelFree(pixels);
+        return false;
+    }
+
+    GraphicsClear(&surface, WindowColours.paper);
+    (void)GraphicsBlit(&surface, 0, 0, &window->surface,
+                       WindowMakeRectangle(0, 0, (width < window->width) ? width : window->width,
+                                           (height < window->height) ? height : window->height));
+
+    WindowDamageAdd(WindowFrameOf(window));
+    KernelFree(window->pixels);
+    window->pixels = pixels;
+    window->surface = surface;
+    window->x = x;
+    window->y = y;
+    window->width = width;
+    window->height = height;
+    WindowDamageAdd(WindowFrameOf(window));
+
+    event.kind = WINDOW_EVENT_RESIZE;
+    event.x = width;
+    event.y = height;
+    event.button = 0U;
+    event.buttons = 0U;
+    event.key.scancode = 0U;
+    event.key.character = '\0';
+    event.key.modifiers = 0U;
+    event.key.pressed = false;
+    event.key.extended = false;
+    WindowEnqueue(identifier, &event);
+
+    return true;
+}
+
+bool WindowSetFull(size_t identifier, bool full)
+{
+    Window *const window = WindowAt(identifier);
+
+    if ((window == NULL) || !window->decorated)
+    {
+        return false;
+    }
+
+    if (full == window->full)
+    {
+        return true;
+    }
+
+    if (full)
+    {
+        const GraphicsRectangle area = WindowManagerWorkArea();
+        const int32_t x = window->x;
+        const int32_t y = window->y;
+        const int32_t width = window->width;
+        const int32_t height = window->height;
+
+        if (!WindowResizeContent(identifier, area.x, area.y, area.width - (2 * WINDOW_BORDER),
+                                 area.height - WINDOW_TITLE_HEIGHT - (2 * WINDOW_BORDER)))
+        {
+            return false;
+        }
+
+        window->restore_x = x;
+        window->restore_y = y;
+        window->restore_width = width;
+        window->restore_height = height;
+        window->full = true;
+    }
+    else
+    {
+        if (!WindowResizeContent(identifier, window->restore_x, window->restore_y,
+                                 window->restore_width, window->restore_height))
+        {
+            return false;
+        }
+
+        window->full = false;
+
+        /* Confined again, in case the screen the window was left upon is not
+         * the one it returns to. */
+        WindowMove(identifier, window->x, window->y);
+    }
+
+    if (WindowDragged == identifier)
+    {
+        WindowDragged = WINDOW_NONE;
+    }
+
+    WindowNotifyRoots();
+
+    return true;
+}
+
+bool WindowMinimise(size_t identifier)
+{
+    Window *const window = WindowAt(identifier);
+
+    if ((window == NULL) || !window->decorated)
+    {
+        return false;
+    }
+
+    if (window->minimised)
+    {
+        return true;
+    }
+
+    window->minimised = true;
+    WindowDamageAdd(WindowFrameOf(window));
+
+    /* A window nobody can see holds neither the pointer nor the keys. */
+    if (WindowGrabbed == identifier)
+    {
+        WindowGrabbed = WINDOW_NONE;
+    }
+
+    if (WindowDragged == identifier)
+    {
+        WindowDragged = WINDOW_NONE;
+    }
+
+    if (WindowFocused == identifier)
+    {
+        WindowTransferFocus(WindowTopmostFocusable());
+    }
+
+    WindowNotifyRoots();
+
+    return true;
+}
+
+bool WindowRestore(size_t identifier)
+{
+    Window *const window = WindowAt(identifier);
+
+    if ((window == NULL) || !window->decorated)
+    {
+        return false;
+    }
+
+    if (window->minimised)
+    {
+        window->minimised = false;
+        WindowDamageAdd(WindowFrameOf(window));
+    }
+
+    WindowRaise(identifier);
+    WindowTransferFocus(identifier);
+    WindowNotifyRoots();
+
+    return true;
+}
+
+bool WindowIsMinimised(size_t identifier)
+{
+    const Window *const window = WindowAt(identifier);
+
+    return (window != NULL) && window->minimised;
+}
+
+bool WindowIsFull(size_t identifier)
+{
+    const Window *const window = WindowAt(identifier);
+
+    return (window != NULL) && window->full;
 }
 
 GraphicsRectangle WindowFrame(size_t identifier)
@@ -1143,6 +1574,12 @@ static void WindowBeginPress(int32_t x, int32_t y, uint8_t button, uint8_t butto
     if (window->layer != WINDOW_LAYER_ROOT)
     {
         WindowRaise(identifier);
+    }
+
+    /* And a press upon the panel raises it within its layer but leaves the
+     * focus where it was, for the reason WindowCreate gives. */
+    if (window->layer == WINDOW_LAYER_NORMAL)
+    {
         WindowTransferFocus(identifier);
     }
 
@@ -1152,11 +1589,38 @@ static void WindowBeginPress(int32_t x, int32_t y, uint8_t button, uint8_t butto
         return;
     }
 
+    /*
+     * The two controls of 2026-09-23 are the manager's to act upon, unlike the
+     * close: neither destroys anything or loses anything the owner holds, so
+     * there is nothing to ask. The owner learns of a full screen by the
+     * resize event it must redraw upon, and of a minimise by nothing at all —
+     * a program that drew differently while nobody could see it would be
+     * drawing for nobody.
+     */
+    if (GraphicsRectangleContains(WindowControlReachOf(window, WINDOW_CONTROL_FULL), x, y))
+    {
+        (void)WindowSetFull(identifier, !window->full);
+        return;
+    }
+
+    if (GraphicsRectangleContains(WindowControlReachOf(window, WINDOW_CONTROL_MINIMISE), x, y))
+    {
+        WindowMinimise(identifier);
+        return;
+    }
+
+    /* A full window is not dragged: it fills the screen below the panel, and
+     * a drag would leave it the size of the screen and somewhere else, which
+     * is a window neither full nor what it was before. */
     if (GraphicsRectangleContains(WindowTitleBandOf(window), x, y))
     {
-        WindowDragged = identifier;
-        WindowDragOffsetX = x - window->x;
-        WindowDragOffsetY = y - window->y;
+        if (!window->full)
+        {
+            WindowDragged = identifier;
+            WindowDragOffsetX = x - window->x;
+            WindowDragOffsetY = y - window->y;
+        }
+
         return;
     }
 
@@ -1294,7 +1758,8 @@ GraphicsRectangle WindowManagerCompose(void)
         const size_t identifier = WindowStack[position];
         const GraphicsRectangle frame = WindowFrameOf(&WindowTable[identifier]);
 
-        if (!GraphicsRectangleIsEmpty(GraphicsRectangleIntersect(frame, composed)))
+        if (!WindowTable[identifier].minimised &&
+            !GraphicsRectangleIsEmpty(GraphicsRectangleIntersect(frame, composed)))
         {
             WindowDrawFrame(identifier);
         }
@@ -1331,7 +1796,8 @@ size_t WindowManagerWindowAt(int32_t x, int32_t y)
     {
         const size_t identifier = WindowStack[position - 1U];
 
-        if (GraphicsRectangleContains(WindowFrameOf(&WindowTable[identifier]), x, y))
+        if (!WindowTable[identifier].minimised &&
+            GraphicsRectangleContains(WindowFrameOf(&WindowTable[identifier]), x, y))
         {
             return identifier;
         }

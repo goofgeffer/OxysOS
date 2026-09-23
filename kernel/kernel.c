@@ -2356,6 +2356,10 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
      * pictures of art/. */
     KernelVerifyMark();
 
+    /* The background, a file upon the ramdisk as the icons are, and asserted
+     * beside them for the same reason. */
+    KernelVerifyImage();
+
     /* Sub-task 8.6: the pipes the sessions above made, and the scheduler the
      * pipelines ran upon, which the shell is the first thing to sleep in. */
     VfsPipeReport();

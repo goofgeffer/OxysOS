@@ -6,7 +6,7 @@
  *          emulator that decides what stands where, kept apart from the half
  *          that draws it and from the descriptors it reads, so that the whole of
  *          it can be asserted before there is a window to look at.
- * Key definitions: TermScreen, TERM_COLUMNS_MAXIMUM, TERM_ROWS_MAXIMUM,
+ * Key definitions: TermScreen, TERM_COLUMNS_MAXIMUM, TERM_ROWS_MAXIMUM, TermResize,
  *          TermInitialise, TermWrite, TermWriteByte, TermRow, TermRowChanged,
  *          TermRowDrawn, TermColumns, TermRows, TermCursorColumn, TermCursorRow,
  *          TermKeyBytes, TermSequenceFor, TERM_MODIFIER_CONTROL,
@@ -52,15 +52,19 @@
 /*
  * The bounds of the grid.
  *
- * Ninety-six columns is what a screen of 1280 pixels holds at the face's width
- * of eight doubled, with a window frame about it; forty rows is what 800 holds
- * the same way. They are the largest a window upon the largest screen this
- * system has been run at can use, and a caller asking for more is refused
+ * Since 2026-09-23 a terminal made full is given the whole screen below the
+ * panel, and VirtualBox's 640 by 480 drawn at the face's own size is then
+ * seventy-nine columns and forty-three rows — past the forty this was. The
+ * rows are sixty-four, which a screen of 1280 by 800 drawn at scale one would
+ * fill with room over. The columns are bounded by something else: a row is
+ * drawn with one `window_text`, which carries SYSCALL_WINDOW_TEXT_MAXIMUM
+ * characters, so a row longer than that would be refused and never drawn, and
+ * a hundred and twenty stays below it. A caller asking for more is refused
  * rather than quietly given fewer — a terminal that thought it had more columns
  * than it has would wrap its lines in the wrong places for ever.
  */
-#define TERM_COLUMNS_MAXIMUM 96U
-#define TERM_ROWS_MAXIMUM    40U
+#define TERM_COLUMNS_MAXIMUM 120U
+#define TERM_ROWS_MAXIMUM    64U
 
 /*
  * One grid.
@@ -94,6 +98,15 @@ typedef struct TermScreen
  * bounds above and leaves the grid untouched.
  */
 bool TermInitialise(TermScreen *screen, uint32_t columns, uint32_t rows);
+
+/*
+ * Gives the grid a new size, of 2026-09-23, keeping its text: each row cut or
+ * padded with spaces to the new width, and, where there are fewer rows, the
+ * rows dropped from the top so that the cursor's row stays upon the grid —
+ * the line a person is typing is the line that must survive. Every row is
+ * marked changed. Refuses the sizes TermInitialise refuses, changing nothing.
+ */
+bool TermResize(TermScreen *screen, uint32_t columns, uint32_t rows);
 
 /* Writes one byte, and a run of them. */
 void TermWriteByte(TermScreen *screen, char byte);

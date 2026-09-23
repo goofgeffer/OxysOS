@@ -294,6 +294,12 @@ static void WindowClientConvert(const WindowEvent *from, SyscallWindowEvent *to)
     case WINDOW_EVENT_FOCUS_OUT:
         to->kind = SYSCALL_WINDOW_EVENT_FOCUS_OUT;
         break;
+    case WINDOW_EVENT_RESIZE:
+        to->kind = SYSCALL_WINDOW_EVENT_RESIZE;
+        break;
+    case WINDOW_EVENT_WINDOWS:
+        to->kind = SYSCALL_WINDOW_EVENT_WINDOWS;
+        break;
     case WINDOW_EVENT_CLOSE:
     default:
         to->kind = SYSCALL_WINDOW_EVENT_CLOSE;
@@ -566,6 +572,158 @@ int64_t WindowClientText(uint64_t window, uint64_t placement_address, uint64_t t
     }
 
     return SYSCALL_OK;
+}
+
+int64_t WindowClientState(uint64_t window, uint64_t action)
+{
+    const uint64_t caller = WindowClientCaller();
+    bool done;
+
+    ++WindowClientCalls;
+
+    if (!WindowManagerIsActive() || (caller == 0U))
+    {
+        ++WindowClientRefusals;
+
+        return SYSCALL_ENOTSUP;
+    }
+
+    /*
+     * The owner, or the session for any window. Checked before the layer, so
+     * that a program asking about a window it does not hold learns EBADF and
+     * nothing about what kind of window the number names.
+     */
+    if ((window >= WINDOW_CAPACITY) || !WindowExists((size_t)window) ||
+        ((WindowOwner((size_t)window) != caller) && (WindowSession() != caller)))
+    {
+        ++WindowClientRefusals;
+
+        return SYSCALL_EBADF;
+    }
+
+    if (WindowLayerOf((size_t)window) != WINDOW_LAYER_NORMAL)
+    {
+        ++WindowClientRefusals;
+
+        return SYSCALL_EINVAL;
+    }
+
+    switch (action)
+    {
+    case SYSCALL_WINDOW_STATE_MINIMISE:
+        done = WindowMinimise((size_t)window);
+        break;
+    case SYSCALL_WINDOW_STATE_RESTORE:
+        done = WindowRestore((size_t)window);
+        break;
+    case SYSCALL_WINDOW_STATE_FULL:
+        done = WindowSetFull((size_t)window, true);
+
+        if (!done)
+        {
+            ++WindowClientRefusals;
+
+            return SYSCALL_ENOMEM;
+        }
+        break;
+    case SYSCALL_WINDOW_STATE_NOT_FULL:
+        done = WindowSetFull((size_t)window, false);
+
+        if (!done)
+        {
+            ++WindowClientRefusals;
+
+            return SYSCALL_ENOMEM;
+        }
+        break;
+    default:
+        ++WindowClientRefusals;
+
+        return SYSCALL_EINVAL;
+    }
+
+    if (!done)
+    {
+        ++WindowClientRefusals;
+
+        return SYSCALL_EINVAL;
+    }
+
+    /* The resize, the loss of focus, the list: each is an event somebody may
+     * be asleep for. */
+    WindowClientWakeAll();
+
+    return SYSCALL_OK;
+}
+
+int64_t WindowClientList(uint64_t entries_address, uint64_t capacity)
+{
+    const uint64_t caller = WindowClientCaller();
+    const size_t focused = WindowManagerFocused();
+    SyscallWindowEntry *destination;
+    int64_t count = 0;
+
+    ++WindowClientCalls;
+
+    if (!WindowManagerIsActive() || (caller == 0U))
+    {
+        ++WindowClientRefusals;
+
+        return SYSCALL_ENOTSUP;
+    }
+
+    /* The list is the session's: the titles of every program's windows are
+     * not every program's business. */
+    if (caller != WindowSession())
+    {
+        ++WindowClientRefusals;
+
+        return SYSCALL_EPERM;
+    }
+
+    if ((capacity > WINDOW_CAPACITY) ||
+        ((capacity != 0U) &&
+         !SyscallUserRangeIsWritable(entries_address, capacity * (uint64_t)sizeof *destination)))
+    {
+        ++WindowClientRefusals;
+
+        return SYSCALL_EFAULT;
+    }
+
+    destination = (SyscallWindowEntry *)(uintptr_t)entries_address;
+
+    for (size_t identifier = 0U; identifier < WINDOW_CAPACITY; ++identifier)
+    {
+        if (!WindowExists(identifier) || (WindowLayerOf(identifier) != WINDOW_LAYER_NORMAL))
+        {
+            continue;
+        }
+
+        if ((uint64_t)count < capacity)
+        {
+            SyscallWindowEntry *const entry = &destination[count];
+            const char *const title = WindowTitle(identifier);
+            size_t length = 0U;
+
+            entry->window = (uint32_t)identifier;
+            entry->flags = (WindowIsMinimised(identifier) ? SYSCALL_WINDOW_ENTRY_MINIMISED : 0U) |
+                           ((identifier == focused) ? SYSCALL_WINDOW_ENTRY_FOCUSED : 0U) |
+                           (WindowIsFull(identifier) ? SYSCALL_WINDOW_ENTRY_FULL : 0U);
+
+            while ((title != NULL) && (title[length] != '\0') &&
+                   (length < SYSCALL_WINDOW_TITLE_MAXIMUM))
+            {
+                entry->title[length] = title[length];
+                ++length;
+            }
+
+            entry->title[length] = '\0';
+        }
+
+        ++count;
+    }
+
+    return count;
 }
 
 void WindowClientReleaseProcess(uint64_t process_id)

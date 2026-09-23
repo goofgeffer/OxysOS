@@ -376,5 +376,12 @@ pixels — the slot's own extent. Both edges are mixed with whatever they are
 drawn upon rather than being all or nothing, which was a staircase.
 [`../design/SESSION.md`](../design/SESSION.md), Sections 3.2 and 8.
 
+**The desktop has a background, and windows may be minimised and made full,
+since 2026-09-23.** The background is a file on the ramdisk in a run-length
+format, scaled to cover the screen; the frame carries two controls beside the
+close, and the panel lists the windows so that a minimised one can be brought
+back. [`../design/SESSION.md`](../design/SESSION.md), Sections 9 and 10;
+[`../design/WINDOWS.md`](../design/WINDOWS.md), Section 13.
+
 **Next: sub-task 9.7** — the utilities the desktop is not usable without: a file
 manager, a text viewer and a clock. `Oxys 1 Beta` is cut there.

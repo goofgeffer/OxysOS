@@ -268,10 +268,17 @@ Four, each reverted:
    movements at least; the line editor already parses that grammar upon the
    input side, [`../../libc/line/line.c`](../../libc/line/line.c), and would be
    the thing to read before writing the output side.
-4. **The window cannot be resized, so the grid cannot be.** A window is the size
-   it was made ([`WINDOWS.md`](WINDOWS.md), Section 9, limitation 3), and
-   nothing tells a program its size has changed; the grid is therefore fixed at
-   start from the screen.
+4. ~~**The window cannot be resized, so the grid cannot be.**~~ **Closed on
+   2026-09-23**: a window made full is sent its new extent
+   ([`WINDOWS.md`](WINDOWS.md), Section 13), and `/bin/terminal` gives the grid
+   as many whole cells as it holds with `TermResize` — each row cut or padded,
+   and rows dropped from the top only so that the cursor's row survives — and
+   paints the whole content, the margin past the last cell included. The
+   bounds rose to 120 columns, below the 127 characters one `window_text`
+   carries, and 64 rows. **What remains is that the shell is not told**: there
+   is no call by which a program learns its terminal's size, so a program
+   that laid out a screen would lay it out by the size it assumed. None here
+   does.
 5. **There is no scrollback.** What scrolls off the top is gone. The grid holds
    what is shown and nothing behind it, and a history would be a second array
    and a way to look at it.

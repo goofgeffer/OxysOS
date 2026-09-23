@@ -722,6 +722,30 @@ with what it would catch. What only looking establishes is the desktop.
    yellow stands about the disc. Look at 640 by 480 as well as wider: the
    narrow screen draws the table averaged and the wide one draws it one to one,
    and a fault in either path shows in only one of them.
+8. **The background, of 2026-09-23.** The desktop is the drawing of
+   `art/backgrounds/background.png` — a pale yellow sky, an orange sun, a brown
+   shape at the right — covering the whole screen beneath the panel, with no
+   bars at any edge and the sun round rather than oval. At 640 by 480 the
+   sides are cut and at 1280 by 800 the top and the foot, Section 9 of
+   `SESSION.md`; the mark and the wordmark are not drawn upon it. **The ground
+   and the mark in its place** is a background that could not be read, which
+   the serial line says.
+9. **Minimise, full screen and the list of windows, of 2026-09-23.** Open the
+   demonstration and the terminal from the launcher: the panel lists `Oxys`,
+   `Pointer`, `Keys` and `Terminal`, the window holding the focus upon the
+   quiet colour. Each frame carries, from the right, the close disc, a square
+   and a bar. Type `ls` into the terminal and press its square: it fills the
+   screen below the panel with the text kept and more rows and columns about
+   it, and the square becomes two. Press the bar: the terminal vanishes and
+   its name upon the panel is dimmed, and the focus passes to the window left
+   on top. Press the square of `Oxys`: the mark grows with the window and
+   stays smooth. Press `Terminal` upon the panel: it returns, full, focused,
+   its text intact; press its two squares and it returns to its size and
+   place. Pressing the focused window's name minimises it. Failures that
+   report nothing: **a stripe of white** at the right or foot of the full
+   terminal is a margin not painted; **a small mark in a large paper** is a
+   program that ignored the resize; **typing that goes nowhere** after the
+   launcher closes is the panel holding the focus.
 
 ## 12. Verification of the terminal emulator
 

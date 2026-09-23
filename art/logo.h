@@ -5,7 +5,8 @@
  * Purpose: The mark of Oxys-OS as a table of coverage, one byte to a pixel,
  *          generated from art/logo.png and included by whatever draws it.
  * Key definitions: LOGO_EXTENT, LOGO_UNITS, LOGO_LEVELS, LOGO_FULL,
- *          LogoCoverage, LogoSample, LogoMix, LogoMixPacked.
+ *          LogoCoverage, LogoLevel, LogoInterpolate, LogoSample, LogoMix,
+ *          LogoMixPacked.
  * References:
  *   - art/README.md: how this is generated, and why it is generated rather
  *     than drawn.
@@ -3127,6 +3128,75 @@ static const unsigned char LogoCoverage[LOGO_EXTENT * LOGO_EXTENT] = {
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 };
+/*
+ * One coverage of the table, the high four bits or the low, at (column, row),
+ * with the position held to the table so that the interpolation below may ask
+ * for the neighbour of an edge pixel.
+ */
+static inline unsigned LogoLevel(int column, int row, unsigned shift)
+{
+    if (column >= LOGO_EXTENT)
+    {
+        column = LOGO_EXTENT - 1;
+    }
+
+    if (row >= LOGO_EXTENT)
+    {
+        row = LOGO_EXTENT - 1;
+    }
+
+    return ((unsigned)LogoCoverage[(row * LOGO_EXTENT) + column] >> shift) & 0x0FU;
+}
+
+/*
+ * The enlargement of 2026-09-23: the coverage between the four pixels of the
+ * table nearest the centre of the pixel asked for, weighted by how near each
+ * is, in 256ths. Repeating the pixel beneath, as the box below does when its
+ * span is empty, draws the edge of the disc as steps of the enlargement's
+ * size, and a window made full shows the mark several times larger than the
+ * table; interpolated, the edge stays a soft line at any size.
+ */
+static inline void LogoInterpolate(int x, int y, int size, unsigned *covered, unsigned *inked)
+{
+    int position_x = ((((2 * x) + 1) * LOGO_EXTENT * 256) / (2 * size)) - 128;
+    int position_y = ((((2 * y) + 1) * LOGO_EXTENT * 256) / (2 * size)) - 128;
+    unsigned weight_x;
+    unsigned weight_y;
+    int column;
+    int row;
+
+    position_x = (position_x < 0) ? 0 : position_x;
+    position_y = (position_y < 0) ? 0 : position_y;
+    column = position_x / 256;
+    row = position_y / 256;
+    weight_x = (unsigned)(position_x % 256);
+    weight_y = (unsigned)(position_y % 256);
+
+    for (unsigned shift = 0U; shift <= 4U; shift += 4U)
+    {
+        const unsigned mixed =
+            (LogoLevel(column, row, shift) * (256U - weight_x) * (256U - weight_y)) +
+            (LogoLevel(column + 1, row, shift) * weight_x * (256U - weight_y)) +
+            (LogoLevel(column, row + 1, shift) * (256U - weight_x) * weight_y) +
+            (LogoLevel(column + 1, row + 1, shift) * weight_x * weight_y);
+        const unsigned value =
+            ((mixed * LOGO_FULL) + ((LOGO_LEVELS * 65536U) / 2U)) / (LOGO_LEVELS * 65536U);
+
+        if (shift == 4U)
+        {
+            *covered = value;
+        }
+        else
+        {
+            *inked = value;
+        }
+    }
+
+    if (*inked > *covered)
+    {
+        *inked = *covered;
+    }
+}
 
 /*
  * The coverage and the ink of pixel (x, y) of the mark drawn `size` pixels
@@ -3135,9 +3205,9 @@ static const unsigned char LogoCoverage[LOGO_EXTENT * LOGO_EXTENT] = {
  * Every pixel of the table whose position falls within the pixel asked for is
  * averaged, which is a box filter: at `size` equal to LOGO_EXTENT it is one
  * pixel, at half of it four. When `size` exceeds LOGO_EXTENT the span would be
- * empty, and it is widened to the one pixel beneath, which is enlargement by
- * repetition. The arithmetic is integral throughout, because the kernel draws
- * this and PROJECT_GUIDELINES.md, Section 8, keeps floating point out of it.
+ * empty, and LogoInterpolate answers instead. The arithmetic is integral
+ * throughout, because the kernel draws this and PROJECT_GUIDELINES.md,
+ * Section 8, keeps floating point out of it.
  */
 static inline void LogoSample(int x, int y, int size, unsigned *covered, unsigned *inked)
 {
@@ -3154,6 +3224,13 @@ static inline void LogoSample(int x, int y, int size, unsigned *covered, unsigne
 
     if ((size <= 0) || (x < 0) || (y < 0) || (x >= size) || (y >= size))
     {
+        return;
+    }
+
+    if (size > LOGO_EXTENT)
+    {
+        LogoInterpolate(x, y, size, covered, inked);
+
         return;
     }
 

@@ -109,7 +109,7 @@ default of.**
 | ---- | ------- | ------------ |
 | `/etc/system.conf` | `/bin/init` | `[system]`, a banner it prints; and a `[service]` block for each program `init` starts, with `run`, `name`, `restart` and `needs`. |
 | `/etc/desktop.conf` | `/bin/windows` | `[desktop]`, the scale its windows are drawn at and the accent its contents are drawn with — `system` for the palette's. |
-| `/etc/session.conf` | `/bin/session` | `[session]`, the scale the desktop is drawn at; and a `[launch]` block for each entry of the launcher, with `run`, `name` and — since sub-task 9.6 — `icon`, a path to a picture the launcher draws beside the name. |
+| `/etc/session.conf` | `/bin/session` | `[session]`, the scale the desktop is drawn at and — since 2026-09-23 — `background`, a path to the picture that covers the desktop; and a `[launch]` block for each entry of the launcher, with `run`, `name` and — since sub-task 9.6 — `icon`, a path to a picture the launcher draws beside the name. |
 
 They are **files in the repository**, at [`../../etc/`](../../etc/), staged onto
 the initial ramdisk by the `Makefile` rather than written by a recipe: the thing

@@ -29,6 +29,7 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <syscall.h>
 
 static int WindowFailures;
@@ -198,6 +199,16 @@ int main(void)
         errno = 0;
         WindowRequire((OxysWindowCreate(&full, "odd", 9U) == -1) && (errno == EINVAL),
                       "a layer that does not exist was not EINVAL");
+        /* The list of windows is the session's as well: the titles of every
+         * program's windows are not every program's business. */
+        {
+            SyscallWindowEntry entries[4];
+
+            errno = 0;
+            WindowRequire((OxysWindowList(entries, 4U) == -1) && (errno == EPERM),
+                          "the list of windows was given to a program that does not hold the "
+                          "session");
+        }
 
         /* Claiming it is permitted — nothing holds it during this test — and
          * claiming it twice is not an error. */
@@ -213,6 +224,60 @@ int main(void)
         }
     }
 
+    /*
+     * --- Minimise and full screen, of 2026-09-23, by the two calls. ---
+     *
+     * Upon a window of its own, for the reason the text below has one: the
+     * kernel's self-test reads the first window's pixels while this program
+     * sleeps, and a first window made full would have moved them.
+     */
+    {
+        SyscallWindowRectangle wide = CheckRectangle(8, 8, 130, 40);
+        const int64_t window = OxysWindowCreate(&wide, "state", SYSCALL_WINDOW_LAYER_NORMAL);
+        SyscallWindowEntry entries[16];
+        bool resized = false;
+        bool listed = false;
+        int64_t count;
+
+        WindowRequire(window >= 0, "a window for the states could not be made");
+        WindowRequire(OxysWindowState(window, SYSCALL_WINDOW_STATE_FULL) == 0,
+                      "full screen was refused a window this program holds");
+
+        /* No panel stands upon the self-test's screen, so full is the whole
+         * of it: 160 wide less the border, 120 high less the band and border. */
+        while (OxysWindowEvent(window, &event, 0U) == 1)
+        {
+            resized = resized || ((event.kind == SYSCALL_WINDOW_EVENT_RESIZE) &&
+                                  (event.x == 158) && (event.y == 94));
+        }
+
+        WindowRequire(resized, "a window made full was not told its new extent");
+        WindowRequire(OxysWindowState(window, SYSCALL_WINDOW_STATE_NOT_FULL) == 0,
+                      "leaving full screen was refused");
+        WindowRequire((OxysWindowState(window, SYSCALL_WINDOW_STATE_MINIMISE) == 0) &&
+                          (OxysWindowState(window, SYSCALL_WINDOW_STATE_RESTORE) == 0),
+                      "a window this program holds could not be minimised and restored");
+
+        errno = 0;
+        WindowRequire((OxysWindowState(window, 99U) == -1) && (errno == EINVAL),
+                      "an action that is none of the four was not EINVAL");
+        errno = 0;
+        WindowRequire((OxysWindowState(999, SYSCALL_WINDOW_STATE_MINIMISE) == -1) &&
+                          (errno == EBADF),
+                      "a window naming nothing was not EBADF");
+
+        /* This program holds the session now, and the list names its window. */
+        count = OxysWindowList(entries, 16U);
+
+        for (int64_t index = 0; (index < count) && (index < 16); ++index)
+        {
+            listed = listed || ((entries[index].window == (uint32_t)window) &&
+                                (strcmp(entries[index].title, "state") == 0));
+        }
+
+        WindowRequire(listed, "the session's list did not name a window this program holds");
+        WindowRequire(OxysWindowDestroy(window) == 0, "the states' window could not be destroyed");
+    }
     /*
      * --- The text of sub-task 9.5, into a window of its own. ---
      *

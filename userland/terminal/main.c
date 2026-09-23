@@ -6,7 +6,7 @@
  *          beneath it. It starts /bin/sh upon a pair of pipes, draws what the
  *          shell writes, and sends the shell what a person types at the window.
  * Key functions: main, TerminalStartShell, TerminalDraw, TerminalHandleKey,
- *          TerminalHandleEvents, TerminalDrainShell.
+ *          TerminalHandleEvents, TerminalDrainShell, TerminalResize.
  * References:
  *   - libc/include/term.h: the grid and the key translation, both of which are
  *     the C library's and are asserted without a window by
@@ -93,6 +93,12 @@ static TermScreen TerminalGrid;
 static int64_t TerminalWindow = -1;
 static int32_t TerminalScale = 2;
 
+/* The content's extent, which since 2026-09-23 may be larger than the grid:
+ * a window made full is given what the screen has, and the grid takes as many
+ * whole cells of it as it holds. */
+static int32_t TerminalContentWidth;
+static int32_t TerminalContentHeight;
+
 /* The pipes, from this program's side: what it writes to the shell, and what it
  * reads from the shell. */
 static int TerminalToShell = -1;
@@ -123,14 +129,16 @@ static bool TerminalCursorDrawn;
  */
 static bool TerminalPaintGround(void)
 {
-    const int32_t width = (int32_t)TermColumns(&TerminalGrid) * TERMINAL_GLYPH * TerminalScale;
+    const int32_t width = TerminalContentWidth;
     const int32_t band = TERMINAL_PITCH * TerminalScale;
     const size_t count = (size_t)width * (size_t)band;
     uint32_t *const pixels = malloc(count * sizeof *pixels);
     SyscallWindowRectangle area;
 
-    if (pixels == NULL)
+    if ((pixels == NULL) || (width <= 0))
     {
+        free(pixels);
+
         return false;
     }
 
@@ -141,11 +149,15 @@ static bool TerminalPaintGround(void)
 
     area.x = 0;
     area.width = width;
-    area.height = band;
 
-    for (uint32_t row = 0U; row < TermRows(&TerminalGrid); ++row)
+    /* The whole content and not the grid alone: a window made full has a
+     * margin below and to the right of the last whole cell, and that margin
+     * would otherwise stand in the manager's paper. */
+    for (int32_t top = 0; top < TerminalContentHeight; top += band)
     {
-        area.y = (int32_t)row * band;
+        area.y = top;
+        area.height = ((top + band) <= TerminalContentHeight) ? band
+                                                              : (TerminalContentHeight - top);
 
         if (OxysWindowBlit(TerminalWindow, &area, pixels) != 0)
         {
@@ -158,6 +170,35 @@ static bool TerminalPaintGround(void)
     free(pixels);
 
     return true;
+}
+
+/*
+ * The content has a new extent — the window was made full, or ceased to be:
+ * the grid is given as many whole cells as it holds, keeping its text, and the
+ * whole content is painted and drawn again. The shell is not told; nothing in
+ * this system can tell a program its terminal's size, docs/design/TERMINAL.md,
+ * Section 7, and a program that laid out a screen by the old size will lay it
+ * out wrongly until it next looks — which is every program that exists here,
+ * none of them laying out screens.
+ */
+static void TerminalResize(int32_t width, int32_t height)
+{
+    uint32_t columns = (uint32_t)(width / (TERMINAL_GLYPH * TerminalScale));
+    uint32_t rows = (uint32_t)(height / (TERMINAL_PITCH * TerminalScale));
+
+    columns = (columns > TERM_COLUMNS_MAXIMUM) ? TERM_COLUMNS_MAXIMUM : columns;
+    rows = (rows > TERM_ROWS_MAXIMUM) ? TERM_ROWS_MAXIMUM : rows;
+
+    TerminalContentWidth = width;
+    TerminalContentHeight = height;
+
+    if ((columns == 0U) || (rows == 0U) || !TermResize(&TerminalGrid, columns, rows))
+    {
+        return;
+    }
+
+    TerminalCursorDrawn = false;
+    (void)TerminalPaintGround();
 }
 
 /* Draws one run of text at a cell position. */
@@ -370,6 +411,10 @@ static bool TerminalHandleEvents(void)
             TerminalHandleKey(&event);
             break;
 
+        case SYSCALL_WINDOW_EVENT_RESIZE:
+            TerminalResize(event.x, event.y);
+            break;
+
         case SYSCALL_WINDOW_EVENT_CLOSE:
             return false;
 
@@ -448,6 +493,8 @@ int main(void)
     geometry.x = (screen.width - geometry.width) / 2;
     geometry.y = (screen.height - geometry.height) / 2;
 
+    TerminalContentWidth = geometry.width;
+    TerminalContentHeight = geometry.height;
     TerminalWindow = OxysWindowCreate(&geometry, "Terminal", SYSCALL_WINDOW_LAYER_NORMAL);
 
     if (TerminalWindow < 0)
