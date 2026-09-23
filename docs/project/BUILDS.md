@@ -352,12 +352,12 @@ regenerates it and fails if what is here differs.*
 
 | | |
 | --- | --- |
-| Builds recorded | 8 |
-| Verified | 8 passed, 0 not |
+| Builds recorded | 9 |
+| Verified | 9 passed, 0 not |
 | Compilers | gcc |
 | Environments | QEMU, VirtualBox |
 | First | 2026-09-17T01:34Z |
-| Latest | 2026-09-22T22:17Z |
+| Latest | 2026-09-23T00:27Z |
 
 ## The builds
 
@@ -371,5 +371,6 @@ regenerates it and fails if what is here differs.*
 | 6 | 2026-09-21T23:26Z | `b1f1f65` | gcc 13.2.0 | 3354208 | 10582016 | passed (71 assertions) |  | The demonstration's window drawing the mark of art/logo.h, and the archive check reporting rather than failing where the archive is not |
 | 7 | 2026-09-21T23:57Z | `bb2e6de` | gcc 13.2.0 | 3354936 | 10584064 | passed (71 assertions) |  | The screen handed back to the console before the reason is written, and cleared when it is |
 | 8 | 2026-09-22T22:17Z | `182a724` | gcc 13.2.0 | 3438440 | 10665984 | passed (72 assertions) |  | Sub-task 9.6: the terminal emulator, the poll it waits in, and the tcgroup refusal |
+| 9 | 2026-09-23T00:27Z | `e8bb681` | gcc 13.2.0 | 3438440 | 10665984 | passed (72 assertions) |  | The terminal white upon black, and the fg that continued nothing |
 
 <!-- END GENERATED -->
