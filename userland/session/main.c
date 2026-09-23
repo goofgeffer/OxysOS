@@ -60,9 +60,9 @@
 #define SESSION_LAUNCH_WIDTH 56
 
 /* The icon slot within a row: its extent in units, and the margin before it.
- * An icon larger than the slot is drawn as much of as fits, the slot being what
- * the row was sized for; ICON_EXTENT_MAXIMUM is what the library will hold at
- * all. */
+ * An icon of any extent is fitted to the slot, SessionDrawIcon; one drawn at
+ * twice the units, as the shipped icons are, is drawn one to one at a scale of
+ * two. ICON_EXTENT_MAXIMUM is what the library will hold at all. */
 #define SESSION_ICON_UNITS  24
 #define SESSION_ICON_MARGIN 2
 
@@ -208,17 +208,24 @@ static void SessionDrawRoot(void)
 {
     const int32_t centre_x = SessionScreen.width / 2;
     const int32_t centre_y = SessionScreen.height / 2;
-    const int32_t left = centre_x - ((LOGO_WIDTH * SessionScale) / 2);
-    const int32_t top = centre_y - (24 * SessionScale) - ((LOGO_HEIGHT * SessionScale) / 2);
+    const int32_t size = LOGO_UNITS * SessionScale;
+    const int32_t left = centre_x - (size / 2);
+    const int32_t top = centre_y - (24 * SessionScale) - (size / 2);
+    /* Zero, and nothing drawn, for a mark wider than the tile: a scale this
+     * session never sets. */
+    const int32_t band = (size > 0) ? (int32_t)(SESSION_TILE / (uint32_t)size) : 0;
 
     SessionFill(SessionRoot, 0, 0, SessionScreen.width, SessionScreen.height, SESSION_GROUND);
 
     /*
-     * The mark of art/logo.h, drawn a run at a time rather than a pixel at a
-     * time: a row of the bitmap is walked, and each run of one state becomes
-     * one fill. The mark is ninety-six pixels square and every fill crosses
-     * the system-call boundary, so a pixel at a time would be nine thousand
-     * calls for a picture drawn once.
+     * The mark of art/logo.h, composed into the tile a band of rows at a time
+     * and carried across in one blit for each band. Every pixel is mixed from
+     * the ground, the disc and the ink in the proportions LogoSample gives,
+     * so the edge of the disc is smooth rather than the staircase the table of
+     * three states drew; and since the square about the mark is composed as
+     * the ground, the whole square may be blitted without a pixel of it being
+     * wrong. Ten blits for a mark of 192 pixels, where a fill for every run of
+     * one colour would be thousands once the edge is mixed.
      *
      * It is the same mark, at the same size and in the same colours, as the
      * boot screen the kernel drew a moment before — art/palette.h and
@@ -226,28 +233,32 @@ static void SessionDrawRoot(void)
      * hand-over from looking like two pictures replacing each other rather
      * than one machine finishing what it started.
      */
-    for (int32_t row = 0; row < LOGO_HEIGHT; ++row)
+    for (int32_t first = 0; (band > 0) && (first < size); first += band)
     {
-        int32_t column = 0;
+        const int32_t rows = ((first + band) <= size) ? band : (size - first);
+        SyscallWindowRectangle area;
 
-        while (column < LOGO_WIDTH)
+        for (int32_t row = 0; row < rows; ++row)
         {
-            const unsigned state = LogoAt(column, row);
-            int32_t run = 1;
-
-            while (((column + run) < LOGO_WIDTH) && (LogoAt(column + run, row) == state))
+            for (int32_t column = 0; column < size; ++column)
             {
-                ++run;
-            }
+                unsigned covered;
+                unsigned inked;
 
-            if (state != LOGO_NOTHING)
-            {
-                SessionFill(SessionRoot, left + (column * SessionScale),
-                            top + (row * SessionScale), run * SessionScale, SessionScale,
-                            (state == LOGO_INK) ? SESSION_INK : SESSION_DISC);
+                LogoSample(column, first + row, size, &covered, &inked);
+                SessionTile[(row * size) + column] =
+                    LogoMixPacked(SESSION_GROUND, SESSION_DISC, SESSION_INK, covered, inked);
             }
+        }
 
-            column += run;
+        area.x = left;
+        area.y = top + first;
+        area.width = size;
+        area.height = rows;
+
+        if (OxysWindowBlit(SessionRoot, &area, SessionTile) != 0)
+        {
+            break;
         }
     }
 
@@ -294,18 +305,20 @@ static void SessionDrawPanel(bool open)
 }
 
 /*
- * Draws an icon at a position, enlarged by the scale, with `paper` wherever the
- * icon covers nothing.
+ * Draws an icon at a position, fitted to the slot, over `paper`.
  *
  * It is composed into the tile and carried across in one blit. **The
  * transparency is resolved here and not by the window manager**: the protocol
  * carries pixels and has no notion of a pixel that is not there, so what a
  * caller means by "nothing" is "the colour behind me", and the caller is the
- * only one that knows what that is — SESSION.md, Section 8.
+ * only one that knows what that is — SESSION.md, Section 8. OxysIconCompose
+ * does the mixing, a pixel partly transparent becoming partly the paper, which
+ * is what lets the edge of a picture be smooth.
  *
- * An icon larger than the slot is drawn as much of as the slot holds rather
- * than refused: the slot is what the row was sized for, and half a picture in
- * the right place is more use than none.
+ * The icon is fitted to the slot whatever its extent — averaged down when it
+ * is larger, repeated when it is smaller — so that a picture drawn at the
+ * slot's own extent is drawn one to one, and a picture drawn at any other is
+ * still the whole picture in the place the row was sized for.
  */
 static void SessionDrawIcon(int64_t window, int32_t x, int32_t y, const OxysIcon *icon,
                             uint32_t paper)
@@ -322,10 +335,8 @@ static void SessionDrawIcon(int64_t window, int32_t x, int32_t y, const OxysIcon
     {
         for (int32_t column = 0; column < slot; ++column)
         {
-            const uint32_t pixel = OxysIconAt(icon, (uint32_t)(column / SessionScale),
-                                              (uint32_t)(row / SessionScale));
-
-            SessionTile[(row * slot) + column] = (pixel == ICON_NOTHING) ? paper : pixel;
+            SessionTile[(row * slot) + column] = OxysIconCompose(
+                icon, (uint32_t)column, (uint32_t)row, (uint32_t)slot, paper);
         }
     }
 

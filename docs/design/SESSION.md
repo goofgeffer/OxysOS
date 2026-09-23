@@ -8,7 +8,7 @@ kernel's half and the part that could not be expressed by an order alone;
 Section 3 is the session itself — the root, the panel, the launcher; Section 4
 is the text a program may draw and why the face is the kernel's; Section 5 is
 the ownership of the display; Section 6 is the verification; Section 7 the
-limitations.
+limitations; Section 8 is the icons, and the resolution of both pictures.
 
 **Authority**: `PROJECT_GUIDELINES.md`, Sections 2, 3 and 6.
 
@@ -127,24 +127,43 @@ the machine starts and what they see when it has started are recognisably the
 same system — the same slate, the same figure, the same wordmark. The hand-over
 from the boot screen to the desktop is then not a flash of a different colour.
 
-**Both draw the same bitmap.** From 2026-09-21 the mark is the project owner's
-own, [`../../art/logo.png`](../../art/logo.png), reduced to ninety-six pixels
-square and classified into three states at two bits to a pixel by
-[`../../art/logo.h`](../../art/logo.h): nothing, the disc, and the ink the
-figure is drawn in. The kernel includes that header and so does the session, and
+**Both draw the same table.** From 2026-09-21 the mark is the project owner's
+own, [`../../art/logo.png`](../../art/logo.png), and since 2026-09-23
+[`../../art/logo.h`](../../art/logo.h) holds it as a table of 192 pixels square
+in which each pixel carries two coverages of four bits: how much of it the mark
+covers at all, and how much of it is the ink the figure is drawn in. The kernel
+includes that header and so does the session, and
 [`../../art/README.md`](../../art/README.md) records why it is public domain —
 neither an LGPL kernel nor an MIT program may take artwork from the other.
 
-Three states and not a mask of one bit, for the reason the pointer of sub-task
-6.5 has a coverage byte: the mark is a figure **upon** a disc, and where the
-bitmap says nothing the ground behind shows through, so the same file sits upon
-the yellow of the boot screen and the yellow of the desktop without a colour
-reserved to mean "absent".
+**Coverage and not states.** Until 2026-09-23 the table was ninety-six pixels
+square and each pixel one of three states — nothing, the disc, the ink. Drawn
+two screen pixels to a pixel upon every screen of 1024 or wider, its edge was a
+staircase of two-pixel steps and its figure a line of blocks, and no pixel could
+be *partly* the disc. A pixel of the edge is now the ground, the disc and the
+ink in the proportions the artwork gives it, by `LogoMix`; the table is drawn one
+to one at the scale of two, and `LogoSample` averages four of its pixels into one
+at the scale of one, so the edge is smooth upon VirtualBox's 640 by 480 as upon
+everything wider. `LOGO_UNITS` — the size the mark is laid out by — is still
+ninety-six, so nothing about where the mark stands moved.
 
-**The session draws it a run at a time and the kernel a pixel at a time**, and
-the difference is the boundary. Every fill the session makes is a system call,
-so a row is walked and each run of one state becomes one call; the kernel is
-already inside its own drawing code and has nothing to save. The picture is the
+**The ground is mixed in, so the caller names it.** A pixel of the edge is
+partly the ground, and the ground is whatever the mark is drawn upon — the
+yellow of the boot screen and the desktop, the paper of the window
+demonstration. Each caller passes the colour it drew beneath, and a caller that
+named one colour and drew upon another would carry a fringe of the named one
+about the mark. The three that draw it today each clear to the colour they name
+immediately before.
+
+**The session composes it and the kernel draws it a pixel at a time**, and the
+difference is the boundary. Every blit the session makes is a system call, and a
+mixed edge would make a fill for every run of one colour into thousands of them;
+so the session composes the whole square into its tile, twenty-one rows at a
+time, and carries each band across in one blit — ten for the mark at the scale
+of two. The square about the mark is composed as the ground, which the root
+already is, so the whole of it may be blitted without a pixel being wrong. The
+kernel is already inside its own drawing code and has nothing to save. The
+picture is the same either way.
 same either way.
 
 It replaced a ring of coloured squares the session drew for itself — squares
@@ -361,21 +380,46 @@ time without the two disagreeing the first time somebody edits that file.
 
 **The format** is [`../../libc/include/icon.h`](../../libc/include/icon.h): four
 bytes of magic, a version, a width, a height, a reserved byte, and then one
-32-bit little-endian pixel per position, row by row. A pixel is the
-`0x00RRGGBB` the window protocol carries, or `ICON_NOTHING` — `0xFF000000`, a
-value no client pixel can be — for a position the icon does not cover. There is
-no compression and no palette: an icon is a few kilobytes, and a format a person
+32-bit little-endian pixel per position, row by row. A pixel is `0xTTRRGGBB`:
+the colour the window protocol carries in its low three bytes, and in its top
+byte how transparent the position is — zero for wholly the colour, 0xFF for
+wholly whatever is behind, which is `ICON_NOTHING`, `0xFF000000`. There is no
+compression and no palette: an icon is a few kilobytes, and a format a person
 can read with `xxd` is a format that can be checked by looking.
 [`../../art/README.md`](../../art/README.md) holds the one command that makes a
 file of it from a picture somebody drew.
 
+**Version 2, since 2026-09-23.** Version 1 allowed the top byte two values, none
+and all, so a picture reduced to the slot had to make every pixel of its edge one
+or the other, and was twenty-four pixels square and enlarged by two into a slot
+of forty-eight. Both were the staircase a person saw. Version 2 lets the top
+byte be anything between, and the terminal's icon is forty-eight pixels square —
+the slot's own extent at the scale of two, drawn one to one. The number was
+raised because a reader of version 1 takes a top byte of 0x80 for part of a
+colour and blits it; a newer file refused is better than one drawn wrongly. A
+file of version 1 is still read, since its two values mean in version 2 what
+they meant in it. `ICON_EXTENT_MAXIMUM` went from thirty-two to sixty-four at
+the same time, which a picture of forty-eight required.
+
 **The transparency is resolved by the caller.** The protocol carries pixels and
 has no notion of a pixel that is not there, so what an icon means by "nothing"
 is "the colour behind me" — and the only thing that knows what that is, is the
-program drawing it. `SessionDrawIcon` composes the icon over the panel's colour
-into its tile and carries the result across in one blit. An icon drawn by
-something over a different ground would compose it over that one instead; the
-file says nothing about either.
+program drawing it. `SessionDrawIcon` asks `OxysIconCompose` for each pixel of
+the slot upon the panel's colour, composes them into its tile and carries the
+result across in one blit. An icon drawn by something over a different ground
+would compose it over that one instead; the file says nothing about either.
+
+**`OxysIconCompose` fits the icon to the square it is asked for.** Each pixel of
+the square is the pixels of the icon beneath it averaged, **each colour weighted
+by how opaque it is**, and the rest of the pixel the paper. The weighting is not
+a refinement: `ICON_NOTHING` carries black in its colour, and averaging colours
+alone would bring that black into every pixel beside a transparent one — a dark
+fringe about every picture reduced to the slot, looking like a fault in the
+drawing and not in the arithmetic. A square larger than the icon repeats the
+pixel beneath; an icon that is not square is centred in the square with the
+paper about it rather than stretched. It is in the library and not the session
+because it is ordinary arithmetic upon a parsed icon, and so the kernel's
+self-test can assert it without a window.
 
 **The parsing is in the C library, and the reading is beside it**, which is the
 seam of [`LIBC.md`](LIBC.md), Section 9, a fifth time: the kernel's self-test
@@ -384,7 +428,8 @@ transition, and then reads the file the ramdisk actually ships and puts it
 through the same parser. That second half is `config-check`'s argument: a parser
 that works and a system whose icons are what its launcher expects are different
 properties, and a picture converted at the wrong size or with its transparency
-flattened parses perfectly and draws a black square.
+flattened parses perfectly and draws a black square; one converted as version
+1 was parses perfectly and draws the staircase.
 
 **An icon that cannot be read costs the icon and not the entry.** The fault is
 printed upon the standard error and the entry is offered without a picture,
@@ -393,3 +438,48 @@ program because its picture was missing would be a desktop a person cannot use
 for a reason having nothing to do with the program.
 
 
+
+### 8.1 Verification of the pictures
+
+The icon's assertions are
+[`../../kernel/test/libc/icon.c`](../../kernel/test/libc/icon.c) and the mark's
+[`../../kernel/test/gfx/mark.c`](../../kernel/test/gfx/mark.c), both at boot and
+neither needing a window. The rows below are those of 2026-09-23; the parser's
+refusals, of the day before, are listed in the file itself.
+
+| Property asserted | The silent failure it would catch |
+| ----------------- | --------------------------------- |
+| An opaque pixel drawn one to one is its own colour; a position of nothing is the paper | A launcher that tints its icons, or draws the black of `ICON_NOTHING` as a square |
+| A pixel half transparent is half its colour upon black | A reader treating the top byte as none or all — the staircase version 2 exists to be rid of |
+| Two white and two nothing, reduced to one upon white, are white | The black carried by `ICON_NOTHING` averaged into the edge: a dark fringe about every reduced picture |
+| Two white and two black reduced to one are the grey between; enlarged, the pixel beneath is repeated; outside the square is the paper | A reduction that samples one pixel instead of averaging, or an enlargement that reads beyond the icon |
+| An icon three by one is centred in a square of three | A picture stretched to fill the slot |
+| Version 1 is still read, version 0 refused | A launcher whose older icons vanish when the format grows |
+| The shipped icon is forty-eight square, and has a transparent, an opaque and a partly transparent pixel | The icon converted as version 1 was — at the old extent, or with its edge thresholded — which parses and draws |
+| No pixel of the mark has more ink than coverage | `LogoMix`'s unsigned subtraction the wrong way round: a speck of some other colour upon the edge |
+| The mark has a disc, a figure, a pixel of edge, and uncovered corners | The ground kept (a square), the figure lost, or the edge regenerated all or nothing |
+| One to one the mark is its table; halved it is the average of the four beneath | A reduction that picks one of four and brings the staircase back at 640 by 480 |
+| The mix at no coverage is exactly the ground, wholly covered the disc, wholly inked the ink | A mix a level off, drawing a faint box about the mark upon the boot screen |
+
+**The damage applied.** The version-1 icon of the commit before was put back
+upon the ramdisk and one byte at the corner of the table given ink without
+coverage, together, in one build. The run reported the icon's extent wrong in
+both directions, "no pixel of the shipped icon is partly transparent, so its
+edge was converted as a staircase", "a pixel of the mark has more ink than
+coverage" and "a corner of the mark is covered, so its ground was not removed",
+and both self-tests FAILED; build 11 of the register is that image. Both were
+reverted.
+
+### 8.2 Limitations of the pictures
+
+1. **Enlargement repeats.** Above the scale of two the mark and the icons are
+   enlarged by repeating pixels, and a step shows again. No screen this system
+   has run upon is drawn at a larger scale; a table of higher resolution, or a
+   filter, is the remedy when one is.
+2. **One icon per program, at one extent.** A file carries one picture, so a
+   slot of another size is filled by reducing or repeating it rather than by a
+   picture drawn for that size.
+3. **The palette of the mark is the caller's, the edge's ground too.** A caller
+   that draws the mark upon a colour other than the one it passes as the
+   ground gets a fringe of the one it passed. Nothing can check that but
+   looking, Section 3.2.

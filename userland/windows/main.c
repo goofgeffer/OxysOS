@@ -192,8 +192,8 @@ static bool DemoMake(DemoWindow *window, int32_t x, int32_t y, int32_t width, in
 }
 
 /*
- * The mark: the disc and the figure of art/logo.h, one source pixel to a square
- * of DemoScale — the same bitmap at the same size as the kernel's boot screen
+ * The mark: the disc and the figure of art/logo.h, LOGO_UNITS units of DemoScale
+ * across — the same table at the same size as the kernel's boot screen
  * and the session's root, so that the three things upon the screen that show
  * the mark show one mark.
  *
@@ -202,9 +202,9 @@ static bool DemoMake(DemoWindow *window, int32_t x, int32_t y, int32_t width, in
  * it: the boot screen and the desktop had been carrying the owner's mark for a
  * day while the window a person actually opens carried the stand-in.
  *
- * LOGO_NOTHING is skipped rather than filled, so the paper shows through where
- * the artwork's white ground was. That is the whole reason the bitmap carries
- * three states and not two, art/README.md.
+ * A pixel the mark does not cover is left as the paper, and one it covers in
+ * part is mixed with the paper in that part, so the edge of the disc is
+ * smooth upon the paper and not a staircase — art/README.md.
  *
  * The disc takes the accent, which is what the configuration sets and what
  * every other coloured thing this program draws takes: a person who writes
@@ -214,24 +214,28 @@ static bool DemoMake(DemoWindow *window, int32_t x, int32_t y, int32_t width, in
 static void DemoDrawFigure(void)
 {
     DemoWindow *const window = &DemoFigure;
-    const int32_t left = (window->width - (LOGO_WIDTH * DemoScale)) / 2;
-    const int32_t top = (window->height - (LOGO_HEIGHT * DemoScale)) / 2;
+    const int32_t size = LOGO_UNITS * DemoScale;
+    const int32_t left = (window->width - size) / 2;
+    const int32_t top = (window->height - size) / 2;
 
     DemoFillRectangle(window, 0, 0, window->width, window->height, DEMO_PAPER);
 
-    for (int32_t y = 0; y < LOGO_HEIGHT; ++y)
+    for (int32_t y = 0; y < size; ++y)
     {
-        for (int32_t x = 0; x < LOGO_WIDTH; ++x)
+        for (int32_t x = 0; x < size; ++x)
         {
-            const unsigned state = LogoAt((int)x, (int)y);
+            unsigned covered;
+            unsigned inked;
 
-            if (state == LOGO_NOTHING)
+            LogoSample((int)x, (int)y, size, &covered, &inked);
+
+            if (covered == 0U)
             {
                 continue;
             }
 
-            DemoFillRectangle(window, left + (x * DemoScale), top + (y * DemoScale), DemoScale,
-                              DemoScale, (state == LOGO_INK) ? DEMO_INK : DemoAccent);
+            DemoFillRectangle(window, left + x, top + y, 1, 1,
+                              LogoMixPacked(DEMO_PAPER, DemoAccent, DEMO_INK, covered, inked));
         }
     }
 

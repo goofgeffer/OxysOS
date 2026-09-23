@@ -771,14 +771,23 @@ text read for minutes at a time is not the problem a label upon a panel is.
 **And the launcher draws pictures**, since the same sub-task. An entry of
 `/etc/session.conf` may carry an `icon`, which is **a path to a file** the
 session reads once at start: four bytes of magic, a version, an extent, and one
-`0x00RRGGBB` pixel per position with `0xFF000000` for a position the picture
-does not cover. A file and not a header, because there is one icon per program
-and the set grows whenever somebody edits that file — a picture compiled in
-would need the system rebuilt to change. The parsing is in the C library and is
-asserted upon bytes composed in memory; the file the ramdisk ships is then read
-and put through the same parser, because a picture converted at the wrong size
-or with its transparency flattened parses perfectly and draws a black square.
+`0xTTRRGGBB` pixel per position, the top byte how transparent it is — zero for
+opaque, 0xFF for a position the picture does not cover, and since 2026-09-23
+(version 2) anything between. A file and not a header, because there is one
+icon per program and the set grows whenever somebody edits that file — a
+picture compiled in would need the system rebuilt to change. The parsing and
+the fitting of an icon to the slot are in the C library and are asserted upon
+bytes composed in memory; the file the ramdisk ships is then read and put
+through the same parser, because a picture converted at the wrong size, with its
+transparency flattened, or with its edge thresholded parses perfectly and draws
+wrongly. The terminal's icon is forty-eight pixels square, drawn one to one.
 [`../design/SESSION.md`](../design/SESSION.md), Section 8.
+
+**The mark is drawn smooth**, since 2026-09-23: `art/logo.h` is 192 pixels of
+coverage rather than ninety-six of three states, drawn one to one upon every
+screen of 1024 or wider and averaged upon VirtualBox's 640 by 480, its edge
+mixed with the ground. Observed under QEMU, VirtualBox and Bochs.
+[`../design/SESSION.md`](../design/SESSION.md), Section 3.2.
 [`../design/TERMINAL.md`](../design/TERMINAL.md).
 
 **The same day found and fixed a defect a person could reach from the
@@ -830,7 +839,7 @@ The physical machine is one machine — the HP Laptop 14-dq0052dx specified in
 | 9.3 `init`, the shutdown and the boot screen | Yes: the boot screen captured, the desktop started by `init`, the desktop killed and started again, `shutdown` halting and `shutdown -r` restarting | **Yes**, the desktop started by `init` at 640 by 480 | **Yes — 9.3**, seventy assertions and the prompt reached | — | **Not yet run** |
 | 9.4 The configuration and `/etc` | Yes: the desktop's accent changed in `/etc/desktop.conf` and seen to change, and `init` seen to give up on a service whose program is missing | **Yes**, seventy-one assertions | **Yes — 9.4**, seventy-one assertions and the prompt reached | — | **Not yet run** |
 | 9.5 The session | Yes: the root and panel captured, the launcher opened and a program started from it, and a window dragged upward seen to pass under the panel | **Yes**, at 640 by 480 — and it is where the panel's height was found to fall below the least extent a window may have | **Yes — 9.5**, seventy-one assertions and the prompt reached | — | **Not yet run** |
-| 9.6 The terminal emulator | Yes: the launcher opened with the terminal's icon beside its name, `Terminal` chosen, and `ls` and `echo hi` typed at the window with their output drawn in it | **Yes**, at 640 by 480, the boot reaching the desktop | **Yes — 9.6**, seventy-three assertions and the prompt reached | — | **Not yet run** |
+| 9.6 The terminal emulator | Yes: the launcher opened with the terminal's icon beside its name, `Terminal` chosen, and `ls` and `echo hi` typed at the window with their output drawn in it | **Yes**, at 640 by 480, the boot reaching the desktop | **Yes — 9.6**, seventy-four assertions and the prompt reached | — | **Not yet run** |
 
 **The rows marked "— 7.2" were all established by two boots of one image**,
 because a boot runs every self-test in the corpus and a clean one is therefore
@@ -1035,7 +1044,7 @@ functional. [`TESTING.md`](TESTING.md), Section 3.
 There is no test harness and there will be none before Phase 7, there being no
 userland to run one in. The kernel therefore asserts its own properties at boot,
 in the order the subsystems are initialised, and `make verify` fails if any of
-them reports a failure. Seventy-three assertions presently report passed or sound.
+them reports a failure. Seventy-four assertions presently report passed or sound.
 
 Those tests are in [`../../kernel/test/`](../../kernel/test/), one file per
 subsystem. Each subsystem's design document carries a table pairing every

@@ -709,12 +709,19 @@ with what it would catch. What only looking establishes is the desktop.
    left: a small dark screen with a prompt in it, read from
    `/share/icons/terminal.oxi` when the session started. The `Windows` row
    carries none and its name stands in the same column as the other's, the slot
-   being left empty rather than closed up. Two failures are worth looking for
-   and neither reports itself: a **square of the panel's colour** where the
+   being left empty rather than closed up. Three failures are worth looking for
+   and none reports itself: a **square of the panel's colour** where the
    picture should be is an icon whose transparency was flattened in the
-   conversion, and **nothing at all** where a row names an icon is a file that
+   conversion; **nothing at all** where a row names an icon is a file that
    could not be read — which says so upon the serial line and offers the entry
-   anyway.
+   anyway; and **a stepped edge or a dark fringe** about the picture is an icon
+   converted as version 1 was, or composed without weighting by opacity.
+7. **The mark's edge, since 2026-09-23.** Upon the boot screen, the desktop and
+   the window demonstration, the disc's outline and the figure are smooth
+   curves, with no steps of two pixels, and no box of a slightly different
+   yellow stands about the disc. Look at 640 by 480 as well as wider: the
+   narrow screen draws the table averaged and the wide one draws it one to one,
+   and a fault in either path shows in only one of them.
 
 ## 12. Verification of the terminal emulator
 

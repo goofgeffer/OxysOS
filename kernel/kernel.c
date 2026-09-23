@@ -137,51 +137,59 @@ static _Noreturn void KernelHalt(void)
 }
 
 /*
- * The mark drawn upon the boot screen and the power screen: a ring of small
- * discs about a larger ringed one, in a few colours — the figure the window
- * demonstration draws, drawn here for the two screens the kernel paints itself.
- * It is geometry and nothing else, which docs/project/INSPIRATIONS.md, Section
- * 3, asks of the appearance, and it needs no font.
+ * The mark of art/logo.h upon the boot screen and the power screen, drawn over
+ * the ground the caller has already cleared the screen to. It is the owner's
+ * artwork and needs no font.
  */
 static void KernelDrawMark(GraphicsSurface *surface, int32_t centre_x, int32_t centre_y,
                            int32_t scale)
 {
-    const uint32_t disc = FramebufferEncode(OXYS_DISC_RED, OXYS_DISC_GREEN, OXYS_DISC_BLUE);
-    const uint32_t ink = FramebufferEncode(OXYS_INK_RED, OXYS_INK_GREEN, OXYS_INK_BLUE);
-    const int32_t left = centre_x - ((LOGO_WIDTH * scale) / 2);
-    const int32_t top = centre_y - ((LOGO_HEIGHT * scale) / 2);
+    const int32_t size = LOGO_UNITS * scale;
+    const int32_t left = centre_x - (size / 2);
+    const int32_t top = centre_y - (size / 2);
 
     /*
-     * The mark of art/logo.h, a pixel of it drawn as a square of `scale` by
-     * `scale`. Nothing is drawn where the bitmap says nothing, so the ground
-     * behind shows through and the disc keeps its shape without a colour
-     * reserved to mean "absent" — the reason the pointer of sub-task 6.5 has a
-     * coverage mask, arriving again for a picture with three states rather
-     * than two.
+     * One screen pixel at a time, each mixed from the ground, the disc and the
+     * ink in the proportions LogoSample gives for it. **The ground is mixed in
+     * and not skipped**: a pixel on the edge of the disc is partly the ground,
+     * and a mark that drew only where it covered wholly would have its edge
+     * back as the staircase this table replaced. That is why the colour of
+     * the ground is passed to LogoMix and why the caller must have cleared to
+     * it — a mark drawn over anything else carries a fringe of the ground.
      *
      * A pixel at a time, and no faster. It is drawn twice in the life of a
      * machine — once upon the boot screen and once upon the page that says the
      * machine may be turned off — and a specialisation for that would be a
      * specialisation nobody could measure.
      */
-    for (int32_t row = 0; row < LOGO_HEIGHT; ++row)
+    for (int32_t row = 0; row < size; ++row)
     {
-        for (int32_t column = 0; column < LOGO_WIDTH; ++column)
+        for (int32_t column = 0; column < size; ++column)
         {
-            const unsigned state = LogoAt(column, row);
+            unsigned covered;
+            unsigned inked;
             GraphicsRectangle pixel;
 
-            if (state == LOGO_NOTHING)
+            LogoSample(column, row, size, &covered, &inked);
+
+            if (covered == 0U)
             {
                 continue;
             }
 
-            pixel.x = left + (column * scale);
-            pixel.y = top + (row * scale);
-            pixel.width = scale;
-            pixel.height = scale;
+            pixel.x = left + column;
+            pixel.y = top + row;
+            pixel.width = 1;
+            pixel.height = 1;
 
-            GraphicsFillRectangle(surface, pixel, (state == LOGO_INK) ? ink : disc);
+            GraphicsFillRectangle(
+                surface, pixel,
+                FramebufferEncode(
+                    (uint8_t)LogoMix(OXYS_GROUND_RED, OXYS_DISC_RED, OXYS_INK_RED, covered, inked),
+                    (uint8_t)LogoMix(OXYS_GROUND_GREEN, OXYS_DISC_GREEN, OXYS_INK_GREEN, covered,
+                                     inked),
+                    (uint8_t)LogoMix(OXYS_GROUND_BLUE, OXYS_DISC_BLUE, OXYS_INK_BLUE, covered,
+                                     inked)));
         }
     }
 }
@@ -231,10 +239,12 @@ static void KernelBootScreen(void)
     }
 
     /*
-     * The scale is a whole number of pixels to a pixel of the mark, and is
-     * two upon a screen wide enough for the mark at that size to leave room
-     * for the words beneath it. A fractional scale would need a filter, and a
-     * filtered mark at this size is a blurred mark.
+     * The scale is a whole number of pixels to a layout unit, and is two upon
+     * a screen wide enough for the mark at that size to leave room for the
+     * words beneath it. The words are the bitmap face enlarged, and a
+     * fractional scale would need a filter the face was not drawn for; the
+     * mark is LOGO_UNITS units across at either scale, and art/logo.h is
+     * drawn one to one at two and averaged down at one.
      */
     centre_x = (int32_t)surface->width / 2;
     centre_y = (int32_t)surface->height / 2;
@@ -2340,6 +2350,11 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
     /* Sub-task 9.6: the icons the launcher draws, which are files upon the
      * ramdisk and are therefore asserted after it is mounted. */
     KernelVerifyIcon();
+
+    /* Sub-task 9.6: the mark the boot screen was drawn with. It needs nothing
+     * but the header, and stands beside the icons because both are the
+     * pictures of art/. */
+    KernelVerifyMark();
 
     /* Sub-task 8.6: the pipes the sessions above made, and the scheduler the
      * pipelines ran upon, which the shell is the first thing to sleep in. */

@@ -222,6 +222,7 @@ C_SOURCES := kernel/kernel.c \
              kernel/test/gfx/faultscreen.c \
              kernel/test/gfx/windows.c \
              kernel/test/gfx/client.c \
+             kernel/test/gfx/mark.c \
              kernel/test/proc/init.c \
              kernel/test/dev/devices.c \
              kernel/test/dev/mouse.c \

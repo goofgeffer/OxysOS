@@ -368,5 +368,13 @@ here". A picture compiled in would need the system rebuilt to change, which a
 launcher whose entries come from a file cannot afford.
 [`../design/SESSION.md`](../design/SESSION.md), Section 8.
 
+**Both pictures are drawn at the resolution they are shown at, since
+2026-09-23.** The mark is a table of 192 pixels of coverage drawn one to one
+at the scale of two and averaged at one, and an icon is version 2 of its
+format, carrying a transparency of 256 levels, the terminal's at forty-eight
+pixels — the slot's own extent. Both edges are mixed with whatever they are
+drawn upon rather than being all or nothing, which was a staircase.
+[`../design/SESSION.md`](../design/SESSION.md), Sections 3.2 and 8.
+
 **Next: sub-task 9.7** — the utilities the desktop is not usable without: a file
 manager, a text viewer and a clock. `Oxys 1 Beta` is cut there.

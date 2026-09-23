@@ -5,7 +5,8 @@
  * Purpose: Turns the bytes of an icon file into pixels a program may draw, and
  *          refuses everything that is not one. It opens nothing and reads
  *          nothing.
- * Key functions: OxysIconParse, OxysIconAt, OxysIconWidth, OxysIconHeight.
+ * Key functions: OxysIconParse, OxysIconAt, OxysIconWidth, OxysIconHeight,
+ *          OxysIconCompose.
  * References:
  *   - libc/include/icon.h: the format, and why an icon is a file.
  *   - docs/design/SESSION.md, Section 8: what reads these and when.
@@ -53,7 +54,10 @@ bool OxysIconParse(OxysIcon *icon, const void *bytes, size_t count)
         return false;
     }
 
-    if (source[4] != (uint8_t)ICON_VERSION)
+    /* Every version from the oldest to this one is read alike: a pixel of
+     * version 1 is 0x00 or 0xFF in its top byte, which version 2 reads as it
+     * was meant. A later one is refused, since what it adds is unknown here. */
+    if ((source[4] < (uint8_t)ICON_VERSION_OLDEST) || (source[4] > (uint8_t)ICON_VERSION))
     {
         return false;
     }
@@ -114,4 +118,86 @@ uint32_t OxysIconWidth(const OxysIcon *icon)
 uint32_t OxysIconHeight(const OxysIcon *icon)
 {
     return (icon == NULL) ? 0U : icon->height;
+}
+
+uint32_t OxysIconCompose(const OxysIcon *icon, uint32_t x, uint32_t y, uint32_t extent,
+                         uint32_t paper)
+{
+    uint32_t side;
+    uint32_t offset_x;
+    uint32_t offset_y;
+    uint32_t first_x;
+    uint32_t last_x;
+    uint32_t first_y;
+    uint32_t last_y;
+    uint64_t opacity = 0U;
+    uint64_t channel[3] = {0U, 0U, 0U};
+    uint64_t whole;
+    uint32_t pixel = 0U;
+
+    if ((icon == NULL) || (icon->width == 0U) || (icon->height == 0U) || (extent == 0U) ||
+        (x >= extent) || (y >= extent))
+    {
+        return ICON_COLOUR(paper);
+    }
+
+    /* The icon's square, and where the icon stands within it. */
+    side = (icon->width > icon->height) ? icon->width : icon->height;
+    offset_x = (side - icon->width) / 2U;
+    offset_y = (side - icon->height) / 2U;
+
+    first_x = (x * side) / extent;
+    last_x = ((x + 1U) * side) / extent;
+    first_y = (y * side) / extent;
+    last_y = ((y + 1U) * side) / extent;
+
+    if (last_x <= first_x)
+    {
+        last_x = first_x + 1U;
+    }
+
+    if (last_y <= first_y)
+    {
+        last_y = first_y + 1U;
+    }
+
+    /*
+     * Each colour weighted by how opaque it is, so that the colour a wholly
+     * transparent pixel happens to carry — black, for ICON_NOTHING — adds
+     * nothing. Averaging the colours alone would darken every edge by the
+     * black of the nothing beside it, which is a fringe about the picture.
+     */
+    for (uint32_t row = first_y; row < last_y; ++row)
+    {
+        for (uint32_t column = first_x; column < last_x; ++column)
+        {
+            uint32_t value = ICON_NOTHING;
+            uint32_t opaque;
+
+            if ((column >= offset_x) && (row >= offset_y))
+            {
+                value = OxysIconAt(icon, column - offset_x, row - offset_y);
+            }
+
+            opaque = ICON_TRANSPARENT - ICON_TRANSPARENCY(value);
+            opacity += opaque;
+
+            for (uint32_t index = 0U; index < 3U; ++index)
+            {
+                channel[index] += (uint64_t)((value >> (8U * index)) & 0xFFU) * opaque;
+            }
+        }
+    }
+
+    whole = (uint64_t)(last_x - first_x) * (uint64_t)(last_y - first_y) * ICON_TRANSPARENT;
+
+    for (uint32_t index = 0U; index < 3U; ++index)
+    {
+        const uint64_t behind = (paper >> (8U * index)) & 0xFFU;
+        const uint64_t mixed = (channel[index] + (behind * (whole - opacity)) + (whole / 2U)) / whole;
+
+        pixel |= (uint32_t)mixed << (8U * index);
+    }
+
+    return pixel;
 }

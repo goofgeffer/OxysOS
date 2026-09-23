@@ -19,7 +19,7 @@ the one thing here that is not compiled in.
 | File | What it is |
 | ---- | ---------- |
 | [`logo.png`](logo.png) | The mark as the project owner drew it: a disc with a figure upon it, on a white ground. It is the source and nothing reads it at build time. |
-| [`logo.h`](logo.h) | The same, cropped to the disc, reduced to ninety-six pixels square, and classified into three states at two bits to a pixel. This is what is compiled in. |
+| [`logo.h`](logo.h) | The same, cropped to the disc and reduced to 192 pixels square, each pixel carrying how much of it the mark covers and how much of it is ink, four bits of each. This is what is compiled in. |
 | [`palette.h`](palette.h) | The colours this system draws itself in: the ground, the two bars, the ink, the dim, the paper, the border and the disc, with `OXYS_RGB` to pack three channels into the pixel a program's window takes. Nothing is generated; these are numbers somebody chose. |
 
 ## Why the artwork is CC0 and lives here
@@ -36,37 +36,64 @@ directory so that there is one of it.
 
 Every other picture in this system was drawn by hand into a table — the face of
 sub-task 6.4, the pointer of 6.5 — because each is a few dozen bytes and a
-person can see the shape in the source. This is nine thousand pixels of somebody
-else's drawing, and a hand transcription of it would be a copy that drifts.
+person can see the shape in the source. This is thirty-seven thousand pixels of
+somebody else's drawing, and a hand transcription of it would be a copy that
+drifts.
 
 It is generated, once, by a command recorded here rather than by a rule in the
 `Makefile`. A build rule would mean every build depended upon ImageMagick, which
 [`../docs/project/TOOLCHAIN.md`](../docs/project/TOOLCHAIN.md) does not require
 and which nothing else here needs; and the mark changes when somebody draws a
-new one, not when somebody builds.
+new one, not when somebody builds. It is written for ImageMagick 6, whose
+`-extent` takes no expression, which is why the side is measured first.
 
 ```sh
-convert art/logo.png -trim +repage -resize 96x96! -depth 8 txt:- | ...
+S=$(convert art/logo.png -trim -format '%[fx:max(w,h)]' info:)
+convert art/logo.png -trim +repage -gravity center -background white \
+        -extent ${S}x${S} -colorspace Gray square.png
+convert square.png -threshold 74.5% -negate -filter box -resize 192x192! -depth 8 gray:covered
+convert square.png -threshold 39.2% -negate -filter box -resize 192x192! -depth 8 gray:inked
+paste -d' ' <(od -An -v -tu1 -w1 covered) <(od -An -v -tu1 -w1 inked) |
+  awk '{ c = int(($1 * 15) / 255 + 0.5); i = int(($2 * 15) / 255 + 0.5);
+         if (i > c) i = c;
+         printf "%s0x%X%X,", (n % 12 == 0) ? "    " : " ", c, i;
+         if (++n % 12 == 0) printf "\n" }'
 ```
 
-The full command is in the commit that added this directory. The classification
-it performs is the whole of the judgement:
+The output is the body of `LogoCoverage`, and replaces the one in `logo.h`
+between its opening brace and its closing one. What it does is the whole of the
+judgement:
 
-| The pixel | Becomes |
-| --------- | ------- |
-| Luminance below 100 | `LOGO_INK` — the outline and the figure |
-| Nearly grey and bright: channels within 30 of each other, luminance above 190 | `LOGO_NOTHING` — the white ground, which is removed so that the mark sits upon whatever is behind it |
-| Anything else | `LOGO_DISC` — the disc itself |
+| Step | Why |
+| ---- | --- |
+| Trimmed, then padded to a square of white | The artwork is a disc a little wider than it is tall once trimmed. Stretched to a square, as the table of three states was, it would be an ellipse by half a percent; padded, it is the disc as drawn. |
+| Covered where the luminance is below 190 of 255 (74.5%) | The disc is a tan near 164 and the ground is white; everything that is not the ground is the mark. |
+| Ink where the luminance is below 100 of 255 (39.2%) | The outline and the figure. Everything that is ink is also covered, since 100 is below 190. |
+| Each of the two decided at the artwork's full resolution, and only then reduced with a box filter | A pixel of the table is then the *fraction* of the artwork beneath it that is covered, and that is ink. Reduced first and decided afterwards, a pixel on the edge is still all or nothing, and the edge is the staircase this table replaced. |
+| Four bits of each, the ink clamped to the coverage | Sixteen levels are more than a person tells apart upon an edge one pixel wide; and `LogoMix` subtracts the ink from the coverage, so the clamp is what keeps a rounding the wrong way from being a speck of some other colour. |
 
-**Three states and not two.** A mask of one bit would make the figure and the
-ground one thing, and the mark is a figure *upon* a disc: a caller draws the
-disc in one colour and the figure in another, and sees neither where the ground
-shows through.
+**Coverage and not states.** The table of 2026-09-20 to 2026-09-23 was
+ninety-six pixels square with three states — nothing, disc, ink — and was drawn
+two screen pixels to a pixel upon every screen of 1024 or wider, which is every
+screen but VirtualBox's. Its edge was a staircase of two-pixel steps, and
+nothing about the three states could say "half of this pixel is the disc". A
+table of coverage can; and it is drawn one to one at the scale of two and
+averaged by `LogoSample` at the scale of one, so the mark is smooth upon both.
+The size a caller lays the mark out by, `LOGO_UNITS`, is still ninety-six, so
+nothing about the screens the mark is drawn upon moved.
 
 **The colours are not in the file.** A caller supplies them, as every drawing in
 this system does, because a pixel value means nothing without an encoding — the
 kernel's is `FramebufferEncode` and a program's is the `0x00RRGGBB` the window
-protocol carries.
+protocol carries. The caller supplies the colour of the ground too, because a
+pixel of the edge is partly the ground; which means a caller must draw the mark
+upon the colour it says the ground is, or the edge carries a fringe of the
+colour it named instead.
+
+[`../kernel/test/gfx/mark.c`](../kernel/test/gfx/mark.c) asserts every byte of
+the table has no more ink than coverage, that the corners are not covered, that
+there is a pixel of the edge, and that the sampling and the mixing are exact at
+the points that can be computed by hand.
 
 ## What reads it
 
@@ -105,7 +132,7 @@ thing has to agree with it about either colour.
 | File | What it is |
 | ---- | ---------- |
 | [`icons/terminal.png`](icons/terminal.png) | The terminal's icon as the project owner drew it. It is the source and nothing reads it at build time. |
-| [`icons/terminal.oxi`](icons/terminal.oxi) | The same, reduced to twenty-four pixels square and written in the format [`../libc/include/icon.h`](../libc/include/icon.h) sets out. This is what the ramdisk carries and what the session reads. |
+| [`icons/terminal.oxi`](icons/terminal.oxi) | The same, upon nothing rather than white, reduced to forty-eight pixels square with the transparency of every pixel kept, and written in version 2 of the format [`../libc/include/icon.h`](../libc/include/icon.h) sets out. This is what the ramdisk carries and what the session reads. |
 
 **They are files and not a header**, which is the whole difference between an
 icon and the mark above. There is one mark and it is drawn before there is a
@@ -119,29 +146,50 @@ time without the two disagreeing the first time somebody edits it.
 The conversion is one command, recorded here rather than made a rule of the
 `Makefile` — for the reason `logo.h`'s is: a build rule would put ImageMagick in
 the path of every build, and an icon changes when somebody draws one, not when
-somebody builds.
+somebody builds. `E` is the extent; forty-eight is the launcher's slot of
+twenty-four units at the scale of two.
 
 ```sh
-convert art/icons/terminal.png -trim +repage -background none \
-        -resize 24x24 -gravity center -extent 24x24 -depth 8 rgba:- > raw
-printf 'OXIC' > head && printf '\x01\x18\x18\x00' >> head
-xxd -p -c 4 raw | awk '{ r = substr($0,1,2); g = substr($0,3,2);
-        b = substr($0,5,2); a = strtonum("0x" substr($0,7,2));
-        if (a < 128) printf "000000ff"; else printf "%s%s%s00", b, g, r }' \
-    | xxd -r -p > pixels
+E=48
+convert art/icons/terminal.png -alpha set -fuzz 10% -fill none \
+        -draw 'color 0,0 floodfill' -trim +repage cut.png
+S=$(convert cut.png -format '%[fx:max(w,h)]' info:)
+convert cut.png -background none -gravity center -extent ${S}x${S} \
+        -filter box -resize ${E}x${E} -depth 8 rgba:raw
+{ printf 'OXIC\002'; printf "\\$(printf %03o $E)\\$(printf %03o $E)\\000"; } > head
+xxd -p -c 4 raw | awk '{ printf "%s%s%s%02x", substr($0,5,2), substr($0,3,2),
+        substr($0,1,2), 255 - strtonum("0x" substr($0,7,2)) }' | xxd -r -p > pixels
 cat head pixels > art/icons/terminal.oxi
 ```
 
-Three things in that are the whole of the judgement. **`-background none`
-before the resize**, so that what is outside the picture stays outside it: an
-icon converted over white is a white square upon the panel, and the self-test of
-[`../kernel/test/libc/icon.c`](../kernel/test/libc/icon.c) refuses a shipped
-icon with no transparent pixel for exactly that reason. **`-extent 24x24`
-centred**, so that a picture of any shape becomes a square the launcher's slot
-was sized for, padded rather than stretched. And **a pixel below half alpha
-becomes nothing** rather than a blend: there is no alpha in the window protocol,
-so the only two answers available are "this colour" and "whatever is behind me".
+Four things in that are the whole of the judgement.
 
-The header's five significant bytes are `OXIC`, the version 1, the width 0x18,
-the height 0x18 and a reserved zero; the pixels are little-endian, which is why
-the `awk` writes blue, green, red, zero.
+**The ground is made transparent at the artwork's full resolution**, by a flood
+from a corner, because the drawing arrived opaque — a picture upon white, not a
+picture upon nothing. `-background none` alone says what lies *outside* the
+picture and nothing about the white inside it, so at this extent the rounded
+corners of the frame would be specks of white upon the panel. The self-test of
+[`../kernel/test/libc/icon.c`](../kernel/test/libc/icon.c) refuses a shipped
+icon with no transparent pixel for exactly that failure, taken to the whole
+square.
+
+**Padded to a square, centred**, so that a picture of any shape becomes the
+square the launcher's slot was sized for, padded rather than stretched.
+
+**Reduced after the ground is gone, with a box filter**, so that a pixel of the
+edge carries the fraction of the drawing beneath it as its opacity. The
+conversion this replaced reduced to twenty-four and then made every pixel below
+half alpha nothing and every other opaque, because version 1 of the format had
+no answer between; the edge was a staircase, and the session enlarged it by two.
+Version 2 carries the fraction, and the session mixes it with the panel —
+`OxysIconCompose`, [`../docs/design/SESSION.md`](../docs/design/SESSION.md),
+Section 8.
+
+**Transparency and not opacity** in the top byte, `255 - alpha`, so that a pixel
+wholly opaque has a top byte of zero and is the `0x00RRGGBB` the window protocol
+carries, and a pixel wholly transparent is `ICON_NOTHING`, as each was in
+version 1.
+
+The header's five significant bytes are `OXIC`, the version 2, the width 0x30,
+the height 0x30 and a reserved zero; the pixels are little-endian, which is why
+the `awk` writes blue, green, red and then the transparency.

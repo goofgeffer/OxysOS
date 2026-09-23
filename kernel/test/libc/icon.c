@@ -20,7 +20,7 @@
  *   converted with its transparency flattened, parses perfectly and draws a
  *   black square. So the file is read, and what is asserted of it is what a
  *   person would have looked for — its extent, that something in it is
- *   transparent, and that something in it is not.
+ *   transparent, that something is not, and that something is partly.
  *
  *   It is `config-check`'s argument, made from the kernel because an icon needs
  *   no privilege to judge: the bytes are a file the VFS can read, and the
@@ -40,11 +40,11 @@
 /* What that file is, and what the launcher was sized for. A conversion that
  * produced some other extent would draw a picture in the wrong place, at the
  * wrong size, or not at all. */
-#define VERIFY_ICON_EXTENT 24U
+#define VERIFY_ICON_EXTENT 48U
 
 static bool VerifyIconSucceeded;
 
-/* One icon and one buffer, reused: the icon is four kilobytes and a second of
+/* One icon and one buffer, reused: the icon is sixteen kilobytes and a second of
  * either would be a second thing to keep in step for no assertion's sake. */
 static OxysIcon VerifyIconStore;
 static uint8_t VerifyIconBytes[ICON_BYTES_MAXIMUM + 1U];
@@ -189,6 +189,98 @@ static void VerifyIconRefusals(void)
                       "an icon of the largest extent the library holds was refused");
 }
 
+/* Writes one pixel of the icon the buffer holds, of the width given. */
+static void VerifyIconSet(uint32_t width, uint32_t x, uint32_t y, uint32_t value)
+{
+    const size_t at = ICON_HEADER_BYTES + (((size_t)y * width + x) * 4U);
+
+    VerifyIconBytes[at] = (uint8_t)(value & 0xFFU);
+    VerifyIconBytes[at + 1U] = (uint8_t)((value >> 8) & 0xFFU);
+    VerifyIconBytes[at + 2U] = (uint8_t)((value >> 16) & 0xFFU);
+    VerifyIconBytes[at + 3U] = (uint8_t)((value >> 24) & 0xFFU);
+}
+
+/* ------------------------------------------------------- the composition */
+
+static void VerifyIconComposition(void)
+{
+    size_t length;
+
+    /*
+     * A two-by-two of red, nothing, blue half transparent, and green — each
+     * fitted one to one. The half is what version 2 exists for: a reader that
+     * took it for none or for all would draw the edge of every picture as the
+     * staircase the format was changed to be rid of.
+     */
+    length = VerifyIconCompose(2U, 2U);
+    VerifyIconSet(2U, 0U, 0U, UINT32_C(0x00FF0000));
+    VerifyIconSet(2U, 1U, 0U, ICON_NOTHING);
+    VerifyIconSet(2U, 0U, 1U, UINT32_C(0x800000FF));
+    VerifyIconSet(2U, 1U, 1U, UINT32_C(0x0000FF00));
+    VerifyIconRequire(OxysIconParse(&VerifyIconStore, VerifyIconBytes, length),
+                      "an icon with a pixel half transparent was refused");
+    VerifyIconRequire(OxysIconCompose(&VerifyIconStore, 0U, 0U, 2U, UINT32_C(0x123456)) ==
+                          UINT32_C(0x00FF0000),
+                      "an opaque pixel drawn one to one was not its own colour");
+    VerifyIconRequire(OxysIconCompose(&VerifyIconStore, 1U, 0U, 2U, UINT32_C(0x123456)) ==
+                          UINT32_C(0x00123456),
+                      "a position of nothing was not the paper behind it");
+    VerifyIconRequire(OxysIconCompose(&VerifyIconStore, 0U, 1U, 2U, 0U) == UINT32_C(0x0000007F),
+                      "a pixel half transparent was not half its colour upon black");
+
+    /* Enlarged, the pixel beneath is repeated: (3, 3) of four is (1, 1). */
+    VerifyIconRequire(OxysIconCompose(&VerifyIconStore, 3U, 3U, 4U, 0U) == UINT32_C(0x0000FF00),
+                      "an enlarged icon did not repeat the pixel beneath the position");
+    VerifyIconRequire(OxysIconCompose(&VerifyIconStore, 4U, 0U, 4U, UINT32_C(0x123456)) ==
+                          UINT32_C(0x00123456),
+                      "a position outside the square was not the paper");
+
+    /*
+     * **Reduced, the colours are weighted by opacity.** Two white pixels and
+     * two of nothing, reduced to one upon white paper, must be white. Were the
+     * colours averaged alone, the black that ICON_NOTHING carries would come
+     * through as grey — a dark fringe about every picture reduced to the slot,
+     * which looks like a fault in the drawing and not in the arithmetic.
+     */
+    length = VerifyIconCompose(2U, 2U);
+    VerifyIconSet(2U, 0U, 0U, UINT32_C(0x00FFFFFF));
+    VerifyIconSet(2U, 1U, 0U, ICON_NOTHING);
+    VerifyIconSet(2U, 0U, 1U, ICON_NOTHING);
+    VerifyIconSet(2U, 1U, 1U, UINT32_C(0x00FFFFFF));
+    (void)OxysIconParse(&VerifyIconStore, VerifyIconBytes, length);
+    VerifyIconRequire(OxysIconCompose(&VerifyIconStore, 0U, 0U, 1U, UINT32_C(0xFFFFFF)) ==
+                          UINT32_C(0x00FFFFFF),
+                      "a reduction darkened white upon white with the black of nothing");
+
+    /* And an opaque reduction is the average: two white and two black is the
+     * grey between. */
+    VerifyIconSet(2U, 1U, 0U, 0U);
+    VerifyIconSet(2U, 0U, 1U, 0U);
+    (void)OxysIconParse(&VerifyIconStore, VerifyIconBytes, length);
+    VerifyIconRequire(OxysIconCompose(&VerifyIconStore, 0U, 0U, 1U, 0U) == UINT32_C(0x00808080),
+                      "a reduction was not the average of the pixels it covers");
+
+    /* An icon wider than it is tall is centred, not stretched: three by one in
+     * a square of three has the paper above and below it. */
+    length = VerifyIconCompose(3U, 1U);
+    VerifyIconSet(3U, 0U, 0U, UINT32_C(0x00ABCDEF));
+    (void)OxysIconParse(&VerifyIconStore, VerifyIconBytes, length);
+    VerifyIconRequire((OxysIconCompose(&VerifyIconStore, 0U, 0U, 3U, 0U) == 0U) &&
+                          (OxysIconCompose(&VerifyIconStore, 0U, 1U, 3U, 0U) ==
+                           UINT32_C(0x00ABCDEF)) &&
+                          (OxysIconCompose(&VerifyIconStore, 0U, 2U, 3U, 0U) == 0U),
+                      "an icon that is not square was not centred in its square");
+
+    /* Version 1 is still read: its two transparencies mean what they did. */
+    length = VerifyIconCompose(2U, 2U);
+    VerifyIconBytes[4] = (uint8_t)ICON_VERSION_OLDEST;
+    VerifyIconRequire(OxysIconParse(&VerifyIconStore, VerifyIconBytes, length),
+                      "an icon of version 1 was no longer read");
+    VerifyIconBytes[4] = 0U;
+    VerifyIconRequire(!OxysIconParse(&VerifyIconStore, VerifyIconBytes, length),
+                      "an icon of version 0 was accepted");
+}
+
 /* --------------------------------------------------- the file that ships */
 
 static void VerifyIconShipped(void)
@@ -198,6 +290,7 @@ static void VerifyIconShipped(void)
     int descriptor;
     bool transparent = false;
     bool opaque = false;
+    bool partial = false;
 
     if (!VfsStat(VERIFY_ICON_PATH, &attributes))
     {
@@ -245,32 +338,39 @@ static void VerifyIconShipped(void)
         for (uint32_t x = 0U; x < OxysIconWidth(&VerifyIconStore); ++x)
         {
             const uint32_t pixel = OxysIconAt(&VerifyIconStore, x, y);
+            const uint32_t transparency = ICON_TRANSPARENCY(pixel);
 
-            if (pixel == ICON_NOTHING)
+            if (transparency == ICON_TRANSPARENT)
             {
                 transparent = true;
             }
-            else
+            else if (transparency == 0U)
             {
                 opaque = true;
-
-                VerifyIconRequire((pixel & UINT32_C(0xFF000000)) == 0U,
-                                  "a pixel of the shipped icon is not a client's 0x00RRGGBB");
+            }
+            else
+            {
+                partial = true;
             }
         }
     }
 
     /*
-     * Both of these are what a conversion gone wrong produces, and neither is
+     * The first two are what a conversion gone wrong produces, and neither is
      * a thing the parser can see: an icon converted with its transparency
-     * flattened is a black square where a picture should be, and an icon
-     * converted to nothing at all is a picture that never appears and reports
-     * no fault of any kind.
+     * flattened is a square where a picture should be, and an icon converted
+     * to nothing at all is a picture that never appears and reports no fault
+     * of any kind. The third is the conversion of version 1 run again — the
+     * alpha thresholded at half, every pixel of the edge made all or nothing —
+     * which parses and draws, and draws the staircase version 2 was made to
+     * be rid of.
      */
     VerifyIconRequire(transparent, "no part of the shipped icon is transparent, so it would "
                                    "draw as a square upon whatever is behind it");
-    VerifyIconRequire(opaque, "every part of the shipped icon is transparent, so it would "
-                              "draw nothing at all");
+    VerifyIconRequire(opaque, "no part of the shipped icon is opaque, so it would draw as a "
+                              "ghost of itself or not at all");
+    VerifyIconRequire(partial, "no pixel of the shipped icon is partly transparent, so its "
+                               "edge was converted as a staircase");
 }
 
 void KernelVerifyIcon(void)
@@ -282,12 +382,14 @@ void KernelVerifyIcon(void)
 
     VerifyIconFormat();
     VerifyIconRefusals();
+    VerifyIconComposition();
     VerifyIconShipped();
 
     KernelWriteString(VerifyIconSucceeded
-                          ? "Icon self-test passed: the format, every refusal of it, and the "
-                            "icon `/etc/session.conf` names — read off the ramdisk, of the "
-                            "extent the launcher draws, and neither wholly transparent nor "
-                            "wholly not.\n"
+                          ? "Icon self-test passed: the format, every refusal of it, the "
+                            "composition over the paper, and the icon `/etc/session.conf` "
+                            "names — read off the ramdisk, of the "
+                            "extent the launcher draws, with a transparent, an opaque and a "
+                            "partly transparent pixel.\n"
                           : "Icon self-test FAILED.\n");
 }

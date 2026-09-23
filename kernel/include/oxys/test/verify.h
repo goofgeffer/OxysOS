@@ -21,7 +21,7 @@
  *          KernelVerifyUtilities, KernelVerifyLine, KernelVerifyShell,
  *          KernelVerifyTerminal, KernelVerifyWindows, KernelVerifyCircle,
  *          KernelVerifyClients, KernelVerifyInit, KernelVerifyConfig, KernelVerifyTerm,
- *          KernelVerifyIcon,
+ *          KernelVerifyIcon, KernelVerifyMark,
  *          KernelVerifyPit, KernelVerifyKeyboard, KernelVerifySerial,
  *          KernelVerifyVga, KernelVerifyPci, KernelVerifyAta, KernelVerifyBlock,
  *          KernelVerifyBuffer, KernelVerifyExt2, KernelVerifyVfs,
@@ -169,6 +169,10 @@ void KernelVerifyTerm(void);
 /* Sub-task 9.6: the icon format, upon bytes in memory and upon the file the
  * ramdisk ships for the launcher to draw. */
 void KernelVerifyIcon(void);
+
+/* Sub-task 9.6: the mark of art/logo.h — the invariant its mixing relies upon,
+ * its reduction, and the colours at either end of its coverage. */
+void KernelVerifyMark(void);
 
 /* Phase 6, sub-task 6.1: the descriptors, the task state segment, the interrupt
  * stack table and the three registers that configure SYSCALL. */
