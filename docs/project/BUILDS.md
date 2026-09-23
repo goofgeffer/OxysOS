@@ -352,12 +352,12 @@ regenerates it and fails if what is here differs.*
 
 | | |
 | --- | --- |
-| Builds recorded | 14 |
-| Verified | 12 passed, 2 not |
+| Builds recorded | 16 |
+| Verified | 13 passed, 3 not |
 | Compilers | gcc |
 | Environments | QEMU, VirtualBox |
 | First | 2026-09-17T01:34Z |
-| Latest | 2026-09-23T20:48Z |
+| Latest | 2026-09-23T21:36Z |
 
 ## The builds
 
@@ -377,5 +377,7 @@ regenerates it and fails if what is here differs.*
 | 12 | 2026-09-23T20:06Z | `7f1c530` *(modified)* | gcc 13.2.0 | 3552616 | 10780672 | passed (74 assertions) |  | The mark and the icons at the resolution they are shown at: logo coverage table of 192, icon format version 2 at 48. Dirty only by the register's own uncommitted row 11; the source is exactly 7f1c530 |
 | 13 | 2026-09-23T20:47Z | `27cf149` | gcc 13.2.0 | 3631256 | 10860544 | passed (75 assertions) |  | A background upon the system's own filesystem, and windows that minimise and fill the screen |
 | 14 | 2026-09-23T20:48Z | `27cf149` *(modified)* | gcc 13.2.0 | 3631016 | 10858496 | failed |  | Negative test of the background and window states: the run-crossing check removed, the root notice not coalesced, a minimised window focusable; all caught, reverted |
+| 15 | 2026-09-23T21:36Z | `4cab1ea` | gcc 13.2.0 | 3677712 | 10905600 | passed (77 assertions) |  | Sub-task 9.7: the file manager, the text viewer and the clock |
+| 16 | 2026-09-23T21:36Z | `4cab1ea` *(modified)* | gcc 13.2.0 | 3677456 | 10905600 | failed |  | Negative test of 9.7: the 12-hour reduction removed, gmtime's weekday from Wednesday, fork copying the alarm; all caught, reverted |
 
 <!-- END GENERATED -->
