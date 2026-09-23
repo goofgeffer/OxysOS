@@ -28,3 +28,5 @@ number	date	commit	dirty	compiler	cc_version	kernel	iso	result	assertions	enviro
 8	2026-09-22T22:17Z	182a724	no	gcc	13.2.0	3438440	10665984	passed	72		-	Sub-task 9.6: the terminal emulator, the poll it waits in, and the tcgroup refusal
 9	2026-09-23T00:27Z	e8bb681	no	gcc	13.2.0	3438440	10665984	passed	72		-	The terminal white upon black, and the fg that continued nothing
 10	2026-09-23T02:06Z	74b8443	no	gcc	13.2.0	3459392	10688512	passed	73		-	Icons for the launcher, read from files rather than compiled in
+11	2026-09-23T19:57Z	1c31a78	yes	gcc	13.2.0	3552808	10780672	failed	-		-	Negative test of the smooth mark and icons: the version-1 icon shipped and a logo byte with ink beyond coverage; both self-tests failed as intended, reverted
+12	2026-09-23T20:06Z	7f1c530	yes	gcc	13.2.0	3552616	10780672	passed	74		639183da251b9eed2091f0a78419a0c02d2c6b9be5fa0ad7f15b0675dac5b6c9	The mark and the icons at the resolution they are shown at: logo coverage table of 192, icon format version 2 at 48. Dirty only by the register's own uncommitted row 11; the source is exactly 7f1c530
