@@ -1466,6 +1466,36 @@ added beside it, which is the only reason a stale number is ever found.
 
 Used by: `boot/grub/grub.cfg`, `Makefile`.
 
+### Motorola MC146818A, Real-Time Clock Plus RAM (RTC)
+Motorola Semiconductor Products. Advance Information data sheet, "Real-Time
+Clock Plus RAM (RTC)". A copy is kept by Stanford's CS212 at
+`https://www.scs.stanford.edu/23wi-cs212/pintos/specs/mc146818a.pdf`, read on
+2026-09-23 for sub-task 9.7.
+
+Sections relied upon: **Figure 14, "Address Map"** — seconds at 0, minutes at 2,
+hours at 4, the date of the month at 7, the month at 8, the year at 9, register
+A at `$0A` and B at `$0B`. **Table 3, "Time, Calendar, and Alarm Data Modes"** —
+each field's range in binary and BCD; the hours of the 12-hour mode are 1 to 12,
+the afternoon's carrying the high-order bit (`$81` to `$92` in BCD); the year is
+0 to 99. **Register A** — the update-in-progress bit is bit 7, read only.
+**Register B** — from bit 7, SET, PIE, AIE, UIE, SQWE, DM, 24/12, DSE; DM is 1
+for binary and 0 for BCD, and 24/12 is 1 for the 24-hour mode. **"Update
+Cycle"** — "After the UIP bit goes high, the update cycle begins 244 µs later",
+and during the update, of up to 1984 µs, the time and calendar bytes are not
+accessible; three methods of reading around it, the first of which the driver
+uses. Applied in [`../../drivers/rtc/rtc.c`](../../drivers/rtc/rtc.c) and
+[`../devices/TIME.md`](../devices/TIME.md), Section 10.
+
+### Intel Platform Controller Hub, NMI_EN at offset 70h
+Intel Corporation. Intel 400 Series Chipset On-Package Platform Controller Hub
+register database, "NMI Enable (and Real Time Clock Index) (NMI_EN) – Offset 70",
+`https://edc.intel.com/`, read on 2026-09-23. That I/O port `0x70` is both the
+index of the real-time clock's registers and the non-maskable interrupt's
+enable, which is why the driver writes the index with bit 7 clear. The data
+register at `0x71` is the conventional companion and is the one every
+environment here decodes; its bit-level description was not reached in the
+register database, and this entry says so rather than claim it.
+
 ## 2. To be consulted in later phases
 
 | Specification | Phase | Subject |

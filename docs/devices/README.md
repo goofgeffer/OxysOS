@@ -9,7 +9,7 @@ stands.
 
 | Document | Device | Driver | Phase |
 | -------- | ------ | ------ | ----- |
-| [`TIME.md`](TIME.md) | Counter 0 of the 8253 programmable interval timer, and the system tick derived from it. | [`../../drivers/pit/`](../../drivers/pit/) | 3.6 |
+| [`TIME.md`](TIME.md) | Counter 0 of the 8253 programmable interval timer, and the system tick derived from it; since sub-task 9.7 the real-time clock, the date read from it, and the alarm. | [`../../drivers/pit/`](../../drivers/pit/), [`../../drivers/rtc/`](../../drivers/rtc/) | 3.6, 9.7 |
 | [`DISPLAY.md`](DISPLAY.md) | The VGA text-mode display: its register configuration, cursor, attributes and control characters — and, since sub-task 6.2, the graphics mode that displaces it. | [`../../drivers/vga/`](../../drivers/vga/) | 1.7, 4.2 |
 | [`SERIAL.md`](SERIAL.md) | The 16550 serial adapter at COM1, the channel every automated test reads. | [`../../drivers/serial/`](../../drivers/serial/) | 1.7, 4.1 |
 | [`KEYBOARD.md`](KEYBOARD.md) | The PS/2 keyboard upon the controller's first port, and the controller it is reached through. | [`../../drivers/ps2/`](../../drivers/ps2/), [`../../drivers/keyboard/`](../../drivers/keyboard/) | 3.7 |

@@ -163,6 +163,8 @@ LIBC_SOURCES := libc/string/copying.c \
                 libc/icon/system.c \
                 libc/image/image.c \
                 libc/image/system.c \
+                libc/time/time.c \
+                libc/time/system.c \
                 libc/term/term.c \
                 libc/term/keys.c \
                 libc/signal/signal.c
@@ -228,6 +230,7 @@ C_SOURCES := kernel/kernel.c \
              kernel/test/proc/init.c \
              kernel/test/dev/devices.c \
              kernel/test/dev/mouse.c \
+             kernel/test/dev/rtc.c \
              kernel/test/storage/stack.c \
              kernel/test/storage/ext2.c \
              kernel/test/storage/ext2/format.c \
@@ -247,6 +250,7 @@ C_SOURCES := kernel/kernel.c \
              kernel/test/libc/config.c \
              kernel/test/libc/icon.c \
              kernel/test/libc/image.c \
+             kernel/test/libc/time.c \
              kernel/test/libc/term.c \
              kernel/test/terminal/terminal.c \
              kernel/test/shell/parser.c \
@@ -299,6 +303,7 @@ C_SOURCES := kernel/kernel.c \
              drivers/apic/lapic.c \
              drivers/apic/ioapic.c \
              drivers/pit/pit.c \
+             drivers/rtc/rtc.c \
              drivers/ps2/ps2.c \
              drivers/keyboard/keyboard.c \
              drivers/mouse/mouse.c \
@@ -544,7 +549,7 @@ $(USER_CRT0): libc/crt/crt0.asm
 # Within the generated rule, the archive is named *after* the program's objects,
 # which is not a style choice: a linker resolves an archive's members against the
 # references it has already seen, so an archive named first contributes nothing.
-USER_PROGRAMS := poll-check terminal startup-check arg-check exec-check file-check line-check dir-check env-check signal-check window-check init-check config-check echo cat ls mkdir rm touch cp rmdir wc micro head tail grep sort mv ps sh windows init shutdown session
+USER_PROGRAMS := date view files poll-check terminal startup-check arg-check exec-check file-check line-check dir-check env-check signal-check window-check init-check config-check echo cat ls mkdir rm touch cp rmdir wc micro head tail grep sort mv ps sh windows init shutdown session
 
 USER_PROGRAM_SOURCES := $(foreach program,$(USER_PROGRAMS),$(wildcard userland/$(program)/*.c))
 USER_PROGRAM_IMAGES  := $(foreach program,$(USER_PROGRAMS),$(USER_DIR)/$(program).elf)
@@ -712,7 +717,7 @@ INITRD_UUID    := 0c5f7a10-7b41-4d2e-9a3c-6f0c5f7a1000
 # check program is a test's apparatus: it is embedded in the kernel image, where
 # the self-test that runs it is, and a system that shipped it in /bin would be
 # shipping its own test harness to somebody who asked for a shell.
-INITRD_UTILITIES := terminal echo cat ls mkdir rm touch cp rmdir wc micro head tail grep sort mv ps sh windows init shutdown session
+INITRD_UTILITIES := date view files terminal echo cat ls mkdir rm touch cp rmdir wc micro head tail grep sort mv ps sh windows init shutdown session
 INITRD_SOURCES   := $(foreach utility,$(INITRD_UTILITIES),$(USER_DIR)/$(utility).embed.elf)
 
 # The `/etc` hierarchy of sub-task 9.4: the configuration `init` and the desktop

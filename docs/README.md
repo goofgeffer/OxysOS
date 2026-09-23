@@ -68,12 +68,13 @@ complementary, and neither replaces the other.
 | [`CONFIG.md`](design/CONFIG.md) | The system configuration format of sub-task 9.4, the `/etc` hierarchy, and the parser in the C library that reads it: what `init` takes its list of services from and the desktop its appearance. |
 | [`SESSION.md`](design/SESSION.md) | The session of sub-task 9.5: the stacking layers that put a root beneath every window and a panel above them, the claim that decides who may draw either, the text a program may draw with the system's face, and the desktop, panel and launcher a person meets. |
 | [`TERMINAL.md`](design/TERMINAL.md) | The terminal emulator of sub-task 9.6: a window with a shell beneath it, the grid that decides what stands where, the `poll` a program waits in when it must wait upon two things, and why the shell in a window has no job control. |
+| [`UTILITIES.md`](design/UTILITIES.md) | The utilities of sub-task 9.7: a file manager, a text viewer, and the clock upon the panel. | `userland/files/`, `userland/view/`, `userland/date/` |
 
 ### [`devices/`](devices/)
 
 | Document | Subject | Driver |
 | -------- | ------- | ------ |
-| [`TIME.md`](devices/TIME.md) | The interval timer and the system tick. | `drivers/pit/` |
+| [`TIME.md`](devices/TIME.md) | The interval timer, the system tick, and since 9.7 the real-time clock. | `drivers/pit/`, `drivers/rtc/` |
 | [`DISPLAY.md`](devices/DISPLAY.md) | The VGA text-mode display, and how sub-task 6.2 displaced it. | `drivers/vga/` |
 | [`SERIAL.md`](devices/SERIAL.md) | The 16550 serial adapter. | `drivers/serial/` |
 | [`KEYBOARD.md`](devices/KEYBOARD.md) | The PS/2 keyboard, and the 8042 controller it is reached through. | `drivers/ps2/`, `drivers/keyboard/` |

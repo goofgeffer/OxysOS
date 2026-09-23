@@ -451,3 +451,15 @@ int64_t OxysWindowList(SyscallWindowEntry *entries, uint64_t capacity)
     return OxysSyscallResult(OxysSyscallInvoke2(SYSCALL_WINDOW_LIST,
                                                 (uint64_t)(uintptr_t)entries, capacity));
 }
+
+/* ------------------------------------------------------------ sub-task 9.7 */
+
+int64_t OxysTime(void)
+{
+    return OxysSyscallResult(OxysSyscallInvoke0(SYSCALL_TIME));
+}
+
+int64_t OxysAlarm(uint64_t milliseconds)
+{
+    return OxysSyscallResult(OxysSyscallInvoke1(SYSCALL_ALARM, milliseconds));
+}

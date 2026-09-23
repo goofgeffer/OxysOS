@@ -55,6 +55,7 @@
 #include <oxys/proc/signal.h>
 #include <oxys/arch/syscall/sigframe.h>
 #include <oxys/terminal/terminal.h>
+#include <oxys/dev/rtc.h>
 
 /* Defined in kernel/arch/x86_64/syscall/syscall_entry.asm. */
 extern void SyscallEntry(void);
@@ -2282,7 +2283,9 @@ static const SyscallEntryDescriptor SyscallTable[SYSCALL_COUNT] = {
     { "window_text", 3U },
     { "poll", 3U },
     { "window_state", 2U },
-    { "window_list", 2U }
+    { "window_list", 2U },
+    { "time", 0U },
+    { "alarm", 1U }
 };
 
 bool SyscallNumberIsValid(uint64_t number)
@@ -2524,6 +2527,16 @@ void SyscallDispatch(SyscallFrame *frame)
 
     case SYSCALL_WINDOW_LIST:
         frame->rax = (uint64_t)WindowClientList(frame->rdi, frame->rsi);
+        break;
+
+    case SYSCALL_TIME:
+        /* Zero is 1970 and is also what RtcNow says of no clock, so the two
+         * are told apart by asking rather than by the value. */
+        frame->rax = RtcIsPresent() ? RtcNow() : (uint64_t)SYSCALL_ENOTSUP;
+        break;
+
+    case SYSCALL_ALARM:
+        frame->rax = (uint64_t)ProcessAlarm(PitMillisecondsElapsed(), frame->rdi);
         break;
 
     default:

@@ -460,6 +460,16 @@ int64_t OxysWindowState(int64_t window, uint64_t action);
 int64_t OxysWindowList(SyscallWindowEntry *entries, uint64_t capacity);
 
 /*
+ * The two of sub-task 9.7. OxysTime returns seconds since 1970 as the machine's
+ * clock gives them, or -1 with errno ENOTSUP where it gave none; `time` of
+ * <time.h> is the portable face of it. OxysAlarm asks for SIGALRM that many
+ * milliseconds from now, zero cancelling, and returns what remained of the
+ * alarm it replaced.
+ */
+int64_t OxysTime(void);
+int64_t OxysAlarm(uint64_t milliseconds);
+
+/*
  * OxysPoll waits until one of the things named can be read without sleeping and
  * reports how many can, writing each entry's `ready`. SYSCALL_POLL_WINDOWS in
  * place of a descriptor names the caller's window events;

@@ -56,6 +56,7 @@
 
 #include <oxys/proc/sched.h>
 #include <oxys/proc/process.h>
+#include <oxys/dev/pit.h>
 #include <oxys/arch/cpu/percpu.h>
 #include <oxys/arch/cpu/spinlock.h>
 #include <oxys/dev/lapic.h>
@@ -411,6 +412,12 @@ static void SchedulerHandleTick(TrapFrame *frame)
     if (SchedulerIndex() == 0U)
     {
         TerminalService();
+
+        /* The alarms of sub-task 9.7, from here for the terminal's reason: a
+         * program asleep in a call is reached by nothing else, and SIGALRM is
+         * sent as control-C is, beside it. */
+        (void)ProcessServiceAlarms(PitMillisecondsElapsed());
+
         KernelServiceDisplay();
     }
 

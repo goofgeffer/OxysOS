@@ -746,6 +746,26 @@ with what it would catch. What only looking establishes is the desktop.
    terminal is a margin not painted; **a small mark in a large paper** is a
    program that ignored the resize; **typing that goes nowhere** after the
    launcher closes is the panel holding the focus.
+10. **The file manager and the viewer, of sub-task 9.7.** Choose `Files` from
+    the launcher: a window lists `bin/`, `etc/`, `lost+found/`, `mnt/` and
+    `share/`, the first selected, with `5 entries` upon its foot. Press `etc/`
+    twice: the list is `..` and the three files of `/etc`. Press a file twice: a
+    second window, titled with the file's name, shows its text with a dark
+    status row at its foot reading which rows of how many; the file manager's
+    foot says `opened` and the path. Page Down moves the text; the full-screen
+    control wraps it to the whole width and the row count falls, the row at the
+    top staying at the top. Failures that report nothing: **a column of full
+    stops at the right** is a carriage return drawn as a byte; **the text
+    starting again from the top** upon full screen is the top row not kept;
+    **a directory opened in a viewer** is the type read wrongly.
+11. **The clock, of sub-task 9.7.** The panel's right carries `HH:MM`, the
+    machine's clock as it holds it — the host's universal time under QEMU, the
+    Windows host's local time under VirtualBox — and within a few seconds of
+    each minute it turns by itself, with nothing pressed. `date` at the shell
+    prints the same with the seconds. **A clock that stays at the minute the
+    desktop started** is an alarm the tick never served; **one that is minutes
+    behind after an hour** is a time made of the timer's count, which
+    `TIME.md`, Section 10.1, records.
 
 ## 12. Verification of the terminal emulator
 

@@ -35,6 +35,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <syscall.h>
+#include <time.h>
 
 static int SignalFailures;
 
@@ -367,6 +368,61 @@ static void SignalStops(void)
                   "the stopped child was not ended by SIGKILL");
 }
 
+/*
+ * --- The alarm and the time of sub-task 9.7. ---
+ *
+ * The alarm is asked for, and the program pauses: it is the tick that sends
+ * SIGALRM, so a pause that never ended is an alarm the tick never served —
+ * which is the panel's clock stopped at the minute the session started.
+ */
+static void SignalAlarm(void)
+{
+    int64_t status = 0;
+    int64_t child;
+    time_t now = 0;
+
+    SignalSeen = 0;
+    SignalSeenCount = 0;
+    SignalRequire(signal(SIGALRM, SignalRecord) == SIG_DFL, "SIGALRM was not at its default");
+    SignalRequire(OxysAlarm(50U) == 0, "an alarm was reported as replacing one where none was");
+    errno = 0;
+    SignalRequire((OxysPause() < 0) && (errno == EINTR), "the pause did not end by a signal");
+    SignalRequire((SignalSeen == SIGALRM) && (SignalSeenCount == 1),
+                  "the alarm did not arrive, once, as SIGALRM");
+
+    /* Replaced, the old alarm's remainder is returned; cancelled, nothing is
+     * left to arrive. */
+    (void)OxysAlarm(10000U);
+    {
+        const int64_t remaining = OxysAlarm(0U);
+
+        SignalRequire((remaining > 0) && (remaining <= 10000),
+                      "a replaced alarm did not report what remained of it");
+    }
+
+    /* A child of fork has no alarm, IEEE Std 1003.1-2017, `fork()`: a copied
+     * alarm would send SIGALRM to a program that never asked for one, and its
+     * default is to end it. */
+    (void)OxysAlarm(100000U);
+    child = OxysFork();
+
+    if (child == 0)
+    {
+        OxysExit((OxysAlarm(0U) == 0) ? 0 : 1);
+    }
+
+    SignalRequire(child > 0, "fork failed for the alarm's child");
+    SignalRequire((SignalCollect(child, 0U, &status) == child) &&
+                      SignalStatusIs(status, SYSCALL_STATUS_KIND_EXITED, 0U),
+                  "a child of fork inherited its parent's alarm");
+    (void)OxysAlarm(0U);
+    SignalRequire(signal(SIGALRM, SIG_DFL) == SignalRecord, "SIGALRM's handler was not kept");
+
+    /* The time: after 2000, and the same through the pointer as returned. */
+    SignalRequire((time(&now) > (time_t)946684800) && (now > (time_t)946684800),
+                  "the time was before 2000, or not stored through the pointer");
+}
+
 int main(void)
 {
     (void)printf("signal-check: signals, groups and waitpid, from a program.\n");
@@ -375,6 +431,7 @@ int main(void)
     SignalChildren();
     SignalGroups();
     SignalStops();
+    SignalAlarm();
 
     (void)printf("signal-check: %d assertion(s) failed.\n", SignalFailures);
 

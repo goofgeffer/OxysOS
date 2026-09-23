@@ -37,6 +37,7 @@ below where they used to be described records the move.
 | `apic/lapic.c` | The Local APIC: one per logical processor; what completes every interrupt from sub-task 6.12 onward; from sub-task 6.13 the command register through which one processor interrupts another; from sub-task 6.14 `LocalApicInitialiseThisProcessor`, by which a started processor enables and programmes its own controller; and from sub-task 6.15 the timer that pre-empts it, calibrated against the interval timer because the architecture states no rate for it. | `<oxys/dev/lapic.h>` | 6.12, 6.13, 6.14, 6.15 |
 | `apic/ioapic.c` | The I/O APIC: the redirection table that decides what vector an interrupt input presents, and to which processor. | `<oxys/dev/ioapic.h>` | 6.12 |
 | `pit/pit.c` | Counter 0 of the 8253 interval timer, the system tick; from sub-task 6.14 `PitBusyWaitMicroseconds`, the counter-watching wait the startup protocol's delays are measured by; and from sub-task 6.15 the reference the local APIC timers are calibrated against. | `<oxys/dev/pit.h>` | 3, 6.14, 6.15 |
+| `rtc/rtc.c` | Sub-task 9.7. The real-time clock the PC carries from the MC146818A, read through ports `0x70` and `0x71` in both of its data modes and both of its hour modes, twice until two readings agree so that no update cycle is read across; and the date turned into seconds since 1970 and back. Read at every `time` call, the interval timer being the fallback. `../docs/devices/TIME.md`, Section 10. |
 | `ps2/ps2.c` | The 8042 keyboard controller itself, and the two device ports it presents. | `<oxys/dev/ps2.h>` | 3, 6.5 |
 | `keyboard/keyboard.c` | The PS/2 keyboard upon the controller's first port. | `<oxys/dev/keyboard.h>` | 3 |
 | `mouse/mouse.c` | The PS/2 mouse upon the controller's second port. | `<oxys/dev/mouse.h>` | 6.5 |
@@ -347,6 +348,17 @@ processor. The divide register is the part worth care: bit 2 is reserved and the
 divisor lives in bits 3, 1 and 0, so divide-by-one is `1011B` while `0000B` is
 divide-by-two. A value that looks like one halves every interval the kernel
 believes it programmed, and nothing would report it.
+### `rtc/` — the real-time clock, of sub-task 9.7
+
+Reads the date and the time of day from the clock the PC has carried since the
+AT, compatible with the Motorola MC146818A data sheet, whose address map, Table
+3, registers A and B and update cycle it cites; the index port is Intel's
+"NMI Enable (and Real Time Clock Index)" register at `0x70`, whose bit 7 is
+written clear so that non-maskable interrupts stay as the machine left them.
+The two-digit year is placed in 2000 to 2099, there being no century register
+whose place it knows. [`../docs/devices/TIME.md`](../docs/devices/TIME.md),
+Section 10.
+
 
 ### `pit/` — the interval timer
 
@@ -451,6 +463,7 @@ whoever knows the display, a mouse having no idea what it is pointing at.
 | 8042 controller and PS/2 device command sets | The controller commands 0x20 and 0x60 reading and writing the configuration byte, 0xAD/0xAE and 0xA7/0xA8 enabling and disabling the two device ports, 0xAA the controller self-test answered by 0x55, 0xAB and 0xA9 the ports' tests answered by 0x00, and 0xD4 directing a byte to the second port; the configuration byte's interrupt-enable, clock-disable and translation bits, and status bit 5 naming the port a byte came from; the device commands 0xFF reset, 0xF4/0xF5 reporting, 0xF6 defaults, 0xF3 sample rate, 0xF2 identifier, 0xE8 resolution and 0xE6 linear scaling, and the answers 0xFA acknowledge and 0xFE resend. |
 | PS/2 auxiliary device movement packet | The three-byte packet, its always-set framing bit, its nine-bit two's complement movements with their signs and overflow indications in the first byte, and its upward vertical sense; the sample-rate sequence 200, 100, 80 that interrogates for a wheel, and the four-byte packet a device answering 0x03 sends thereafter. |
 | Intel 8254 datasheet, sections "Programming the 8254", "Mode 2: Rate Generator" and "Counter Latch Command" | The control word fields; the two-byte transfer of the count, least significant first; the periodic reload of the rate generator and the illegality of a count of one within it; the latching of a running count for reading. |
+| Motorola MC146818A data sheet, Figure 14 "Address Map", Table 3, "Register A", "Register B" and "Update Cycle"; Intel Platform Controller Hub register "NMI Enable (and Real Time Clock Index) (NMI_EN) – Offset 70" | `rtc/`: the six time and calendar registers and their ranges in both data modes and both hour modes; the update-in-progress bit and the 244 and 1984 microseconds of the update; the DM and 24/12 bits; the index port and its NMI bit. |
 | Intel SDM, Volume 3A, Chapter 10 (Chapter 11 in a current edition) | The Local APIC: the register page at `0xFEE00000` and its uncacheable mapping; the two enables, in `IA32_APIC_BASE` bit 11 and in bit 8 of the spurious-interrupt vector register; the local vector table entry; the end-of-interrupt register; the task priority register; and the spurious vector whose low four bits are hardwired. |
 | Intel 82093AA I/O APIC datasheet, Sections 3.1 and 3.2 | The indirect register pair `IOREGSEL` and `IOWIN`; the identification, version and maximum-redirection-entry registers; and the 64-bit redirection table entry with its vector, delivery mode, destination mode, polarity, trigger mode, mask and destination. |
 | ACPI Specification 6.5, Sections 5.2.5.3, 5.2.6 to 5.2.8 and 5.2.12 | The Root System Description Pointer and its two checksums; the description header every table begins with; the RSDT and the XSDT; and the Multiple APIC Description Table with its processor, I/O APIC, interrupt source override and local NMI structures. |

@@ -19,7 +19,7 @@
  *          SYSCALL_POWER, SYSCALL_PAUSE, SYSCALL_POWER_HALT, SYSCALL_POWER_REBOOT,
  *          SYSCALL_WINDOW_SESSION, SYSCALL_WINDOW_TEXT, SyscallWindowText,
  *          SYSCALL_WINDOW_STATE, SYSCALL_WINDOW_LIST, SyscallWindowEntry, the
- *          SYSCALL_WINDOW_STATE actions,
+ *          SYSCALL_WINDOW_STATE actions, SYSCALL_TIME, SYSCALL_ALARM,
  *          SYSCALL_WINDOW_TEXT_MAXIMUM,
  *          SYSCALL_WINDOW_LAYER_ROOT, SYSCALL_WINDOW_LAYER_NORMAL, SYSCALL_WINDOW_LAYER_PANEL,
  *          SYSCALL_EPERM,
@@ -433,7 +433,34 @@
  */
 #define SYSCALL_WINDOW_STATE   40U
 #define SYSCALL_WINDOW_LIST    41U
-#define SYSCALL_COUNT          42U
+
+/*
+ * The two calls of sub-task 9.7, by which a program learns the time and asks
+ * to be woken.
+ *
+ *   time()                             Seconds since 1970-01-01T00:00:00 as the
+ *                                      real-time clock read at start, advanced
+ *                                      by the interval timer. ENOTSUP where the
+ *                                      machine's clock read no date. The clock
+ *                                      holds whatever time its owner set, which
+ *                                      is commonly local and not universal; the
+ *                                      call does not know which, and says the
+ *                                      clock's time. ISO/IEC 9899:2011, Section
+ *                                      7.27.2.4, `time`.
+ *   alarm(milliseconds)                Sends the caller SIGALRM once, that many
+ *                                      milliseconds from now; zero cancels. It
+ *                                      returns the milliseconds that remained of
+ *                                      the alarm it replaced, or zero. One alarm
+ *                                      per process, as IEEE Std 1003.1-2017's
+ *                                      `alarm()`, which counts in seconds: a
+ *                                      clock that wants the start of the next
+ *                                      minute wants it to the millisecond. A
+ *                                      child of `fork` has none; `execve` keeps
+ *                                      it.
+ */
+#define SYSCALL_TIME           42U
+#define SYSCALL_ALARM          43U
+#define SYSCALL_COUNT          44U
 
 /* The layer a window stands in, given to window_create. A root and a panel may
  * be made by the session alone and carry no frame; every other program's

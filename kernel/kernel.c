@@ -81,6 +81,7 @@
 #include <oxys/dev/lapic.h>
 #include <oxys/dev/ioapic.h>
 #include <oxys/dev/pit.h>
+#include <oxys/dev/rtc.h>
 #include <oxys/dev/ps2.h>
 #include <oxys/dev/keyboard.h>
 #include <oxys/dev/mouse.h>
@@ -1810,6 +1811,18 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
     PitReport();
 
     /*
+     * The real-time clock of sub-task 9.7, read once, after the timer and not
+     * before: the time afterwards is this reading advanced by the timer's
+     * count, and a reading taken before the timer counted would be advanced
+     * from nothing. A machine whose clock reads no date is not in error; it
+     * has no time, and `time` says so. The self-test asserts the arithmetic
+     * whether or not there is a clock.
+     */
+    (void)RtcInitialise();
+    KernelVerifyRtc();
+    RtcReport();
+
+    /*
      * The 8042 controller, before either of the devices upon it.
      *
      * It is one device shared by two drivers, and its configuration byte governs
@@ -2359,6 +2372,10 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
     /* The background, a file upon the ramdisk as the icons are, and asserted
      * beside them for the same reason. */
     KernelVerifyImage();
+
+    /* Sub-task 9.7: the C library's calendar arithmetic, which the clock and
+     * `/bin/date` draw with. */
+    KernelVerifyTime();
 
     /* Sub-task 8.6: the pipes the sessions above made, and the scheduler the
      * pipelines ran upon, which the shell is the first thing to sleep in. */

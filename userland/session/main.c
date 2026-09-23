@@ -8,7 +8,7 @@
  * Key functions: main, SessionClaim, SessionDrawRoot, SessionDrawPanel,
  *          SessionOpenLauncher, SessionLaunch, SessionHandlePress,
  *          SessionReapChildren, SessionDrawBackground, SessionDrawTasks,
- *          SessionRefreshTasks.
+ *          SessionRefreshTasks, SessionDrawClock.
  * References:
  *   - kernel/abi/oxys/syscall_abi.h: `window_session`, the three layers, and
  *     `window_text`; and `window_state` and `window_list`, by which the panel
@@ -48,6 +48,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <syscall.h>
+#include <time.h>
 
 #define SESSION_CONFIGURATION "/etc/session.conf"
 
@@ -166,6 +167,17 @@ static void SessionChildHandler(int signal)
 {
     (void)signal;
     SessionChildEnded = 1;
+}
+
+/* The clock of sub-task 9.7: the alarm the session asks for at each minute,
+ * and nothing else done in the handler, for the reason `init`'s handlers do
+ * nothing else. */
+static volatile sig_atomic_t SessionClockDue;
+
+static void SessionAlarmHandler(int signal)
+{
+    (void)signal;
+    SessionClockDue = 1;
 }
 
 /* ------------------------------------------------------------- drawing */
@@ -380,6 +392,56 @@ static int32_t SessionPanelHeight(void)
     return (height < SESSION_EXTENT_MINIMUM) ? SESSION_EXTENT_MINIMUM : height;
 }
 
+
+/*
+ * The clock's width upon the panel: five characters, `HH:MM`, with an inset
+ * either side. The list of windows stops short of it, so that a long list is
+ * cut before the time rather than drawn under it.
+ */
+static int32_t SessionClockWidth(void)
+{
+    return (5 * 8 * SessionScale) + (2 * 3 * SessionScale * 2);
+}
+
+/*
+ * The clock, at the right of the panel: the hours and minutes of the machine's
+ * clock, as it holds them — there is no time zone here, SYSCALL_TIME — and
+ * nothing where the machine gave no time. Seconds are not shown: a panel
+ * redrawn every second is a blit every second for a digit nobody reads.
+ *
+ * It asks for SIGALRM at the start of the next minute, from the seconds the
+ * kernel counts; so the minute changes upon the panel within a second of the
+ * clock's, the kernel having read the clock at a whole second at start.
+ */
+static void SessionDrawClock(bool open)
+{
+    const int32_t inset = 3 * SessionScale;
+    const int32_t width = SessionClockWidth();
+    const int32_t x = SessionScreen.width - width;
+    const time_t now = time(NULL);
+    struct tm broken;
+    char text[6];
+
+    (void)open;
+
+    if ((now < 0) || (gmtime_r(&now, &broken) == NULL))
+    {
+        return;
+    }
+
+    text[0] = (char)('0' + (broken.tm_hour / 10));
+    text[1] = (char)('0' + (broken.tm_hour % 10));
+    text[2] = ':';
+    text[3] = (char)('0' + (broken.tm_min / 10));
+    text[4] = (char)('0' + (broken.tm_min % 10));
+    text[5] = '\0';
+
+    SessionFill(SessionPanel, x, 0, width, SessionPanelHeight() - 1, SESSION_PANEL);
+    SessionText(SessionPanel, x + (inset * 2), inset, text, SESSION_INK, SESSION_PANEL,
+                SessionScale);
+
+    (void)OxysAlarm((uint64_t)(60 - (now % 60)) * 1000U);
+}
 static void SessionDrawTasks(void);
 
 static void SessionDrawPanel(bool open)
@@ -398,6 +460,7 @@ static void SessionDrawPanel(bool open)
     SessionFill(SessionPanel, 0, height - 1, SessionScreen.width, 1, SESSION_GROUND);
 
     SessionDrawTasks();
+    SessionDrawClock(open);
 }
 
 /* Where the list of windows begins upon the panel, and how wide one of its
@@ -416,7 +479,7 @@ static int32_t SessionTaskStride(void)
  * at its edge rather than drawn over it. */
 static size_t SessionTasksShown(void)
 {
-    const int32_t room = SessionScreen.width - SessionTaskLeft();
+    const int32_t room = SessionScreen.width - SessionTaskLeft() - SessionClockWidth();
     const int32_t fit = (room > 0) ? ((room + (SESSION_TASK_GAP * SessionScale)) /
                                       SessionTaskStride())
                                    : 0;
@@ -835,6 +898,7 @@ int main(void)
     }
 
     (void)signal(SIGCHLD, SessionChildHandler);
+    (void)signal(SIGALRM, SessionAlarmHandler);
 
     SessionReadConfiguration();
 
@@ -871,11 +935,21 @@ int main(void)
             SessionReapChildren();
         }
 
+        /* The minute turned: the clock is drawn again, which asks for the
+         * next. The alarm ends the wait below with EINTR, which is what brings
+         * the loop back here. */
+        if (SessionClockDue != 0)
+        {
+            SessionClockDue = 0;
+            SessionDrawClock(SessionMenu >= 0);
+        }
+
         result = OxysWindowEvent((int64_t)SYSCALL_WINDOW_ANY, &event, SYSCALL_WINDOW_WAIT);
 
         if (result < 0)
         {
-            /* EINTR is a child that ended, which the top of the loop reaps.
+            /* EINTR is a child that ended, or the minute turning upon the
+             * clock, each of which the top of the loop acts upon.
              * EBADF is a session with no windows left, which cannot happen
              * while the root stands and means something is badly wrong. */
             if (errno == EINTR)

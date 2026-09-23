@@ -21,7 +21,8 @@
  *          KernelVerifyUtilities, KernelVerifyLine, KernelVerifyShell,
  *          KernelVerifyTerminal, KernelVerifyWindows, KernelVerifyCircle,
  *          KernelVerifyClients, KernelVerifyInit, KernelVerifyConfig, KernelVerifyTerm,
- *          KernelVerifyIcon, KernelVerifyMark, KernelVerifyImage,
+ *          KernelVerifyIcon, KernelVerifyMark, KernelVerifyImage, KernelVerifyRtc,
+ *          KernelVerifyTime,
  *          KernelVerifyPit, KernelVerifyKeyboard, KernelVerifySerial,
  *          KernelVerifyVga, KernelVerifyPci, KernelVerifyAta, KernelVerifyBlock,
  *          KernelVerifyBuffer, KernelVerifyExt2, KernelVerifyVfs,
@@ -177,6 +178,13 @@ void KernelVerifyMark(void);
 /* Phase 9, of 2026-09-23: the image format and its scaler, upon bytes in memory
  * and upon the background the ramdisk ships for the session. */
 void KernelVerifyImage(void);
+
+/* Sub-task 9.7: the real-time clock's decoding and arithmetic, and the clock
+ * this machine carries. */
+void KernelVerifyRtc(void);
+
+/* Sub-task 9.7: gmtime of the C library's <time.h>. */
+void KernelVerifyTime(void);
 
 /* Phase 6, sub-task 6.1: the descriptors, the task state segment, the interrupt
  * stack table and the three registers that configure SYSCALL. */

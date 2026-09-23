@@ -6,7 +6,7 @@ How the machine is brought up, how it is arranged once it is, and — from
 sub-task 7.1 — what a program standing upon it is given, and — from sub-task
 9.1 — the windows it will be given them through, from 9.3 — the process that
 starts and stops the whole of it, from 9.4 — the configuration it is all told
-what to do by, and from 9.5 — the desktop a person meets. These twenty-three
+what to do by, and from 9.5 — the desktop a person meets. These twenty-four
 documents describe the parts of the kernel that no device driver may assume the
 absence of. Five of them are the graphical work, which
 [`GRAPHICS.md`](GRAPHICS.md) indexes and no longer holds.
@@ -46,6 +46,7 @@ a widened description of this one.
 | [`CONFIG.md`](CONFIG.md) | The system configuration of sub-task 9.4: the format — a line at a time, so that a bad character costs the line and not the machine — the `/etc` hierarchy and the two files in it, what `init` and the desktop do with what they read, the parser in the C library and the seam that lets half of it be asserted before there is a program, and the bound upon restarts that a list of services made necessary. | [`../../libc/config/`](../../libc/config/), [`../../etc/`](../../etc/) | 9.4 |
 | [`SESSION.md`](SESSION.md) | The session of sub-task 9.5: the three stacking layers, without which a panel is a window the next press buries and a root is one the next raise hides; the claim upon the display, by which exactly one program may make a root or a panel and every other is refused for being the wrong program; the text a program draws with the system's one face, and why that face stays in the kernel; and the session itself — the root, the panel, and the launcher that reads what it offers from `/etc/session.conf`. | [`../../userland/session/main.c`](../../userland/session/main.c), [`../../graphics/window.c`](../../graphics/window.c) | 9.5 |
 | [`TERMINAL.md`](TERMINAL.md) | The terminal emulator of sub-task 9.6: a window with an ordinary `/bin/sh` beneath it upon a pair of pipes; the character grid in the C library, which decides what stands where and which is asserted without a window; `poll`, added because a program that must wait upon its window and upon a pipe at once had no way to; and the refusal of `tcgroup` to a process whose standard input is not the terminal, which is what stops a shell in a window taking the terminal from the shell at the keyboard — and what leaves that shell without job control. | [`../../userland/terminal/main.c`](../../userland/terminal/main.c), [`../../libc/term/`](../../libc/term/) | 9.6 |
+| [`UTILITIES.md`](UTILITIES.md) | The utilities of sub-task 9.7, at which `Oxys 1 Beta` is fixed: a file manager in which a press selects and a second opens, a text viewer that wraps again when its window is made full, and a clock upon the panel woken by an alarm. |
 
 They are listed in the order the phases build them, and that is the order to read
 them in if you are new to the project: each depends upon the ones before it, and

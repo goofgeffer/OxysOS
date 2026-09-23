@@ -383,5 +383,21 @@ close, and the panel lists the windows so that a minimised one can be brought
 back. [`../design/SESSION.md`](../design/SESSION.md), Sections 9 and 10;
 [`../design/WINDOWS.md`](../design/WINDOWS.md), Section 13.
 
-**Next: sub-task 9.7** — the utilities the desktop is not usable without: a file
-manager, a text viewer and a clock. `Oxys 1 Beta` is cut there.
+**Sub-task 9.7 is complete**, on 2026-09-23: the utilities the desktop is not
+usable without. `/bin/files` lists a directory, directories first, a press
+selecting and a second opening — a directory in its own window, a file in
+`/bin/view`, which wraps the text to its window and wraps it again when the
+window is made full. The panel carries a clock, and `/bin/date` prints the
+same at the shell. Beneath them the kernel reads the date from the real-time
+clock — a driver for the MC146818A's registers in both data modes and both hour
+modes — at every `time` call, having been watched falling behind when the date
+was the timer's count; and `alarm` sends SIGALRM at a time, served from the tick,
+which is what wakes the clock at each minute. Two calls, 42 and 43, and
+`<time.h>`. [`../design/UTILITIES.md`](../design/UTILITIES.md);
+[`../devices/TIME.md`](../devices/TIME.md), Section 10.
+
+**`Oxys 1 Beta` is fixed at this sub-task**, [`VERSIONING.md`](VERSIONING.md),
+Section 11.1, and is cut at the project owner's direction, as the alpha was.
+
+**Next: sub-task 9.8** — the settings application, by which the configuration
+of 9.4 is edited rather than written by hand. It closes Phase 9.

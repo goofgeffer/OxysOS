@@ -9,7 +9,7 @@
  * Key functions: ProcessInitialise, ProcessCreate, ProcessDestroy, ThreadCreate,
  *          ThreadDestroy, ThreadSetCurrent, ProcessCreateUserStack,
  *          ProcessRecordImage, ProcessReport, ProcessFork, ProcessExecute,
- *          ProcessExit, ProcessWait.
+ *          ProcessExit, ProcessWait, ProcessAlarm, ProcessServiceAlarms.
  * References: kernel/include/oxys/process.h states what this implements, and
  *          docs/design/PROCESS.md why.
  *
@@ -346,6 +346,7 @@ static Process *ProcessAllocate(const char *name, const Process *parent,
         process->group = (parent != NULL) ? parent->group : process->id;
         process->pending = 0U;
         process->restorer = 0U;
+        process->alarm_deadline = 0U;
         process->wait_status = 0U;
         process->stop_signal = 0U;
         process->termination_signal = 0U;
@@ -2867,4 +2868,67 @@ void ProcessReport(void)
     {
         KernelWriteString("Processes: no thread is current, and nothing has run.\n");
     }
+}
+
+/* ------------------------------------------------------ the alarm, 9.7 */
+
+int64_t ProcessAlarm(uint64_t now, uint64_t milliseconds)
+{
+    Process *const process = ProcessCurrent();
+    uint64_t remaining = 0U;
+
+    if (process == NULL)
+    {
+        return SYSCALL_EINVAL;
+    }
+
+    if ((process->alarm_deadline != 0U) && (process->alarm_deadline > now))
+    {
+        remaining = process->alarm_deadline - now;
+    }
+
+    /*
+     * A deadline of zero means none, so an alarm that would fall due at the
+     * timer's zeroth millisecond is placed one later — which can happen only
+     * to a call made before the timer has counted, and costs a millisecond.
+     */
+    process->alarm_deadline = (milliseconds == 0U) ? 0U : (now + milliseconds);
+
+    if ((milliseconds != 0U) && (process->alarm_deadline == 0U))
+    {
+        process->alarm_deadline = 1U;
+    }
+
+    return (int64_t)remaining;
+}
+
+size_t ProcessServiceAlarms(uint64_t now)
+{
+    size_t sent = 0U;
+
+    /*
+     * Every slot, every tick, upon the bootstrap processor: sixty-four
+     * comparisons, which is less than the terminal's service beside it. The
+     * deadline is cleared before the signal is sent, so that an alarm is one
+     * signal and not one per tick until the process runs.
+     */
+    for (size_t index = 0U; index < PROCESS_CAPACITY; ++index)
+    {
+        Process *const process = &ProcessTable[index];
+
+        if (!process->used || (process->alarm_deadline == 0U) ||
+            (process->alarm_deadline > now))
+        {
+            continue;
+        }
+
+        process->alarm_deadline = 0U;
+
+        if (SignalSend(process, SYSCALL_SIGALRM))
+        {
+            ++sent;
+        }
+    }
+
+    return sent;
 }

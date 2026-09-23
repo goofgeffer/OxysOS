@@ -11,7 +11,8 @@
  *          ProcessCreateUserStack, ProcessReport, ProcessFork, ProcessExecute,
  *          ThreadLaunch, ProcessSetInit, ProcessInitId, ProcessAdoptOrphansOf,
  *          ProcessExit, ProcessWait, ProcessWaitFor, ProcessCurrent, ProcessEstablishBreak,
- *          ProcessSetBreak, ProcessBreak, ProcessArguments,
+ *          ProcessSetBreak, ProcessBreak, ProcessArguments, ProcessAlarm,
+ *          ProcessServiceAlarms,
  *          ProcessCloseDescriptors, ProcessAdoptDescriptor,
  *          ProcessDescriptorFile, ProcessReleaseDescriptor.
  * References:
@@ -521,6 +522,11 @@ struct Process
     uint32_t pending;
     uint64_t handlers[SYSCALL_SIGNAL_MAXIMUM + 1U];
     uint64_t restorer;
+
+    /* The alarm of sub-task 9.7: the interval timer's milliseconds at which
+     * SIGALRM is sent, or zero for none. A child of `fork` begins with none,
+     * being made rather than copied here. */
+    uint64_t alarm_deadline;
     uint64_t wait_status;
     uint32_t stop_signal;
     uint32_t termination_signal;
@@ -886,6 +892,17 @@ uint64_t ProcessWait(Process *parent, int64_t *status);
 /* The process the running thread belongs to, or null where the running thread
  * has none — which is every thread of the kernel's own. */
 Process *ProcessCurrent(void);
+
+/*
+ * The alarm of sub-task 9.7. ProcessAlarm is the call: it sets the caller's
+ * alarm `milliseconds` from `now`, or cancels it for zero, and returns the
+ * milliseconds that remained of the one it replaced. ProcessServiceAlarms is
+ * the tick's: every process whose deadline has passed is sent SIGALRM, once,
+ * and its deadline cleared. Both take the interval timer's milliseconds, so
+ * that the self-test may drive them with a time of its own.
+ */
+int64_t ProcessAlarm(uint64_t now, uint64_t milliseconds);
+size_t ProcessServiceAlarms(uint64_t now);
 
 /* Accounting. */
 uint64_t ProcessForkCount(void);

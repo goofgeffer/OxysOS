@@ -327,8 +327,9 @@ sliding **under** the panel rather than over it.
 
 ## 7. Limitations
 
-1. **The panel shows a launcher and a list of windows, and nothing else.** No
-   clock and no indicator: a clock is sub-task 9.7's. ~~No list of what is
+1. **The panel shows a launcher, a list of windows and a clock, and nothing
+   else.** No indicator. ~~No clock~~ — **closed at sub-task 9.7**,
+   [`UTILITIES.md`](UTILITIES.md), Section 4. ~~No list of what is
    running~~ — **closed on 2026-09-23**, Section 10: once a window could be put
    away, the list became the only way to bring it back.
 2. ~~**No minimise**~~ **and no resize by hand**. Minimise and full screen
