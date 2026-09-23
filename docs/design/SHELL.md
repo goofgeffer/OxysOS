@@ -1476,6 +1476,25 @@ is the conversion that writes a count; the self-test's count of `help`'s lines
 caught it, the file `help | wc -l` wrote holding something other than the
 number.
 
+**A `fg` that continued nothing** — found on 2026-09-22, under Bochs, five
+sub-tasks after the job control it belongs to. `fg` and `bg` sent SIGCONT only
+where `job->state` said the job was stopped, and that field is what the shell
+last *observed* rather than what the job is: a job stopped by SIGTTIN a moment
+earlier is stopped in the kernel and running as far as this table knows, until
+a wait reports it. `fg` upon such a job continued nothing, and the wait beneath
+collected the stop at once and printed `[1]+ Stopped` for the job the person
+had just asked to bring forward. **A person reaches it by typing `fg` quickly
+after a control-Z.**
+
+The continue is sent unconditionally now, which is what IEEE Std 1003.1-2017
+says `fg` does — SIGCONT to a process that is not stopped does nothing, so
+there is no case to distinguish and no reason to ask first.
+
+It was invisible under QEMU and reproducible under Bochs, and what exposed it
+was **the size of an unrelated program**: `/bin/terminal` grew, the images
+shifted, and the background `cat` reached its read before `fg` instead of after
+it. The session was passing by timing, which is not the same as passing.
+
 
 ### 28.5 A shell with no terminal, of sub-task 9.6
 

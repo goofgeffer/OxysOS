@@ -586,11 +586,31 @@ int ShellJobForeground(const char *operand)
     job->background = false;
     (void)OxysTerminalGroup(job->group);
 
-    if (job->state == SHELL_JOB_STOPPED)
-    {
-        (void)OxysKill(-job->group, SIGCONT);
-        ShellJobContinued(job);
-    }
+    /*
+     * **The continue is sent whether or not the shell has yet noticed the
+     * stop**, and that is a correction of 2026-09-22.
+     *
+     * It was sent only where `job->state` said stopped, which is what the
+     * shell last *observed* and not what the job is: a job stopped by SIGTTIN
+     * a moment ago is stopped in the kernel and running as far as this table
+     * knows, until a wait reports it. `fg` upon it then continued nothing, and
+     * the wait beneath collected the stop at once and printed `[1]+ Stopped`
+     * for a job the person had just asked to bring forward. A person can reach
+     * it by typing `fg` quickly after a control-Z.
+     *
+     * It was found under Bochs, where the shell's job-control session failed
+     * with the status of `xyz` — 127, a command not found — in place of the
+     * 130 a control-C leaves: the `cat` that `fg` should have brought forward
+     * stayed stopped, so the line meant for it was read by the shell. The same
+     * image passed under QEMU and under VirtualBox, and the same source passed
+     * under Bochs one commit earlier; what moved was the size of an unrelated
+     * program, which is how a race announces itself.
+     *
+     * SIGCONT to a process that is not stopped does nothing, so there is no
+     * case to distinguish and no reason to ask first.
+     */
+    (void)OxysKill(-job->group, SIGCONT);
+    ShellJobContinued(job);
 
     return ShellJobWaitForeground(job);
 }
@@ -615,11 +635,10 @@ int ShellJobBackground(const char *operand)
         return 1;
     }
 
-    if (job->state == SHELL_JOB_STOPPED)
-    {
-        (void)OxysKill(-job->group, SIGCONT);
-        ShellJobContinued(job);
-    }
+    /* Unconditionally, for the reason `fg` above records: a job stopped a
+     * moment ago is stopped whether or not this table has heard of it yet. */
+    (void)OxysKill(-job->group, SIGCONT);
+    ShellJobContinued(job);
 
     job->background = true;
     (void)printf("[%u] %s &\n", ShellJobNumber(job), job->text);

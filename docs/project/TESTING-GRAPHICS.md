@@ -714,9 +714,11 @@ key translation and `poll` are asserted without one —
 is the whole of what only looking establishes.
 
 1. **A shell appears.** Boot the default entry, press the panel's button and
-   choose `Terminal`. A window titled `Terminal` opens with the shell's prompt
-   at its top left and a block cursor after it. A window with no prompt in it is
-   a shell that did not start; the reason is upon the serial line.
+   choose `Terminal`. A window titled `Terminal` opens — white upon black, with
+   no stripe of the window manager's paper anywhere between its rows — with the
+   shell's prompt at its top left and a block cursor after it. A window with no
+   prompt in it is a shell that did not start; the reason is upon the serial
+   line.
 2. **It runs what is typed.** Type `ls` and press Return: the entries of the
    root are drawn in the window, one to a line, and a new prompt follows them.
    Then `echo hi`, which must draw `hi` and nothing else. **Watch for a

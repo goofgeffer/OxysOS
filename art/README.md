@@ -91,5 +91,10 @@ looked like the system for exactly as long as the system did not change. The
 coral and the mint it draws beside them stay its own, because a colour belongs
 here when two things must agree about it and nothing else draws those.
 
+`/bin/terminal` of sub-task 9.6 takes neither, and that is the same rule seen
+from the other side: it draws white upon black, because a window of text read
+for minutes at a time is not the problem a label upon a panel is, and no second
+thing has to agree with it about either colour.
+
 `/etc/desktop.conf` ships `accent = system` to name this header from a file —
 [`../docs/design/CONFIG.md`](../docs/design/CONFIG.md), Section 4.2.

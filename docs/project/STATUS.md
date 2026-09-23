@@ -763,7 +763,10 @@ in either alone is deafness to the other. And a **refusal**: `tcgroup` from a
 process whose standard input is not the terminal is now `ENOTTY`, which is what
 stops a shell in a window taking the terminal from the shell at the keyboard.
 That shell therefore has no job control — no `fg`, no `bg`, no control-Z — and
-control-C is a signal the emulator sends to the group the shell leads.
+control-C is a signal the emulator sends to the group the shell leads. It draws
+white upon black, at the project owner's direction, which is the one thing in
+this system that does not take its colours from `art/palette.h`: a window of
+text read for minutes at a time is not the problem a label upon a panel is.
 [`../design/TERMINAL.md`](../design/TERMINAL.md).
 
 **The same day found and fixed a defect a person could reach from the

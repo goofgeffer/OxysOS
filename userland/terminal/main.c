@@ -37,7 +37,6 @@
  */
 
 #include <errno.h>
-#include <palette.h>
 #include <signal.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -61,20 +60,34 @@
  * The face is eight pixels tall and a row of it eight pixels high leaves no
  * space at all between one line and the next, which is what the kernel's
  * console looks like and is legible there because a boot log is read in
- * paragraphs. A person reads a terminal line by line. The gap is never drawn
- * into: a window's content begins as the paper this draws upon, so what shows
- * between the rows is that paper and needs no painting.
+ * paragraphs. A person reads a terminal line by line.
+ *
+ * **The gap is painted once and never again.** Nothing draws into it — a row is
+ * drawn as glyph cells and the glyphs are eight pixels tall — so what shows
+ * there is whatever the window's content held when it was made, which is the
+ * window manager's warm paper. That was invisible while this drew upon the same
+ * paper and would have been two-pixel white stripes across the window the
+ * moment it drew upon black. TerminalPaintGround is the answer, and it runs at
+ * start alone.
  */
 #define TERMINAL_LEADING 2
 #define TERMINAL_PITCH   (TERMINAL_GLYPH + TERMINAL_LEADING)
 
 /*
- * The colours, from art/palette.h — the same paper and ink the window manager
- * draws a frame's title with, so that the terminal looks like part of the
- * system rather than like a program with opinions of its own.
+ * The colours: white upon black, at the project owner's direction on
+ * 2026-09-22.
+ *
+ * **They are this program's own and not art/palette.h's**, and that is the
+ * rule the demonstration's coral and mint already follow: a colour belongs in
+ * the shared header when two things must agree about it, and nothing else in
+ * this system draws a terminal. The paper and the ink the header carries are
+ * what a frame, a boot screen and a desktop must agree upon; a window full of
+ * text that a person reads for minutes at a time is a different problem from a
+ * label upon a panel, and it was answered here with the system's warm paper
+ * until somebody had to look at it.
  */
-#define TERMINAL_PAPER OXYS_RGB(OXYS_PAPER_RED, OXYS_PAPER_GREEN, OXYS_PAPER_BLUE)
-#define TERMINAL_INK   OXYS_RGB(OXYS_INK_RED, OXYS_INK_GREEN, OXYS_INK_BLUE)
+#define TERMINAL_PAPER UINT32_C(0x00000000)
+#define TERMINAL_INK   UINT32_C(0x00FFFFFF)
 
 static TermScreen TerminalGrid;
 static int64_t TerminalWindow = -1;
@@ -92,6 +105,60 @@ static int64_t TerminalShell = -1;
 static uint32_t TerminalCursorColumn;
 static uint32_t TerminalCursorRow;
 static bool TerminalCursorDrawn;
+
+/*
+ * Paints the whole content in the terminal's ground, once, before anything is
+ * drawn upon it.
+ *
+ * A window is made carrying the window manager's paper, and this draws upon
+ * black; without this the leading between the rows, and every cell no glyph has
+ * reached yet, would show the paper through. **There is no fill across the
+ * protocol** — the session met the same wall for its panel,
+ * docs/design/SESSION.md, Section 7, limitation 4 — so it is a buffer blitted
+ * in bands: one row's pitch at a time, which is a few tens of kilobytes rather
+ * than the megabyte the whole content would be.
+ *
+ * It runs at start alone. Nothing afterwards uncovers the ground: a row redrawn
+ * writes its own cells whole, paper and glyph together.
+ */
+static bool TerminalPaintGround(void)
+{
+    const int32_t width = (int32_t)TermColumns(&TerminalGrid) * TERMINAL_GLYPH * TerminalScale;
+    const int32_t band = TERMINAL_PITCH * TerminalScale;
+    const size_t count = (size_t)width * (size_t)band;
+    uint32_t *const pixels = malloc(count * sizeof *pixels);
+    SyscallWindowRectangle area;
+
+    if (pixels == NULL)
+    {
+        return false;
+    }
+
+    for (size_t index = 0U; index < count; ++index)
+    {
+        pixels[index] = TERMINAL_PAPER;
+    }
+
+    area.x = 0;
+    area.width = width;
+    area.height = band;
+
+    for (uint32_t row = 0U; row < TermRows(&TerminalGrid); ++row)
+    {
+        area.y = (int32_t)row * band;
+
+        if (OxysWindowBlit(TerminalWindow, &area, pixels) != 0)
+        {
+            free(pixels);
+
+            return false;
+        }
+    }
+
+    free(pixels);
+
+    return true;
+}
 
 /* Draws one run of text at a cell position. */
 static void TerminalDrawAt(uint32_t column, uint32_t row, const char *text, uint32_t ink,
@@ -388,6 +455,15 @@ int main(void)
         (void)fprintf(stderr, "terminal: a window could not be made.\n");
 
         return EXIT_FAILURE;
+    }
+
+    /* The ground before the shell, so that no part of the window is ever seen
+     * in the window manager's paper. A window that could not be painted is a
+     * window with white stripes across it and is worth saying so about, but it
+     * is not worth refusing to run over. */
+    if (!TerminalPaintGround())
+    {
+        (void)fprintf(stderr, "terminal: the window's ground could not be painted.\n");
     }
 
     if (!TerminalStartShell())

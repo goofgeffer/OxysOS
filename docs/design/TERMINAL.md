@@ -59,6 +59,26 @@ own pipelines have used since sub-task 8.6.
 not join it. Control-C is sent to that group, and a program that interrupted its
 own group would interrupt itself.
 
+**White upon black**, at the project owner's direction on 2026-09-22, and the
+two colours are the program's own rather than
+[`../../art/palette.h`](../../art/palette.h)'s. That is the rule the
+demonstration's coral and mint already follow: a colour belongs in the shared
+header when two things must agree about it, and nothing else in this system
+draws a terminal. The header's paper and ink are what a frame, a boot screen and
+a desktop must agree upon — a label read in a glance. A window full of text a
+person reads for minutes at a time is a different problem, and it was answered
+with the system's warm paper until somebody had to look at it.
+
+**The leading is painted once and never again.** A row is drawn as glyph cells
+eight pixels tall at a pitch of ten, so the two pixels between rows are never
+drawn into: what shows there is whatever the window's content held when it was
+made, which is the window manager's paper. That was invisible while the terminal
+drew upon the same paper, and would have become white stripes across the window
+the instant it drew upon black. `TerminalPaintGround` blits the ground in bands
+at start — **there is no fill across the protocol**, the wall the session met
+for its panel ([`SESSION.md`](SESSION.md), Section 7, limitation 4) — and
+nothing afterwards uncovers it, a row redrawn writing its own cells whole.
+
 ## 3. The grid, and what it interprets
 
 [`../../libc/include/term.h`](../../libc/include/term.h) is a fixed array of
