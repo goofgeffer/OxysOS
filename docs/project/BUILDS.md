@@ -352,12 +352,12 @@ regenerates it and fails if what is here differs.*
 
 | | |
 | --- | --- |
-| Builds recorded | 12 |
-| Verified | 11 passed, 1 not |
+| Builds recorded | 14 |
+| Verified | 12 passed, 2 not |
 | Compilers | gcc |
 | Environments | QEMU, VirtualBox |
 | First | 2026-09-17T01:34Z |
-| Latest | 2026-09-23T20:06Z |
+| Latest | 2026-09-23T20:48Z |
 
 ## The builds
 
@@ -375,5 +375,7 @@ regenerates it and fails if what is here differs.*
 | 10 | 2026-09-23T02:06Z | `74b8443` | gcc 13.2.0 | 3459392 | 10688512 | passed (73 assertions) |  | Icons for the launcher, read from files rather than compiled in |
 | 11 | 2026-09-23T19:57Z | `1c31a78` *(modified)* | gcc 13.2.0 | 3552808 | 10780672 | failed |  | Negative test of the smooth mark and icons: the version-1 icon shipped and a logo byte with ink beyond coverage; both self-tests failed as intended, reverted |
 | 12 | 2026-09-23T20:06Z | `7f1c530` *(modified)* | gcc 13.2.0 | 3552616 | 10780672 | passed (74 assertions) |  | The mark and the icons at the resolution they are shown at: logo coverage table of 192, icon format version 2 at 48. Dirty only by the register's own uncommitted row 11; the source is exactly 7f1c530 |
+| 13 | 2026-09-23T20:47Z | `27cf149` | gcc 13.2.0 | 3631256 | 10860544 | passed (75 assertions) |  | A background upon the system's own filesystem, and windows that minimise and fill the screen |
+| 14 | 2026-09-23T20:48Z | `27cf149` *(modified)* | gcc 13.2.0 | 3631016 | 10858496 | failed |  | Negative test of the background and window states: the run-crossing check removed, the root notice not coalesced, a minimised window focusable; all caught, reverted |
 
 <!-- END GENERATED -->
