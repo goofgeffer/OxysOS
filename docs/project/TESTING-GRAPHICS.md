@@ -705,6 +705,16 @@ with what it would catch. What only looking establishes is the desktop.
    panel, the launcher and the mark must all still appear: it is the screen upon
    which the panel was once refused for being shorter than a window may be, and
    the failure showed as a bare ground and a line in the log from `init`.
+6. **The icons, of sub-task 9.6.** The `Terminal` row carries a picture at its
+   left: a small dark screen with a prompt in it, read from
+   `/share/icons/terminal.oxi` when the session started. The `Windows` row
+   carries none and its name stands in the same column as the other's, the slot
+   being left empty rather than closed up. Two failures are worth looking for
+   and neither reports itself: a **square of the panel's colour** where the
+   picture should be is an icon whose transparency was flattened in the
+   conversion, and **nothing at all** where a row names an icon is a file that
+   could not be read — which says so upon the serial line and offers the entry
+   anyway.
 
 ## 12. Verification of the terminal emulator
 

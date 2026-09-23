@@ -159,6 +159,8 @@ LIBC_SOURCES := libc/string/copying.c \
                 libc/line/system.c \
                 libc/config/config.c \
                 libc/config/system.c \
+                libc/icon/icon.c \
+                libc/icon/system.c \
                 libc/term/term.c \
                 libc/term/keys.c \
                 libc/signal/signal.c
@@ -240,6 +242,7 @@ C_SOURCES := kernel/kernel.c \
              kernel/test/libc/utilities.c \
              kernel/test/libc/line.c \
              kernel/test/libc/config.c \
+             kernel/test/libc/icon.c \
              kernel/test/libc/term.c \
              kernel/test/terminal/terminal.c \
              kernel/test/shell/parser.c \
@@ -715,6 +718,13 @@ INITRD_SOURCES   := $(foreach utility,$(INITRD_UTILITIES),$(USER_DIR)/$(utility)
 # is a change git can show.
 INITRD_CONFIGURATION := etc/system.conf etc/desktop.conf etc/session.conf
 
+# The `/share/icons` hierarchy of sub-task 9.6: the pictures the launcher draws
+# beside its entries. They are files upon the ramdisk and not a header compiled
+# in, which is what lets somebody add an entry to `/etc/session.conf` and give
+# it a picture without rebuilding the system — the whole reason an icon is a
+# file. art/README.md holds the format and the one command that makes one.
+INITRD_ICONS := art/icons/terminal.oxi
+
 # `/mnt` is the second and last thing upon the image, and it is empty.
 #
 # Before sub-task 7.7 the root was whatever volume the machine carried, and the
@@ -726,7 +736,7 @@ INITRD_CONFIGURATION := etc/system.conf etc/desktop.conf etc/session.conf
 # The machine's own volume is mounted here instead. See kernel/kernel.c,
 # KernelMountMachineVolume.
 
-$(INITRD_IMAGE): $(INITRD_SOURCES) $(INITRD_CONFIGURATION)
+$(INITRD_IMAGE): $(INITRD_SOURCES) $(INITRD_CONFIGURATION) $(INITRD_ICONS)
 	@command -v mke2fs >/dev/null \
 		|| (echo "ERROR: mke2fs was not found upon the PATH, and the initial ramdisk requires it." \
 		    && echo "It is supplied by e2fsprogs; see docs/project/TOOLCHAIN.md." && false)
@@ -734,9 +744,14 @@ $(INITRD_IMAGE): $(INITRD_SOURCES) $(INITRD_CONFIGURATION)
 	@mkdir -p $(INITRD_STAGING)/bin
 	@mkdir -p $(INITRD_STAGING)/mnt
 	@mkdir -p $(INITRD_STAGING)/etc
+	@mkdir -p $(INITRD_STAGING)/share/icons
 	@for file in $(INITRD_CONFIGURATION); do \
 		cp $$file $(INITRD_STAGING)/etc/; \
 		chmod 644 $(INITRD_STAGING)/etc/$$(basename $$file); \
+	done
+	@for file in $(INITRD_ICONS); do \
+		cp $$file $(INITRD_STAGING)/share/icons/; \
+		chmod 644 $(INITRD_STAGING)/share/icons/$$(basename $$file); \
 	done
 	@for utility in $(INITRD_UTILITIES); do \
 		cp $(USER_DIR)/$$utility.embed.elf $(INITRD_STAGING)/bin/$$utility; \
@@ -747,7 +762,7 @@ $(INITRD_IMAGE): $(INITRD_SOURCES) $(INITRD_CONFIGURATION)
 	@SOURCE_DATE_EPOCH=1789257600 mke2fs -q -F -t ext2 -b 1024 -r 1 \
 		-U $(INITRD_UUID) -E hash_seed=$(INITRD_UUID) \
 		-L oxys-initrd -d $(INITRD_STAGING) $@ $(INITRD_BLOCKS)
-	@echo "The initial ramdisk has been written to $@ ($(words $(INITRD_UTILITIES)) utilities in /bin, $(words $(INITRD_CONFIGURATION)) files in /etc)."
+	@echo "The initial ramdisk has been written to $@ ($(words $(INITRD_UTILITIES)) utilities in /bin, $(words $(INITRD_CONFIGURATION)) files in /etc, $(words $(INITRD_ICONS)) in /share/icons)."
 
 iso: $(ISO_IMAGE)
 

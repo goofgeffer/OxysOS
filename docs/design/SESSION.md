@@ -336,3 +336,60 @@ sliding **under** the panel rather than over it.
    What that shell does not have is job control, which
    [`TERMINAL.md`](TERMINAL.md), Section 7, limitation 1, owes to a
    pseudo-terminal this system does not yet have.
+
+## 8. Icons, which are files and not a header
+
+Since sub-task 9.6 a `[launch]` block may carry an `icon`, and the launcher
+draws it beside the entry's name. It is **a path to a file**, read once when the
+session starts:
+
+```
+[launch]
+name = Terminal
+run  = /bin/terminal
+icon = /share/icons/terminal.oxi
+```
+
+**Why a file.** The mark of [`../../art/logo.h`](../../art/logo.h) is compiled
+into the kernel and into this program because both draw it before there is a
+filesystem and because there is exactly one of it. An icon is the opposite of
+both: there is one per program, the set grows whenever somebody adds an entry to
+the launcher, and nothing draws one before `/` is mounted. A picture compiled in
+is a picture that needs the system rebuilt to change — and a launcher whose
+entries are read from a file at start cannot have its pictures fixed at compile
+time without the two disagreeing the first time somebody edits that file.
+
+**The format** is [`../../libc/include/icon.h`](../../libc/include/icon.h): four
+bytes of magic, a version, a width, a height, a reserved byte, and then one
+32-bit little-endian pixel per position, row by row. A pixel is the
+`0x00RRGGBB` the window protocol carries, or `ICON_NOTHING` — `0xFF000000`, a
+value no client pixel can be — for a position the icon does not cover. There is
+no compression and no palette: an icon is a few kilobytes, and a format a person
+can read with `xxd` is a format that can be checked by looking.
+[`../../art/README.md`](../../art/README.md) holds the one command that makes a
+file of it from a picture somebody drew.
+
+**The transparency is resolved by the caller.** The protocol carries pixels and
+has no notion of a pixel that is not there, so what an icon means by "nothing"
+is "the colour behind me" — and the only thing that knows what that is, is the
+program drawing it. `SessionDrawIcon` composes the icon over the panel's colour
+into its tile and carries the result across in one blit. An icon drawn by
+something over a different ground would compose it over that one instead; the
+file says nothing about either.
+
+**The parsing is in the C library, and the reading is beside it**, which is the
+seam of [`LIBC.md`](LIBC.md), Section 9, a fifth time: the kernel's self-test
+drives the parser over bytes it composes, with no filesystem and no privilege
+transition, and then reads the file the ramdisk actually ships and puts it
+through the same parser. That second half is `config-check`'s argument: a parser
+that works and a system whose icons are what its launcher expects are different
+properties, and a picture converted at the wrong size or with its transparency
+flattened parses perfectly and draws a black square.
+
+**An icon that cannot be read costs the icon and not the entry.** The fault is
+printed upon the standard error and the entry is offered without a picture,
+which is what an entry naming no icon gets. A launcher that refused to offer a
+program because its picture was missing would be a desktop a person cannot use
+for a reason having nothing to do with the program.
+
+

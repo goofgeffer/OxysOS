@@ -12,8 +12,9 @@ the artwork living beside whichever program draws it —
 
 ## Purpose
 
-The mark of Oxys-OS, the bitmap generated from it, and the colours the system
-draws itself in.
+The mark of Oxys-OS, the bitmap generated from it, the colours the system
+draws itself in, and the icons its launcher draws — which are files, and are
+the one thing here that is not compiled in.
 
 | File | What it is |
 | ---- | ---------- |
@@ -98,3 +99,49 @@ thing has to agree with it about either colour.
 
 `/etc/desktop.conf` ships `accent = system` to name this header from a file —
 [`../docs/design/CONFIG.md`](../docs/design/CONFIG.md), Section 4.2.
+
+## `icons/` — the pictures the launcher draws, which are files
+
+| File | What it is |
+| ---- | ---------- |
+| [`icons/terminal.png`](icons/terminal.png) | The terminal's icon as the project owner drew it. It is the source and nothing reads it at build time. |
+| [`icons/terminal.oxi`](icons/terminal.oxi) | The same, reduced to twenty-four pixels square and written in the format [`../libc/include/icon.h`](../libc/include/icon.h) sets out. This is what the ramdisk carries and what the session reads. |
+
+**They are files and not a header**, which is the whole difference between an
+icon and the mark above. There is one mark and it is drawn before there is a
+filesystem; there is one icon per program, the set grows whenever somebody adds
+an entry to `/etc/session.conf`, and nothing draws one before `/` is mounted. A
+picture compiled in would need the system rebuilt to change, and a launcher
+whose entries are read from a file cannot have its pictures fixed at compile
+time without the two disagreeing the first time somebody edits it.
+[`../docs/design/SESSION.md`](../docs/design/SESSION.md), Section 8.
+
+The conversion is one command, recorded here rather than made a rule of the
+`Makefile` — for the reason `logo.h`'s is: a build rule would put ImageMagick in
+the path of every build, and an icon changes when somebody draws one, not when
+somebody builds.
+
+```sh
+convert art/icons/terminal.png -trim +repage -background none \
+        -resize 24x24 -gravity center -extent 24x24 -depth 8 rgba:- > raw
+printf 'OXIC' > head && printf '\x01\x18\x18\x00' >> head
+xxd -p -c 4 raw | awk '{ r = substr($0,1,2); g = substr($0,3,2);
+        b = substr($0,5,2); a = strtonum("0x" substr($0,7,2));
+        if (a < 128) printf "000000ff"; else printf "%s%s%s00", b, g, r }' \
+    | xxd -r -p > pixels
+cat head pixels > art/icons/terminal.oxi
+```
+
+Three things in that are the whole of the judgement. **`-background none`
+before the resize**, so that what is outside the picture stays outside it: an
+icon converted over white is a white square upon the panel, and the self-test of
+[`../kernel/test/libc/icon.c`](../kernel/test/libc/icon.c) refuses a shipped
+icon with no transparent pixel for exactly that reason. **`-extent 24x24`
+centred**, so that a picture of any shape becomes a square the launcher's slot
+was sized for, padded rather than stretched. And **a pixel below half alpha
+becomes nothing** rather than a blend: there is no alpha in the window protocol,
+so the only two answers available are "this colour" and "whatever is behind me".
+
+The header's five significant bytes are `OXIC`, the version 1, the width 0x18,
+the height 0x18 and a reserved zero; the pixels are little-endian, which is why
+the `awk` writes blue, green, red, zero.

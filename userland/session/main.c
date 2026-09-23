@@ -33,6 +33,7 @@
  */
 
 #include <config.h>
+#include <icon.h>
 #include <logo.h>
 #include <palette.h>
 #include <errno.h>
@@ -45,10 +46,25 @@
 
 #define SESSION_CONFIGURATION "/etc/session.conf"
 
-/* The panel's height, and the launcher's, in units of the scale. */
+/*
+ * The panel's height, and the launcher's, in units of the scale.
+ *
+ * A launcher row is twenty-eight units where it was sixteen, because since
+ * sub-task 9.6 an entry may carry a picture: twenty-four for the icon and four
+ * for the space about it. A row the height of the icon would leave the icons
+ * touching one another, which reads as one column of noise rather than as
+ * three things.
+ */
 #define SESSION_PANEL_UNITS  14
-#define SESSION_ENTRY_UNITS  16
+#define SESSION_ENTRY_UNITS  28
 #define SESSION_LAUNCH_WIDTH 56
+
+/* The icon slot within a row: its extent in units, and the margin before it.
+ * An icon larger than the slot is drawn as much of as fits, the slot being what
+ * the row was sized for; ICON_EXTENT_MAXIMUM is what the library will hold at
+ * all. */
+#define SESSION_ICON_UNITS  24
+#define SESSION_ICON_MARGIN 2
 
 /*
  * The least extent a window may have, which the panel's height must not fall
@@ -82,6 +98,15 @@ typedef struct SessionEntry
 {
     char name[CONFIG_VALUE_MAXIMUM + 1U];
     char run[CONFIG_VALUE_MAXIMUM + 1U];
+
+    /*
+     * The picture, read from the file the entry names, and whether there is
+     * one. An entry without an icon is drawn without one and not with a
+     * substitute: a launcher that invented a picture for every program would
+     * be telling a person something it does not know.
+     */
+    OxysIcon picture;
+    bool has_picture;
 } SessionEntry;
 
 static SessionEntry SessionEntries[SESSION_ENTRIES_MAXIMUM];
@@ -268,20 +293,78 @@ static void SessionDrawPanel(bool open)
     SessionFill(SessionPanel, 0, height - 1, SessionScreen.width, 1, SESSION_GROUND);
 }
 
+/*
+ * Draws an icon at a position, enlarged by the scale, with `paper` wherever the
+ * icon covers nothing.
+ *
+ * It is composed into the tile and carried across in one blit. **The
+ * transparency is resolved here and not by the window manager**: the protocol
+ * carries pixels and has no notion of a pixel that is not there, so what a
+ * caller means by "nothing" is "the colour behind me", and the caller is the
+ * only one that knows what that is — SESSION.md, Section 8.
+ *
+ * An icon larger than the slot is drawn as much of as the slot holds rather
+ * than refused: the slot is what the row was sized for, and half a picture in
+ * the right place is more use than none.
+ */
+static void SessionDrawIcon(int64_t window, int32_t x, int32_t y, const OxysIcon *icon,
+                            uint32_t paper)
+{
+    const int32_t slot = SESSION_ICON_UNITS * SessionScale;
+    SyscallWindowRectangle area;
+
+    if ((window < 0) || (icon == NULL) || ((uint32_t)(slot * slot) > SESSION_TILE))
+    {
+        return;
+    }
+
+    for (int32_t row = 0; row < slot; ++row)
+    {
+        for (int32_t column = 0; column < slot; ++column)
+        {
+            const uint32_t pixel = OxysIconAt(icon, (uint32_t)(column / SessionScale),
+                                              (uint32_t)(row / SessionScale));
+
+            SessionTile[(row * slot) + column] = (pixel == ICON_NOTHING) ? paper : pixel;
+        }
+    }
+
+    area.x = x;
+    area.y = y;
+    area.width = slot;
+    area.height = slot;
+
+    (void)OxysWindowBlit(window, &area, SessionTile);
+}
+
 /* The launcher: one row per program, drawn into a panel-layer window. */
 static void SessionDrawMenu(void)
 {
     const int32_t row = SESSION_ENTRY_UNITS * SessionScale;
-    const int32_t inset = 3 * SessionScale;
+    const int32_t slot = SESSION_ICON_UNITS * SessionScale;
+    const int32_t margin = SESSION_ICON_MARGIN * SessionScale;
+    /* The text begins after the icon's slot whether or not an entry has a
+     * picture, so that the names stand in one column and a launcher of three
+     * entries does not read as three margins. */
+    const int32_t text_x = margin + slot + margin;
 
     SessionFill(SessionMenu, 0, 0, SESSION_LAUNCH_WIDTH * 3 * SessionScale,
                 row * (int32_t)SessionEntryCount, SESSION_PANEL);
 
     for (size_t index = 0U; index < SessionEntryCount; ++index)
     {
-        SessionText(SessionMenu, inset * 2, (int32_t)index * row + inset, SessionEntries[index].name,
-                    SESSION_INK, SESSION_PANEL, SessionScale);
+        const int32_t top = (int32_t)index * row;
+
+        if (SessionEntries[index].has_picture)
+        {
+            SessionDrawIcon(SessionMenu, margin, top + ((row - slot) / 2),
+                            &SessionEntries[index].picture, SESSION_PANEL);
+        }
+
+        SessionText(SessionMenu, text_x, top + ((row - (8 * SessionScale)) / 2),
+                    SessionEntries[index].name, SESSION_INK, SESSION_PANEL, SessionScale);
     }
+
 }
 
 /* ------------------------------------------------------- the launcher */
@@ -409,6 +492,8 @@ static void SessionReadConfiguration(void)
     {
         const char *const run = OxysConfigValue(&SessionConfig, "launch", index, "run");
         const char *const name = OxysConfigValue(&SessionConfig, "launch", index, "name");
+        const char *const icon = OxysConfigValue(&SessionConfig, "launch", index, "icon");
+        SessionEntry *const entry = &SessionEntries[SessionEntryCount];
 
         if (run == NULL)
         {
@@ -416,9 +501,34 @@ static void SessionReadConfiguration(void)
             continue;
         }
 
-        SessionCopy(SessionEntries[SessionEntryCount].run, CONFIG_VALUE_MAXIMUM, run);
-        SessionCopy(SessionEntries[SessionEntryCount].name, CONFIG_VALUE_MAXIMUM,
-                    (name != NULL) ? name : run);
+        SessionCopy(entry->run, CONFIG_VALUE_MAXIMUM, run);
+        SessionCopy(entry->name, CONFIG_VALUE_MAXIMUM, (name != NULL) ? name : run);
+
+        /*
+         * The picture, of sub-task 9.6, read here rather than where it is drawn
+         * — the launcher is drawn every time it opens and a file read at each
+         * opening is a file read for nothing.
+         *
+         * **An icon that cannot be read costs the icon and not the entry.** A
+         * launcher that refused to offer a program because its picture was
+         * missing would be a desktop a person cannot use for a reason that has
+         * nothing to do with the program; the fault is said plainly upon the
+         * standard error and the entry is offered with no picture, which is
+         * what an entry that named none gets.
+         */
+        entry->has_picture = false;
+
+        if (icon != NULL)
+        {
+            entry->has_picture = OxysIconRead(&entry->picture, icon);
+
+            if (!entry->has_picture)
+            {
+                (void)fprintf(stderr, "session: %s: the icon could not be read; the entry "
+                                      "stands without one.\n", icon);
+            }
+        }
+
         ++SessionEntryCount;
     }
 }

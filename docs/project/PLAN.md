@@ -361,5 +361,12 @@ shell in a window therefore runs without job control, which is stated rather tha
 worked around: a pseudo-terminal is what would give it back.
 [`../design/TERMINAL.md`](../design/TERMINAL.md).
 
+**The launcher draws icons from the same sub-task**, and they are **files**: an
+entry of `/etc/session.conf` names one, the session reads it at start, and the
+format is a header and one pixel per position with a value that means "nothing
+here". A picture compiled in would need the system rebuilt to change, which a
+launcher whose entries come from a file cannot afford.
+[`../design/SESSION.md`](../design/SESSION.md), Section 8.
+
 **Next: sub-task 9.7** — the utilities the desktop is not usable without: a file
 manager, a text viewer and a clock. `Oxys 1 Beta` is cut there.

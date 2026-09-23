@@ -2337,6 +2337,10 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
      * job-control session; docs/design/INIT.md, Section 6.2. */
     KernelVerifyTerm();
 
+    /* Sub-task 9.6: the icons the launcher draws, which are files upon the
+     * ramdisk and are therefore asserted after it is mounted. */
+    KernelVerifyIcon();
+
     /* Sub-task 8.6: the pipes the sessions above made, and the scheduler the
      * pipelines ran upon, which the shell is the first thing to sleep in. */
     VfsPipeReport();

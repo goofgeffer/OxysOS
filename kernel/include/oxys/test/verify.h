@@ -21,6 +21,7 @@
  *          KernelVerifyUtilities, KernelVerifyLine, KernelVerifyShell,
  *          KernelVerifyTerminal, KernelVerifyWindows, KernelVerifyCircle,
  *          KernelVerifyClients, KernelVerifyInit, KernelVerifyConfig, KernelVerifyTerm,
+ *          KernelVerifyIcon,
  *          KernelVerifyPit, KernelVerifyKeyboard, KernelVerifySerial,
  *          KernelVerifyVga, KernelVerifyPci, KernelVerifyAta, KernelVerifyBlock,
  *          KernelVerifyBuffer, KernelVerifyExt2, KernelVerifyVfs,
@@ -164,6 +165,10 @@ void KernelVerifyConfig(void);
  * call the emulator waits in.
  */
 void KernelVerifyTerm(void);
+
+/* Sub-task 9.6: the icon format, upon bytes in memory and upon the file the
+ * ramdisk ships for the launcher to draw. */
+void KernelVerifyIcon(void);
 
 /* Phase 6, sub-task 6.1: the descriptors, the task state segment, the interrupt
  * stack table and the three registers that configure SYSCALL. */
