@@ -767,6 +767,7 @@ control-C is a signal the emulator sends to the group the shell leads. It draws
 white upon black, at the project owner's direction, which is the one thing in
 this system that does not take its colours from `art/palette.h`: a window of
 text read for minutes at a time is not the problem a label upon a panel is.
+[`../design/TERMINAL.md`](../design/TERMINAL.md).
 
 **And the launcher draws pictures**, since the same sub-task. An entry of
 `/etc/session.conf` may carry an `icon`, which is **a path to a file** the
@@ -788,7 +789,6 @@ coverage rather than ninety-six of three states, drawn one to one upon every
 screen of 1024 or wider and averaged upon VirtualBox's 640 by 480, its edge
 mixed with the ground. Observed under QEMU, VirtualBox and Bochs.
 [`../design/SESSION.md`](../design/SESSION.md), Section 3.2.
-[`../design/TERMINAL.md`](../design/TERMINAL.md).
 
 **The same day found and fixed a defect a person could reach from the
 launcher.** Two processes reading the terminal at once stopped the machine:
