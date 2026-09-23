@@ -352,12 +352,12 @@ regenerates it and fails if what is here differs.*
 
 | | |
 | --- | --- |
-| Builds recorded | 9 |
-| Verified | 9 passed, 0 not |
+| Builds recorded | 10 |
+| Verified | 10 passed, 0 not |
 | Compilers | gcc |
 | Environments | QEMU, VirtualBox |
 | First | 2026-09-17T01:34Z |
-| Latest | 2026-09-23T00:27Z |
+| Latest | 2026-09-23T02:06Z |
 
 ## The builds
 
@@ -372,5 +372,6 @@ regenerates it and fails if what is here differs.*
 | 7 | 2026-09-21T23:57Z | `bb2e6de` | gcc 13.2.0 | 3354936 | 10584064 | passed (71 assertions) |  | The screen handed back to the console before the reason is written, and cleared when it is |
 | 8 | 2026-09-22T22:17Z | `182a724` | gcc 13.2.0 | 3438440 | 10665984 | passed (72 assertions) |  | Sub-task 9.6: the terminal emulator, the poll it waits in, and the tcgroup refusal |
 | 9 | 2026-09-23T00:27Z | `e8bb681` | gcc 13.2.0 | 3438440 | 10665984 | passed (72 assertions) |  | The terminal white upon black, and the fg that continued nothing |
+| 10 | 2026-09-23T02:06Z | `74b8443` | gcc 13.2.0 | 3459392 | 10688512 | passed (73 assertions) |  | Icons for the launcher, read from files rather than compiled in |
 
 <!-- END GENERATED -->
