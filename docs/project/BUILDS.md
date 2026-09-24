@@ -352,12 +352,12 @@ regenerates it and fails if what is here differs.*
 
 | | |
 | --- | --- |
-| Builds recorded | 18 |
-| Verified | 14 passed, 4 not |
+| Builds recorded | 20 |
+| Verified | 15 passed, 5 not |
 | Compilers | gcc |
 | Environments | QEMU, VirtualBox |
 | First | 2026-09-17T01:34Z |
-| Latest | 2026-09-24T01:10Z |
+| Latest | 2026-09-24T01:25Z |
 
 ## The builds
 
@@ -381,5 +381,7 @@ regenerates it and fails if what is here differs.*
 | 16 | 2026-09-23T21:36Z | `4cab1ea` *(modified)* | gcc 13.2.0 | 3677456 | 10905600 | failed |  | Negative test of 9.7: the 12-hour reduction removed, gmtime's weekday from Wednesday, fork copying the alarm; all caught, reverted |
 | 17 | 2026-09-24T01:09Z | `ccdd12e` | gcc 13.2.0 | 3706552 | 10934272 | passed (78 assertions) |  | The persistent /etc: a labelled volume mounted over the ramdisk's |
 | 18 | 2026-09-24T01:10Z | `ccdd12e` *(modified)* | gcc 13.2.0 | 3706448 | 10934272 | failed |  | Negative test of the persistent /etc: label prefix accepted, seeding truncating, no write-back on close; all caught, reverted |
+| 19 | 2026-09-24T01:25Z | `2b250f0` | gcc 13.2.0 | 3713576 | 10942464 | passed (78 assertions) |  | clear in a terminal window: the grid acts upon the form feed |
+| 20 | 2026-09-24T01:25Z | `2b250f0` *(modified)* | gcc 13.2.0 | 3713584 | 10942464 | failed |  | Negative test of clear: the grid's form-feed case disabled; caught, reverted |
 
 <!-- END GENERATED -->
