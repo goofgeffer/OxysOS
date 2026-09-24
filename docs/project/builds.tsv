@@ -43,3 +43,4 @@ number	date	commit	dirty	compiler	cc_version	kernel	iso	result	assertions	enviro
 23	2026-09-24T01:55Z	e381ca2	no	gcc	13.2.0	3715328	10944512	passed	78		-	The launcher offers the terminal when the file offers nothing; window create and destroy wake the session
 24	2026-09-24T02:27Z	9382d5e	no	gcc	13.2.0	3718160	10946560	passed	78		b113bd493de24e0f08c9a1ff409ef497a4fed47879c77dfc565fe01f7784267e	Settings recoverable without knowing how, and seen without a restart
 25	2026-09-24T02:27Z	9382d5e	yes	gcc	13.2.0	3717944	10946560	failed	-		-	Negative test: defaults unstaged, micro's file beside left, no write-back after unlink; all caught, reverted
+26	2026-09-24T21:44Z	8ca9ae5	no	gcc	13.2.0	3718160	10946560	passed	78		-	Documentation revamp: subsystem documents rewritten, section references stripped (comments only)
