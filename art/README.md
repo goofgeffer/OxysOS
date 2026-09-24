@@ -155,7 +155,7 @@ twenty-four units at the scale of two.
 
 ```sh
 E=48; N=terminal          # or files, or windows
-convert art/icons/$N.png -alpha set -fuzz 10% -fill none \
+convert art/icons/$N.png -background white -alpha remove -alpha set -fuzz 10% -fill none \
         -draw 'color 0,0 floodfill' -trim +repage cut.png
 S=$(convert cut.png -format '%[fx:max(w,h)]' info:)
 convert cut.png -background none -gravity center -extent ${S}x${S} \
@@ -169,8 +169,8 @@ cat head pixels > art/icons/$N.oxi
 Four things in that are the whole of the judgement.
 
 **The ground is made transparent at the artwork's full resolution**, by a flood
-from a corner, because the drawing arrived opaque — a picture upon white, not a
-picture upon nothing. `-background none` alone says what lies *outside* the
+from a corner, because a drawing may arrive upon white rather than upon nothing.
+It is flattened upon white first, so that a ground partly transparent and partly white (as the Files drawing's is) is one colour and clears in one flood. `-background none` alone says what lies *outside* the
 picture and nothing about the white inside it, so at this extent the rounded
 corners of the frame would be specks of white upon the panel. The self-test of
 [`../kernel/test/libc/icon.c`](../kernel/test/libc/icon.c) refuses a shipped
@@ -201,8 +201,9 @@ the `awk` writes blue, green, red and then the transparency.
 
 | File | What it is |
 | ---- | ---------- |
-| [`backgrounds/background.png`](backgrounds/background.png) | The background, a photograph of a yellow rose, as the project owner supplied it, 2048 by 1448. It is the source and nothing reads it at build time. |
-| [`backgrounds/background.oxim`](backgrounds/background.oxim) | The same, reduced and softened as below, in the run-length format [`../libc/include/image.h`](../libc/include/image.h) sets out: seventy kilobytes. This is what the ramdisk carries at `/share/backgrounds/background.oxim`, what `/etc/session.conf` names, and what the session reads. |
+| [`backgrounds/rose.png`](backgrounds/rose.png) | The background, a photograph of a yellow rose, as the project owner supplied it, 2048 by 1448. It is the source and nothing reads it at build time. |
+| [`backgrounds/rose.oxim`](backgrounds/rose.oxim) | The same, reduced and softened as below, in the run-length format [`../libc/include/image.h`](../libc/include/image.h) sets out: seventy kilobytes. This is what the ramdisk carries at `/share/backgrounds/background.oxim`, what `/etc/session.conf` names, and what the session reads. |
+| [`backgrounds/cliff.png`](backgrounds/cliff.png), [`backgrounds/cliff.oxim`](backgrounds/cliff.oxim) | The earlier background, a cliff and a sun, drawn by the project owner in flat colour, 2048 by 1448, and the same in the run-length format at full size: flat colour needs no reduction. |
 
 **A file, for the icons' reason and one more.** The session reads it once at
 start and a person changes it by editing one line of `/etc/session.conf`; and a
@@ -226,7 +227,7 @@ important part is near an edge loses it upon some screen; draw with a margin.
 The conversion is one command, for the reason every conversion here is:
 
 ```sh
-in=art/backgrounds/background.png; out=art/backgrounds/background.oxim
+in=art/backgrounds/rose.png; out=art/backgrounds/rose.oxim
 W=1280; H=905
 { printf 'OXIM\001\000\000\000'
   printf "\\$(printf %03o $((W & 255)))\\$(printf %03o $((W >> 8)))"

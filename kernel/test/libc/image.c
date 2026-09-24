@@ -29,7 +29,7 @@
 #include <string.h>
 
 /* The file `/etc/session.conf` names, and the extent of the drawing in it. */
-#define VERIFY_IMAGE_PATH   "/share/backgrounds/background.oxim"
+#define VERIFY_IMAGE_PATH   "/share/backgrounds/rose.oxim"
 #define VERIFY_IMAGE_WIDTH  1280U
 #define VERIFY_IMAGE_HEIGHT 905U
 

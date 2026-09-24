@@ -602,7 +602,7 @@ with what it would catch. What only looking establishes is the desktop.
    narrow screen draws the table averaged and the wide one draws it one to one,
    and a fault in either path shows in only one of them.
 8. **The background, of 2026-09-23.** The desktop is the drawing of
-   `art/backgrounds/background.png` — a pale yellow sky, an orange sun, a brown
+   `art/backgrounds/cliff.png` — a pale yellow sky, an orange sun, a brown
    shape at the right — covering the whole screen beneath the panel, with no
    bars at any edge and the sun round rather than oval. At 640 by 480 the
    sides are cut and at 1280 by 800 the top and the foot, Section 9 of

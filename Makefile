@@ -746,7 +746,7 @@ INITRD_ICONS := art/icons/terminal.oxi art/icons/files.oxi art/icons/windows.oxi
 # desktop with, named by `background` in `/etc/session.conf`. Files for the
 # reason icons are, and in the run-length format of libc/include/image.h
 # because a drawing held a pixel to four bytes would not fit the ramdisk.
-INITRD_BACKGROUNDS := art/backgrounds/background.oxim
+INITRD_BACKGROUNDS := art/backgrounds/rose.oxim art/backgrounds/cliff.oxim
 
 # `/mnt` is the second and last thing upon the image, and it is empty.
 #

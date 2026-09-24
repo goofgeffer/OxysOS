@@ -92,7 +92,7 @@ may ([`../../art/README.md`](../../art/README.md)).
   the ground, which the root already is.
 
 **The background** ([`../../libc/include/image.h`](../../libc/include/image.h),
-`.oxim`) ships at `/share/backgrounds/background.oxim`, converted from
+`.oxim`) ships at `/share/backgrounds/rose.oxim` (the default) and `cliff.oxim`, converted from
 [`../../art/`](../../art/) by the command in its README.
 
 - **A file**, so a person changes it by editing a line.
