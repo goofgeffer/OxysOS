@@ -352,20 +352,19 @@ regenerates it and fails if what is here differs.*
 
 | | |
 | --- | --- |
-| Builds recorded | 28 |
-| Verified | 21 passed, 7 not |
+| Builds recorded | 29 |
+| Verified | 22 passed, 7 not |
 | Compilers | gcc |
 | Environments | QEMU, VirtualBox |
 | First | 2026-09-17T01:34Z |
-| Latest | 2026-09-24T22:37Z |
+| Latest | 2026-09-24T22:42Z |
 
 ## The last 20 builds
 
-The remaining 8 are in [`builds.tsv`](builds.tsv), which is the record.
+The remaining 9 are in [`builds.tsv`](builds.tsv), which is the record.
 
 | # | Date (UTC) | Commit | Compiler | Kernel | ISO | Result | Environments | Note |
 | - | ---------- | ------ | -------- | ------ | --- | ------ | ------------ | ---- |
-| 9 | 2026-09-23T00:27Z | `e8bb681` | gcc 13.2.0 | 3438440 | 10665984 | passed (72 assertions) |  | The terminal white upon black, and the fg that continued nothing |
 | 10 | 2026-09-23T02:06Z | `74b8443` | gcc 13.2.0 | 3459392 | 10688512 | passed (73 assertions) |  | Icons for the launcher, read from files rather than compiled in |
 | 11 | 2026-09-23T19:57Z | `1c31a78` *(modified)* | gcc 13.2.0 | 3552808 | 10780672 | failed |  | Negative test of the smooth mark and icons: the version-1 icon shipped and a logo byte with ink beyond coverage; both self-tests failed as intended, reverted |
 | 12 | 2026-09-23T20:06Z | `7f1c530` *(modified)* | gcc 13.2.0 | 3552616 | 10780672 | passed (74 assertions) |  | The mark and the icons at the resolution they are shown at: logo coverage table of 192, icon format version 2 at 48. Dirty only by the register's own uncommitted row 11; the source is exactly 7f1c530 |
@@ -385,5 +384,6 @@ The remaining 8 are in [`builds.tsv`](builds.tsv), which is the record.
 | 26 | 2026-09-24T21:44Z | `8ca9ae5` | gcc 13.2.0 | 3718160 | 10946560 | passed (78 assertions) |  | Documentation revamp: subsystem documents rewritten, section references stripped (comments only) |
 | 27 | 2026-09-24T22:06Z | `51e019e` | gcc 13.2.0 | 3718160 | 10946560 | passed (78 assertions) |  | Launcher icons for Files and Windows |
 | 28 | 2026-09-24T22:37Z | `4bd8769` | gcc 13.2.0 | 3718160 | 13043712 | passed (78 assertions) |  | New Files icon; rose photograph background; ramdisk 4 MiB |
+| 29 | 2026-09-24T22:42Z | `1df1a73` | gcc 13.2.0 | 3718160 | 13043712 | passed (78 assertions) |  | Files icon corner fixed; rose and cliff backgrounds |
 
 <!-- END GENERATED -->
