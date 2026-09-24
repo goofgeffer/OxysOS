@@ -44,3 +44,4 @@ number	date	commit	dirty	compiler	cc_version	kernel	iso	result	assertions	enviro
 24	2026-09-24T02:27Z	9382d5e	no	gcc	13.2.0	3718160	10946560	passed	78		b113bd493de24e0f08c9a1ff409ef497a4fed47879c77dfc565fe01f7784267e	Settings recoverable without knowing how, and seen without a restart
 25	2026-09-24T02:27Z	9382d5e	yes	gcc	13.2.0	3717944	10946560	failed	-		-	Negative test: defaults unstaged, micro's file beside left, no write-back after unlink; all caught, reverted
 26	2026-09-24T21:44Z	8ca9ae5	no	gcc	13.2.0	3718160	10946560	passed	78		-	Documentation revamp: subsystem documents rewritten, section references stripped (comments only)
+27	2026-09-24T22:06Z	51e019e	no	gcc	13.2.0	3718160	10946560	passed	78		-	Launcher icons for Files and Windows

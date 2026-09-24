@@ -352,20 +352,19 @@ regenerates it and fails if what is here differs.*
 
 | | |
 | --- | --- |
-| Builds recorded | 26 |
-| Verified | 19 passed, 7 not |
+| Builds recorded | 27 |
+| Verified | 20 passed, 7 not |
 | Compilers | gcc |
 | Environments | QEMU, VirtualBox |
 | First | 2026-09-17T01:34Z |
-| Latest | 2026-09-24T21:44Z |
+| Latest | 2026-09-24T22:06Z |
 
 ## The last 20 builds
 
-The remaining 6 are in [`builds.tsv`](builds.tsv), which is the record.
+The remaining 7 are in [`builds.tsv`](builds.tsv), which is the record.
 
 | # | Date (UTC) | Commit | Compiler | Kernel | ISO | Result | Environments | Note |
 | - | ---------- | ------ | -------- | ------ | --- | ------ | ------------ | ---- |
-| 7 | 2026-09-21T23:57Z | `bb2e6de` | gcc 13.2.0 | 3354936 | 10584064 | passed (71 assertions) |  | The screen handed back to the console before the reason is written, and cleared when it is |
 | 8 | 2026-09-22T22:17Z | `182a724` | gcc 13.2.0 | 3438440 | 10665984 | passed (72 assertions) |  | Sub-task 9.6: the terminal emulator, the poll it waits in, and the tcgroup refusal |
 | 9 | 2026-09-23T00:27Z | `e8bb681` | gcc 13.2.0 | 3438440 | 10665984 | passed (72 assertions) |  | The terminal white upon black, and the fg that continued nothing |
 | 10 | 2026-09-23T02:06Z | `74b8443` | gcc 13.2.0 | 3459392 | 10688512 | passed (73 assertions) |  | Icons for the launcher, read from files rather than compiled in |
@@ -385,5 +384,6 @@ The remaining 6 are in [`builds.tsv`](builds.tsv), which is the record.
 | 24 | 2026-09-24T02:27Z | `9382d5e` | gcc 13.2.0 | 3718160 | 10946560 | passed (78 assertions) |  | Settings recoverable without knowing how, and seen without a restart |
 | 25 | 2026-09-24T02:27Z | `9382d5e` *(modified)* | gcc 13.2.0 | 3717944 | 10946560 | failed |  | Negative test: defaults unstaged, micro's file beside left, no write-back after unlink; all caught, reverted |
 | 26 | 2026-09-24T21:44Z | `8ca9ae5` | gcc 13.2.0 | 3718160 | 10946560 | passed (78 assertions) |  | Documentation revamp: subsystem documents rewritten, section references stripped (comments only) |
+| 27 | 2026-09-24T22:06Z | `51e019e` | gcc 13.2.0 | 3718160 | 10946560 | passed (78 assertions) |  | Launcher icons for Files and Windows |
 
 <!-- END GENERATED -->
