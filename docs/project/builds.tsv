@@ -40,3 +40,4 @@ number	date	commit	dirty	compiler	cc_version	kernel	iso	result	assertions	enviro
 20	2026-09-24T01:25Z	2b250f0	yes	gcc	13.2.0	3713584	10942464	failed	-		-	Negative test of clear: the grid's form-feed case disabled; caught, reverted
 21	2026-09-24T01:38Z	393b437	no	gcc	13.2.0	3715080	10944512	passed	78		-	A write of nothing returns zero, and micro saves files with blank lines
 22	2026-09-24T01:38Z	393b437	yes	gcc	13.2.0	3714776	10942464	failed	-		-	Negative test: meant to refuse a write of nothing again, the sed disabled all four length-zero tests of syscall.c (write, read, version, path canonicalisation); caught, reverted
+23	2026-09-24T01:55Z	e381ca2	no	gcc	13.2.0	3715328	10944512	passed	78		-	The launcher offers the terminal when the file offers nothing; window create and destroy wake the session
