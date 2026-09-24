@@ -11,7 +11,7 @@ row.
 
 | Date | Phase | Change | Commit |
 | ---- | ----- | ------ | ------ |
-| 2026-09-24 | Phase 9 | A new Files icon and a photograph for the background, softened to fit; the ramdisk grows to 4 MiB | — |
+| 2026-09-24 | Phase 9 | A new Files icon and a photograph for the background, softened to fit; the ramdisk grows to 4 MiB | `4bd8769` |
 | 2026-09-24 | Phase 9 | Launcher icons for Files and Windows, drawn by the project owner, shipped on the ramdisk and named in `/etc/session.conf` | `51e019e` |
 | 2026-09-24 | Phase 9 | Settings a person can recover without knowing anything, and see without restarting | `9382d5e` |
 | 2026-09-24 | Phase 9 | The launcher opens whatever the file says, and the list of windows is not left stale | `e381ca2` |
