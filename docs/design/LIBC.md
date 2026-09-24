@@ -573,7 +573,7 @@ arguments, an invocation and the translation above.
 
 | Wrapper | Call | What it returns |
 | ------- | ---- | --------------- |
-| `OxysWrite(descriptor, buffer, length)` | `write` | Bytes written, which may be fewer than asked: the kernel bounds a single transfer. `EBADF` for a descriptor other than 1 or 2 — there are no files yet — and `EFAULT` for a range the program may not read. |
+| `OxysWrite(descriptor, buffer, length)` | `write` | Bytes written, which may be fewer than asked: the kernel bounds a single transfer. `EBADF` for a descriptor other than 1 or 2 — there are no files yet — and `EFAULT` for a range the program may not read. **A length of zero writes nothing and returns zero**, since 2026-09-24, as IEEE Std 1003.1-2017's `write()` requires of a regular file — it was `EFAULT`, the address check refusing a range of no length, and `micro` saving a file with a blank line in it truncated the file at that line. |
 | `OxysTicks()` | `ticks` | The interval timer's count. It cannot fail. |
 | `OxysVersion(buffer, capacity)` | `version` | Bytes copied, excluding the terminator the kernel always writes. `EINVAL` for a capacity of zero. |
 | `OxysFork()` | `fork` | The child's identifier to the parent and zero to the child; `ENOMEM` where the frames, tables or slot could not be had. |

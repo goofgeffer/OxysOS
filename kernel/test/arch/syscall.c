@@ -236,6 +236,23 @@ void KernelVerifySyscall(void)
                                                      KERNEL_SYSCALL_USER_PAGE, 1U) == 1,
                                  "a write of one legitimate byte did not report one");
 
+            /*
+             * A write of nothing is zero and not a fault, since 2026-09-24,
+             * IEEE Std 1003.1-2017, `write()`. It was EFAULT, the address
+             * check refusing a range of no length, and every blank line
+             * `micro` saved was a write of nothing: a file with a blank line
+             * in it was truncated at that line. And nothing is still
+             * nobody's to write to a descriptor that names nothing.
+             */
+            KernelSyscallRequire(KernelSyscallInvoke(SYSCALL_WRITE, 1U,
+                                                     KERNEL_SYSCALL_USER_PAGE, 0U) == 0,
+                                 "a write of nothing was not zero");
+            KernelSyscallRequire(KernelSyscallInvoke(SYSCALL_WRITE, 7U,
+                                                     KERNEL_SYSCALL_USER_PAGE, 0U) ==
+                                     SYSCALL_EBADF,
+                                 "a write of nothing to a descriptor that does not exist "
+                                 "was not refused");
+
             /* A descriptor that names nothing is refused before the buffer is
              * even looked at. */
             KernelSyscallRequire(KernelSyscallInvoke(SYSCALL_WRITE, 7U,

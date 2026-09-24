@@ -506,6 +506,25 @@ static int64_t SyscallDoWrite(uint64_t descriptor, uint64_t address, uint64_t le
         return SYSCALL_EBADF;
     }
 
+    /*
+     * A write of nothing writes nothing and reports nothing written, since
+     * 2026-09-24. IEEE Std 1003.1-2017, `write()`: where `nbyte` is zero and
+     * the file is a regular file, "the write() function shall return zero and
+     * have no other results"; for any other file the results are unspecified,
+     * and this gives the same answer. It is tested after the descriptor, so a
+     * write of nothing to a number that names nothing is still EBADF.
+     *
+     * Before it, the length reached the address check below, which refuses a
+     * range of no length, and the write was EFAULT. `micro` writes a file line
+     * by line and a blank line is a write of nothing, so saving any file with
+     * a blank line in it failed part way — after the open had truncated the
+     * file, leaving it cut at its first blank line.
+     */
+    if (length == 0U)
+    {
+        return 0;
+    }
+
     if (length > SYSCALL_TRANSFER_MAXIMUM)
     {
         length = SYSCALL_TRANSFER_MAXIMUM;
