@@ -15,6 +15,7 @@ that was cleared that day and renumbered from 1; the date identifies the image.
 
 | Date | Where | What | Result |
 | ---- | ----- | ---- | ------ |
+| 2026-09-24 | QEMU q35, VirtualBox and Bochs | The Files and Windows launcher icons | Passed; the launcher showed all three icons under QEMU; every self-test passed on all three |
 | 2026-09-24 | QEMU q35, VirtualBox and Bochs | the shipped defaults, the fall-back, the launcher read at every opening, and `micro` saving all or nothing | Passed, every self-test under each, `config-check` included |
 | 2026-09-24 | `make verify` | the defaults, the save and the write-back, the damage applied | Passed, three damages caught in one build and reverted, each target counted to one line before it was altered |
 | 2026-09-24 | QEMU q35 | the launcher with an emptied configuration, and the list of windows | Passed |

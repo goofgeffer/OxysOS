@@ -740,7 +740,7 @@ INITRD_CONFIGURATION := etc/system.conf etc/desktop.conf etc/session.conf
 # in, which is what lets somebody add an entry to `/etc/session.conf` and give
 # it a picture without rebuilding the system — the whole reason an icon is a
 # file. art/README.md holds the format and the one command that makes one.
-INITRD_ICONS := art/icons/terminal.oxi
+INITRD_ICONS := art/icons/terminal.oxi art/icons/files.oxi art/icons/windows.oxi
 
 # The `/share/backgrounds` hierarchy: the pictures the session may cover the
 # desktop with, named by `background` in `/etc/session.conf`. Files for the

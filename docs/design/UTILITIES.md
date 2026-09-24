@@ -100,4 +100,3 @@ level 3. The checks a person performs are in
 3. The viewer wraps by character, not by word, and has no search.
 4. The viewer reads the file once; a change while it is shown is not shown.
 5. The clock has no time zone ([`../devices/TIME.md`](../devices/TIME.md)).
-6. `Files` has no launcher icon; the launcher shows its name alone.
