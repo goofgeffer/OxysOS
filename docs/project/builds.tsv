@@ -38,3 +38,5 @@ number	date	commit	dirty	compiler	cc_version	kernel	iso	result	assertions	enviro
 18	2026-09-24T01:10Z	ccdd12e	yes	gcc	13.2.0	3706448	10934272	failed	-		-	Negative test of the persistent /etc: label prefix accepted, seeding truncating, no write-back on close; all caught, reverted
 19	2026-09-24T01:25Z	2b250f0	no	gcc	13.2.0	3713576	10942464	passed	78		-	clear in a terminal window: the grid acts upon the form feed
 20	2026-09-24T01:25Z	2b250f0	yes	gcc	13.2.0	3713584	10942464	failed	-		-	Negative test of clear: the grid's form-feed case disabled; caught, reverted
+21	2026-09-24T01:38Z	393b437	no	gcc	13.2.0	3715080	10944512	passed	78		-	A write of nothing returns zero, and micro saves files with blank lines
+22	2026-09-24T01:38Z	393b437	yes	gcc	13.2.0	3714776	10942464	failed	-		-	Negative test: meant to refuse a write of nothing again, the sed disabled all four length-zero tests of syscall.c (write, read, version, path canonicalisation); caught, reverted

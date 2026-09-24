@@ -352,19 +352,19 @@ regenerates it and fails if what is here differs.*
 
 | | |
 | --- | --- |
-| Builds recorded | 20 |
-| Verified | 15 passed, 5 not |
+| Builds recorded | 22 |
+| Verified | 16 passed, 6 not |
 | Compilers | gcc |
 | Environments | QEMU, VirtualBox |
 | First | 2026-09-17T01:34Z |
-| Latest | 2026-09-24T01:25Z |
+| Latest | 2026-09-24T01:38Z |
 
-## The builds
+## The last 20 builds
+
+The remaining 2 are in [`builds.tsv`](builds.tsv), which is the record.
 
 | # | Date (UTC) | Commit | Compiler | Kernel | ISO | Result | Environments | Note |
 | - | ---------- | ------ | -------- | ------ | --- | ------ | ------------ | ---- |
-| 1 | 2026-09-17T01:34Z | `6bcb5fd` | gcc 13.2.0 | 3060288 | 10287104 | passed (66 assertions) | QEMU;VirtualBox | Oxys 1 Alpha: the release image, cut at the close of Phase 8; booted under QEMU by make verify and under VirtualBox at the keyboard |
-| 2 | 2026-09-17T01:38Z | `ee505ef` | gcc 13.2.0 | 3060288 | 10287104 | passed (66 assertions) |  | The register's policy: every build recorded from now on; the image this documentation change was verified with |
 | 3 | 2026-09-21T22:51Z | `4c51c4f` *(modified)* | gcc 13.2.0 | 3354208 | 10582016 | passed (71 assertions) |  | The appearance of 2026-09-21 and the terminal livelock fixed with it, from a working tree in progress. The note was written by a mistyped `record --help`, which the script took for a note; it is corrected and the row kept, the image and its verdict being real. |
 | 4 | 2026-09-21T23:00Z | `3a98088` | gcc 13.2.0 | 3354208 | 10582016 | passed (71 assertions) |  | The shell taken out of the launcher; the first image whose launcher offers only what has a window |
 | 5 | 2026-09-21T23:15Z | `3a1d910` | gcc 13.2.0 | 3354208 | 10582016 | passed (71 assertions) |  | The desktop drawing its accent from art/palette.h, named from /etc/desktop.conf by the word system |
@@ -383,5 +383,7 @@ regenerates it and fails if what is here differs.*
 | 18 | 2026-09-24T01:10Z | `ccdd12e` *(modified)* | gcc 13.2.0 | 3706448 | 10934272 | failed |  | Negative test of the persistent /etc: label prefix accepted, seeding truncating, no write-back on close; all caught, reverted |
 | 19 | 2026-09-24T01:25Z | `2b250f0` | gcc 13.2.0 | 3713576 | 10942464 | passed (78 assertions) |  | clear in a terminal window: the grid acts upon the form feed |
 | 20 | 2026-09-24T01:25Z | `2b250f0` *(modified)* | gcc 13.2.0 | 3713584 | 10942464 | failed |  | Negative test of clear: the grid's form-feed case disabled; caught, reverted |
+| 21 | 2026-09-24T01:38Z | `393b437` | gcc 13.2.0 | 3715080 | 10944512 | passed (78 assertions) |  | A write of nothing returns zero, and micro saves files with blank lines |
+| 22 | 2026-09-24T01:38Z | `393b437` *(modified)* | gcc 13.2.0 | 3714776 | 10942464 | failed |  | Negative test: meant to refuse a write of nothing again, the sed disabled all four length-zero tests of syscall.c (write, read, version, path canonicalisation); caught, reverted |
 
 <!-- END GENERATED -->
