@@ -21,7 +21,7 @@
  *     8259A request lines, except where an Interrupt Source Override says
  *     otherwise. That is what allows one line number to mean the same device
  *     under either controller.
- *   - docs/design/INTERRUPTS.md, Section 10: why this layer exists, what it owns
+ *   - docs/design/INTERRUPTS.md: why this layer exists, what it owns
  *     and what it deliberately does not.
  *
  * Why a device driver names a line and not a controller.
@@ -113,8 +113,7 @@ bool IrqAdoptApic(void);
  *
  * The handler is entered with the completion of the request not yet signalled,
  * and must not signal it: this layer does so upon the handler's return, at
- * whichever controller delivered the request. See docs/design/INTERRUPTS.md,
- * Section 10.3.
+ * whichever controller delivered the request. See docs/design/INTERRUPTS.md.
  *
  * name: a short description used in diagnostic output. The string is not copied
  *     and must therefore have static storage duration.

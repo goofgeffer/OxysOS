@@ -11,7 +11,7 @@
  *   - kernel/abi/oxys/syscall_abi.h: `open` with SYSCALL_OPEN_DIRECTORY,
  *     `readdir` and SyscallEntryType; the window calls and the resize event.
  *   - userland/view/main.c: the viewer a file is opened in.
- *   - docs/design/UTILITIES.md, Section 2: the design, and what only looking
+ *   - docs/design/UTILITIES.md: the design, and what only looking
  *     establishes.
  *
  * How a person uses it.

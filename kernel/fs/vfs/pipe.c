@@ -17,7 +17,7 @@
  *     interleaved with another's.
  *   - kernel/include/oxys/proc/sched.h: the wait channel, and the discipline
  *     of testing a condition and sleeping within one masked section.
- *   - docs/design/SHELL.md, Section 22; docs/storage/VFS.md, Section 11.
+ *   - docs/design/SHELL.md; docs/storage/VFS.md.
  *
  * Why the reader and the writer sleep upon the pipe and not upon two channels.
  *
@@ -48,7 +48,7 @@
  *   inside the kernel, so no two of them are inside this file at once. The
  *   masked sections below are the discipline <oxys/proc/sched.h> sets out for
  *   a sleep, kept for the day a wake arrives from an interrupt handler, and not
- *   a lock. docs/design/CONCURRENCY.md, Section 10, limitation 1, records the
+ *   a lock. docs/design/CONCURRENCY.md records the
  *   structures a second processor would race for, and this is one of them.
  */
 

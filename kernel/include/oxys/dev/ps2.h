@@ -37,7 +37,7 @@
  *   - The PS/2 device command set: a device answers 0xFA to acknowledge a
  *     command and 0xFE to ask that it be sent again; 0xFF resets a device, which
  *     acknowledges and then reports 0xAA if its own self-test passed.
- *   - docs/devices/KEYBOARD.md, Section 2, and docs/devices/MOUSE.md, Section 2:
+ *   - docs/devices/KEYBOARD.md and docs/devices/MOUSE.md:
  *     the controller as the two drivers see it.
  *
  * Why the controller is a module and not part of the keyboard driver.

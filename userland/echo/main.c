@@ -18,7 +18,7 @@
  *     defined. What this implementation does with each is recorded below.
  *   - System V Application Binary Interface, AMD64 supplement, Section 3.4.1:
  *     the argument vector, which sub-task 7.6 is the first thing here to read.
- *   - docs/design/LIBC.md, Section 12.3: the five utilities and what each one
+ *   - docs/design/LIBC.md: the five utilities and what each one
  *     is for.
  *
  * What this does with the two implementation-defined cases, and why.

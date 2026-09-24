@@ -21,7 +21,7 @@
  * This file is the layer's ground floor, and the parts above it are the five
  * files beside this one; `internal.h` is what joins them. The layer was one
  * translation unit of 2,355 lines until the review that followed sub-task 6.10,
- * and docs/design/ARCHITECTURE.md, Section 2.2, records why it is no longer.
+ * and docs/design/ARCHITECTURE.md records why it is no longer.
  *
  * Design note. There is no string prefix matching anywhere in this layer. A
  * mount is found through the *node* it covers and not through the path it was

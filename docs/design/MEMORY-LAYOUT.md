@@ -32,7 +32,7 @@ not conflict when they are introduced.
 | Base | Extent | Region | Introduced |
 | ---- | ------ | ------ | ---------- |
 | `0xFFFF800000000000` | 64 TiB | The direct map of all physical memory. | Phase 2, sub-task 2.4 (established) |
-| `0xFFFFC00000000000` | 32 TiB | The kernel virtual allocator arena, comprising the kernel heap and device mappings. The first device mapping is the framebuffer of sub-task 6.2; see [`FRAMEBUFFER.md`](FRAMEBUFFER.md), Section 5. | Phase 2, sub-task 2.5 (established) |
+| `0xFFFFC00000000000` | 32 TiB | The kernel virtual allocator arena, comprising the kernel heap and device mappings. The first device mapping is the framebuffer of sub-task 6.2; see [`FRAMEBUFFER.md`](FRAMEBUFFER.md). | Phase 2, sub-task 2.5 (established) |
 | `0xFFFFFFFF80000000` | 2 GiB | The kernel image: text, read-only data, data and BSS. | Phase 1 |
 
 The kernel image is placed within the topmost 2 GiB so that every kernel symbol
@@ -120,7 +120,7 @@ because they are used before paging is enabled. They are two sections and not
 one so that each may occupy a program header of its own: the entry code is
 executed and never written, the boot data is written and never executed, and a
 single section holding both obliged the linker to describe the pair as readable,
-writable and executable together. See [`BOOT.md`](BOOT.md), Section 8. Every subsequent section is linked at its higher-half virtual
+writable and executable together. See [`BOOT.md`](BOOT.md). Every subsequent section is linked at its higher-half virtual
 address, with an explicit `AT()` clause fixing its load address, so that GRUB
 places the image correctly while the code executes from the upper half.
 
@@ -189,14 +189,13 @@ boots perfectly, mounts the filesystem upon it, and then reads from it whatever
 the frame allocator has since put there — which is a root filesystem that decays
 under load rather than one that fails, and by the time anything notices, the
 evidence has been overwritten. The reservation was added with the initial ramdisk
-at sub-task 7.7; [`../storage/INITRD.md`](../storage/INITRD.md), Section 4.4.
+at sub-task 7.7; [`../storage/INITRD.md`](../storage/INITRD.md).
 
 Each is reserved by extent and not by page, `FrameMarkRange` marking every frame a
 range touches in its entirety. That is what makes it safe for a module to be
 unaligned: a frame shared between a module and something else is reserved for
 both, which costs a frame and never issues one from beneath a module. It is why
-the Multiboot2 module-alignment header tag is not carried; [`BOOT.md`](BOOT.md),
-Section 2.1.
+the Multiboot2 module-alignment header tag is not carried; [`BOOT.md`](BOOT.md).
 
 The low mebibyte is reserved in its entirety rather than by the map, because it
 contains structures that the map does not describe and that later phases will
@@ -206,7 +205,7 @@ from reset beginning execution in real mode. The page is fixed rather than
 allocated, and `SmpTrampolinePageIsUsable` proves the firmware calls it available
 and that neither the kernel image nor the boot information structure stands
 within it — the same two exclusions `pmm.c` applies, applied again because this
-page does not come from the allocator. See [`SMP.md`](SMP.md), Sections 3.2
+page does not come from the allocator. See [`SMP.md`](SMP.md)
 and 3.3.
 
 ### 6.2 Why the kernel extent is not derived from the ELF sections tag
@@ -281,20 +280,6 @@ The bitmap must also be addressable, which until sub-task 2.4 confines it to the
 first gibibyte of physical memory, that being the extent of the higher-half
 mapping.
 
-### 7.5 Observed state
-
-Under QEMU with 512 MiB:
-
-| Quantity | Value |
-| -------- | ----- |
-| Frames governed | 131039 |
-| Frames free | 130751 (523004 KiB) |
-| Frames reserved | 288 |
-| Bitmap | `0x0011B000` – `0x0011F000` (16 KiB) |
-
-The 288 reserved frames account exactly: 256 for the low mebibyte, 27 for the
-kernel image, 4 for the bitmap and 1 for the boot information structure.
-
 ### 7.6 The boot-time self-test
 
 There is no test harness in a kernel, and none can exist before the userland of
@@ -352,7 +337,7 @@ without that machinery, and it is taken now rather than retrofitted.
 only when that flag is set; it is clear upon reset and GRUB does not set it.
 Until Phase 3, sub-task 3.4, added the flag to `PagingInitialise`, the read-only
 mappings described here were advisory: the kernel could write through them and no
-fault would arise. Refer to `docs/design/INTERRUPTS.md`, Section 8.4.
+fault would arise. Refer to `docs/design/INTERRUPTS.md`.
 
 Restrictions are applied at the leaf entry, never at an intermediate one. Intel
 SDM, Volume 3A, Section 4.6, provides that the permissions of a translation are
@@ -382,7 +367,7 @@ No segment register was reloaded after the switch, so the cached descriptors
 remained in force and the table was never read again — until Phase 3 installed
 interrupt gates, delivery of which obliges the processor to read the descriptor
 named by the gate's selector. The consequence and the remedy are recorded in
-`docs/design/INTERRUPTS.md`, Section 5. The general rule it illustrates is that a
+`docs/design/INTERRUPTS.md`. The general rule it illustrates is that a
 structure the processor reads directly must remain mapped for as long as the
 processor may read it, and such reads are not visible in the source.
 
@@ -706,23 +691,6 @@ becomes worth addressing when the heap comes under sustained and varied load,
 which is not before Phase 6. The remedy is a doubly linked free list per slab
 rather than per class, at the cost of eight further bytes per free object.
 
-### 11.6 Observed state
-
-After the boot-time self-test under QEMU:
-
-| Quantity | Value |
-| -------- | ----- |
-| Arena pages in use | 3 |
-| Arena high-water mark | 4 |
-| Live heap allocations | 0 |
-| Slab pages retained | 3 |
-
-The three retained pages are those of the 16, 256 and 1024-byte classes, held by
-the limitation of Section 11.5. Zero live allocations confirms the self-test
-released everything it took.
-
-
-
 ### 11.7 The boot-time self-test of the refusals
 
 The refusals of Sections 10.4 and 11.4 are asserted at each boot, with counts and
@@ -802,24 +770,6 @@ it is reported rather than allowed to wrap, because a wrapped count would free a
 frame that is still in use — a corruption that would surface arbitrarily later
 and nowhere near its cause.
 
-### 12.4 Observed state
-
-After the boot-time self-test under QEMU with 512 MiB:
-
-| Quantity | Value |
-| -------- | ----- |
-| Frames governed | 131039 |
-| Frames free | 130671 (522684 KiB) |
-| Frames used | 368 |
-| Reference table | 255 KiB |
-| Greatest count observed | 3 |
-
-The used count has risen from the 288 of Section 7.5 by the paging structures,
-the arena's page tables, the heap's slabs and the pages of the reference table
-itself. The greatest count of three is that reached by the self-test, which takes
-a frame to three references and confirms it survives the release of two of them.
-
-
 ## 13. Copy-on-write
 
 Sub-task 2.7 implements the resolution of a copy-on-write fault. Sub-task 2.8,
@@ -892,17 +842,6 @@ another, and an imbalance between the two would leak physical memory in
 proportion to the number of faults — the least visible and most damaging way for
 the mechanism to be wrong.
 
-### 13.5 Observed state
-
-The figures are those reported at the end of a boot, and count the faults of both
-this section's test and that of Section 14.6.
-
-| Quantity | Value |
-| -------- | ----- |
-| Faults resolved | 4 |
-| Frames duplicated | 2 |
-| Resolved without duplication | 2 |
-
 ### 13.6 Limitations
 
 1. Only 4 KiB pages are supported. A copy-on-write fault upon a large page would
@@ -911,7 +850,7 @@ this section's test and that of Section 14.6.
    2.8 need not be the kernel's. It has no means of resolving a fault in an
    address space that is not the active one, and needs none: a fault is raised
    only by the processor that is translating through that space.
-3. ~~No shootdown is performed.~~ Discharged at sub-task 6.13. `INVLPG`
+3. Discharged at sub-task 6.13. `INVLPG`
    invalidates the translation upon the executing processor only, per Intel SDM,
    Volume 3A, Section 4.10.5, so `PagingInvalidate` now announces the address to
    every other processor by inter-processor interrupt and waits for each to
@@ -919,7 +858,7 @@ this section's test and that of Section 14.6.
    one comparison. A shootdown that is not acknowledged is fatal: Section 4.10.4.4
    permits an invalidation to be deferred only while no processor can use the
    stale translation, and a caller that returned would go on to give the frame
-   away. See [`CONCURRENCY.md`](CONCURRENCY.md), Section 6.
+   away. See [`CONCURRENCY.md`](CONCURRENCY.md).
 
 ## 14. Address-space cloning
 
@@ -934,7 +873,7 @@ invalidation of Section 14.4 having anticipated a source hierarchy that is the
 active one, which under `fork` it always is. What the sub-task did add is a
 consumer within the kernel: `wait` writes a status into a page the fork has just
 protected, so the argument validation of
-[`PRIVILEGE.md`](PRIVILEGE.md), Section 9.8, must resolve a copy-on-write fault
+[`PRIVILEGE.md`](PRIVILEGE.md) must resolve a copy-on-write fault
 rather than refuse the address.
 
 The implementation is `kernel/arch/x86_64/mm/addrspace.c`; the interface is
@@ -1050,14 +989,6 @@ The test is performed with the parent and then the child actually loaded into
 CR3, so the faults it provokes are resolved by the real page-fault handler within
 the real hierarchy, not by a probe.
 
-### 14.7 Observed state
-
-| Quantity | Value |
-| -------- | ----- |
-| Clones performed | 1 |
-| Pages shared | 2 |
-| Of which protected | 1 |
-
 ### 14.8 Limitations
 
 1. A large page in the lower half is rejected rather than provided for. Sharing
@@ -1067,14 +998,14 @@ the real hierarchy, not by a probe.
    itself*, and there deliberately is not: an address space is a paging
    hierarchy and nothing besides. The record lives in the process control block
    of sub-task 6.9, which is what put things there and therefore what can say
-   what it mapped. See [`PROCESS.md`](PROCESS.md), Section 2.
+   what it mapped. See [`PROCESS.md`](PROCESS.md).
 3. Cloning is not safe against a concurrent fault upon the same address space. It
    must be performed under the lock governing the space, which has existed since
    sub-task 6.13 and has not yet been applied here, there being one thread of
    control. The other half of that limitation **is** discharged: the invalidation
    of Section 14.4 goes through `PagingInvalidate`, which announces the address to
    every other processor upon which the source may be active. See
-   [`CONCURRENCY.md`](CONCURRENCY.md), Sections 6 and 10.
+   [`CONCURRENCY.md`](CONCURRENCY.md).
 
 ---
 
@@ -1118,8 +1049,8 @@ find it writable.
 extent and for the same reason Section 14.8, limitation 2, gives: an address
 space is a paging hierarchy and cannot say what it maps or why. `break_start` is
 fixed when the program is loaded and never moves; `break_current` is what the
-program has asked for. See [`PROCESS.md`](PROCESS.md), Section 2, and
-[`LIBC.md`](LIBC.md), Section 9.2, which holds the design of the call itself.
+program has asked for. See [`PROCESS.md`](PROCESS.md) and
+[`LIBC.md`](LIBC.md) which holds the design of the call itself.
 
 ### 15.1 The unmapping primitive this required
 

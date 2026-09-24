@@ -52,9 +52,9 @@
  *   - System V Application Binary Interface, AMD64 supplement, Section 3.2.3:
  *     the six integer argument registers, from which the convention below
  *     departs in exactly one place.
- *   - docs/design/PRIVILEGE.md, Sections 6 and 7: the dispatch and the
+ *   - docs/design/PRIVILEGE.md: the dispatch and the
  *     validation these numbers and limits are consumed by.
- *   - docs/design/LIBC.md, Section 2: the division of which this file is one
+ *   - docs/design/LIBC.md: the division of which this file is one
  *     half, and the licensing obligation that required it.
  *
  * Why this file is separate from <oxys/arch/syscall/syscall.h>, and why it is MIT.
@@ -171,7 +171,7 @@
  * diagnostic descriptors alone. The utilities of this sub-task read, list and
  * remove; the first thing that needs to write to a file is the shell's output
  * redirection at sub-task 8.5, and a call whose only caller is a future one is
- * a call nothing asserts. docs/design/LIBC.md, Section 12.7, limitation 2.
+ * a call nothing asserts. docs/design/LIBC.md.
  */
 #define SYSCALL_OPEN    8U
 #define SYSCALL_CLOSE   9U
@@ -291,7 +291,7 @@
  * sleeps — `window_event` with SYSCALL_WINDOW_WAIT, and `read` of a pipe — and
  * a program that slept in one would be deaf to the other. Waiting in neither
  * means spinning, and a window that spins is a machine that never halts, which
- * docs/design/WINDOWS.md, Section 10, spent a sub-task avoiding.
+ * docs/design/WINDOWS.md spent a sub-task avoiding.
  *
  * `entries` is an array of `count` SyscallPollEntry, at most
  * SYSCALL_POLL_MAXIMUM. Each names a descriptor, or SYSCALL_POLL_WINDOWS for
@@ -401,7 +401,7 @@
  *                                      position, colours and scale. The face is
  *                                      the one the window manager draws titles
  *                                      with, and there is exactly one of it;
- *                                      docs/design/SESSION.md, Section 4.
+ *                                      docs/design/SESSION.md.
  */
 #define SYSCALL_WINDOW_SESSION 37U
 #define SYSCALL_WINDOW_TEXT    38U
@@ -628,7 +628,7 @@ typedef struct SyscallProcessInformation
  * eight bits, or the signal that ended or stopped it. Until 8.7 the status was
  * the quadword `exit` was given, or the negated vector of a fault, which could
  * not say that a program had been stopped and could not tell a signal from a
- * vector; docs/design/PROCESS.md, Section 19, limitation 11, had recorded that
+ * vector; docs/design/PROCESS.md had recorded that
  * the encoding was owed and belonged with the C library that must agree with it.
  * A fault is reported as the signal it corresponds to — SIGSEGV for a page or
  * protection fault, SIGILL for an invalid opcode, SIGFPE for a divide error,

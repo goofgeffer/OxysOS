@@ -8,10 +8,10 @@
  * Key definitions: OXYS_GROUND_*, OXYS_BAR_*, OXYS_BAR_QUIET_*, OXYS_INK_*,
  *          OXYS_DIM_*, OXYS_PAPER_*, OXYS_BORDER_*, OXYS_DISC_*, OXYS_RGB.
  * References:
- *   - docs/project/INSPIRATIONS.md, Section 3: a small palette, mostly quiet,
+ *   - docs/project/INSPIRATIONS.md: a small palette, mostly quiet,
  *     with colour reserved for the few things that must be told apart at a
  *     glance — and legibility taken over prettiness wherever the two disagree.
- *   - docs/design/SESSION.md, Section 3.2: why the boot screen and the desktop
+ *   - docs/design/SESSION.md: why the boot screen and the desktop
  *     must draw the same thing in the same colours.
  *
  * Why the colours are triples and not pixels.

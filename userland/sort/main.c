@@ -11,7 +11,7 @@
  *   - IEEE Std 1003.1-2017, `sort`: the lines of all input files together,
  *     in collating order; `-r` reverses; with no operand the standard input.
  *     The collation is by byte, this system having no locale.
- *   - docs/design/SHELL.md, Section 30.
+ *   - docs/design/SHELL.md.
  *
  * The lines are held whole, in a buffer that grows by `realloc`, and sorted by
  * merging — there being no `qsort` in this C library yet, and a merge being

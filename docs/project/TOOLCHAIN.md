@@ -21,7 +21,7 @@
 
 **`mke2fs` is the first required tool here that is not a compiler, an assembler,
 a linker or an image builder**, and it is required for a reason rather than for
-convenience. `docs/storage/INITRD.md`, Section 3.2, argues it at length; the short
+convenience. `docs/storage/INITRD.md` argues it at length; the short
 form is that a filesystem image composed by this project and read by this project
 proves the reader consistent with the composer and nothing more, while one
 composed by e2fsprogs is corroboration from an implementation that has never seen
@@ -99,7 +99,7 @@ which files are which would be a worse arrangement than not.
 
 `kernel/abi` is a root and not a subdirectory of `kernel/include` for a licensing
 reason rather than a structural one, which
-[`../design/LIBC.md`](../design/LIBC.md), Section 2, sets out: a library that
+[`../design/LIBC.md`](../design/LIBC.md) sets out: a library that
 added the kernel's corpus to its include path in order to reach one permissive
 header would have every header of the kernel within reach.
 
@@ -123,7 +123,7 @@ header would have every header of the kernel within reach.
 The program headers themselves are declared by `linker.ld` rather than inferred
 from the sections, so that no `LOAD` segment is both writable and executable; the
 division and the reason for it are recorded in
-[`../design/BOOT.md`](../design/BOOT.md), Section 8. `readelf -lW build/oxys.elf`
+[`../design/BOOT.md`](../design/BOOT.md). `readelf -lW build/oxys.elf`
 shows the result, and the linker no longer warns of a segment with `RWX`
 permissions.
 
@@ -190,7 +190,7 @@ Every assertion this project makes about its own correctness is made by
 machinery this project wrote, against fixtures this project composed. That is a
 closed loop, and its characteristic failure is agreement: a misreading of a
 specification is composed into the fixture and then asserted against itself, and
-everything passes. `docs/project/TESTING.md`, Section 7, sets that argument out
+everything passes. `docs/project/TESTING.md` sets that argument out
 in full and names the several independent judges available to this project.
 
 A compiler written by other people, from the same standard, is one of them. It
@@ -229,7 +229,7 @@ x86, where the access would work regardless.
 Specification, Section 3.6.2, requires every tag to begin upon an 8-byte
 boundary — but that is a guarantee made by the boot loader, and no compiler can
 see it. This is one of the two documented exceptions to the no-overlay rule of
-[`CODING-STANDARDS.md`](CODING-STANDARDS.md), Section 7.1, admitted there for
+[`CODING-STANDARDS.md`](CODING-STANDARDS.md) admitted there for
 exactly this reason: the structure is not read from a medium, its fields are
 naturally aligned by the specification, and no byte-order decision arises.
 
@@ -285,7 +285,7 @@ is attributable to that edit.
 It does not run under KVM — a hosted runner provides none, so QEMU emulates,
 which is how the target is run locally also. It does not perform the interactive
 tests, the VirtualBox target, or the physical hardware procedure of
-[`TESTING.md`](TESTING.md), Section 5: each of those requires a display, a
+[`TESTING.md`](TESTING.md): each of those requires a display, a
 hypervisor or a machine that a hosted runner does not have. Those runs are
 recorded by hand and this workflow does not replace them.
 

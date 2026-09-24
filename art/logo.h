@@ -10,7 +10,7 @@
  * References:
  *   - art/README.md: how this is generated, and why it is generated rather
  *     than drawn.
- *   - docs/design/SESSION.md, Section 3.2: where it is drawn and why the
+ *   - docs/design/SESSION.md: where it is drawn and why the
  *     boot screen and the desktop must draw the same thing.
  *
  * Two coverages and not one state, which is why it is a byte. The high four

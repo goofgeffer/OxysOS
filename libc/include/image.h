@@ -11,7 +11,7 @@
  *          OxysImageWidth, OxysImageHeight, OxysImageScalerBegin,
  *          OxysImageScalerRow, OxysImageRead.
  * References:
- *   - docs/design/SESSION.md, Section 9: what an image is for, where it lives,
+ *   - docs/design/SESSION.md: what an image is for, where it lives,
  *     and why the background is a file and not a header compiled in.
  *   - art/README.md: the one command that makes a file of this format.
  *   - libc/include/icon.h: the smaller format beside it, and why the two are

@@ -12,7 +12,7 @@
  * References:
  *   - kernel/abi/oxys/syscall_abi.h: the five window calls, the rectangle,
  *     the event, and the pixel format 0x00RRGGBB.
- *   - docs/design/WINDOWS.md, Section 10: the protocol, and Section 7 what
+ *   - docs/design/WINDOWS.md: the protocol, and Section 7 what
  *     this program stands in for until there is a desktop.
  *   - art/logo.h and art/palette.h: the mark this program draws and the
  *     colours it draws in, both public domain so that this program and the

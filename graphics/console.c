@@ -11,9 +11,9 @@
  *          ConsoleReport.
  * References:
  *   - ANSI X3.4-1986: LF, CR, HT, BS and FF, and the meaning each is given.
- *   - docs/devices/DISPLAY.md, Sections 6 and 7: the same four characters as the
+ *   - docs/devices/DISPLAY.md: the same four characters as the
  *     text-mode driver implements them, and the erase limit.
- *   - docs/design/CONSOLE.md, Sections 2 and 3.
+ *   - docs/design/CONSOLE.md.
  *
  * Concurrency. **The lock is taken above this file, in KernelWriteString**, and
  * from sub-task 6.14 it is genuinely necessary: a started processor announces
@@ -520,7 +520,7 @@ void ConsoleWriteCharacter(char character)
      * and then drawing the glyph over it was the first arrangement and was
      * replaced: it wrote every pixel of the cell twice and clipped each of them
      * separately, and it was the greater part of what a character cost. See
-     * docs/design/CONSOLE.md, Section 6.
+     * docs/design/CONSOLE.md.
      */
     FontDrawGlyphOpaque(&ConsoleSurface, (int32_t)(ConsoleCursorColumn * FONT_WIDTH),
                         (int32_t)(ConsoleCursorRow * FONT_HEIGHT), code, ConsoleForeground,

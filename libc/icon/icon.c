@@ -9,7 +9,7 @@
  *          OxysIconCompose.
  * References:
  *   - libc/include/icon.h: the format, and why an icon is a file.
- *   - docs/design/SESSION.md, Section 8: what reads these and when.
+ *   - docs/design/SESSION.md: what reads these and when.
  *
  * Concurrency. None; see the header.
  */

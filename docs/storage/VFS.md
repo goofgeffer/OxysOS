@@ -2,711 +2,275 @@
 <!-- SPDX-License-Identifier: CC0-1.0 -->
 # The Virtual Filesystem Layer
 
-**Corresponding phase**: 5, sub-task 5.8, which completes the phase.
-**Authority**: `PROJECT_GUIDELINES.md`, Sections 2 and 4.
-**Implemented by**: [`../../kernel/fs/vfs/`](../../kernel/fs/vfs/), which holds
-seven translation units and the private header between them:
-[`vfs.c`](../../kernel/fs/vfs/vfs.c) (the state, the refusals and the
-accounting), [`node.c`](../../kernel/fs/vfs/node.c) (Section 6),
-[`path.c`](../../kernel/fs/vfs/path.c) (Sections 4 and 5),
-[`mount.c`](../../kernel/fs/vfs/mount.c) (Sections 3 and 5),
-[`file.c`](../../kernel/fs/vfs/file.c) (Sections 7 and 8),
-[`namespace.c`](../../kernel/fs/vfs/namespace.c) (Sections 9 and 10),
-[`pipe.c`](../../kernel/fs/vfs/pipe.c) (Section 11.3, of sub-task 8.6), and
-[`internal.h`](../../kernel/fs/vfs/internal.h). It was one file of 2,355 lines
-until the review that followed sub-task 6.10; the sections of this document
-corresponded to those units already, which is why the division needed nothing
-rewritten. See [`../design/ARCHITECTURE.md`](../design/ARCHITECTURE.md),
-Section 2.2.
-[`../../kernel/fs/ext2_vfs.c`](../../kernel/fs/ext2_vfs.c),
-[`../../kernel/include/oxys/fs/vfs.h`](../../kernel/include/oxys/fs/vfs.h),
-[`../../kernel/include/oxys/fs/ext2_vfs.h`](../../kernel/include/oxys/fs/ext2_vfs.h).
-**Asserted by**: `KernelVerifyVfs` in
-[`../../kernel/test/storage/vfs.c`](../../kernel/test/storage/vfs.c).
+**Phase**: sub-task 5.8 of [`../project/PLAN.md`](../project/PLAN.md); pipes from
+sub-task 8.6.
+**Source**: [`../../kernel/fs/vfs/`](../../kernel/fs/vfs/) — `vfs.c` (state,
+refusals, accounting), `node.c` (Section 5), `path.c` (Section 3), `mount.c`
+(Section 4), `file.c` (Sections 6 and 7), `namespace.c` (Section 8), `pipe.c`
+(Section 9), `internal.h`; the EXT2 binding
+[`../../kernel/fs/ext2_vfs.c`](../../kernel/fs/ext2_vfs.c); the interfaces
+[`../../kernel/include/oxys/fs/vfs.h`](../../kernel/include/oxys/fs/vfs.h) and
+[`ext2_vfs.h`](../../kernel/include/oxys/fs/ext2_vfs.h).
+**Specifications**: IEEE Std 1003.1-2017, Section 4.13 (pathname resolution),
+`open()`, `lseek()`, `link()`, `unlink()`, `pipe()`.
 
----
+The layer that turns a filesystem format into a filesystem: it retains mounted
+volumes, joins them into one tree, gives every file one identity, and holds open
+files with positions. The system calls are these operations with a program's
+arguments validated and copied ([`../design/PRIVILEGE.md`](../design/PRIVILEGE.md),
+[`../design/LIBC.md`](../design/LIBC.md)); nothing of this layer is reimplemented
+above it.
 
-## 1. What was missing
-
-Sub-tasks 5.1 to 5.7 built an EXT2 implementation that can do everything the
-format admits: read a superblock, find an inode, resolve a path, read a file,
-allocate blocks, write, truncate, create a name, destroy a file. What it could
-not do was be *used*.
-
-Three things were absent, and they are absent together rather than by
-coincidence.
-
-**Nothing was retained.** Every operation of Section 12 of
-[`EXT2.md`](EXT2.md) takes a device and a superblock and gives them back. A
-caller that wished to read two files read the superblock twice. There was no
-object that meant "this volume, open".
-
-**Nothing was open.** A file was acted upon by naming it: read this path at this
-offset, write that path at that one. There was no position that advanced, so
-reading a file sequentially meant the caller keeping the offset and the size, and
-two readers of one file could not exist without each keeping its own.
-
-**There was one volume.** `Ext2ResolvePath` begins at inode 2 of the device it
-is given. A machine with two disks had two unrelated trees and no path that
-reached both.
-
-This layer supplies the three. It is the last sub-task of Phase 5 because it is
-the one that turns a format into a filesystem, and it is where Phase 6 begins:
-the system calls of sub-task 6.7 are these operations with a user's arguments
-copied in.
-
-**Since sub-task 7.6 six of those operations are reachable from a program.**
-`open`, `close`, `read`, `readdir`, `mkdir` and `unlink` are system calls, and
-each is a validation of a caller's arguments and then a call of the corresponding
-routine here — nothing of this layer is reimplemented above it. The whole of what
-the boundary adds is the validation, the copy of a caller's bytes into the
-kernel's own buffer in both directions, the per-process descriptor table of
-limitation 2 below, and the translation of `VfsError` into a result a program can
-act upon. [`../design/LIBC.md`](../design/LIBC.md), Section 12.1.
-
-## 2. The shape
+## 1. Structure
 
 ```
-                       VfsOpen, VfsRead, VfsResolve, VfsMountVolume
-                                        |
-     +--------------------------------- | ---------------------------------+
-     |               kernel/fs/vfs/     v                                   |
-     |                                                                      |
-     |   mount table        node cache        open file table               |
-     |   4 mounts           64 nodes          32 descriptors                |
-     |   one tree           one identity      one position each             |
-     |                      per file                                        |
-     +----------------------------------|-----------------------------------+
-                                        |  VfsFilesystemOperations
-     +----------------------------------|-----------------------------------+
-     |            kernel/fs/ext2_vfs.c  v                                   |
-     |   the translation: node <-> inode, mount <-> superblock,             |
-     |   neutral type <-> i_mode, refusal <-> code                          |
-     +----------------------------------|-----------------------------------+
-                                        |
-                          kernel/fs/ext2/    (the format)
-                                        |
-                     kernel/block/buffer.c   (the cache)
-                     kernel/block/block.c    (the device)
-                     drivers/ata/            (the disk)
+      VfsOpen, VfsRead, VfsResolve, VfsMountVolume, VfsPipeCreate, ...
+   +------------------------ kernel/fs/vfs/ ---------------------------+
+   |  mount table      node table       open file table     pipes      |
+   |  4 mounts         64 nodes         32 files            8 pipes    |
+   |  one tree         one identity     one position each   one page   |
+   +------------------------------+------------------------------------+
+                                  |  VfsFilesystemOperations
+   +---------------- kernel/fs/ext2_vfs.c -----------------------------+
+   |  node <-> inode, mount <-> superblock, type <-> i_mode,           |
+   |  refusal <-> code                                                 |
+   +------------------------------+------------------------------------+
+                        kernel/fs/ext2/  ->  buffer cache  ->  block layer
 ```
 
-The layer knows nothing of EXT2 and nothing in `kernel/fs/ext2/` knows anything
-of the layer. `ext2_vfs.c` is the only file in the project that knows both, and
-it is short because everything in it is translation.
-
-That division is why `ext2_vfs.c` is a file of its own rather than a part of the
-format's own directory. The two answer different questions. `kernel/fs/ext2/`
-answers what the format is: where a structure lies, how its bytes are ordered,
-what makes a volume contradict itself. `ext2_vfs.c` answers how that format is
-presented as one filesystem among several. Declaring the binding in `ext2.h`
-would have made every consumer of the format compile against the filesystem layer
-as well, and the direction of the dependency would no longer be legible from the
-includes.
-
-## 3. The operations a filesystem supplies
-
-`VfsFilesystemOperations` is sixteen function pointers. A filesystem is
-registered under a name — `VfsRegisterFilesystem("ext2", ...)` — and a mount asks
-for a type by that name, which is what makes the layer virtual rather than a
-wrapper around the one filesystem that exists.
-
-Four of them are not optional: `mount`, `unmount`, `read_node` and `lookup`.
-Without them nothing can be reached at all, so their absence is refused at
-registration rather than at the first call. Every other entry may be null, and
-the layer refuses the operation with `VFS_ERROR_UNSUPPORTED` rather than calling
-through a null pointer — which is what allows a read-only filesystem, or a
-filesystem with no directories, to be added later without a change here.
-
-Two contracts run through all of them and are stated once rather than at each:
-
-- **A name is given by its address and its length** and is not terminated, so
-  that one component of a path may be used where it stands. Nothing in this
-  layer copies a path or a component out of the caller's string.
-- **A count reports what was transferred**, not what was asked. A partial write
-  is a partial write: those bytes are upon the volume and the file's size
-  accounts for them.
-
-## 4. Resolution
-
-`VfsWalk` takes a starting directory, a path, **and a length**, and produces the
-node the path names. The length is what makes everything else in this file
-buffer-free: the parent of a path is resolved by walking the prefix of that path
-where it stands, so `VfsResolveParent`, which every operation that alters a
-directory needs, copies nothing.
-
-The rules are those of POSIX.1-2017, Section 4.13, and each is applied where it
-arises:
-
-| Rule | Where |
-| ---- | ----- |
-| A path beginning with a separator resolves from the root. | The start of `VfsWalk`. |
-| Successive separators are equivalent to one. | The skip that precedes each component. |
-| A component that is not the last must be a directory. | Tested before the lookup, so that the diagnosis names the component and not what follows it. |
-| A trailing separator asserts that what the path names is a directory. | Recorded per component and applied at the end, since only the last one asserts anything. |
-| A symbolic link met in the path is replaced by its target. | Section 4.2. |
-
-`.` and `..` are **not interpreted**. Every EXT2 directory holds both as ordinary
-entries, and the `..` of a volume's root names that root; the ordinary lookup
-therefore resolves them, and a layer that interpreted them would be
-second-guessing the volume. The one exception is `..` leaving a *mounted* volume,
-which is a fact of the tree and not of the volume, and is Section 5.3.
-
-### 4.1 Two resolvers, and why both remain
-
-`Ext2ResolvePath` of sub-task 5.4 is not used by this layer and is not retired.
-The two resolve different things. `Ext2ResolvePath` resolves a path within one
-volume, needs no mount, and is what the reports and self-tests of sub-tasks 5.4
-to 5.7 exercise the format with. `VfsWalk` resolves a path within the *tree*: it
-crosses mount points, and it produces nodes from the cache so that what it
-returns has an identity. Retiring the first would leave the format untestable
-except through the layer above it, which is precisely the coupling this design
-avoids.
-
-### 4.2 Symbolic links
-
-A link is followed by resolving its target, which re-enters `VfsWalk`. A relative
-target is resolved against the directory holding the link — which the walker is
-still holding at that moment, and which is the whole of the difference between a
-relative target and an absolute one — and an absolute target from the root.
-
-The recursion is what the depth bound is for. Each frame carries a target buffer
-of 256 bytes and the bound is eight, so the whole cost of the arrangement is two
-kibibytes of stack, and a link that names itself stops rather than consuming the
-stack. Eight is the depth POSIX requires an implementation to allow.
-
-A link standing as the **last** component is followed where the caller asked for
-the file and left alone where it asked for the name, which is the distinction
-between `stat` and `lstat` and between acting upon a file and acting upon its
-name. A trailing separator overrides it: such a path asserts a directory, a link
-is not one, so it is asking for what the link names.
-
-## 5. The mount
-
-### 5.1 Found through the node, never through the path
-
-There is no string prefix matching anywhere in this layer. A mount is found
-through the **node it covers**: `VfsNode` carries a `mounted` pointer, and
-resolution substitutes the covering mount's root for the node the moment it
-reaches one. The path a mount was made at is retained for a report and for
-nothing else.
-
-This is the central decision of the design, and prefix matching is the obvious
-alternative that appears to work. It fails in three ways that have no remedy
-within it:
-
-1. **A symbolic link whose target crosses a mount point** is not a path any
-   prefix describes. The resolution continues from wherever the target leads,
-   and no string was ever composed that a prefix could be matched against.
-2. **`..` leaving a mounted volume** must arrive at the parent of the mount
-   point, and a prefix has no way to know it has left. Section 5.3.
-3. **One directory reached by two routes** would be matched against one prefix
-   and not the other.
-
-Every one of the three is silent. The path resolves, to the wrong file.
-
-### 5.2 Crossing into a volume
-
-When a lookup produces a node that carries `mounted`, the node is released and
-the mounted volume's root is taken in its place. The directory beneath is hidden
-entirely for as long as the mount stands — not merged with what covers it, which
-is what a mount means and what makes the covered directory's contents
-unreachable rather than shadowed name by name.
-
-### 5.3 Leaving a volume by `..`
-
-The `..` of a volume's root names that root. That is what the volume says and it
-is correct whenever the volume stands alone.
-
-Where the volume is mounted within another, the parent of its root is the
-directory the mount covers — a fact of the tree that only this layer holds. So
-before `..` is looked up at all, the walker steps from a mounted root to the node
-that mount covers, and looks up `..` there. It is written as a loop rather than
-a single step: this kernel does not stack mounts, but a bound written as a loop
-does not become wrong when it does.
-
-### 5.4 What a mount refuses
-
-| Refused | Because |
-| ------- | ------- |
-| The first mount anywhere but `/`. | Until the root stands there is no tree for a path to resolve within, so a mount elsewhere would have nowhere to attach. |
-| A device already mounted. | Two mounts of one device would hold two superblocks of one volume, and each would allocate blocks without regard to what the other had taken. |
-| A point already covered. | This kernel does not stack mounts. |
-| A point that is not a directory. | There would be nothing to resolve through. |
-| A type not registered. | There is nothing to read the volume with. |
-
-### 5.5 What an unmount refuses
-
-An unmount is refused where **anything upon the volume is still held**: an open
-descriptor, a node somebody is resolving through, or another volume mounted
-within it. The test is one rule — a node of this mount in use by anything but the
-mount itself — and the three cases are instances of it, the inner mount holding
-the directory it covers.
-
-The alternative is to withdraw it regardless, and the failure would then appear
-at the next read of a descriptor addressing a volume that no longer exists,
-which is a fault reported far from its cause.
-
-The order of the withdrawal matters in one place. The mount's own node references
-go **before** the filesystem is told to release the volume: releasing a node
-calls the filesystem's `release_node`, which is entitled to look at the volume's
-description, and doing it afterwards would be reading a description the
-filesystem had just given back.
-
-## 6. Nodes
-
-A node is the identity of a file within the kernel. Two callers that reach the
-same file by any route hold the same node.
-
-**That is a correctness requirement and not a convenience.** Were each caller to
-hold a copy of the file's description, a write through one that extended the file
-would leave the other's copy holding the old size and the old block pointers, and
-the next write through that copy would restore them — truncating the file and
-orphaning every block the first write had allocated. Nothing would report it.
-
-The same identity is what makes the link counts of a directory correct. Creating
-a directory raises the parent's link count for the `..` written into the child;
-the creation is performed through the parent's *node*, so every holder of that
-directory sees the new count, and the self-test asserts exactly this by reading
-the root's link count before and after.
-
-### 6.1 Nodes in use, not nodes recently used
-
-A node whose last reference goes is released at once. This is a table of nodes in
-use and not a cache of nodes recently used, and the distinction is deliberate: a
-retained node is a description of a file that may since have been destroyed and
-its inode reissued to another file, and nothing here would know.
-
-The cost is that opening the same file twice in succession reads its inode twice.
-Those reads are served by the buffer cache of sub-task 4.6, so the cost is the
-decoding and not the medium. It is the right trade for a kernel that has no
-invalidation protocol, and Section 11 records it as a limitation rather than as a
-design.
-
-The root node of every mount, and the node every mount covers, are held for the
-life of the mount. That is what keeps them from being released and is why
-`VfsMountIsBusy` counts the root's references against one rather than against
-zero.
-
-## 7. The open file
-
-`VfsFile` is a node, a position and the flags it was opened with. The position
-belongs to the open file and not to the node, which is why two descriptors upon
-one file read independently of one another while writing to the same bytes.
-
-Two things about it are decisions rather than mechanism.
-
-**An appending write goes to the end of the file as it stands at that moment**,
-and not to where the position happens to be. That is the whole purpose of the
-flag: two writers appending to one file must not overwrite one another, which
-they would were the offset taken from a position each had advanced on its own.
-
-**The position of a directory descriptor is the filesystem's own cookie**, not a
-byte offset. It is kept in the same field because it is the same thing — where
-the next read begins — and because a caller that seeks a directory to a cookie it
-was given earlier is doing what `seekdir` means. The EXT2 binding packs the block
-index of the traversal into the high half and the offset within that block into
-the low half; both are bounded far below what they are given, and an index that
-nevertheless exceeded it is refused rather than truncated, a truncated index
-naming a different block of the same directory and reporting entries twice.
-
-A seek beyond the end of a file is permitted, as POSIX requires: writing there
-leaves a hole, which is how a sparse file is made. A seek before the beginning is
-refused, there being nothing there. The two directions are computed separately so
-that neither the sum nor the difference can wrap, and a negative offset is
-negated in the unsigned domain, `INT64_MIN` having no positive counterpart in the
-signed one.
-
-## 8. The mark a mount leaves upon a volume
-
-A volume mounted for writing is marked as **not cleanly unmounted for as long as
-it is open**, and the mark is forced to the medium before anything else is
-written to the volume.
-
-The order is the whole point. A machine that stops while the volume is open
-leaves that mark behind, so the next mount reads a volume that was not cleanly
-unmounted, `Ext2ReadSuperblock` makes it read-only, and it stays read-only until
-a check has been run over it. A kernel that marked the volume upon *unmounting*
-would record only the mounts that ended well — which are exactly the ones that
-need no record.
-
-The mark is made by **clearing** the bit that says the volume was cleanly
-unmounted, and not by setting the bit that says errors were found in it. They are
-distinct bits of one field and they say different things: a volume that is merely
-open is intact, and a kernel that recorded it as faulty would have `e2fsck`
-report errors upon a disk that has none, and would erase the record of a volume
-that genuinely had some by overwriting the field rather than masking it.
-
-The mount count is raised at the same moment. It is half of what tells a check
-that a volume is due for one — `s_max_mnt_count` states how many mounts may pass
-between checks and this states how many have — and `Ext2WriteSuperblock` was
-extended in this sub-task to write it, there having been nothing before that
-altered it.
-
-### 8.1 A stranger's disk is mounted read-only
-
-The root volume of a machine this kernel is booted upon is mounted **read-only**
-unless the operator chose the entry of the GRUB menu that permits writing.
-
-A kernel that mounted a stranger's disk for writing would mark it as not cleanly
-unmounted merely by having been booted, and every such disk would then demand a
-check before its owner could mount it again. That is a real cost imposed for
-nothing, and it is imposed by the very mechanism that exists to protect them.
-
-### 8.2 The initial ramdisk is not a stranger's disk
-
-Since sub-task 7.7 the volume mounted at the root is not a disk at all: it is the
-initial ramdisk, an EXT2 image built beside the kernel and placed in memory by
-the boot loader. It is mounted **for writing**, and the exception is not a
-relaxation of Section 8.1 but the same rule applied.
-
-Every word of that reasoning is about a volume that belongs to somebody. The
-ramdisk was made by this build, is read by nothing else, and ceases to exist when
-the machine is switched off. There is nothing to protect and nobody to
-inconvenience — and a root that nothing may write to is a root the shell's output
-redirection at sub-task 8.5 cannot redirect into.
-
-**The root is chosen by name, not by search.** `VfsMountRoot` walks the
-registered devices and mounts the first volume it can, which answers "is there
-anything to mount" and not "is this the right thing". `KernelMountRootVolume`
-therefore names `ram0` outright: a machine carrying an EXT2 volume upon a disk
-would otherwise boot with that volume at the root, or with the ramdisk there,
-according to which driver happened to register first — a difference nobody chose,
-that changes every path in the system, and that a boot log does not obviously
-show.
-
-A volume the machine carries is mounted at **`/mnt`** instead, read-only unless
-the operator asked otherwise, under Section 8.1 which still governs it. The
-directory exists upon the ramdisk because the build puts it there. That is also
-what keeps the write probe of Section 10 alive: before 7.7 it resolved its path
-from the root, and a root it no longer reaches would have turned it into a
-diagnostic that prints "not present" for ever —
-[`INITRD.md`](INITRD.md), Section 6.3.
-
-**Since 2026-09-23 one disk is not a stranger's**: a volume whose label is
-exactly `oxys-etc` is this system's own, made by `tools/etc-disk.sh`, and is
-mounted over `/etc` for writing before `/mnt` is considered, so that it is not
-taken for the machine's volume. Section 8.1 is not relaxed for anything else;
-the label is how this layer knows the disk is not somebody else's.
-[`PERSIST.md`](PERSIST.md).
-
-A kernel booted without a ramdisk falls back to `VfsMountRoot` exactly as this
-function behaved before 7.7.
-
-## 9. What the layer refuses
-
-### 9.1 The codes
-
-`VfsError` is sixteen values and a description in words is kept beside it. The
-words are what a diagnostic prints; the code exists because Phase 6 must return a
-refusal to a user program, which cannot be given a pointer into the kernel's
-read-only data. Both are set at every refusal, in one statement, so that neither
-can say something the other does not.
-
-### 9.2 Read-only is tested once
-
-A mount that may not be written is refused in one place — `VfsWritable`, against
-the node's mount — rather than by each operation remembering to test it. A volume
-the filesystem judges unwritable is read-only whatever was asked for at the
-mount, and a read-only mount of a writable volume is read-only because it was
-asked for; the mount records the disjunction of the two.
-
-### 9.3 A file something holds is not destroyed
-
-`VfsUnlink` and `VfsRemoveDirectory` refuse a file anything else holds.
-
-POSIX would keep such a file alive until its last descriptor closed. That
-requires a list of files that have no name and are not yet gone, together with
-the discipline that empties that list after a machine has stopped — which is the
-orphan list `i_dtime` is threaded through and which `e2fsck` exists to reclaim.
-This kernel has neither.
-
-The alternative to refusing is not "slightly wrong". `Ext2Unlink` frees the inode
-and every block of the file the moment the last name goes, so a descriptor still
-reading it would be reading blocks that had been given to somebody else, and the
-inode would be reissued to another file while the first was still open. That is
-silent, and it is corruption rather than a surprise.
-
-The test is that the node has a reference beyond the one the resolution itself
-took. A mount point is caught by the same test, its mount holding the node as the
-directory it covers, so a mount point cannot be unlinked either — which is right
-for the same reason.
-
-### 9.4 A name and the file it names lie upon one volume
-
-`VfsLink` refuses two paths that resolve to different mounts. A directory entry
-names an inode of the volume the directory belongs to, and there is no number one
-volume could write that would name a file upon another.
-
-## 10. Verification
-
-`KernelVerifyVfs` asserts the layer against two volumes composed within the two
-memory-backed block devices, so the verification needs no disk and touches
-nobody's data. Every property below is asserted at each boot; the procedure is
-`make verify`, described in [`../project/TESTING.md`](../project/TESTING.md).
-
-The second volume is a **copy of the first with one field altered** — the owner
-of `/file` — rather than a second composition. That is what allows an assertion
-to say *which* volume a path reached, which is the only way the mount can be
-tested at all: two volumes that were identical would make every crossing
-assertion vacuous, and two volumes that differed everywhere would make it unclear
-which difference the assertion had detected.
-
-### 10.1 Resolution
-
-| Property asserted | The silent failure it would catch |
-| ----------------- | --------------------------------- |
-| Each of `/`, `/file`, `/sub`, `/sub/inner` resolves to the inode the composition gave it, of the format it gave it. | A walk that lost a component, or found the right file by the wrong route. |
-| The size of a file is reported as the volume states it. | The two halves of the size joined wrongly, which bounds every read at the wrong place. |
-| `//sub//inner` resolves as `/sub/inner`, and `/sub/` resolves while `/file/` is refused. | Repeated separators read as empty components; a trailing separator that asserts nothing. |
-| `/.`, `/..`, `/sub/..` and `/sub/../file` all resolve, the `..` of the root naming the root. | `.` and `..` interpreted rather than looked up — which would disagree with the volume the moment a volume disagreed with the interpretation. |
-| A symbolic link is followed as the last component, within a path, and in both its fast and slow forms; and is *not* followed where the name was asked for. | `stat` and `lstat` conflated; a link in one of the two forms unreadable. |
-| A path is refused for the reason that distinguishes it: absent, not a directory, relative, empty. | A resolver that reached the right conclusion by the wrong route, which will reach a wrong one elsewhere. |
-| A record whose inode number is zero is neither resolved nor listed. | The bytes of a removed name read as a file that was deleted. |
-
-### 10.2 The open file
-
-| Property asserted | The silent failure it would catch |
-| ----------------- | --------------------------------- |
-| The whole of a file is read through a descriptor and matches contents derived from the offset. | A read that returned the right count from the wrong block — which a constant fill would not catch. |
-| The position advances by exactly what was transferred. | A position that drifts, so that a sequential read silently skips or repeats. |
-| A read at the end transfers nothing and is not a failure. | Every caller obliged to treat the conclusion of its work as a fault. |
-| Seeks from all three origins arrive where they were sent, and a read after a seek begins there. | A seek that is computed but not applied. |
-| A seek beyond the end is permitted; one before the beginning is refused. | Sparse files made impossible; a position that wrapped. |
-| Two descriptors upon one file have two positions, and moving one does not move the other. | The position kept upon the node rather than the open file, which would make two readers of one file impossible. |
-| A directory is not read as a stream; a file is not opened as a directory; an open asking neither to read nor to write is refused; a link is not opened where the open refused to follow one. | Entries read as bytes; an open that could do nothing accepted, so that the discovery is deferred to the first read. |
-| A descriptor closed twice is refused. | A node released twice, freeing it beneath its remaining holder. |
-
-### 10.3 Directories
-
-| Property asserted | The silent failure it would catch |
-| ----------------- | --------------------------------- |
-| The root lists exactly its six entries and the subdirectory exactly its three. | A traversal that lost or repeated a record, which the count catches and a search for one name does not. |
-| What a directory lists is what resolves, and what it does not list does not resolve. | A listing and a lookup that disagree — two readings of one structure. |
-
-### 10.4 Alteration
-
-| Property asserted | The silent failure it would catch |
-| ----------------- | --------------------------------- |
-| A file is created, written, closed, reopened, and read back identically. | A write that reached the wrong block, or a size that did not account for it. |
-| An exclusive creation of a file that exists is refused, with the code that says so. | A creation that silently opened what was there. |
-| An appending write goes to the end and not to the position. | Two appenders overwriting one another. |
-| Truncation to nothing and upward into a hole both work, and the hole reads as zeroes. | Blocks freed that were not, or a hole read as whatever the blocks last held. |
-| An open that truncates discards the contents. | A file that keeps data the caller believed it had discarded. |
-| A second name raises the link count, both names lead to one file, and removing one leaves the other. | An unlink that destroys a file another name still leads to. |
-| A directory may not be given a second name. | A cycle in what must be a tree. |
-| A new directory bears two links and **its parent gains one**. | The count of Section 4.3 of [`EXT2-FILES.md`](EXT2-FILES.md) — a parent short by one may be freed while a child still names it, and nothing reports it until the freed blocks are given away. |
-| Removing the directory returns the parent's link. | The same, in the other direction. |
-| A directory holding names is not removed; a directory is not unlinked as a file. | Everything within a directory made reachable by no path. |
-| A file that is open is not destroyed, and is destroyed once nothing holds it. | Section 9.3: blocks freed beneath a reader. |
-
-### 10.5 The mount
-
-| Property asserted | The silent failure it would catch |
-| ----------------- | --------------------------------- |
-| Nothing resolves and no mount may be made away from `/` before a root stands. | A tree with no root that appears to work until a path is resolved. |
-| A mount upon something that is not a directory, of a device already mounted, or of a type not registered, is refused with the code that says so. | Two superblocks of one volume, each allocating without regard to the other. |
-| The mount point names the first volume's directory before the mount and the second volume's root after it. | A mount recorded but not applied. |
-| A path crossing the mount point reaches the **second** volume, and one that does not reaches the first. | The crossing applied to the wrong node, or to every node. |
-| What the mount covers is entirely unreachable while it stands. | A mount that merges rather than covers. |
-| `..` from the root of the mounted volume leaves it, and a path that returns and crosses again reaches the second volume once more. | Section 5.3 — the failure a layer matching paths by prefix would have, and the one nothing else here would catch. |
-| A read-only mount refuses a write and a creation. | Somebody's volume altered by a kernel that was told not to. |
-| The root is not withdrawn while a volume stands within it, nor while a file upon it is open. | Descriptors addressing a volume that no longer exists. |
-| What the mount covered reappears exactly as it was when the mount is withdrawn. | A covering that damaged what it covered. |
-
-### 10.6 The mark, and what was left behind
-
-| Property asserted | The silent failure it would catch |
-| ----------------- | --------------------------------- |
-| After a writable mount, the state read **back out of the medium** has the clean bit clear and the error bit still clear, and the mount count is raised. | A mark that never reached the disk, which would protect nothing in the one circumstance it exists for; and a volume falsely recorded as faulty. |
-| After a clean withdrawal the clean bit is set again. | A volume that demands a check after every ordinary use. |
-| **No node is left held and no descriptor left open** after everything is closed and withdrawn. | A resolution that failed to release what it held — which exhausts a fixed table long before a machine has done any real work, and does so silently until it does. |
-| The volume still describes itself consistently: the superblock is read afresh and `Ext2VerifyGroupDescriptors` passes. | Anything leaked or double-counted across the whole sequence. |
-
-The descriptor table is verified **after** the unmount rather than during the
-mount, because a mounted volume is marked unclean and is therefore permitted to
-disagree with itself — which is what an unclean state means.
-
-### 10.7 Corroboration upon a volume this kernel did not make
-
-The self-test establishes the layer consistent with itself. The corroboration is
-a `mke2fs` image, and it is recorded in
-[`../project/TESTING-SYSTEM.md`](../project/TESTING-SYSTEM.md), Section 6. In summary: the
-kernel mounted the image at `/` and listed its root with the inode numbers, types
-and names `debugfs` gives; a writable mount left the volume marked not clean with
-a mount count of one, and `e2fsck -fn` found no structural error in it; a
-read-only mount left the volume byte for byte as it was; 5000 bytes were written
-through a descriptor and read back through the same descriptor after a seek, and
-`debugfs` extracted them from the image matching byte for byte; the volume was
-then withdrawn and reported clean; and the whole was repeated upon a volume of
-4096-byte blocks.
-
-**That corroboration found a defect in sub-task 5.7.** It is Section 11.1.
-
-**Since sub-task 7.7 it happens at every boot.** The root filesystem is a volume
-`mke2fs` composed, so the mount, the root inode, the directory entries and the
-file blocks of this layer are exercised against an image this project did not
-write before the banner is printed — in every environment, upon every machine,
-without anybody remembering to build one.
-[`INITRD.md`](INITRD.md), Section 3.2.
-
-## 11. Corrections this sub-task made elsewhere, and what later ones added
-
-### 11.1 The deletion time was read as an orphan-list link
-
-Destroying a file records a deletion time in `i_dtime`, and this kernel, having
-no clock, recorded the constant 1.
-
-`i_dtime` means two things upon an EXT2 volume. Of an inode that has been freed
-it is the time of the deletion, which is what it is defined as. Of an inode upon
-the **orphan list** — files whose last name went while something still held them
-open — it is the *number of the next inode in that list*, the list being threaded
-through this field rather than being given a structure of its own. A check cannot
-ask which meaning is intended and distinguishes them by magnitude: `e2fsck` reads
-a value below `s_inodes_count` as a link and anything above it as a time.
-
-So every inode this kernel had ever freed was reported by `e2fsck` as the member
-of a corrupted orphan list naming inode 1, upon volumes that were in fact intact.
-It is now `EXT2_DELETION_TIME_UNKNOWN`, which is `UINT32_MAX`: no volume has an
-inode numbered above `s_inodes_count`, so it cannot be read as a link, and it is
-the last second the field can express, which is a defensible way of saying that
-the moment is not known.
-
-It was found by running `e2fsck` over a volume this layer had created and
-destroyed files upon, and it is exactly the class of defect the corroboration
-exists for — the operation reported success, the volume read back correctly, and
-only a tool that knew what the field meant could see it.
-
-### 11.2 The mount count was never written
-
-`Ext2WriteSuperblock` wrote the free counts, the state and the write time, those
-being everything sub-task 5.6 altered. The mount is the first thing that alters
-the mount count, so the field is now written as well.
-
-### 11.3 The pipe, of sub-task 8.6
-
-The pipe is an open file of Section 7 with no node beneath it. That is a
-decision and not a convenience: everything a descriptor does — the count of
-holders that lets a child inherit one, the `dup2` that places one at 0 or 1, the
-close at a process's end that releases it — was built at 8.5 upon the open file,
-and a pipe end that was not one would have needed all of it written a second
-time, with the two copies parting the first time one was corrected. So `VfsFile`
-carries a `pipe` beside its `node`, exactly one of the two set, and `VfsRead`,
-`VfsWrite`, `VfsClose`, `VfsSeek`, `VfsTell`, `VfsReadDirectory` and
-`VfsFileAttributes` ask which before they touch the node; the mount's busy scan
-skips a file with no node, because a pipe holds no volume open.
-
-`VfsPipeCreate` makes the pipe and two open files upon it, finding both slots
-before claiming either, so that a table with one slot left refuses the pipe
-rather than making half of one — a read end with no write end is a pipe at its
-end before anything was written. The buffer is one page, drawn from a fixed
-array of eight pipes for the reason every table of this layer is fixed; the
-pipe's own design — who sleeps, who wakes whom, why a writer waits for room for
-the whole of what remains — is in the header of
-[`../../kernel/fs/vfs/pipe.c`](../../kernel/fs/vfs/pipe.c) and in
-[`../design/SHELL.md`](../design/SHELL.md), Section 22.2. `VFS_ERROR_BROKEN_PIPE`
-is the sixteenth refusal, carried to a program as `EPIPE`, and
-`VFS_ERROR_INTERRUPTED` the seventeenth, of 8.7, carried as `EINTR`: a sleep
-upon the pipe woken by a signal rather than by the pipe. A write with no
-reader also sends SIGPIPE, since 8.7.
-
-| Property asserted, from the kernel | The silent failure it catches |
-| ---------------------------------- | ----------------------------- |
-| A pipe is two open files and one pipe, released together at the last close. | A leaked open file, or a pipe slot never returned. |
-| Bytes cross in order, a partial read leaving the rest. | A read index that skipped or repeated. |
-| Each end does one thing; a seek is refused. | A write end read as a file at its end, or a seek that moved a position a pipe has not got. |
-| An empty pipe with a writer, read by a caller that cannot sleep, is refused as busy. | A machine that waits for ever for a writer that is the same flow of control. |
-| A second holder keeps the pipe open through the first close. | A child's inherited write end closing the pipe from under the parent. |
-| A write with no reader is refused as a broken pipe. | A writer told its bytes went somewhere. |
-
-## 12. Limitations
-
-1. **There is no working directory, so no relative path is resolved.** Every path
-   given to this layer must be absolute. A working directory is a property of a
-   process, and although processes exist from sub-task 6.9 none of them has one:
-   the process control block carries no filesystem state at all. A relative
-   *symbolic link target* is resolved, against the directory holding the link,
-   that directory being known.
-2. **The open file table is global, and a process now has a table of its own
-   above it.** Sub-task 6.9 was expected to make it per-process and did not: a
-   process there is an address space and its threads, with **no file
-   descriptors** — see [`../design/PROCESS.md`](../design/PROCESS.md),
-   limitation 6.
-
-   **Sub-task 7.6 joined the two, in the half that could be joined.** A process
-   holds `PROCESS_DESCRIPTOR_CAPACITY` entries, each naming a descriptor of this
-   layer, so the numbers a program sees are its own and it cannot reach another
-   process's open file by guessing one — and one program's share of this layer's
-   thirty-two descriptors is bounded. What that does **not** do is make an open
-   file a description that may be *shared*. **Sub-task 8.5 joined the other
-   half**: an open file counts its holders, `VfsHold` adds one and `VfsClose`
-   takes one, and the file is released by the last. A child of `fork` now
-   inherits every descriptor, `execve` keeps them, and `dup2` makes two
-   numbers of one file and one position — which is what the shell's
-   redirection needed and what `open` for writing gave it something to
-   redirect to. [`../design/LIBC.md`](../design/LIBC.md), Section 12.7,
-   limitation 8, is closed; [`../design/SHELL.md`](../design/SHELL.md),
-   Section 19.
-3. **Nothing is cached between one use and the next.** A node whose last
-   reference goes is released, so opening the same file twice reads its inode
-   twice. See Section 6.1: it is the right trade for a kernel with no
-   invalidation protocol, and it costs the decoding rather than the medium.
-4. **A file that is open cannot be unlinked.** Section 9.3. POSIX would keep it
-   alive until the last close; this kernel refuses instead.
-5. **Nothing is renamed.** `Ext2Unlink` and `Ext2DirectoryInsert` exist, so a
-   rename is two operations with a window between them in which the file has two
-   names or none. An atomic rename is what `rename()` promises and is not offered
-   here, and it also crosses two directories at once, which nothing above has yet
-   needed.
-6. **The refusal codes of the EXT2 binding are approximate.** The implementation
-   beneath distinguishes its refusals in words and not by code — a failed lookup
-   and a directory whose records are malformed are both `false` with a different
-   sentence behind them — so the code assigned is the likeliest of the outcomes
-   the operation admits, and the sentence is the authority. Where the distinction
-   matters to a caller the binding establishes it beforehand instead: an existing
-   name is found before a creation is attempted, and a directory's emptiness
-   before its removal, so that `VFS_ERROR_EXISTS` and `VFS_ERROR_NOT_EMPTY` are
-   exact. A volume with no room is distinguished from a volume that failed by
-   consulting the free counts after the failure, which is a heuristic and is right
-   whenever the volume is genuinely full.
-7. **Permissions are recorded and not enforced.** A node carries its mode, its
-   owner and its group, and nothing consults them. There are no users until
-   Phase 6 and nothing to check a request against.
-8. **The times are not maintained.** Reading a file does not update `i_atime` and
-   writing one does not update `i_mtime`, there being no clock; a file this
-   kernel creates bears a time of zero. This is the limitation of
-   [`EXT2.md`](EXT2.md) restated, the layer adding nothing that would remedy it.
-9. **A mount point is not remembered across an unmount and a remount**, and a
-   mount is found by its path only for the purpose of withdrawing it. Two mounts
-   made at paths that resolve to one directory would be refused by the covering
-   test rather than by comparing the paths, which is right; but `VfsUnmount`
-   compares the path as it was given, so a volume mounted at `/sub` cannot be
+The layer knows nothing of EXT2, and `kernel/fs/ext2/` knows nothing of the
+layer. `ext2_vfs.c` is the only file that knows both, and holds only
+translation. Putting the binding in `ext2.h` would make every user of the format
+compile against the layer, hiding the direction of the dependency.
+
+## 2. What a filesystem supplies
+
+`VfsFilesystemOperations` is sixteen function pointers, registered under a name
+(`VfsRegisterFilesystem("ext2", …)`); a mount asks for a type by name.
+
+- `mount`, `unmount`, `read_node` and `lookup` are required, and their absence is
+  refused at registration. Any other entry may be null; the operation is then
+  refused with `VFS_ERROR_UNSUPPORTED` rather than called through a null pointer.
+- **A name is an address and a length**, unterminated, so a component is used
+  where it stands in the path and nothing is copied.
+- **A count reports what was transferred**, not what was asked.
+
+## 3. Resolution
+
+`VfsWalk` takes a starting directory, a path **and a length**, and produces the
+node the path names. The length lets `VfsResolveParent` walk a path's prefix in
+place, so no operation that changes a directory copies a path.
+
+| Rule (POSIX.1-2017, Section 4.13) | Applied |
+| --------------------------------- | ------- |
+| A leading separator starts at the root. | At the start. |
+| Repeated separators are one. | Before each component. |
+| A non-final component must be a directory. | Before the lookup, so the diagnosis names that component. |
+| A trailing separator asserts a directory. | At the end. |
+| A symbolic link is replaced by its target. | Below. |
+
+- **Paths given to this layer are absolute.** The system-call layer joins a
+  relative path to the process's working directory first
+  ([`../design/SHELL.md`](../design/SHELL.md)).
+- **`.` and `..` are looked up as ordinary entries**, which EXT2 stores; the one
+  exception is leaving a mounted volume (Section 4).
+- **Symbolic links** re-enter `VfsWalk`: a relative target from the directory
+  holding the link, an absolute one from the root. Each level carries a 256-byte
+  target buffer and the depth bound is `VFS_SYMLINK_DEPTH_MAXIMUM` (8, POSIX's
+  minimum), so the recursion costs at most 2 KiB of stack and a self-naming link
+  stops. A final link is followed when the file is wanted and not when the name
+  is (`stat` against `lstat`); a trailing separator forces following.
+- `Ext2ResolvePath` ([`EXT2-FILES.md`](EXT2-FILES.md)) remains, resolving within
+  one volume without mounts, so the format can be tested without this layer.
+
+## 4. Mounts
+
+**A mount is found through the node it covers, never by path prefix.** A
+`VfsNode` carries a `mounted` pointer; when a lookup produces such a node, the
+walk releases it and continues from the mounted volume's root. The path a mount
+was made at is kept only for reports and for withdrawal. Prefix matching fails,
+silently, on a link whose target crosses a mount (no string was ever composed to
+match), on `..` leaving a mounted volume, and on one directory reached by two
+routes.
+
+- **Covering hides.** The covered directory is unreachable while the mount
+  stands, not merged.
+- **Leaving by `..`.** A volume's root's `..` names that root. Before looking up
+  `..` at a mounted root, the walk steps to the node the mount covers (in a loop,
+  so stacked mounts would stay correct), and looks up `..` there.
+
+| A mount is refused when | Because |
+| ----------------------- | ------- |
+| It is the first mount and not at `/`. | There is no tree to attach to. |
+| The device is already mounted. | Two superblocks of one volume would allocate independently. |
+| The point is already covered. | Mounts do not stack. |
+| The point is not a directory. | Nothing to resolve through. |
+| The type is not registered. | Nothing to read the volume with. |
+
+**An unmount is refused while anything on the volume is held**: an open file, a
+node being resolved through, or a mount within it (which holds the node it
+covers). Otherwise a later read would address a volume that no longer exists.
+The mount's own node references are released **before** the filesystem releases
+the volume, since releasing a node may consult the volume's description.
+
+### 4.1 The mark a writable mount leaves
+
+A volume mounted for writing is marked **not cleanly unmounted** for as long as it
+is open, and the mark reaches the medium before anything else is written. A
+machine that stops mid-mount leaves the mark, and the next mount is read-only
+until checked ([`EXT2.md`](EXT2.md)). Marking at unmount would record only the
+mounts that ended well.
+
+The mark **clears the clean bit**; it does not set the error bit. An open volume
+is intact, and recording it as faulty would make `e2fsck` report errors on a
+healthy disk and overwrite the record of real ones. The mount count is raised at
+the same time. The clean bit is set again at a clean unmount.
+
+### 4.2 Which volume goes where
+
+| Mount | Volume | Writable | Why |
+| ----- | ------ | -------- | --- |
+| `/` | `ram0`, by name | Yes | The initial ramdisk ([`INITRD.md`](INITRD.md)): built by this build, gone at power-off. |
+| `/etc` | The volume labelled exactly `oxys-etc` | Yes | This system's own disk ([`PERSIST.md`](PERSIST.md)). Mounted before `/mnt`. |
+| `/mnt` | The first other volume found | Only if the GRUB entry permitting writes was chosen | A stranger's disk: a writable mount would mark it unclean merely by booting. |
+
+The root is named, not searched for, so that a machine with an EXT2 disk does not
+get it at the root by driver registration order. Without a ramdisk, the root
+falls back to `VfsMountRoot`, the first volume found, under the stranger's rule.
+
+## 5. Nodes
+
+A node is a file's identity in the kernel: every route to one file yields the same
+node. This is correctness, not economy. With copies, a write that grew the file
+through one would leave another holding the old size and block pointers, and its
+next write would restore them, truncating the file and orphaning the new blocks.
+The same identity keeps a directory's link count right: creating a subdirectory
+raises the parent's count through the parent's node, which every holder sees.
+
+**Nodes in use, not nodes recently used.** A node is released when its last
+reference goes. A retained node could describe a file since destroyed and its
+inode reissued, and nothing here would know. Opening a file twice therefore reads
+its inode twice, from the buffer cache. Every mount holds its root and the node
+it covers for its lifetime, which is why `VfsMountIsBusy` compares the root's
+references against one.
+
+## 6. Open files
+
+`VfsFile` is a node, a position and the open flags. The position belongs to the
+open file, so two descriptors on one file read independently. An open file
+counts its holders (`VfsHold` adds, `VfsClose` removes; the last releases it), so
+a descriptor survives `fork`, `execve` and `dup2` as one file with one position.
+
+- **An appending write goes to the end as it is at that moment**, not to the
+  position, so two appenders never overwrite each other.
+- **A directory's position is the filesystem's cookie.** The EXT2 binding packs
+  the block index into the high half and the offset into the low half; an index
+  too large to pack is refused, since a truncated one names another block and
+  repeats entries.
+- **A seek past the end is allowed** (a later write leaves a hole); before the
+  start is refused. The two directions are computed separately so that neither
+  wraps, and a negative offset is negated in the unsigned domain, because
+  `INT64_MIN` has no positive counterpart.
+
+## 7. Writing back
+
+On every writable mount except the root, the buffer cache is synchronised when a
+file opened for writing is closed and when `link`, `unlink`, `mkdir` or `rmdir`
+returns (`VfsMountIsDurable`). Otherwise an edit reported saved would be lost
+with an emulator's closed window. The root is memory, lasting no longer than the
+cache, so syncing it would be wasted. [`PERSIST.md`](PERSIST.md).
+
+## 8. Refusals
+
+`VfsError` holds each refusal as a code, for a program, and as words, for a
+diagnostic; both are set in one statement so they cannot disagree.
+
+- **Read-only is tested once**, in `VfsWritable`, against the node's mount. A
+  mount is read-only if it was asked to be or the filesystem judged the volume
+  unwritable.
+- **A file anything holds is not destroyed.** `VfsUnlink` and
+  `VfsRemoveDirectory` refuse a node with references beyond the resolution's own.
+  POSIX would keep the file alive until its last close, which needs the orphan
+  list this kernel lacks; and `Ext2Unlink` frees the inode and blocks at the last
+  name, so a reader would read blocks given to someone else. A mount point is
+  refused by the same test.
+- **A name and its file lie on one volume.** `VfsLink` refuses paths on different
+  mounts: an entry can only name an inode of its own volume.
+
+## 9. Pipes
+
+A pipe is an open file with no node: `VfsFile` holds a `pipe` or a `node`, never
+both. Everything a descriptor does (holder counts, `dup2`, release at a process's
+end) is built on the open file, so a pipe end that were not one would need all of
+it twice. `VfsRead`, `VfsWrite`, `VfsClose`, `VfsSeek`, `VfsTell`,
+`VfsReadDirectory` and `VfsFileAttributes` check which before touching the node,
+and the busy scan of an unmount skips files with no node.
+
+`VfsPipeCreate` finds both file slots before claiming either, so a table with one
+slot left refuses rather than making a read end with no write end. A pipe's
+buffer is one page, from a fixed array of `VFS_PIPE_CAPACITY` (8). Who sleeps and
+who wakes whom is in the header of
+[`../../kernel/fs/vfs/pipe.c`](../../kernel/fs/vfs/pipe.c). A write with no
+reader is refused as `VFS_ERROR_BROKEN_PIPE` (`EPIPE`) and sends `SIGPIPE`; a
+sleep ended by a signal is `VFS_ERROR_INTERRUPTED` (`EINTR`).
+
+## Verification
+
+`KernelVerifyVfs` and its companions in
+[`../../kernel/test/storage/vfs.c`](../../kernel/test/storage/vfs.c) use two
+volumes composed in the two memory devices. The second is a copy of the first
+with one field changed (the owner of `/file`), so an assertion can tell which
+volume a path reached.
+
+| Property asserted | The failure it would catch |
+| ----------------- | -------------------------- |
+| `/`, `/file`, `/sub`, `/sub/inner` resolve to their composed inodes and formats; sizes are as stated. | A lost component; a size joined wrongly. |
+| `//sub//inner` equals `/sub/inner`; `/sub/` resolves and `/file/` is refused. | Empty components; a trailing separator asserting nothing. |
+| `/.`, `/..`, `/sub/..`, `/sub/../file` resolve; the root's `..` is the root. | `.` and `..` interpreted instead of read. |
+| Links are followed last, mid-path, fast and slow, and not followed when the name is asked for. | `stat` and `lstat` conflated. |
+| Each refusal (absent, not a directory, relative, empty) names its own reason; an unused record neither resolves nor lists. | The right result by the wrong route; a deleted name read. |
+| A file read through a descriptor matches its offset-derived contents; the position advances by what moved; a read at the end moves nothing and succeeds. | Wrong block; drifting position; end reported as error. |
+| Seeks from all three origins land where sent; past the end is allowed, before the start refused. | A seek computed but not applied; a wrapped position. |
+| Two descriptors on one file keep two positions. | The position kept on the node. |
+| A directory is not read as a stream; a file is not opened as a directory; an open asking neither read nor write is refused; a double close is refused. | Records read as bytes; an open that can do nothing; a node released twice. |
+| The root lists exactly six entries and the subdirectory three, and what lists is what resolves. | A lost or repeated record; listing and lookup disagreeing. |
+| A file is created, written, closed, reopened and read back; an exclusive create of an existing file is refused. | A write to the wrong block; a create that opened what was there. |
+| An appending write goes to the end; truncation down and up (a hole, reading zeroes) and truncating open both work. | Appenders overwriting; data kept that was discarded. |
+| A second name raises the link count and removing one keeps the file; a directory cannot get a second name. | An unlink destroying a reachable file; a cycle. |
+| A new directory has two links and its parent gains one, returned at removal; a non-empty directory is not removed. | A parent freed while a child names it. |
+| An open file is not destroyed, and is once released. | Blocks freed under a reader. |
+| Before a root nothing resolves and no other mount is allowed; bad mounts are refused with their codes. | A tree without a root; two superblocks of one volume. |
+| A mount point shows the second volume after mounting; crossing paths reach it and others do not; the covered directory is unreachable. | A mount recorded but not applied, or merged. |
+| `..` from the mounted root leaves it, and returning crosses again. | The prefix-matching failure. |
+| A read-only mount refuses writes and creation; the root cannot be withdrawn while a mount or open file stands on it; the covered directory reappears intact. | A stranger's volume altered; descriptors to a vanished volume. |
+| After a writable mount, the state **read from the medium** has the clean bit clear, the error bit clear and the mount count raised; after unmount, clean again. | A mark that never reached the disk; a volume falsely marked faulty. |
+| Afterwards no node is held and no file open, and the re-read volume's descriptors verify. | A leak that exhausts a fixed table; accounting drift. |
+| A pipe is two files and one pipe, released at the last close; bytes cross in order; each end does one thing and cannot seek. | A leaked slot; skipped bytes; a write end read as a file. |
+| An empty pipe read by a caller that cannot sleep is refused as busy; a second holder keeps it open; a write with no reader is refused. | A wait for a writer that is the same flow; a child's close ending the parent's pipe; a writer told its bytes went somewhere. |
+
+The descriptor table is checked after the unmount, since a mounted volume is
+unclean and allowed to disagree with itself. A volume made by `mke2fs` is mounted
+as the root at every boot ([`INITRD.md`](INITRD.md)), and
+[`EXT2-VERIFICATION.md`](EXT2-VERIFICATION.md) covers writes judged by `e2fsck`.
+
+## Limitations
+
+1. Nothing is cached between uses; a file opened twice has its inode read twice.
+2. An open file cannot be unlinked (Section 8).
+3. No atomic rename; a move is a link and an unlink.
+4. The EXT2 binding's refusal codes are approximate where the format's code
+   distinguishes failures only in words. `VFS_ERROR_EXISTS` and
+   `VFS_ERROR_NOT_EMPTY` are exact, established before the operation; "no space"
+   is inferred from the free counts after a failure.
+5. Permissions are recorded and not enforced; there are no users.
+6. Times are not maintained ([`EXT2.md`](EXT2.md)).
+7. `VfsUnmount` matches the path as given: a volume mounted at `/sub` cannot be
    withdrawn by naming `/sub/`.
-10. **Nothing is mounted from a command line.** `VfsMountRoot` takes the first
-    device carrying a volume it can mount. A `root=` parameter and an initial
-    ramdisk to fall back upon both belong to Phase 7.
-11. **The tables are fixed**: four filesystem types, four mounts, sixty-four
-    nodes, thirty-two descriptors, and since 8.6 eight pipes of a page each. A
-    layer that drew its own structures from the
-    heap could exhaust it, and would do so at exactly the moment something needed
-    to write a diagnostic to a file. Only the filesystems' private descriptions —
-    a superblock, an inode — are allocated, and those are bounded by these
-    tables.
-12. **Nothing here is safe against concurrent access.** The mount table, the node
-    table and the open file table each require a lock, and a node's reference
-    count must be adjusted atomically. The spinlock they require was built by
-    sub-task 6.13 and has not been applied here. A processor started by sub-task
-    6.14 is parked and opens nothing, and 6.15 pinned every user thread to the
-    bootstrap processor; **the change that widens that affinity mask is what makes
-    these tables
-    contended**. The pipe of 8.6 is the first structure here that two user
-    threads reach in turn — never at once, a user thread being pre-empted at
-    privilege level 3 alone — and it joins the list
-    [`../design/CONCURRENCY.md`](../design/CONCURRENCY.md), Section 10,
-    limitation 1, keeps.
-13. **No bind mount, and none can be added without changing how a path is
-    walked.** The walker holds a node and not a node and the mount it was
-    reached through, so a directory made reachable by a second path would not
-    know, at `..`, which path it had come by. The persistent `/etc` of
-    2026-09-23 is a volume of its own for this reason,
-    [`PERSIST.md`](PERSIST.md), Section 2.
+8. Nothing is mounted from the command line; the placement of Section 4.2 is
+   fixed.
+9. Fixed tables: 4 filesystem types, 4 mounts, 64 nodes, 32 open files, 8 pipes.
+   A layer drawing on the heap could exhaust it just when a diagnostic needs
+   writing.
+10. No lock. The mount, node and file tables need one, and node references must
+    be atomic, before user threads leave the bootstrap processor
+    ([`../design/CONCURRENCY.md`](../design/CONCURRENCY.md)).

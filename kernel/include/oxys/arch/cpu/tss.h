@@ -47,7 +47,7 @@
  * eight, so a conforming layout would insert four bytes of padding between them
  * and every field thereafter would be read from the wrong offset. ISO C provides
  * no means of suppressing padding; refer to PROJECT_GUIDELINES.md, Section 8,
- * and to docs/project/CODING-STANDARDS.md, Section 7.
+ * and to docs/project/CODING-STANDARDS.md.
  *
  * The reserved fields are named and retained rather than elided, so that the
  * structure is comparable field by field against the figure it reproduces.
@@ -103,7 +103,7 @@ _Static_assert(sizeof(TaskStateSegment) == 104,
  * the stack was the thing that went wrong. A processor unable to push an
  * exception frame raises a triple fault, which is not an exception at all but a
  * shutdown, and the machine resets with nothing reported. This project has
- * already met one; the account is in docs/design/INTERRUPTS.md, Section 5.
+ * already met one; the account is in docs/design/INTERRUPTS.md.
  */
 #define TSS_IST_DOUBLE_FAULT 1U
 

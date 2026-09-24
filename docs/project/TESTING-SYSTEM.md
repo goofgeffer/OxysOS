@@ -47,7 +47,7 @@ the backspace that crosses into the row above, the agreement between the driver'
 cursor position and the one read back out of the CRT controller, the refusal of a
 position outside the display and of an impossible cursor shape, the hiding and
 restoration of the hardware cursor, and a scroll that moves the display by
-exactly one row. The table in `docs/devices/DISPLAY.md`, Section 8.1, pairs each property
+exactly one row. The table in `docs/devices/DISPLAY.md` pairs each property
 with the failure it would catch.
 
 The scroll assertion reads the frame buffer back through `VgaCharacterAt` and
@@ -139,7 +139,7 @@ device answers the ATA driver there, and the disk self-test reports as much and
 asserts nothing. That is the correct outcome upon that machine and is not a
 failure. The driver now says which of the two causes it is, rather than leaving
 "no device answered" to stand for both: see Section 4.2, and
-[`../storage/DISK.md`](../storage/DISK.md), Sections 2.2 and 2.3.
+[`../storage/DISK.md`](../storage/DISK.md).
 
 The disk is exercised upon the i440fx board, which presents the PIIX3 IDE
 controller at `0:1.1` in compatibility mode. The image is created sparse and
@@ -149,7 +149,7 @@ all; it occupies a few kilobytes upon the host.
 
 ```sh
 qemu-img create -f raw disk.img 256G
-# seed sector 0, sector 1, and sector 0x10000001 with distinguishable text
+# Seed sector 0, sector 1, and sector 0x10000001 with distinguishable text
 
 qemu-system-x86_64 -machine pc -cpu qemu64 -smp cores=2 -m 512M \
     -cdrom build/oxys.iso \
@@ -175,7 +175,7 @@ the self-test reads the final sector, writes a pattern, reads it back, compares
 it byte for byte, and restores the sector from what it first read, verifying the
 restoration in its turn. Anybody may boot this kernel upon their own machine, and
 a self-test that wrote to their disk unbidden would destroy their data; see
-`docs/storage/DISK.md`, Section 6.
+`docs/storage/DISK.md`.
 
 The entry is selected at the menu. For an unattended run, an ISO may be generated
 with `set default=2` in place of `set default=0`:
@@ -198,12 +198,12 @@ this project, and both were reported as faults from a machine that is not:
 Both are pure functions of a PCI configuration header — `AtaChannelAddressesFor`
 and `AtaClassifyForeignStorage` — and the self-test composes headers no machine
 here has and asserts what would be decided about them. The properties are
-tabulated in [`../storage/DISK.md`](../storage/DISK.md), Sections 7.2 and 7.3.
+tabulated in [`../storage/DISK.md`](../storage/DISK.md).
 This is the only alternative to writing the arithmetic and hoping, and hoping is
 what produced both faults.
 
 The second was then observed upon a board composed to have the shape of the
-machine that reported it — the HP Laptop 14-dq0052dx of [`TESTING.md`](TESTING.md), Section 5.1: no disk of
+machine that reported it — the HP Laptop 14-dq0052dx of [`TESTING.md`](TESTING.md): no disk of
 any kind, its system upon a 64 GB eMMC part, booted from a USB drive.
 
 ```sh
@@ -219,24 +219,11 @@ mass-storage class empty; the kernel is then booted from the USB drive, as it wa
 upon the machine in question. Note that the ISO cannot be attached with `-cdrom`
 once the SATA controller is gone, that option needing an IDE bus to hang it upon.
 
-### 4.3 The negative tests
-
-Each was applied to the ATA driver (now `drivers/ata/`), confirmed by `make verify`, and
-reverted.
-
-| The damage | What the run reported |
-| ---------- | --------------------- |
-| The class check dropped from the SD host controller's classification, leaving the subclass read alone. | `An SMBus controller was taken for storage.` Subclass `0x05` under the serial-bus class is SMBus, and the report would have offered it as a place the machine's disks might be. |
-| An SD host controller classified as nothing. | `An SD host controller was not recognised as storage.` This is the fault as it was reported: a laptop told it has no disk. |
-| A mass-storage controller counted as storage outside its own class. | `An IDE controller was reported as beyond this driver's class.` and `An AHCI controller was counted outside its own class.` — two assertions, because the count decides which of the two closing paragraphs is printed, and a machine with no mass-storage controller would have been told to change a firmware setting it does not have. |
-
-
 ### 4.4 Verification of the AHCI disk
 
 `KernelVerifyAhci` asserts three decisions that need no hardware and then the
 transfers themselves where a disk answered. The properties are tabulated against
-the failure each would catch in [`../storage/AHCI.md`](../storage/AHCI.md),
-Sections 8.1 and 8.2.
+the failure each would catch in [`../storage/AHCI.md`](../storage/AHCI.md).
 
 `make verify` exercises more of this driver than the machine appears to offer.
 The q35 board's own AHCI controller answers, and the boot ISO is a packet device
@@ -267,32 +254,12 @@ the same image from the host. The self-test cannot know what a medium holds, so
 this is the corroboration from outside that the driver read the sectors it was
 asked for and not some others.
 
-### 4.5 The negative tests of the AHCI driver
-
-Each was applied to `drivers/ahci/ahci.c`, confirmed, and reverted.
-
-| The damage | What the run reported |
-| ---------- | --------------------- |
-| The port's power state dropped, so that the detection is read alone. | `A port whose interface is not active was called usable.` A port whose device is present but whose interface is asleep would then be issued a command, and the driver's whole patience spent waiting for it. |
-| The signature compared upon its low half alone. | `A signature was not recognised as what it names.` All four signatures end in `0101h`, so a packet device would be driven as a disk. |
-| The write bit of the command header moved from bit 6 to bit 5. | `The write bit is not at bit 6 of the command header.` A command whose direction is wrong reads the disk into the buffer the caller meant to write from, and reports success. |
-| A region descriptor's byte count halved — a byte count mistaken for a word count. | `A sector read twice differs, so less than a whole sector was transferred.` **This one first passed**, and the assertion was strengthened before it caught anything; see below. |
-| A region descriptor's byte count written without its **less one**. | Nothing. Recorded as a gap in [`../storage/AHCI.md`](../storage/AHCI.md), Section 8.3: the descriptor is a capacity and the command's sector count is the length, so no adaptor available here ever reaches the extra byte. |
-
-**The fourth is worth recording for what it revealed about the test rather than
-the driver.** The first form of the transfer assertion read the same sector twice
-and compared the two buffers, which both already held the previous read — so a
-transfer that was consistently the wrong length left both holding the same wrong
-thing and the comparison passed. The buffers are now seeded with different bytes
-before the reads. Wherever the device did not write, the two still differ, and
-the halved descriptor is caught at the first byte the device did not reach.
-
 ### 4.6 Verification of the SD card and the embedded MultiMediaCard
 
 `KernelVerifySdhci` asserts the capacity and command arithmetic, which need no
 hardware, and then the transfers where a card answered. The properties are
 tabulated against the failure each would catch in
-[`../storage/SDCARD.md`](../storage/SDCARD.md), Sections 7.1 and 7.2.
+[`../storage/SDCARD.md`](../storage/SDCARD.md).
 
 ```sh
 mke2fs -q -t ext2 -b 1024 -L oxys-sd -d seed -F sd.img 16384
@@ -328,15 +295,6 @@ second machine. The half that needs no hardware runs upon both. That is a
 limitation of the available hardware and is recorded as one rather than left for
 a reader to infer from its absence.
 
-### 4.7 The negative tests of the SD driver
-
-Each was applied to `drivers/sdhci/sdhci.c`, confirmed, and reverted.
-
-| The damage | What the run reported |
-| ---------- | --------------------- |
-| The capacity computed by the version 2 encoding whatever the structure field said. | `A version 1 capacity was computed wrongly.` The two encodings disagree upon the same bits, which is what makes the field load-bearing rather than decorative. |
-| The version 2 `C_SIZE` shifted by 16 rather than 8 — the offset of the stripped CRC applied twice. | `A version 2 capacity was computed wrongly.` and `The greatest version 2 capacity overflowed or was truncated.` |
-| A response of 136 bits composed with the index check enabled. | `A long response was composed with the index checked.` **The card still came up under QEMU**, which does not enforce the check; real silicon does, and every CMD2 and CMD9 would fail upon it. This is precisely why the composition is asserted directly rather than inferred from a card appearing. |
 ## 5. Verification of the EXT2 superblock
 
 The parser is asserted at every boot against a volume composed within the
@@ -376,15 +334,15 @@ for want of the magic number.
 The layer is asserted at every boot against two volumes composed within two
 memory-backed block devices, which is what makes it verifiable upon a machine
 with no disk. The properties asserted, and the silent failure each would catch,
-are tabulated in [`../storage/VFS.md`](../storage/VFS.md), Section 10.
+are tabulated in [`../storage/VFS.md`](../storage/VFS.md).
 
 The corroboration must come from a volume built by something else, and it is
 performed with four images and two boots of each.
 
 ```sh
 # A volume with a directory, a file within it, a symbolic link, and a regular
-# file for the write probe to act upon. The probe never creates one, so an image
-# without it is left untouched.
+# File for the write probe to act upon. The probe never creates one, so an image
+# Without it is left untouched.
 mkdir -p seed/sub
 printf 'corroboration' > seed/hello.txt
 printf 'placeholder'   > seed/oxys-write-test
@@ -450,14 +408,14 @@ fill would not be.
 outside the kernel can see: the operation reported success and the volume read
 back correctly, and `e2fsck` nevertheless reported every inode the kernel had
 freed as the member of a corrupted orphan list. It is recorded in
-[`../storage/VFS.md`](../storage/VFS.md), Section 11.1.
+[`../storage/VFS.md`](../storage/VFS.md).
 
 ## 7. Verification of the privilege apparatus
 
 The descriptors, the task state segment, the interrupt stack table and the three
 system-call registers of sub-task 6.1 are asserted at every boot by
 `KernelVerifyPrivilege`. Each assertion, and the silent failure it catches, is
-tabulated in [`../design/PRIVILEGE.md`](../design/PRIVILEGE.md), Section 7.
+tabulated in [`../design/PRIVILEGE.md`](../design/PRIVILEGE.md).
 
 Two of the five parts do more than inspect a structure, and they are the two
 worth describing here, because inspecting a structure the processor reads
@@ -481,11 +439,6 @@ values existing nowhere else. It is executed twice, once with the interrupt flag
 clear and once with it set, because the assertion that `IA32_FMASK` cleared the
 flag says nothing whatever if the flag was already clear.
 
-### 7.1 The negative test
-
-A self-test is worth nothing until it has been seen to fail. To repeat it:
-
-```sh
 # Remove the interrupt flag from the mask the kernel writes into IA32_FMASK.
 sed -i 's/RFLAGS_TRAP | RFLAGS_INTERRUPT_ENABLE |/RFLAGS_TRAP |/'     kernel/include/oxys/arch/syscall/syscall.h
 make verify
@@ -548,8 +501,8 @@ Five routines, in the order `KernelMain` runs them.
 | `KernelVerifyIoApic` | After `IoApicInitialise` | Every unit reporting between 1 and 240 inputs, and every input above the request lines masked. |
 | `KernelVerifyApicRouting` | After `IrqAdoptApic` | The 8259A fully masked and reporting itself retired; every claimed line's redirection entry carrying the vector that line has always had, naming this processor, and masked exactly as its driver asked; and **the interval timer still ticking**. |
 
-The tables in [`../devices/ACPI.md`](../devices/ACPI.md), Section 7, and
-[`../devices/APIC.md`](../devices/APIC.md), Section 8, pair each assertion with
+The tables in [`../devices/ACPI.md`](../devices/ACPI.md) and
+[`../devices/APIC.md`](../devices/APIC.md) pair each assertion with
 the silent failure it exists to catch.
 
 ### 8.3 What the log should say
@@ -593,31 +546,6 @@ than passed over.
 whole change in one line: the same driver, upon the same line, at the same
 vector, carried by a different controller through a different pin.
 
-### 8.4 The negative tests
-
-Each was performed by editing the source, rebuilding, executing under QEMU,
-reading the log, and reverting. What is recorded is what the log said.
-
-| The edit | What was observed |
-| -------- | ----------------- |
-| **None.** The ownership rule of `IrqLineOwnsItsInput` did not exist when the sub-task was first run | `A claimed line is routed to the wrong vector.`, and the report showed `Line 0 (vector 32): interval timer, global interrupt 2, masked` — line 2 having overwritten line 0's entry. The machine booted to its banner, echoed keystrokes and carried its serial log throughout, with the timer dead. **This is not a contrived negative test but the defect the self-test caught on its first run**; it is recorded in [`../design/INTERRUPTS.md`](../design/INTERRUPTS.md), Section 10.7. |
-| Omit `PicDisable` from the adoption | `The 8259A pair is not fully masked.` and `APIC routing self-test FAILED.` |
-| Give the redirection entries a vector below 16 | `Interrupt requests: no I/O APIC input carries line 0, which a driver has claimed.`, then `A claimed line is routed to the wrong vector.` four times. `IoApicRouteGlobalInterrupt` refuses the vector rather than programming it, so no entry is written at all and the four claimed lines keep the masked entries the initialisation left. The refusal is what makes this loud: without it the Local APIC would record an illegal vector in a register nothing reads. |
-| Skip the write to the task priority register | Nothing. `make verify` passed unchanged, QEMU's firmware leaving the register clear. The assertion exists for a firmware that does not, and cannot be provoked upon one that behaves — which is recorded rather than glossed, an assertion that cannot fail here being an assertion this environment does not test. |
-| Leave the spurious vector's software enable clear | `The software enable of the spurious vector register is clear.` and `Local APIC self-test FAILED.`, then `The interval timer stopped when the I/O APIC took over its request line.` Every device goes silent at once. |
-| Name a destination other than this processor's local APIC identifier | `A claimed line is directed at another processor.` four times, then `The interval timer stopped when the I/O APIC took over its request line.` This was recorded as what sub-task 6.14's characteristic failure would look like; 6.14 has since arrived without producing it, every redirection entry still naming the bootstrap processor. |
-| Ignore the boot loader's ACPI tag, forcing the low-memory search | `ACPI: pointer at 0xF52C0, revision 0, from the BIOS read-only memory.` — a different address, by a different route, naming the same `RSDT at 0x1FFE2369` and the same five tables, and every self-test passed. This is a **positive** negative test: it is the only thing that exercises the search of ACPI 6.5, Section 5.2.5.1, at all, GRUB always supplying the tag. |
-| Write the redirection entry low half first | **Not attempted.** The window is a few instructions wide and the interrupt flag is clear throughout the adoption, so there is nothing to observe. The order is prevented by construction and recorded in [`../devices/APIC.md`](../devices/APIC.md), Section 4.3, rather than asserted. |
-
-**One of these changed the kernel.** Naming the wrong destination made the run
-outlast this target's twenty-five second timeout, so the failure was reported as
-a kernel that never reached its banner rather than as a timer that had stopped —
-`PitWaitTicks` is bounded by iterations *per tick awaited*, and a dead timer
-makes it spin for a multiple of a bound chosen to be generous. The routing
-self-test now waits by a fixed spin instead, which costs the same whether the
-timer runs or not. The negative test was then repeated and produced the message
-recorded above.
-
 ### 8.5 What is not tested, and cannot presently be
 
 Several paths are written and have never been taken by any run, because no
@@ -634,7 +562,7 @@ machine this kernel has been booted upon presents the conditions:
   overrides — ISA 5, 9, 10 and 11 — but no driver in this kernel claims any of
   those lines, so the flags are read and recorded and never programmed.
 
-These are recorded rather than glossed. [`STATUS.md`](STATUS.md), Section 3,
+These are recorded rather than glossed. [`STATUS.md`](STATUS.md)
 carries the same list against the environments column, which is where a reader
 looking for what has actually been run will look.
 
@@ -736,7 +664,7 @@ establish the delivery and the end-of-interrupt, without publishing a request.
 ## 10. Verification of the application processors
 
 **Corresponding sub-task**: 6.14. **Design**:
-[`../design/SMP.md`](../design/SMP.md), Section 8.
+[`../design/SMP.md`](../design/SMP.md).
 
 ### 10.1 The difficulty this section exists for
 
@@ -786,21 +714,6 @@ that no processor is reported started that is not online, and that the online
 count is one. A test that reported nothing there would be a test that passed upon
 a machine where the bring-up silently did nothing.
 
-### 10.4 The negative tests
-
-| Change | What the run said |
-| ------ | ----------------- |
-| **None.** `SmpMapTrampolinePage` had its call to `PagingMapKernelPage` disabled when the sub-task was first run | `#PF` at `CR2 0x8000`, error code `0x2` — page not present, write, supervisor mode — raised inside the copy of `SmpPlaceTrampoline`, and `KERNEL PANIC: An unresolved page fault was raised within the kernel.` with no banner. **This is not a contrived negative test but the defect the first run met**; the symptom names the cause exactly, the identity mapping being the one thing this kernel otherwise does not have and the one thing the bring-up requires. |
-| **None.** `IA32_PAT` was not written upon the started processor when the sub-task was first run | **Nothing.** Every self-test passed, the banner appeared, and the display looked correct. The started processor was writing the framebuffer through a mapping carrying the page-attribute-table flag while its own entry 4 still held write-back — one physical page under two memory types, which Intel SDM, Volume 3A, Section 11.12.4, declines to define. It was found by reading [`../design/FRAMEBUFFER.md`](../design/FRAMEBUFFER.md), limitation 2, against the new entry path, and by no run. It is recorded here because it is the shape of defect this whole section exists for: correct-looking output from a machine in an undefined state. |
-| Park the started processor with `cli; hlt` rather than `sti; hlt` | The log stops dead after `Processor 1 is online, local controller identifier 1.` — no banner, no panic, nothing further within the 25-second bound `make verify` allows. The cause is `SmpUnmapTrampolinePage`: its shootdown is never acknowledged by a processor that cannot take an interrupt, and `ShootdownBroadcast` spins out `SHOOTDOWN_WAIT_LIMIT`, which is 100,000,000 iterations and outlasts the timeout. **The eventual panic is correct and arrives far too late to be the diagnostic**, which is worth knowing: the observable symptom of an unresponsive processor here is a hang, not a report. |
-| Skip the wait for a started processor to come online | **Nothing. `make verify` passed unchanged.** This is recorded because the prediction was wrong and the reason is the environment: QEMU declares two processors, so there is exactly one application processor, so the loop never starts a second and the prepared index can never collide with a claimed one. The panic in `SmpApplicationProcessorEntry` — `A starting processor claimed an area other than the one prepared for it.` — is therefore **unreachable upon every machine this project has tested against**. It is retained because the serialisation of [`../design/SMP.md`](../design/SMP.md), Section 7, is what makes the two indices agree, and a check that fires loudly when that stops holding is worth more than one that was proven to fire here. |
-| Give a started processor no task state segment | **Nothing, at the time.** It came online, answered a shootdown, and passed every assertion that then existed — and would have taken a triple fault upon its first double fault. That negative test, recorded in the header of [`../../kernel/arch/x86_64/smp/smp.c`](../../kernel/arch/x86_64/smp/smp.c), is why the register comparisons of Section 10.2 exist at all. |
-
-**Two of the five say "nothing", and that is the finding.** This sub-task's
-characteristic failure is not a crash. It is a machine that boots, prints correct
-figures about itself, and is wrong in a way no output distinguishes — which is
-why Section 10.2 asserts registers read by the processor being asked about,
-rather than counts written by the kernel doing the asking.
 ### 10.5 Reading the log
 
 ```
@@ -823,14 +736,14 @@ every stray low pointer in the kernel silently working.
 the removal of that mapping, and the address confirms it.
 
 `Processor 1: acquisitions 1` in the per-processor report is the design of
-[`../design/SMP.md`](../design/SMP.md), Section 6, visible in the accounting. The
+[`../design/SMP.md`](../design/SMP.md) visible in the accounting. The
 one lock a parked processor ever takes is the diagnostic channel, once, to
 announce that it arrived.
 
 ## 11. Verification of the scheduler
 
 **Corresponding sub-task**: 6.15. **Design**:
-[`../design/SCHEDULER.md`](../design/SCHEDULER.md), Section 7.
+[`../design/SCHEDULER.md`](../design/SCHEDULER.md).
 
 ### 11.1 The difficulty this section exists for
 
@@ -846,7 +759,7 @@ assertion is made against what they recorded.
 
 ### 11.2 What `make verify` asserts
 
-See [`../design/SCHEDULER.md`](../design/SCHEDULER.md), Section 7, for the table
+See [`../design/SCHEDULER.md`](../design/SCHEDULER.md) for the table
 pairing each assertion with the failure it catches. In outline: a mask naming no
 online processor is refused; the timer entry is unmasked, read back from the
 entry; every fixture thread completed all its rounds, upon a processor it named
@@ -868,7 +781,7 @@ worth less than a report.
 | The rotation was asserted as "slices at least rounds" | `a thread completed more rounds than it was given the processor. FAILED.` — four times, and the assertion was the thing that was wrong. A thread that yields into an *empty* queue is not switched away, so it carries on and completes many rounds upon one slice. |
 
 Three of those five produced a passing or absent verdict. That is the argument
-for [`../design/SCHEDULER.md`](../design/SCHEDULER.md), Section 7, existing at
+for [`../design/SCHEDULER.md`](../design/SCHEDULER.md) existing at
 all: an assertion is only as good as the state it can actually reach.
 
 **A sixth was recorded at sub-task 7.3 and closed at 7.7, and it is the opposite
@@ -893,7 +806,7 @@ was put upon, always, that field being written once and not cleared; and whether
 it is still upon that queue, only where the queue is the *bootstrap* processor's,
 the admission and the read being made with this processor's interrupts masked and
 no other processor being able to take from this one's queue.
-[`../design/SCHEDULER.md`](../design/SCHEDULER.md), Section 7.3.
+[`../design/SCHEDULER.md`](../design/SCHEDULER.md).
 
 ### 11.4 Reading the log
 
@@ -926,7 +839,7 @@ gives.
 ## 12. Verification of the C library's string and memory functions
 
 **Corresponding sub-task**: 7.1. **Design**:
-[`../design/LIBC.md`](../design/LIBC.md), Section 5.
+[`../design/LIBC.md`](../design/LIBC.md).
 
 ### 12.1 The difficulty this section exists for
 
@@ -955,7 +868,7 @@ needle. Each is where the standard says something a natural loop does not do.
 
 `KernelVerifyString`, in
 [`../../kernel/test/libc/string.c`](../../kernel/test/libc/string.c). See
-[`../design/LIBC.md`](../design/LIBC.md), Section 5, for the table pairing each
+[`../design/LIBC.md`](../design/LIBC.md) for the table pairing each
 assertion with the failure it catches. In outline: the three comparing functions
 and both searching ones are asserted upon `0x80` and `0xFF` rather than upon
 letters; every destination is a region inside a buffer filled with the sentinel
@@ -969,28 +882,6 @@ The sentinel is neither `0x00` nor `0xFF` because both are values these function
 legitimately write — a terminator and a `memset` fill. A sentinel a correct
 function may produce is not a sentinel.
 
-### 12.3 The negative tests, and the one that found something
-
-Five defects were inserted and removed. Four behaved as intended and are
-tabulated in [`../design/LIBC.md`](../design/LIBC.md), Section 5.1: `memcmp`
-comparing through plain `char`, `memcpy` bounded by `<=`, `strncpy` made to
-terminate, `memmove` copying forwards in both directions, and `strrchr` keeping
-the first match.
-
-**The fifth found a gap, and it was in the test.** The guard at the head of
-`strstr` — which returns the haystack when the needle is empty — was deleted, and
-every assertion still passed. The search loop already produces the right answer
-for an empty needle against a haystack that is not empty; the guard is
-load-bearing in exactly one case, an empty needle in an *empty* haystack, and the
-self-test had asserted the empty needle only against a subject that was not
-empty. So the test asserted a property that could not fail, beside a comment
-describing a job the code was not doing. The assertion now covers the empty
-haystack and the comment was corrected in the same change.
-
-This is the ordinary yield of the discipline and is recorded because the defect
-it found was in the test, which is the class of defect a passing run cannot
-report.
-
 ### 12.4 What this verification cannot establish
 
 **Nothing here has ever run in a program.** The four translation units are
@@ -1003,7 +894,7 @@ compiled with the flags a user program requires rather than the kernel's —
 `-mcmodel=kernel` puts every symbol in the topmost two gibibytes of the address
 space, and a program does not live there — and executed at privilege level 3.
 Sub-task 7.5 is where that first happens, and it is a genuine second verification
-rather than a formality. [`../design/LIBC.md`](../design/LIBC.md), Section 7.
+rather than a formality. [`../design/LIBC.md`](../design/LIBC.md).
 
 ### 12.5 Reading the log
 
@@ -1024,7 +915,7 @@ which of the nineteen, and in which of the three ways of Section 12.1.
 ## 13. Verification of the C library's system-call wrappers
 
 **Corresponding sub-task**: 7.2. **Design**:
-[`../design/LIBC.md`](../design/LIBC.md), Section 8. **Implementation of the
+[`../design/LIBC.md`](../design/LIBC.md). **Implementation of the
 test**: [`../../kernel/test/libc/wrappers.c`](../../kernel/test/libc/wrappers.c).
 
 ### 13.1 The difficulty this section exists for
@@ -1035,7 +926,7 @@ to privilege level 3 unconditionally — so a kernel that called `OxysWrite` wou
 enter its own entry path and leave it as a user program, upon a stack and in an
 address space that are not a user program's. Nothing survives that. Since
 sub-task 6.7 the only executor of `SYSCALL` in this system is a program, and
-[`../design/PRIVILEGE.md`](../design/PRIVILEGE.md), Section 9.4, records the same
+[`../design/PRIVILEGE.md`](../design/PRIVILEGE.md) records the same
 fact from the kernel's side.
 
 Every earlier section of this document asserts something the kernel may call.
@@ -1057,7 +948,7 @@ copies them out of the kernel image, into a program composed for the purpose, an
 runs them at privilege level 3 — so what is asserted is the code this library
 ships and not a reconstruction of it. That property is the reason the invocation
 is a translation unit of assembly rather than inline assembly inside the C
-wrappers; [`../design/LIBC.md`](../design/LIBC.md), Section 8.1.
+wrappers; [`../design/LIBC.md`](../design/LIBC.md).
 
 ### 13.2 What `make verify` asserts
 
@@ -1095,33 +986,6 @@ between two observations. Multiplying the first by a scale no boot reaches keeps
 the uncertainty in the second from absorbing an error in the first — added
 together they would be one number with a tolerance, and an off-by-one in the sum
 would hide inside it.
-
-### 13.3 The negative tests, and the two that found something
-
-Seven defects were inserted and removed. The table is in
-[`../design/LIBC.md`](../design/LIBC.md), Section 8.7, with what each run said.
-Five behaved as intended, including a failure result renumbered in the kernel's
-interface header, which fails at compile time rather than at boot:
-`static assertion failed: "EBADF does not name SYSCALL_EBADF."`
-
-**Two did not, and both were defects in the one file the test was written for.**
-The three-argument invocation was made to drop `mov rdx, rcx` — losing the third
-argument of every three-argument call — and **every assertion passed**. The lost
-argument was a *length*, and the kernel bounds a length rather than refusing an
-implausible one: 0x402000 became 4096, the range was readable because a program's
-data page is a whole page, and the write emitted the same string it would have
-emitted anyway. The only trace was a newline missing from the log, and nothing
-was asserting the log. The two-argument invocation passed for the same reason: a
-capacity larger than the string is not a capacity the result depends upon.
-
-The assertion is now the sum of *every* result, and step 5 above exists solely so
-that one capacity is smaller than the string it is given. Both defects now fail
-it.
-
-This is the second time in this phase that the negative-test discipline has
-found the defect in the test rather than in the code — Section 12.3 is the first
-— and the two are worth reading together. A passing run cannot report a test that
-does not test.
 
 ### 13.4 What this verification cannot establish
 
@@ -1235,22 +1099,6 @@ and no page left mapped by either.
 pass against a `brk` that reported an address without mapping anything, or that
 shrank a number and left the mapping. Those two are the ones that fail.
 
-### 14.3 The negative tests
-
-Fourteen defects were inserted and removed;
-[`../design/LIBC.md`](../design/LIBC.md), Section 9.7, holds the table of what
-each run said. Twelve were caught. **Two were not**, and both are recorded rather
-than explained away:
-
-- **The undo of a failed growth** was removed and nothing reported it. No test
-  here can exhaust the frame allocator, which is the only thing that makes a
-  growth fail part way; asserting it needs a way to make `FrameAllocate` fail on
-  demand, which this kernel has not got. Section 14.4.
-- **A redundant size check in `OxysHeapAdopt`** was removed and nothing reported
-  it — correctly, because a second check made later rejects strictly more. The
-  code was deleted rather than kept, which is the outcome a negative test is
-  supposed to be able to produce and rarely does.
-
 ### 14.4 What this verification cannot establish
 
 - **The two halves joined.** `OxysBrk`, `OxysSbrk` and `OxysHeapExtend` are
@@ -1351,7 +1199,7 @@ composed here and read here proves the reader consistent with the composer, whic
 [`../../kernel/test/volume.h`](../../kernel/test/volume.h) has warned about its
 own fixture since Phase 5.
 
-[`../storage/EXT2-VERIFICATION.md`](../storage/EXT2-VERIFICATION.md), Section 6,
+[`../storage/EXT2-VERIFICATION.md`](../storage/EXT2-VERIFICATION.md)
 made the comparison against e2fsprogs by hand, upon images somebody had to
 remember to build. Since sub-task 7.7 the volume this kernel mounts as its root
 *is* such an image, so Phase 5's superblock, group descriptor, inode, directory
@@ -1405,7 +1253,7 @@ not upon the ramdisk, and the withdrawal leaves the operator's volume clean.
 - **What `echo` printed.** Nothing in this kernel captures the diagnostic path,
   so the line the program writes is evidence for a person reading the serial log
   and not for a machine. It is the limitation
-  [`../design/LIBC.md`](../design/LIBC.md), Section 12.7, records of the whole of
+  [`../design/LIBC.md`](../design/LIBC.md) records of the whole of
   sub-task 7.6.
 - **That the ramdisk survives being written a great deal.** The write made here
   is one small file, created and removed. A ramdisk exhausted by an hour of a

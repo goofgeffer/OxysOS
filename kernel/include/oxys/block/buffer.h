@@ -73,7 +73,7 @@ void BufferRelease(Buffer *buffer);
 /*
  * Records that the buffer's contents differ from the device's. The block is
  * written back when the buffer is evicted, flushed or synchronised, and not
- * before; see docs/storage/BUFFER.md, Section 4.
+ * before; see docs/storage/BUFFER.md.
  */
 void BufferMarkDirty(Buffer *buffer);
 

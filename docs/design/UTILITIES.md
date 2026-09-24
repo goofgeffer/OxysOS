@@ -1,160 +1,103 @@
 <!-- SPDX-FileCopyrightText: 2026 The Oxys-OS Authors -->
 <!-- SPDX-License-Identifier: CC0-1.0 -->
-# The Utilities of the Desktop: a File Manager, a Text Viewer, and a Clock
+# The Desktop Utilities: File Manager, Text Viewer, Clock
 
-**Phase**: 9, sub-task 9.7, of [`../project/PLAN.md`](../project/PLAN.md) — the
-sub-task at which `Oxys 1 Beta` is fixed, [`../project/VERSIONING.md`](../project/VERSIONING.md),
-Section 11.1.
-
-Section 1 is what this sub-task is; Section 2 the file manager; Section 3 the
-text viewer; Section 4 the clock upon the panel and `/bin/date`; Section 5 the
-verification; Section 6 the limitations.
-
-**Authority**: `PROJECT_GUIDELINES.md`, Sections 2, 3 and 6.
-
-**Implementation**: [`../../userland/files/main.c`](../../userland/files/main.c),
-[`../../userland/view/main.c`](../../userland/view/main.c) and
+**Phase**: sub-task 9.7 of [`../project/PLAN.md`](../project/PLAN.md), at which
+`Oxys 1 Beta` is fixed.
+**Source**: [`../../userland/files/main.c`](../../userland/files/main.c),
+[`../../userland/view/main.c`](../../userland/view/main.c),
 [`../../userland/date/main.c`](../../userland/date/main.c); the clock in
-[`../../userland/session/main.c`](../../userland/session/main.c). Beneath them,
-the real-time clock and the `time` and `alarm` calls of
-[`../devices/TIME.md`](../devices/TIME.md), Section 10, and `<time.h>` of
-[`../../libc/include/time.h`](../../libc/include/time.h).
+[`../../userland/session/main.c`](../../userland/session/main.c).
+**Specifications**: ISO/IEC 9899:2011, Section 7.27 (`<time.h>`); IEEE Std
+1003.1-2017, `alarm()`, `date`, `fork()`. The appearance is judged against
+[`../project/INSPIRATIONS.md`](../project/INSPIRATIONS.md).
 
-**Specifications**: ISO/IEC 9899:2011, Section 7.27, for `<time.h>`; IEEE Std
-1003.1-2017, `alarm()`, `date` and `fork()`; the Motorola MC146818A data sheet
-beneath the clock, cited in [`../devices/TIME.md`](../devices/TIME.md). No
-specification governs a file manager or a viewer; the appearance is judged
-against [`../project/INSPIRATIONS.md`](../project/INSPIRATIONS.md), Section 3.
+The three programs without which the desktop is not usable: a file manager, a
+text viewer and a clock. Each is an ordinary program at privilege level 3 upon
+the client protocol of [`WINDOWS.md`](WINDOWS.md). The date and the alarm
+beneath the clock are [`../devices/TIME.md`](../devices/TIME.md).
 
-## 1. What this sub-task is
+## 1. The file manager, `/bin/files`
 
-[`../project/VERSIONING.md`](../project/VERSIONING.md) fixes `Oxys 1 Beta` at
-the point the desktop has "the utilities the desktop is not usable without",
-and [`../project/PLAN.md`](../project/PLAN.md) names them: a file manager, a text
-viewer and a clock. Before this a person at the desktop could open a terminal
-and nothing else of use; they could not see what files the machine held without
-typing `ls`, read one without `cat` scrolling it past, or tell the time at all —
-the kernel did not know it.
+A window listing one directory, starting at `/`: the path on the top row, the
+entries below, a status row at the foot. The launcher's `Files` entry starts it.
 
-The three are ordinary programs at privilege level 3 upon the client protocol,
-as the terminal is. Two things beneath them are new: **the date**, read from
-the real-time clock, and **the alarm**, by which a program asleep is woken at a
-time rather than by an event. [`../devices/TIME.md`](../devices/TIME.md),
-Section 10, holds both.
+| Rule | Reason |
+| ---- | ------ |
+| Directories first, then by name as bytes. | The order `ls` gives, so that knowing one is knowing the other. |
+| A directory is marked with a slash, as `ls -F` marks it; nothing else is marked. | The system has no picture per file type. |
+| `.` is omitted; `..` is shown except at the root. | `.` is this directory; `..` at the root is the root again. |
+| A press selects; a press on the selected row opens. | A double press without a clock to time one. A press on an unselected row only selects, so the two are never confused. |
+| Arrows, Page Up/Down, Home and End move the selection; Enter opens; Backspace goes up. | Every action is reachable without the pointer. |
+| A directory opens in this window; a file opens in `/bin/view`, a child collected when it ends. | Two files can be read side by side. |
+| A device or a pipe is reported unopenable on the status row. | A viewer handed one would read it forever. |
+| It moves, copies and deletes nothing. | `mv`, `cp` and `rm` do, and are asserted doing it; a second implementation would have none of their tests. |
+| A directory is listed to 256 entries, and the status says so beyond that. | The list is a fixed array. |
+| A path longer than `SYSCALL_PATH_MAXIMUM` is refused, not cut. | A path silently shortened names another file. |
 
-## 2. The file manager, `/bin/files`
+## 2. The text viewer, `/bin/view`
 
-The launcher's `Files` entry. A window listing one directory, beginning at `/`:
-the path upon the top row, the entries below it, a status upon the foot.
+`view FILE` shows the file's text in a window titled with its name, with a
+status row saying which rows of how many are shown. It is started by the file
+manager or at the shell. It views; `micro` edits.
 
-**Directories first, then by name as bytes** — the order `ls` gives within each,
-so that a person who knows one knows the other. A directory is marked with the
-slash `ls -F` would give it and nothing else is marked, a picture per type being
-a picture this system does not have. `.` is left out, being this directory;
-`..` is kept everywhere but at the root, where it would be the root again.
+- **Characters.** Printable ASCII as itself; a tab to the next multiple of eight
+  columns; a line feed ends the row; a carriage return is nothing, so that a
+  file from another system shows its lines rather than a column of full stops;
+  any other byte is a full stop.
+- **Wrapping.** Rows are wrapped at the window's edge, because the viewer has no
+  horizontal scroll. When the window's extent changes (made full or restored,
+  [`WINDOWS.md`](WINDOWS.md)) the text is wrapped again and the byte at the top
+  stays at the top, so the reader is still looking at what they were reading.
+  The row table holds the file's length plus two entries: a file of line feeds
+  is a row per byte and one after the last.
+- **Keys.** Arrows, Page Up/Down, Home, End, and the space bar, which pages down.
+- **Size.** A file is read to 256 KiB; beyond that the start is shown and the
+  status says so, which is more use than a refusal.
+- **Long rows.** A row wider than 120 characters is drawn in pieces, because
+  `window_text` carries at most 127 characters and refuses a longer string.
 
-**A press selects; a press upon the row already selected opens.** That is a
-double press without a clock to time one by — and the two are never confused,
-because a press upon an unselected row only ever selects. The keys do the same:
-the arrows, the page keys, Home and End move the selection, Enter opens and
-Backspace goes up. **A directory opens in this window; a file opens in a window
-of its own**, `/bin/view` started as a child and collected when it ends, so that
-a person may read two files beside each other. Anything else — a device, a pipe
-— is said to be unopenable upon the status row rather than handed to a viewer
-that would read it forever.
+## 3. The clock
 
-**It moves, copies and deletes nothing.** `mv`, `cp` and `rm` do that at the
-shell and are asserted there; a file manager that also did it would be a second
-implementation of each with none of their tests, upon a ramdisk whose contents
-are lost at every reboot in any case.
+**On the panel**, at the right, as `HH:MM`. Seconds are not shown: a panel
+redrawn every second is a blit every second for a digit nobody reads.
 
-A directory of more than 256 entries is listed to 256 and the status says so; a
-path that would pass SYSCALL_PATH_MAXIMUM is refused rather than cut, a path
-silently shortened naming another file.
+**Woken by an alarm.** The session asks for `SIGALRM` at the start of the next
+minute, counted from the seconds `time` returns. The signal ends the session's
+wait for window events with `EINTR`; the loop draws the clock and asks for the
+next alarm. A clock drawn on every event would stand still on an idle desktop;
+one polled each second would keep an idle program awake.
 
-## 3. The text viewer, `/bin/view`
+**Accuracy.** Under QEMU the clock turns two to three seconds after the host's
+minute: the alarm is counted by an emulated timer that runs slow, and the
+kernel's seconds are whole. `time` reads the real-time clock at every call, so
+the error does not grow with uptime ([`../devices/TIME.md`](../devices/TIME.md)).
 
-`view file` — started by the file manager, or at the shell. The file's text in
-a window titled with its name, a status row upon the foot saying which rows of
-how many are shown.
+**`/bin/date`** prints the same with seconds, `YYYY-MM-DD hh:mm:ss`: ISO 8601's
+extended form rather than the POSIX default, which names a time zone this
+system does not have.
 
-**What it shows.** Printable ASCII as itself; a tab to the next multiple of
-eight columns; a line feed ending a row; **a carriage return as nothing**, so
-that a file written upon another system shows its lines and not a column of
-full stops down its right edge; every other byte as a full stop. It is a viewer
-and not an editor — `micro` edits, at the shell.
+## Verification
 
-**It wraps, and wraps again when the window changes.** A line cut at the edge
-is a line whose end a person cannot see without a horizontal scroll, which this
-does not have. A window made full is sent its new extent
-([`WINDOWS.md`](WINDOWS.md), Section 13) and the text is wrapped again to it,
-**with the byte at the top kept at the top**: a person who made the window full
-to read more is still looking at what they were reading. The row table is as
-long as the file plus two, because a file of nothing but line feeds is a row
-per byte and one after the last.
+The three programs are drawing and choice, and have no self-test of their own.
+What they stand on is asserted in [`../devices/TIME.md`](../devices/TIME.md):
+the clock's decoding, the date arithmetic, `gmtime`, and the alarm at privilege
+level 3. The checks a person performs are in
+[`../project/TESTING-GRAPHICS.md`](../project/TESTING-GRAPHICS.md).
 
-**The keys** are the arrows, the page keys, Home, End, and the space bar, which
-pages down as it does in every pager of this lineage. A file is read to 256 KiB;
-a larger one is shown to that much and says so upon the status, the start of a
-large file being more use than a refusal.
+| Property checked by looking | The failure it would catch |
+| --------------------------- | -------------------------- |
+| `Files` lists `/` with directories first and the entry count on the status. | A wrong order or a lost entry. |
+| Two presses on a directory list it; on a file, open a viewer titled with its name. | Selection and opening confused. |
+| Making a viewer full rewraps the text with the top row unchanged. | A resize that loses the reader's place. |
+| The panel's clock matches the host's minute and turns by itself. | An alarm that is not re-armed. |
 
-A row wider than 120 characters is drawn in pieces, because `window_text`
-carries at most 127 and a row it refused would not be drawn at all.
+## Limitations
 
-## 4. The clock
-
-**Upon the panel**, at its right: the hours and minutes, `HH:MM`, as the
-machine's clock holds them. The list of windows of 2026-09-23 stops short of
-it. **Seconds are not shown**: a panel redrawn each second is a blit each second
-for a digit nobody reads.
-
-**It is woken by an alarm.** The session asks for SIGALRM at the start of the
-next minute, counted from the seconds `time` returns; the signal ends its wait
-upon the window events with EINTR, and the loop draws the clock, which asks for
-the next. A clock drawn upon every event would stand still upon an idle desktop;
-one drawn upon a poll each second would keep a program awake that has nothing
-to do.
-
-**It turns within a few seconds of the minute.** Watched against the build host
-under QEMU after `time` came to read the clock at every call, it turned two to
-three seconds after the host's minute, at each of two minutes watched — the
-alarm is counted by an emulated timer that runs slow, and the kernel's seconds
-are whole. [`../devices/TIME.md`](../devices/TIME.md), Section 10.1, holds the
-first form, which fell further behind the longer the machine ran.
-
-**`/bin/date`** prints the same at the shell, with the seconds: `YYYY-MM-DD
-hh:mm:ss`, ISO 8601's extended form rather than the POSIX default, which names a
-time zone this system does not have and would have to invent.
-
-## 5. Verification
-
-The three programs are drawing and choice and are not asserted by a self-test
-of their own; what is beneath them is, in
-[`../devices/TIME.md`](../devices/TIME.md), Section 10.3 — the clock's
-decoding, the arithmetic, `gmtime`, and the alarm at privilege level 3. What
-only looking establishes is
-[`../project/TESTING-GRAPHICS.md`](../project/TESTING-GRAPHICS.md), Section 11,
-items 10 and 11.
-
-**Observed**, under QEMU at 1280 by 800 on 2026-09-23, the pointer driven
-through the monitor: the launcher's `Files` opened a window listing `bin/`,
-`etc/`, `lost+found/`, `mnt/` and `share/` with `5 entries` upon the status;
-`etc/` pressed twice listed `/etc`; `system.conf` pressed twice opened a viewer
-titled `system.conf` reading `1-23 of 57`, and the status of the file manager
-said `opened /etc/system.conf`; Page Down and then the full-screen control gave
-the same file wrapped to the whole width, `17-43 of 43`, the row that had been
-at the top still there. The panel's clock read the host's minute, and turned
-over by itself at each minute watched.
-
-## 6. Limitations
-
-1. **The file manager changes nothing**, Section 2.
-2. **No sizes, dates or kinds beyond a directory's slash.** There is no `stat`
-   call; the size of a file could be had only by reading it.
-3. **The viewer wraps by character and not by word**, and has no search.
-4. **The viewer reads the file once.** A file changed while it is shown is not
-   shown changed.
-5. **The clock shows the clock's time**, with no zone — [`../devices/TIME.md`](../devices/TIME.md),
-   Section 10.5, limitation 1.
-6. **No icons** for `Files`; the launcher shows its name alone until one is
-   drawn.
+1. The file manager copies, moves and deletes nothing.
+2. No sizes, dates or kinds beyond a directory's slash: there is no `stat`
+   call.
+3. The viewer wraps by character, not by word, and has no search.
+4. The viewer reads the file once; a change while it is shown is not shown.
+5. The clock has no time zone ([`../devices/TIME.md`](../devices/TIME.md)).
+6. `Files` has no launcher icon; the launcher shows its name alone.

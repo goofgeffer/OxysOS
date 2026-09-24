@@ -58,7 +58,7 @@ archive is not combined with the kernel's image and raises no question at all:
 it is `MIT` code linked into `MIT` programs. What the kernel image carries of a
 program is the linked ELF file itself, embedded so that a self-test can load it,
 and that file is `MIT` throughout.
-[`docs/design/LIBC.md`](docs/design/LIBC.md), Sections 7 and 11, are the whole of
+[`docs/design/LIBC.md`](docs/design/LIBC.md) are the whole of
 the arrangement.
 
 `crypto/`, `net/` and `uefi/` are empty at the time of writing; they acquire
@@ -124,7 +124,7 @@ after a library depended upon it.
 added `kernel/include` to its include path in order to reach one permissive
 header would have every header of the kernel within reach, and would be one
 `#include` away from the thing this division exists to prevent.
-[`docs/design/LIBC.md`](docs/design/LIBC.md), Section 2, records the change in
+[`docs/design/LIBC.md`](docs/design/LIBC.md) records the change in
 full, including that nothing was altered in the move — every constant kept its
 name, its value and its commentary.
 
@@ -179,7 +179,7 @@ recollection.
    wrappers of 7.2 as Section 2.1 required. The interface is
    `kernel/abi/oxys/syscall_abi.h`, under `MIT` and reachable by a second include
    root of its own; the implementation stays with the kernel. Section 2.1 records
-   the division and [`docs/design/LIBC.md`](docs/design/LIBC.md), Section 2,
+   the division and [`docs/design/LIBC.md`](docs/design/LIBC.md)
    records how it was made.
 
    **The rule it leaves behind** is that `kernel/abi/` holds constants and a

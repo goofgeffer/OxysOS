@@ -12,11 +12,11 @@
  * References:
  *   - ANSI X3.4-1986: the four control characters implemented, and the meaning
  *     each is given.
- *   - docs/devices/DISPLAY.md, Sections 6 and 7: the same four characters as the
+ *   - docs/devices/DISPLAY.md: the same four characters as the
  *     text-mode driver implements them. This console matches that driver
  *     deliberately, including the erase limit, so that one diagnostic path does
  *     not behave differently upon two displays.
- *   - docs/design/CONSOLE.md, Sections 2 and 3: the design and its limits.
+ *   - docs/design/CONSOLE.md: the design and its limits.
  *
  * What this is for.
  *
@@ -85,7 +85,7 @@ bool ConsoleIsActive(void);
 
 /*
  * Writes one character, interpreting LF, CR, HT and BS as ANSI X3.4-1986
- * defines them and as docs/devices/DISPLAY.md, Section 6, describes for the
+ * defines them and as docs/devices/DISPLAY.md describes for the
  * text-mode driver:
  *
  *   LF  moves to the first column of the following row, scrolling upon the last.
@@ -131,7 +131,7 @@ uint32_t ConsoleRow(void);
  * The reason is the reason the text-mode driver has one, and it is the same
  * reason: an echo loop must not let a person backspace over the prompt, or over
  * output the kernel wrote and they did not type. See
- * docs/devices/DISPLAY.md, Section 7.
+ * docs/devices/DISPLAY.md.
  */
 void ConsoleSetEraseLimit(void);
 

@@ -9,9 +9,9 @@
  *          CursorIsVisible, CursorX, CursorY, CursorShapeIsOpaque,
  *          CursorShapeIsInterior, CursorReport.
  * References:
- *   - docs/design/COMPOSITOR.md, Section 1: the shape and the two-mask encoding
+ *   - docs/design/COMPOSITOR.md: the shape and the two-mask encoding
  *     of it; Section 27.4: what sub-task 6.6 removed from this file and why.
- *   - docs/devices/MOUSE.md, Sections 7 and 8: the pointer as the mouse driver
+ *   - docs/devices/MOUSE.md: the pointer as the mouse driver
  *     sees it, and every assertion made upon it.
  *   - PROJECT_GUIDELINES.md, Section 2: no code or artwork is copied. The shape
  *     below was drawn for this project, in the same way and for the same reason

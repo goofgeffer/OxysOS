@@ -1,54 +1,36 @@
 <!-- SPDX-FileCopyrightText: 2026 The Oxys-OS Authors -->
 <!-- SPDX-License-Identifier: CC0-1.0 -->
-# `docs/design/` — The Kernel Itself, and the Interface It Presents
+# `docs/design/` — The Kernel, the Library and the Desktop
 
-How the machine is brought up, how it is arranged once it is, and — from
-sub-task 7.1 — what a program standing upon it is given, and — from sub-task
-9.1 — the windows it will be given them through, from 9.3 — the process that
-starts and stops the whole of it, from 9.4 — the configuration it is all told
-what to do by, and from 9.5 — the desktop a person meets. These twenty-four
-documents describe the parts of the kernel that no device driver may assume the
-absence of. Five of them are the graphical work, which
-[`GRAPHICS.md`](GRAPHICS.md) indexes and no longer holds.
+How each subsystem works and why. Devices are [`../devices/`](../devices/README.md);
+the storage stack is [`../storage/`](../storage/README.md). Listed in the order the
+phases build them, which is the order to read them in.
 
-**[`LIBC.md`](LIBC.md) and [`SHELL.md`](SHELL.md) are the two whose subject is
-not the kernel**, and they are here rather than in a group of their own because
-what each describes is the other side of a boundary this group already
-documents: [`PRIVILEGE.md`](PRIVILEGE.md) is the system-call interface as the
-kernel implements it, `LIBC.md` is the same interface as a program is given it,
-together with the library built above, and `SHELL.md` is the first program that
-stands upon that library — and the terminal the kernel had to grow for it to
-read. A fifth group for two documents would have been a worse arrangement than
-a widened description of this one.
+| Document | Subject | Phase |
+| -------- | ------- | ----- |
+| [`ARCHITECTURE.md`](ARCHITECTURE.md) | The structure of the system, the source tree, and why the phases are ordered as they are. | All |
+| [`BOOT.md`](BOOT.md) | From GRUB to `KernelMain`: the Multiboot2 header, long mode, the higher half. | 1 |
+| [`MEMORY-LAYOUT.md`](MEMORY-LAYOUT.md) | Address spaces, paging, the frame allocator, the arena, the heap, reference counts, copy-on-write. | 2 |
+| [`INTERRUPTS.md`](INTERRUPTS.md) | The IDT, stubs and trap frame, the dispatcher, exceptions, the 8259A, the request layer. | 3, 6.12 |
+| [`PRIVILEGE.md`](PRIVILEGE.md) | Descriptors, the TSS, `SYSCALL`, the entry path, argument validation, the call table. | 6.1, 6.7 |
+| [`FRAMEBUFFER.md`](FRAMEBUFFER.md) | The framebuffer: request, validation, write-combining, colour encoding. | 6.2 |
+| [`DRAWING.md`](DRAWING.md) | Surfaces, clipping, and the primitives. | 6.3 |
+| [`CONSOLE.md`](CONSOLE.md) | The system face and the graphical console. | 6.4 |
+| [`FAULTSCREEN.md`](FAULTSCREEN.md) | The page drawn when the kernel stops. | 6.4 |
+| [`COMPOSITOR.md`](COMPOSITOR.md) | The back buffer, layers, damage, clip stack and blending. | 6.5, 6.6 |
+| [`EXECUTABLE.md`](EXECUTABLE.md) | The ELF64 loader. | 6.8 |
+| [`PROCESS.md`](PROCESS.md) | Processes, threads, the switch, `fork`, `execve`, `exit`, `wait`, signals. | 6.9–6.11, 8.7 |
+| [`CONCURRENCY.md`](CONCURRENCY.md) | Spinlocks, per-processor areas, IPIs, shootdown; what is still unsynchronised. | 6.13 |
+| [`SMP.md`](SMP.md) | Starting the application processors. | 6.14 |
+| [`SCHEDULER.md`](SCHEDULER.md) | Run queues, the quantum, affinity, sleeping and waking. | 6.15 |
+| [`LIBC.md`](LIBC.md) | The C library: strings, wrappers, heap, stdio, startup, the filesystem calls. | 7 |
+| [`SHELL.md`](SHELL.md) | The terminal, the line editor, the shell and its utilities. | 8 |
+| [`WINDOWS.md`](WINDOWS.md) | The window manager and its client protocol. | 9.1, 9.2 |
+| [`INIT.md`](INIT.md) | `init`, orphans, `power`, the boot and power screens. | 9.3 |
+| [`CONFIG.md`](CONFIG.md) | The configuration format and `/etc`. | 9.4 |
+| [`SESSION.md`](SESSION.md) | The session: layers, root, panel, launcher, icons, background. | 9.5 |
+| [`TERMINAL.md`](TERMINAL.md) | The terminal emulator, `poll`, and the shell without a terminal. | 9.6 |
+| [`UTILITIES.md`](UTILITIES.md) | The file manager, the text viewer and the clock. | 9.7 |
 
-| Document | Subject | Implementation | Phase |
-| -------- | ------- | -------------- | ----- |
-| [`ARCHITECTURE.md`](ARCHITECTURE.md) | The structure of the system, the source tree file by file, and the subsystem dependency ordering that fixes the order of the phases. | — | All |
-| [`BOOT.md`](BOOT.md) | The boot sequence: the Multiboot2 header, the GRUB handover, the entry into long mode, and the transfer to `KernelMain` in the higher half. | [`../../boot/boot.asm`](../../boot/boot.asm) | 1 |
-| [`MEMORY-LAYOUT.md`](MEMORY-LAYOUT.md) | The physical and virtual address spaces, the permanent paging hierarchy, the frame allocator, the kernel arena, the heap, reference counting and copy-on-write. | [`../../kernel/mm/`](../../kernel/mm/) and [`../../kernel/arch/x86_64/mm/`](../../kernel/arch/x86_64/mm/) | 2 |
-| [`INTERRUPTS.md`](INTERRUPTS.md) | The interrupt descriptor table, the 256 stubs and the uniform trap frame, the dispatcher, the exception handlers and their dispositions, the pair of 8259A controllers with their end-of-interrupt protocol, and — from sub-task 6.12 — the controller-neutral layer through which a driver claims a request line, and the retirement of the 8259A that it makes a single call. | [`../../kernel/arch/x86_64/interrupt/`](../../kernel/arch/x86_64/interrupt/) | 3, 6.12 |
-| [`PRIVILEGE.md`](PRIVILEGE.md) | The apparatus a privilege transition is performed out of: the user-mode descriptors and the order the processor's arithmetic imposes upon them, the task state segment with its trusted stacks and its interrupt stack table, and the three registers that configure `SYSCALL` — and, from sub-task 6.7, the entry path, the dispatch table and the validation of a caller's arguments; and, from sub-task 6.11, the four calls added to that table, the settling of the two segment-base registers at each boundary, and the copy-on-write fault the validation must resolve rather than refuse. | [`../../kernel/arch/x86_64/syscall/syscall.c`](../../kernel/arch/x86_64/syscall/syscall.c), [`../../kernel/arch/x86_64/cpu/tss.c`](../../kernel/arch/x86_64/cpu/tss.c) | 6.1, 6.7, 6.11 |
-| [`GRAPHICS.md`](GRAPHICS.md) | **An index, holding no design of its own**: the five documents the graphical work is divided into, in the order to read them, and why it is five and not one. | — | 6.2 to 6.6 |
-| [`FRAMEBUFFER.md`](FRAMEBUFFER.md) | How a linear framebuffer is asked for, what is validated about the one supplied, why its pages are write-combining rather than write-back, how it is mapped, how a colour is encoded into it, and what happened to the text console that was using the screen already. | [`../../graphics/framebuffer.c`](../../graphics/framebuffer.c) | 6.2 |
-| [`DRAWING.md`](DRAWING.md) | The surface, and why the primitives never name the framebuffer; clipping as the memory-safety boundary rather than a convenience; the pixel, the rectangle, the integer line, and the blit with the copy direction an overlap forces. | [`../../graphics/draw.c`](../../graphics/draw.c) | 6.3 |
-| [`CONSOLE.md`](CONSOLE.md) | The bitmap face of ninety-five glyphs drawn for this project; the console above it, its control characters, its scroll and the buffer that replays what was written before a framebuffer could be mapped; and the measurement that found the console slow with the specialisation that fixed it. | [`../../graphics/font.c`](../../graphics/font.c), [`../../graphics/console.c`](../../graphics/console.c) | 6.4 |
-| [`FAULTSCREEN.md`](FAULTSCREEN.md) | The full-screen page a severe fault draws when the machine stops — one page for each fault rather than one for all — what each must survive to be drawn at all, and the verification run sub-task 6.4 closed with. | [`../../graphics/faultscreen.c`](../../graphics/faultscreen.c) | 6.4 |
-| [`COMPOSITOR.md`](COMPOSITOR.md) | The pointer, which was the first thing that ever composited, and the compositor that put a back buffer beneath all of the above — after which nothing reads the framebuffer. Several of the earlier documents' limitations are discharged here. | [`../../graphics/cursor.c`](../../graphics/cursor.c), [`../../graphics/compositor.c`](../../graphics/compositor.c) | 6.5, 6.6 |
-| [`EXECUTABLE.md`](EXECUTABLE.md) | The ELF64 loader for statically linked executables: what a file is refused for, and how its segments reach an address space. | [`../../kernel/exec/elf.c`](../../kernel/exec/elf.c) | 6.8 |
-| [`PROCESS.md`](PROCESS.md) | The process control block, the thread structure and the saved context: what a program is while it runs, what runs within it, the stacks each is given, the switch between them, the descent to privilege level 3, and the four calls by which a program makes another program, becomes another program, ends, and collects what a child ended with. | [`../../kernel/proc/`](../../kernel/proc/) and [`../../kernel/arch/x86_64/proc/`](../../kernel/arch/x86_64/proc/) | 6.9, 6.10, 6.11 |
-| [`CONCURRENCY.md`](CONCURRENCY.md) | The four mechanisms a second processor cannot safely exist without: the ticket spinlock that masks interrupts for as long as it is held, the per-processor area reached in one instruction through a segment base privilege level 3 cannot write, the interrupt one processor sends to another, and the translation-lookaside-buffer shootdown that waits to be acknowledged. It starts no processor; [`SMP.md`](SMP.md), at sub-task 6.14, does that. | [`../../kernel/arch/x86_64/cpu/spinlock.c`](../../kernel/arch/x86_64/cpu/spinlock.c), [`../../kernel/arch/x86_64/cpu/percpu.c`](../../kernel/arch/x86_64/cpu/percpu.c), [`../../kernel/arch/x86_64/smp/ipi.c`](../../kernel/arch/x86_64/smp/ipi.c), [`../../kernel/arch/x86_64/mm/shootdown.c`](../../kernel/arch/x86_64/mm/shootdown.c) | 6.13 |
-| [`SMP.md`](SMP.md) | The bring-up of the application processors: the INIT-startup-startup protocol and the delays it prescribes, the real-mode trampoline that carries a processor from a reset to 64-bit mode upon the kernel's own hierarchy, the identity mapping that exists for the duration and is removed by the first shootdown this kernel sends to anybody, and the rule that a starting processor allocates nothing. | [`../../kernel/arch/x86_64/smp/smp.c`](../../kernel/arch/x86_64/smp/smp.c), [`../../boot/trampoline.asm`](../../boot/trampoline.asm) | 6.14 |
-| [`SCHEDULER.md`](SCHEDULER.md) | The run queue each processor holds and the lock upon it, the round-robin rotation, the affinity mask that decides which queue a thread may join — and which is the state of the outstanding locks written as a value in a field — the local timer whose rate the kernel measures rather than assumes, and the critical section a switch is made inside. | [`../../kernel/proc/sched.c`](../../kernel/proc/sched.c) | 6.15 |
-| [`LIBC.md`](LIBC.md) | The C library: the division of the system-call header into the interface a program is entitled to and the implementation it is not — a licensing obligation discharged before the wrappers depended upon it — and the nineteen string and memory functions of ISO/IEC 9899:2011, Section 7.24, that this library implements, the three it does not, and why a userland library is presently compiled into the kernel image. | [`../../libc/`](../../libc/), [`../../kernel/abi/`](../../kernel/abi/) | 7.1 |
-| [`SHELL.md`](SHELL.md) | The shell, and what had to exist before a program could read what a person types: the terminal — one byte stream assembled in the kernel from the keyboard and the serial line, the cursor keys translated to the control sequences ECMA-48 and every terminal emulator send — and the line editor above it, which asks nothing of a display but a backspace, keeps a history of thirty-two lines, and is the first thing here built so that what a program prints can be asserted. One section per sub-task of Phase 8, all seven, through the pipelines that first ran two programs at once and the job control that lets a person stop them. | [`../../kernel/terminal/`](../../kernel/terminal/), [`../../libc/line/`](../../libc/line/), [`../../userland/sh/`](../../userland/sh/) | 8.1 |
-| [`WINDOWS.md`](WINDOWS.md) | The window manager of sub-task 9.1, the first of Phase 9, and the client protocol of 9.2: a window as a content the owner draws and a queue the owner drains, with a frame the manager draws; the stack, which is an array; the focus, and the press that moves it; the binding of the pointer to a window by a held button, until every button is up; the drag, the close control that asks rather than destroys, and the confinement that keeps a band reachable; the flat appearance and the palette, judged against `INSPIRATIONS.md`, Section 3; the tick it runs upon and the two things the screen can now be for; and the three windows the default entry presents until there is a desktop — drawn, since 9.2, by a program through six calls: what crosses the boundary and what does not, the ownership of a window by a process, the wait for an event, and the first client's verdict upon the surface interface of 6.6. | [`../../graphics/window.c`](../../graphics/window.c), [`../../graphics/client.c`](../../graphics/client.c), [`../../userland/windows/main.c`](../../userland/windows/main.c) | 9.1, 9.2 |
-| [`INIT.md`](INIT.md) | `init` of sub-task 9.3: the first user process, which starts the desktop and starts it again when it ends, and collects every orphan; the reparenting in the kernel that gives it those orphans; `power`, the one call reserved to a single process, which halts the machine or restarts it through the keyboard controller's reset line, and `pause`, which is what `init` waits in; `shutdown`, by which a person asks; and the two pages the kernel draws for itself — the boot screen that stands in place of a banner and a black screen, and the power screen. | [`../../userland/init/main.c`](../../userland/init/main.c), [`../../kernel/proc/process.c`](../../kernel/proc/process.c) | 9.3 |
-| [`CONFIG.md`](CONFIG.md) | The system configuration of sub-task 9.4: the format — a line at a time, so that a bad character costs the line and not the machine — the `/etc` hierarchy and the two files in it, what `init` and the desktop do with what they read, the parser in the C library and the seam that lets half of it be asserted before there is a program, and the bound upon restarts that a list of services made necessary. | [`../../libc/config/`](../../libc/config/), [`../../etc/`](../../etc/) | 9.4 |
-| [`SESSION.md`](SESSION.md) | The session of sub-task 9.5: the three stacking layers, without which a panel is a window the next press buries and a root is one the next raise hides; the claim upon the display, by which exactly one program may make a root or a panel and every other is refused for being the wrong program; the text a program draws with the system's one face, and why that face stays in the kernel; and the session itself — the root, the panel, and the launcher that reads what it offers from `/etc/session.conf`. | [`../../userland/session/main.c`](../../userland/session/main.c), [`../../graphics/window.c`](../../graphics/window.c) | 9.5 |
-| [`TERMINAL.md`](TERMINAL.md) | The terminal emulator of sub-task 9.6: a window with an ordinary `/bin/sh` beneath it upon a pair of pipes; the character grid in the C library, which decides what stands where and which is asserted without a window; `poll`, added because a program that must wait upon its window and upon a pipe at once had no way to; and the refusal of `tcgroup` to a process whose standard input is not the terminal, which is what stops a shell in a window taking the terminal from the shell at the keyboard — and what leaves that shell without job control. | [`../../userland/terminal/main.c`](../../userland/terminal/main.c), [`../../libc/term/`](../../libc/term/) | 9.6 |
-| [`UTILITIES.md`](UTILITIES.md) | The utilities of sub-task 9.7, at which `Oxys 1 Beta` is fixed: a file manager in which a press selects and a second opens, a text viewer that wraps again when its window is made full, and a clock upon the panel woken by an alarm. |
-
-They are listed in the order the phases build them, and that is the order to read
-them in if you are new to the project: each depends upon the ones before it, and
-the dependency is the reason the phases are numbered as they are.
-`ARCHITECTURE.md`, Section 4, is where that ordering is set out as a whole.
+`LIBC.md` and `SHELL.md` describe userland, not the kernel; they are here because
+each is the other side of an interface this group documents.

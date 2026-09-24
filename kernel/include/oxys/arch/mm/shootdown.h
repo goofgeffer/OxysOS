@@ -23,7 +23,7 @@
  *   - Intel SDM, Volume 3A, Section 4.10.4.4: the delayed invalidation is only
  *     safe while no processor may use the stale translation, which is what the
  *     wait for an acknowledgement below establishes.
- *   - docs/design/CONCURRENCY.md, Section 6.
+ *   - docs/design/CONCURRENCY.md.
  *
  * What the mechanism does not do.
  *
@@ -79,7 +79,7 @@ bool ShootdownBroadcast(VirtualAddress address);
  *
  * It exists because this kernel has started one processor and must nevertheless
  * demonstrate that the mechanism works end to end:
- * `docs/design/ARCHITECTURE.md`, Section 4.1, records that as the condition upon
+ * `docs/design/ARCHITECTURE.md` records that as the condition upon
  * which sub-task 6.13 was placed before 6.14. The interrupt goes out through the
  * local controller, arrives through the same gate an application processor's
  * would, runs the same handler, invalidates the same address and acknowledges by

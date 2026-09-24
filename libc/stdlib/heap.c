@@ -25,7 +25,7 @@
  *     no declared type, and its effective type is that of the lvalue it is first
  *     stored through — which is what makes a block header written into it a
  *     defined thing to read back.
- *   - docs/design/LIBC.md, Section 9: the design, the policy chosen and the
+ *   - docs/design/LIBC.md: the design, the policy chosen and the
  *     three that were not, and what is asserted of each half.
  *
  * The policy, in one paragraph.
@@ -55,7 +55,7 @@
  *   real load wants, and this heap is under no load at all: nothing in this
  *   system allocates yet. Choosing it now would mean writing several hundred
  *   lines against an allocation profile that has never been measured, which is
- *   the same judgement docs/design/LIBC.md, Section 6, limitation 1, records
+ *   the same judgement docs/design/LIBC.md records
  *   about the string functions. The workload that will justify measuring is a
  *   ported compiler, and the day it exists this file is one translation unit to
  *   replace behind an interface four functions wide.
@@ -68,7 +68,7 @@
  * What is not here, and is not an oversight.
  *
  *   There is no locking. There are no userland threads to contend with — see
- *   docs/design/LIBC.md, Section 8.6, limitation 1, which records the same thing
+ *   docs/design/LIBC.md which records the same thing
  *   of errno — and a lock taken against nothing would be a lock nothing asserts.
  *   The day threads exist, every entry point below needs one, and the census is
  *   where the absence is stated so that it is not discovered.
@@ -115,7 +115,7 @@
  * the same storage read through two types, and this project is bound by
  * PROJECT_GUIDELINES.md, Section 8, not to rely upon behaviour it cannot point
  * at a paragraph for. The cost is recorded as a limitation rather than paid
- * silently: docs/design/LIBC.md, Section 9.6, limitation 1.
+ * silently: docs/design/LIBC.md.
  *
  * The size is of the whole block, the header included, and is always a multiple
  * of OXYS_HEAP_ALIGNMENT. Storing the whole size rather than the payload size is
@@ -508,7 +508,7 @@ bool OxysHeapAdopt(void *region, size_t bytes)
      * ones, and a check made before the adjustment would have passed it — after
      * which the block built from it is smaller than its own header, and every
      * later walk of the free list reads past the end of the region. The negative
-     * test of docs/design/LIBC.md, Section 9.7, found the earlier check
+     * test of docs/design/LIBC.md found the earlier check
      * redundant against this one and it was removed rather than kept for
      * appearances.
      */

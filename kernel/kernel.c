@@ -38,7 +38,7 @@
  *   - ECMA-48, Section 8.3.39 (ED, erase in display, parameter 2: the whole
  *     display) and Section 8.3.21 (CUP, cursor position, no parameters: the
  *     first position): what a form feed becomes upon the serial line.
- *   - docs/design/ARCHITECTURE.md, Section 4: the dependency ordering that fixes
+ *   - docs/design/ARCHITECTURE.md: the dependency ordering that fixes
  *     the sequence of initialisation below, and with it the order of the phases.
  *
  * The order of initialisation is the substance of this file, and it is not
@@ -301,7 +301,7 @@ int64_t KernelPower(uint64_t action)
     /*
      * The persistent `/etc` is written back and released before the machine
      * stops, so that the volume is marked cleanly unmounted and every edit is
-     * upon the medium: docs/storage/PERSIST.md, Section 5. Where nothing is
+     * upon the medium: docs/storage/PERSIST.md. Where nothing is
      * mounted over `/etc` the unmount is refused and nothing has changed.
      */
     (void)PersistRelease(PERSIST_ETC_POINT);
@@ -934,7 +934,7 @@ static void KernelMountRootVolume(void)
 
             /* The persistent `/etc` before the machine's volume, so that the
              * disk labelled for it is taken for `/etc` and not mounted at `/mnt`
-             * as a stranger's: docs/storage/PERSIST.md, Section 3. */
+             * as a stranger's: docs/storage/PERSIST.md. */
             (void)PersistEtc();
             KernelMountMachineVolume();
             VfsReport();
@@ -1156,7 +1156,7 @@ static bool KernelDesktopEntry(void)
  * palette, and the framebuffer's encoding for a client's pixels. Returns false
  * where there is no compositor.
  *
- * The palette, which docs/design/WINDOWS.md, Section 4, records: a dark slate
+ * The palette, which docs/design/WINDOWS.md records: a dark slate
  * ground, a warm white paper, one blue accent for the band that holds the
  * focus and a quiet grey for the bands that do not. It is here because the
  * entry point is what knows the framebuffer's encoding, as it is for the
@@ -1319,7 +1319,7 @@ static uint64_t KernelLaunchProgram(const char *path, const char *name)
  * The shell runs upon this processor's own flow of control, as every program
  * so far has: ThreadStart does not return until the program ends, and the
  * `read` the shell blocks in halts this processor until a key arrives. That is
- * the arrangement docs/design/SHELL.md, Section 2.3, records, and it holds
+ * the arrangement docs/design/SHELL.md records, and it holds
  * until something else needs the bootstrap processor while a program waits.
  */
 static bool KernelRunShell(int64_t *status)
@@ -1537,7 +1537,7 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
     /*
      * The banner: one line, at the project owner's request of 2026-09-15,
      * where it had been three. The release is OXYS_VERSION_BANNER — the
-     * ordinal form of docs/project/VERSIONING.md, Section 3, as the banner
+     * ordinal form of docs/project/VERSIONING.md as the banner
      * shows it — "1 ALPHA" since 2026-09-16 — and "UNRELEASED" where an image
      * belongs to no release, which every image was until then. It said "Version 0.1.0" until the
      * versioning scheme was written, naming a release that had been withdrawn
@@ -2352,7 +2352,7 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
      * forks a child which spins, and then sleeps in `pause` to be woken: the
      * job-control session that follows delivers two control bytes through the
      * bootstrap processor's tick, and is sensitive to where that tick falls
-     * against the shell's forking, as docs/design/SHELL.md, Section 28,
+     * against the shell's forking, as docs/design/SHELL.md
      * records. Under Bochs, which is some hundred times slower than the
      * machine this is developed upon, the shift was enough to make the
      * session's third `cat` end by the wrong signal, and the shell self-test
@@ -2371,7 +2371,7 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
      * waits in. It runs after the configuration's test for the reason that one
      * runs after `init`'s — poll-check forks, waits and sleeps, and a test that
      * does those is placed where it cannot move the tick under the shell's
-     * job-control session; docs/design/INIT.md, Section 6.2. */
+     * job-control session; docs/design/INIT.md. */
     KernelVerifyTerm();
 
     /* Sub-task 9.6: the icons the launcher draws, which are files upon the

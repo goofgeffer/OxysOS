@@ -6,8 +6,8 @@
 [`../../docs/project/PLAN.md`](../../docs/project/PLAN.md), which is where the
 division this directory exists for was made. The interface itself dates from
 sub-tasks 6.7 and 6.11.
-**Detailed design**: [`../../docs/design/LIBC.md`](../../docs/design/LIBC.md),
-Section 2; and [`../../LICENSING.md`](../../LICENSING.md), Section 2.1, which
+**Detailed design**: [`../../docs/design/LIBC.md`](../../docs/design/LIBC.md);
+and [`../../LICENSING.md`](../../LICENSING.md), Section 2.1, which
 required the division and named it the first thing to be done about licensing.
 
 ## Purpose

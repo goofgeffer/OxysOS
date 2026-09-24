@@ -13,7 +13,7 @@
  *     Table 6-1: the exceptions, their mnemonics, and which deliver an error
  *     code. Section 6.13 and Figure 6-6: the selector-form error code.
  *     Section 6.15 and Figure 6-9: the page-fault error code and CR2.
- *   - docs/design/FAULTSCREEN.md, Sections 1 and 2.
+ *   - docs/design/FAULTSCREEN.md.
  *
  * What this must survive.
  *

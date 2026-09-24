@@ -18,7 +18,7 @@
  *     the kernel says ENAMETOOLONG of a buffer.
  *   - kernel/test/proc/directory.c: the self-test that runs this and checks
  *     the number it ends with.
- *   - docs/design/SHELL.md, Section 14.
+ *   - docs/design/SHELL.md.
  *
  * Why the refusals are asserted by name, as file-check's are.
  *

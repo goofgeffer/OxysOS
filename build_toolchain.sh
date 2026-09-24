@@ -5,8 +5,8 @@
 # File: build_toolchain.sh
 #
 # Purpose:
-#   Builds the x86_64-elf cross-toolchain that docs/project/TOOLCHAIN.md,
-#   Section 1, requires: GNU binutils and GCC, configured for a target that
+#   Builds the x86_64-elf cross-toolchain that docs/project/TOOLCHAIN.md
+#   requires: GNU binutils and GCC, configured for a target that
 #   presumes nothing beyond the freestanding environment of ISO/IEC 9899:2011,
 #   Section 4, paragraph 6.
 #
@@ -31,7 +31,7 @@
 #   FORCE=1            Rebuild even if the toolchain is already present.
 #
 # References:
-#   - docs/project/TOOLCHAIN.md, Sections 1, 2 and 10.1.
+#   - docs/project/TOOLCHAIN.md.
 #   - GNU GCC Installation Instructions: --without-headers is required when no
 #     C library exists for the target, and all-target-libgcc is built separately
 #     from all-gcc for the same reason.
@@ -170,6 +170,6 @@ BuildBinutils
 BuildGcc
 
 echo
-echo "TOOLCHAIN BUILT. Put it upon the PATH, as TOOLCHAIN.md Section 8 states:"
+echo "TOOLCHAIN BUILT. Put it upon the PATH, as TOOLCHAIN.md states:"
 echo "  export PATH=\"$PREFIX/bin:\$PATH\""
 "$PREFIX/bin/$TARGET-gcc" --version | head -1

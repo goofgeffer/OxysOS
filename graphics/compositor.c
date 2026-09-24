@@ -10,7 +10,7 @@
  *          CompositorMoveLayer, CompositorInvalidate, CompositorPresent,
  *          CompositorReport.
  * References: kernel/include/oxys/compositor.h states what this implements, and
- *          docs/design/COMPOSITOR.md, Section 2, why.
+ *          docs/design/COMPOSITOR.md why.
  *
  * What this sub-task is for, in one paragraph.
  *
@@ -40,7 +40,7 @@
  *   ordinary write-back memory; the framebuffer is written and never read. That
  *   is the whole of the gain over sub-task 6.4's arrangement, where a scroll
  *   read four megabytes back through a write-combining mapping in which reads
- *   are uncached — see docs/design/CONSOLE.md, Section 6.2.
+ *   are uncached — see docs/design/CONSOLE.md.
  *
  * Concurrency. The back buffer, the damage rectangle and the layer table are
  * unsynchronised in this file, and are covered from above: every presentation

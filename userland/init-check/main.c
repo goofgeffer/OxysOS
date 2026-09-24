@@ -12,7 +12,7 @@
  *   - kernel/abi/oxys/syscall_abi.h: `power`, `pause`, and the results.
  *   - kernel/test/proc/init.c: the self-test that runs this, and the kernel
  *     half that asserts the adoption of orphans.
- *   - docs/design/WINDOWS.md, Section 13.3.
+ *   - docs/design/WINDOWS.md.
  *
  * The self-test that runs this is not `init` and none is set, so `power` is
  * EPERM to it whatever it asks — which is the property asserted, and is what

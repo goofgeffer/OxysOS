@@ -9,7 +9,7 @@
  *          and run at privilege level 3.
  * Key functions: KernelVerifyWrappers.
  * References:
- *   - docs/design/LIBC.md, Section 8.4: the table pairing every property
+ *   - docs/design/LIBC.md: the table pairing every property
  *     asserted below with the silent failure that assertion exists to catch.
  *   - ISO/IEC 9899:2011, Section 7.5, paragraph 3: errno is never set to zero by
  *     a library function, which is asserted below because it is the property a
@@ -50,7 +50,7 @@
  *   whole arrangement exists to catch, and **the test still passed**: the
  *   corrupted length reached a call whose result the status did not depend upon,
  *   and the only trace was a missing newline in the log that nothing was
- *   asserting. docs/design/LIBC.md, Section 8.7, records it. The sum below is
+ *   asserting. docs/design/LIBC.md records it. The sum below is
  *   what that failure bought.
  */
 
@@ -303,7 +303,7 @@ extern const uint8_t OxysSyscallInvokeBytes3[];
  * the same number — which is how the negative test of a two-argument invocation
  * first passed against a defective one. A capacity of eight is smaller than the
  * string, so the result is the capacity less one and could have come from
- * nowhere else. docs/design/LIBC.md, Section 8.7.
+ * nowhere else. docs/design/LIBC.md.
  */
 #define VERIFY_WRAPPERS_SHORT_CAPACITY 8U
 

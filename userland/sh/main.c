@@ -26,7 +26,7 @@
  *   - libc/include/line.h: the editor, and the table of what each key does.
  *   - userland/sh/shell.h: the tokeniser, the parser, the expansion, the
  *     variables and the built-ins.
- *   - docs/design/SHELL.md, Sections 4, 8 and 11 to 15.
+ *   - docs/design/SHELL.md to 15.
  *
  * What this program is at sub-task 8.4, stated plainly so that nobody mistakes
  * it for more.
@@ -251,7 +251,7 @@ static bool ShellApplyAssignment(const char *word)
  * environment and waited for by run.c, with the 127 of Section 2.8.2 where
  * it could not be found. A program's redirections are performed in the child
  * since 8.5; a built-in's are named and not performed, which
- * docs/design/SHELL.md, Section 21, records.
+ * docs/design/SHELL.md records.
  *
  * `in_child` says the caller has already forked — this is one command of a
  * pipeline, running in the child made for it, since 8.6 — so a program is

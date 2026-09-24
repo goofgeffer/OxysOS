@@ -120,7 +120,7 @@ static bool TerminalCursorDrawn;
  * black; without this the leading between the rows, and every cell no glyph has
  * reached yet, would show the paper through. **There is no fill across the
  * protocol** — the session met the same wall for its panel,
- * docs/design/SESSION.md, Section 7, limitation 4 — so it is a buffer blitted
+ * docs/design/SESSION.md — so it is a buffer blitted
  * in bands: one row's pitch at a time, which is a few tens of kilobytes rather
  * than the megabyte the whole content would be.
  *
@@ -176,8 +176,8 @@ static bool TerminalPaintGround(void)
  * The content has a new extent — the window was made full, or ceased to be:
  * the grid is given as many whole cells as it holds, keeping its text, and the
  * whole content is painted and drawn again. The shell is not told; nothing in
- * this system can tell a program its terminal's size, docs/design/TERMINAL.md,
- * Section 7, and a program that laid out a screen by the old size will lay it
+ * this system can tell a program its terminal's size, docs/design/TERMINAL.md
+ * and a program that laid out a screen by the old size will lay it
  * out wrongly until it next looks — which is every program that exists here,
  * none of them laying out screens.
  */
@@ -386,7 +386,7 @@ static void TerminalHandleKey(const SyscallWindowEvent *event)
      * does for the shell upon the serial line. The emulator is the line
      * discipline here, and this is the whole of it: the group the shell leads
      * is interrupted, the shell itself ignoring the signal and whatever it is
-     * running taking the default action. docs/design/TERMINAL.md, Section 5.
+     * running taking the default action. docs/design/TERMINAL.md.
      */
     if ((count == 1U) && (bytes[0] == 0x03) && (TerminalShell > 0))
     {

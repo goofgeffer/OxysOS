@@ -14,7 +14,7 @@
  *   - Multiboot2 Specification 2.0, Section 3.6.8: the memory map, and its
  *     warning that the map "includes the regions occupied by kernel, mbi,
  *     segments and modules" and that the kernel must not overwrite them.
- *   - docs/design/MEMORY-LAYOUT.md, Section 6: the reserved extents and their reasons.
+ *   - docs/design/MEMORY-LAYOUT.md: the reserved extents and their reasons.
  *
  * Design note. A bitmap is chosen in preference to a free-frame stack because it
  * permits a frame to be reserved by address, which the initialisation sequence
@@ -346,7 +346,7 @@ void PhysicalMemoryInitialise(const BootInformation *information)
      * every frame a range touches in its entirety, so a module sharing its first
      * or last frame with something else costs that frame and nothing is issued
      * from beneath a module. That is why no page alignment is asked of the boot
-     * loader; see docs/storage/INITRD.md, Section 4.
+     * loader; see docs/storage/INITRD.md.
      */
     for (size_t index = 0U; index < information->module_count; ++index)
     {

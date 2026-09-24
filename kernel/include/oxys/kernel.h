@@ -54,7 +54,7 @@ extern char KernelTextEnd[];
 /*
  * The base of the direct physical map, at which the whole of physical memory is
  * mapped once Phase 2, sub-task 2.4, has run. The region occupies the 64 TiB
- * beginning at this address; refer to docs/design/MEMORY-LAYOUT.md, Section 2.
+ * beginning at this address; refer to docs/design/MEMORY-LAYOUT.md.
  */
 /*
  * The name and version of the system.
@@ -64,14 +64,14 @@ extern char KernelTextEnd[];
  * is running upon. A second copy would be a second thing to forget to change.
  *
  * OXYS_VERSION_STRING holds the *ordinal form* of the release this image belongs
- * to, as docs/project/VERSIONING.md, Section 3, defines it — "1", "1.1",
+ * to, as docs/project/VERSIONING.md defines it — "1", "1.1",
  * "4-workspace" — and "unreleased" where it belongs to none. It held "0.1.0"
  * until the versioning scheme was written, which was a release that had been
  * published and then withdrawn (docs/project/HISTORY.md, 2026-09-09), and
  * "unreleased" from then until `Oxys 1 Alpha` was cut on 2026-09-16 at the
  * close of Phase 8. It is "1-alpha" now, and stays so upon `main` until the
  * next release is cut: an image built between releases belongs to the release
- * it was built after, and says so, which VERSIONING.md, Section 9.3, is the
+ * it was built after, and says so, which VERSIONING.md is the
  * authority for.
  *
  * The release's *name* is deliberately absent. Nothing inside the kernel has any

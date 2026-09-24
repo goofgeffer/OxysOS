@@ -9,7 +9,7 @@
  *          registers that configure SYSCALL.
  * Key functions: KernelVerifyPrivilege.
  * References:
-   - docs/design/PRIVILEGE.md, Section 7: every assertion below, paired with
+   - docs/design/PRIVILEGE.md: every assertion below, paired with
  *     the silent failure it catches.
  *   - Intel SDM, Volume 3A, Figure 3-8: the segment descriptor fields the
  *     assertions decode; Section 8.2.3, the task state segment descriptor and
@@ -471,7 +471,7 @@ static void KernelVerifyPrivilegeSystemCallConfiguration(void)
  * validation, in KernelVerifySyscall; and the configuration, above, which is
  * what says the transition *will* be correct. Sub-task 6.10 then executes it,
  * from a program at privilege level 3, and KernelVerifyUserMode asserts that the
- * call arrived. See docs/design/PROCESS.md, Section 10.
+ * call arrived. See docs/design/PROCESS.md.
  */
 
 

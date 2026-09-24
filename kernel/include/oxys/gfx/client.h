@@ -17,7 +17,7 @@
  * References:
  *   - kernel/abi/oxys/syscall_abi.h: the five calls, their arguments and their
  *     results, which are the whole of what a program is entitled to know.
- *   - docs/design/WINDOWS.md, Section 10: the protocol, and what the first
+ *   - docs/design/WINDOWS.md: the protocol, and what the first
  *     real client decided about the interface of Section 2.
  *
  * What crosses the boundary, and what does not.

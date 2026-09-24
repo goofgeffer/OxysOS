@@ -586,7 +586,7 @@ static void SessionRefreshTasks(void)
  * transparency is resolved here and not by the window manager**: the protocol
  * carries pixels and has no notion of a pixel that is not there, so what a
  * caller means by "nothing" is "the colour behind me", and the caller is the
- * only one that knows what that is — SESSION.md, Section 8. OxysIconCompose
+ * only one that knows what that is — SESSION.md. OxysIconCompose
  * does the mixing, a pixel partly transparent becoming partly the paper, which
  * is what lets the edge of a picture be smooth.
  *

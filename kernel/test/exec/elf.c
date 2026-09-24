@@ -8,7 +8,7 @@
  *          carried.
  * Key functions: KernelVerifyElf.
  * References:
- *   - docs/design/EXECUTABLE.md, Section 6: these assertions paired with the
+ *   - docs/design/EXECUTABLE.md: these assertions paired with the
  *     silent failure each would catch.
  *
  * The image is composed here, byte by byte.

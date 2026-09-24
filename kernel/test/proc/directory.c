@@ -10,7 +10,7 @@
  *          with and checking the number it ends with.
  * Key functions: KernelVerifyDirectory.
  * References:
- *   - docs/design/SHELL.md, Section 14: the table pairing every property the
+ *   - docs/design/SHELL.md: the table pairing every property the
  *     program asserts with the silent failure the assertion exists to catch.
  *   - userland/dir-check/main.c: the assertions themselves.
  *   - kernel/test/proc/directory_image.asm: the program, embedded.

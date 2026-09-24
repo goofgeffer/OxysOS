@@ -215,7 +215,7 @@ The `cpu/` and `smp/` division within it is worth stating because it is not
 obvious: `cpu/` is about **a** processor and `smp/` about **several**. The ticket
 spinlock is in `cpu/` although it exists for contention, because the other half
 of its job — masking interrupts for as long as it is held — is owed on a machine
-with one core, and `CONCURRENCY.md`, Section 3, is about that half.
+with one core, and `CONCURRENCY.md` is about that half.
 
 **Two subsystems are now split across both trees**, which is the cost of the line
 and not a defect in it. `kernel/mm/` keeps the frame allocator, the address-range
@@ -529,7 +529,7 @@ built upon it, and the initial ramdisk they are read from; Phase 8 the terminal,
 the shell, and everything from a redirection to job control. Phase 9 stands upon
 all of it: the window manager of 9.1 is the first graphical thing here that
 needed a process to exist, and the first thing built against the appearance
-[`../project/INSPIRATIONS.md`](../project/INSPIRATIONS.md), Section 3, wrote
+[`../project/INSPIRATIONS.md`](../project/INSPIRATIONS.md) wrote
 down — [`WINDOWS.md`](WINDOWS.md).
 
 ### 4.1 The two orderings chosen against the obvious one
@@ -590,7 +590,7 @@ park its processors — but it parks them against locks that exist, and it
 demonstrates them by the one thing a parked processor can still do: answer an
 interrupt, and record having answered it in an area only it writes. That is
 `KernelVerifyApplicationProcessors`, and it is the assertion the wrong order
-could not have produced. See [`SMP.md`](SMP.md), Section 8.
+could not have produced. See [`SMP.md`](SMP.md).
 
 The reordering costs nothing, because everything in 6.13 can be exercised upon
 one processor. A spinlock's uncontended acquire and release, and the per-CPU data
@@ -608,7 +608,7 @@ would otherwise have surfaced during the bring-up itself, which is the hardest
 moment there is to diagnose one: a segment reload destroys `GS.base`, and the
 interrupt entry path performed no `SWAPGS`. Both had been harmless only because
 nothing in the kernel read `GS`, and both are recorded in
-[`CONCURRENCY.md`](CONCURRENCY.md), Sections 3.3 and 3.4.
+[`CONCURRENCY.md`](CONCURRENCY.md).
 
 ## 5. Privilege and address-space model
 
@@ -641,14 +641,14 @@ From sub-task 4.1 the serial path is buffered and carried by interrupt, but it
 retains its polled path and reverts to it whenever the interrupt flag is clear.
 That is not a fallback for hardware that fails: it is the ordinary path of a
 panic, which reports with interrupts disabled and must not be left holding its
-message in a buffer that nothing will drain. `docs/devices/SERIAL.md`, Section 4, records
+message in a buffer that nothing will drain. `docs/devices/SERIAL.md` records
 the rule and the single place it is decided.
 
 From sub-task 4.2 the display path is a formal driver equally. It is not the path
 the tests read and not the path a panic can most be relied upon to reach; it is
 the path a person looking at the machine has, and the property it is built for is
 that the machine can verify what it displayed rather than merely that it wrote
-something. `docs/devices/DISPLAY.md`, Section 8, records why a display is unusually hard
+something. `docs/devices/DISPLAY.md` records why a display is unusually hard
 to test and what is asserted at each boot in consequence.
 
 **From sub-task 6.2 the operator-facing path is addressed two ways, and the policy
@@ -669,13 +669,13 @@ consequence shown every word of the boot log and not one of its numbers.
 
 Between sub-tasks 6.2 and 6.4 the cost was real and is worth recording: a machine
 with no serial adapter this kernel detects — VirtualBox is one — had **no readable
-diagnostic output at all**. `docs/design/FRAMEBUFFER.md`, Section 7, and `docs/design/CONSOLE.md`, Section 2, record
-the position, and `docs/project/TESTING.md`, Section 4.1, what it cost the
+diagnostic output at all**. `docs/design/FRAMEBUFFER.md` and `docs/design/CONSOLE.md` record
+the position, and `docs/project/TESTING.md` what it cost the
 VirtualBox procedure.
 
 **A fault that the kernel cannot survive leaves the ordinary paths and takes the
 display.** Which faults those are is decided by `ExceptionDispositionOf` and set
-out in `INTERRUPTS.md`, Section 8.1: an abort, a non-maskable interrupt, a
+out in `INTERRUPTS.md`: an abort, a non-maskable interrupt, a
 malformed descriptor table, or any fault the kernel raised within itself. A
 divide by zero or an unresolved page fault raised by a program belongs to that
 program, costs it alone, and draws nothing — announcing the end of the machine
@@ -687,4 +687,4 @@ bears upon it rather than upon the others — and the console is suspended for g
 when it does. That is not a duplicate of the report: the report goes to every
 path and remains the record; the screen is a summary for a person standing at a
 machine that has stopped, who may have no other channel at all.
-`docs/design/FAULTSCREEN.md`, Sections 1 and 2.
+`docs/design/FAULTSCREEN.md`.

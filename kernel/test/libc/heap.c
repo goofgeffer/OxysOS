@@ -9,7 +9,7 @@
  *          and which is therefore asserted by a program at privilege level 3.
  * Key functions: KernelVerifyHeap.
  * References:
- *   - docs/design/LIBC.md, Section 9.5: the two tables pairing every property
+ *   - docs/design/LIBC.md: the two tables pairing every property
  *     asserted below with the silent failure that assertion exists to catch.
  *   - ISO/IEC 9899:2011, Section 7.22.3: the behaviour the first half asserts.
  *   - libc/include/heap.h: OxysHeapAdopt, which is how the policy is given

@@ -19,7 +19,7 @@
  *   - Intel SDM, Volume 3A, Section 6.12.1: the frame IRETQ returns through,
  *     which is why a return through an interrupt frame edits RIP, RSP and
  *     RFLAGS directly.
- *   - docs/design/PROCESS.md, Section 18.3.
+ *   - docs/design/PROCESS.md.
  */
 
 #ifndef OXYS_ARCH_SYSCALL_SIGFRAME_H

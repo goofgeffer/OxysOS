@@ -2,407 +2,174 @@
 <!-- SPDX-License-Identifier: CC0-1.0 -->
 # The PS/2 Keyboard
 
-**Corresponding phase**: Phase 3, sub-task 3.7.
+**Phase**: sub-task 3.7 of [`../project/PLAN.md`](../project/PLAN.md); the
+controller was separated from it in sub-task 6.5.
+**Source**: [`../../drivers/keyboard/keyboard.c`](../../drivers/keyboard/keyboard.c),
+[`../../kernel/include/oxys/dev/keyboard.h`](../../kernel/include/oxys/dev/keyboard.h);
+the controller in [`../../drivers/ps2/ps2.c`](../../drivers/ps2/ps2.c).
+**Specifications**: IBM PC/AT Technical Reference (the 8042 and scan code set 1);
+the 8042 command set; the PS/2 keyboard command set; Intel SDM, Volume 2B, `STI`.
 
-**Specifications**: IBM Personal Computer AT technical reference, the 8042
-keyboard controller and scan code set 1; the 8042 controller command set; the
-PS/2 device command set.
+The keyboard on the first port of the 8042 controller: initialisation, the
+decoding of scan code set 1 into key events with modifiers, and the buffer the
+events wait in.
 
-## 1. Two devices, not one
-
-The word "keyboard" names two devices that are programmed quite differently, and
-conflating them is the first way this subsystem is got wrong.
+## 1. Two devices
 
 | Device | Reached by | Governs |
 | ------ | ---------- | ------- |
-| The 8042 controller | Ports `0x60` and `0x64` | The ports themselves, the interrupt, the translation of scancodes, and which of its two device ports are enabled. |
-| The keyboard | Bytes written to port `0x60` and passed through by the controller | Its own scanning, its scancode set, and its lamps. |
+| The 8042 controller | Ports `0x60` (data) and `0x64` (status/command) | Its two ports, the interrupt, scancode translation. |
+| The keyboard | Bytes written to `0x60`, forwarded by the controller | Scanning, its scancode set, its lamps. |
 
-A command to the controller is written to port `0x64`. A command to the keyboard
-is written to port `0x60`, whence the controller forwards it. The two use
-overlapping numbers for entirely different purposes — `0xAA` is the controller's
-self-test and also the keyboard's report that *its* self-test passed — so a byte
-sent to the wrong port does something, and not the thing intended.
+The two use overlapping numbers for different things (`0xAA` is the controller's
+self-test command and the keyboard's "self-test passed"), so a byte sent to the
+wrong one does something, just not the intended thing.
 
-**Since sub-task 6.5 they are two modules as well as two devices.** The
-controller is driven by [`../../drivers/ps2/ps2.c`](../../drivers/ps2/ps2.c) and
-this driver is a driver for the keyboard alone. The reason is the mouse upon the
-controller's second port: the configuration byte governs both ports and is
-written whole, so two drivers each keeping their own idea of it would each write
-back the other's bits as they last saw them. The whole argument, and what it
-would have broken, is in [`MOUSE.md`](MOUSE.md), Section 2.
+The controller has its own module, `ps2.c`, shared with the mouse on the second
+port. The configuration byte governs both ports and is written whole, so two
+drivers each keeping their own copy would each write back the other's bits as
+they last saw them ([`MOUSE.md`](MOUSE.md)).
 
-The translation bit went with it, and belongs there: it is the *controller* that
-translates, and Section 3 below now describes a property this driver depends upon
-rather than one it establishes.
+## 2. The status register
 
-## 2. The status register, and the rule that governs every access
+| Bit | Name | Set means |
+| --- | ---- | --------- |
+| 0 | Output buffer full | A byte waits **for the processor**; only now is a read of `0x60` valid. |
+| 1 | Input buffer full | The controller has not taken the last byte **from the processor**; write only when clear. |
 
-Port `0x64` read yields the status register. Two of its bits govern every
-exchange:
+The names are from the controller's side. A write while bit 1 is set overwrites
+an unconsumed byte; a read while bit 0 is clear returns a stale byte decoded as a
+keystroke nobody made.
 
-| Bit | Name | Meaning when set |
-| --- | ---- | ---------------- |
-| 0 | Output buffer full | The controller holds a byte **for the processor**. A read of port `0x60` is valid only now. |
-| 1 | Input buffer full | The controller still holds a byte **from the processor**. A write to `0x60` or `0x64` is valid only when this is *clear*. |
+**Every wait is bounded** by an iteration count, and expiry is reported as "no
+device". Many machines have no 8042, and port `0x64` then reads as a constant; an
+unbounded wait would hang initialisation with no message. The bound is a count,
+not a time, because the timer does not advance while interrupts are masked during
+initialisation.
 
-The names are stated from the controller's point of view, not the processor's,
-which is a reliable source of confusion: the *output* buffer is what the
-processor reads.
+## 3. Scan code set 1
 
-Writing while bit 1 is set overwrites a byte the controller has not yet consumed.
-Reading while bit 0 is clear yields whatever the port last held, which will be
-interpreted as a scancode and appear as a keystroke nobody made.
-
-### 2.1 Every wait is bounded
-
-`drivers/README.md` records the convention that a missing device must never cause
-the kernel to block. It is nowhere more necessary than here. A machine with no
-PS/2 controller — which is to say a large proportion of modern machines, where
-the ports are emulated by the firmware or absent altogether — decodes port `0x64`
-as a constant. An unbounded wait upon a bit of that constant would never end, and
-the kernel would hang during initialisation with no message, on hardware the
-developer very likely does not have in front of him.
-
-Every wait in `drivers/keyboard/keyboard.c` is therefore bounded by iteration
-count, and its expiry is reported as the absence of the device. `KeyboardInitialise`
-returns false, claims no request line, and the kernel proceeds.
-
-The bound is an iteration count rather than a duration measured by the interval
-timer of sub-task 3.6, because initialisation runs with the interrupt flag clear
-and the tick counter is therefore not advancing.
-
-## 3. Scan code set 1, and where it actually comes from
-
-`PLAN.md`, sub-task 3.7, specifies scan code set 1. The keyboard does not send
-it.
-
-A PS/2 keyboard powers up in **set 2**. Set 1 is what the processor sees only
-because the 8042 translates on the keyboard's behalf, that translation being
-governed by bit 6 of the controller configuration byte. The arrangement is
-historical: the original Personal Computer's keyboard sent set 1, the AT's sent
-set 2, and rather than break the software the AT's controller was given the
-ability to present the old codes.
-
-The firmware ordinarily leaves the translation enabled. A driver that merely
-assumed set 1 would therefore work upon most machines — and fail upon the rest by
-delivering plausible characters that were simply the wrong ones, since the two
-sets use the same range of numbers for different keys. There would be no
-diagnostic; the machine would type gibberish.
-
-`KeyboardInitialise` accordingly **sets bit 6 explicitly** and keeps it set. The
-alternative, clearing it and decoding set 2 directly, is entirely defensible, is
-what a driver that must also serve a USB-attached keyboard would want, and is not
-what this sub-task specifies.
-
-### 3.1 The encoding
+A PS/2 keyboard sends **set 2**. The processor sees set 1 only because the 8042
+translates, under bit 6 of its configuration byte (the AT's compromise with the
+original PC's keyboard). Firmware usually leaves translation on; a driver merely
+assuming set 1 would type plausible gibberish on machines where it is off, since
+both sets use the same numbers for different keys. `Ps2Initialise` therefore sets
+bit 6 explicitly.
 
 | Form | Encoding |
 | ---- | -------- |
-| A depression ("make") | The key's own code, in the range `0x01` to `0x58`. |
-| A release ("break") | The same code with bit 7 set, that is, the make code plus `0x80`. |
-| A key added after the original 84-key layout | The prefix `0xE0`, then the make or break code as above. |
+| Make (press) | The key's code, `0x01`–`0x58`. |
+| Break (release) | The make code with bit 7 set. |
+| A key added after the 84-key layout | Prefix `0xE0`, then make or break. |
 
-The break code being the make code with one bit set is what allows the decoder to
-treat the two identically: bit 7 is removed to obtain the key, and its former
-value becomes the `pressed` field of the event.
+Removing bit 7 gives the key; its value gives `pressed`. The prefix is recorded
+and applied to the next code; it is not a key.
 
-The prefix is not itself a key. It is recorded, and the following code is
-interpreted in its light.
+## 4. Events
 
-## 4. What the decoder produces
-
-A `KeyEvent`, declared in `kernel/include/oxys/dev/keyboard.h`, carrying the
-scancode, the character it yields under the modifiers in force, those modifiers,
-whether it was a depression or a release, and whether it was extended.
-
-Both depressions and releases are recorded, and the scancode is kept alongside
-the character. A consumer that wants text ignores the releases and reads the
-character, which `KeyboardReadCharacter` does on its behalf. A consumer that
-wants *keys* — the window system of Phase 9, or a shell implementing a keyboard
-interrupt — needs the releases, and needs the codes of the keys that produce no
-character at all. Discarding either at this level would be irreversible.
-
-### 4.1 The modifiers
+A `KeyEvent` carries the scancode, the character under the current modifiers, the
+modifiers, pressed or released, and whether extended. Releases and characterless
+keys are kept, because the window system and the terminal need keys, not just
+text; discarding them here would be irreversible. `KeyboardReadCharacter` serves
+a consumer that wants text, skipping releases.
 
 | Modifier | Behaviour |
 | -------- | --------- |
-| Shift, control, alternate | Follow the key: set while held, cleared upon release. |
-| Capitals lock | A latch: toggled by each depression, and unaffected by the release. |
+| Shift, Control, Alt | Set while held, cleared on release. Left and right are not distinguished. |
+| Caps Lock | Toggled on press only; toggling on release too would appear to do nothing. |
 
-The latch is toggled upon the depression alone. Toggling upon the release as well
-would return it to where it began, and the key would appear to do nothing —
-which is the commonest way for this to be got wrong, and one that a cursory test
-does not reveal, since the state is correct again by the time anybody looks.
+- **Shift and Caps Lock combine by exclusive or for letters only.** Shift with
+  Caps Lock gives lower case; Caps Lock does not turn `1` into `!`.
+- **An extended key yields no character.** Extended `0x1C` is keypad Enter and
+  ordinary `0x1C` is the main Enter; the tables are indexed by number, so
+  consulting them would give the wrong key's character.
 
-Left and right shift are not distinguished, nor left and right control; both set
-the same flag. Nothing yet needs the distinction.
+## 5. The buffer
 
-### 4.2 How shift and capitals lock combine
+128 events with two free-running indices, masked on use: their difference is the
+occupancy, with no empty/full ambiguity, correct across wrap. The capacity must be
+a power of two for the mask, enforced by `_Static_assert` (a capacity of 100
+would silently address only 64 entries).
 
-They do not combine in the same way for every key, and treating the lock as a
-second shift is wrong.
+- **An overrun drops the newest event** and counts it. The oldest are the start
+  of the line being typed, which matters more than its end.
+- **No lock between producer and consumer.** The handler alone advances the write
+  index, and writes the event before advancing it; the consumer alone advances
+  the read index.
 
-- For a **letter**, the two combine as an *exclusive* disjunction. Shift with the
-  lock engaged yields a lower-case letter, which is what every keyboard has ever
-  done.
-- For **every other key**, the lock is disregarded entirely. Capitals lock does
-  not turn the digit 1 into an exclamation mark.
+## 6. Initialisation
 
-The self-test asserts both, the second being the assertion that fails if the lock
-has been implemented as a second shift.
+The controller (`Ps2Initialise`, once, before both device drivers):
 
-### 4.3 Extended keys yield no character
+1. Disable both ports (`0xAD`, `0xA7`), so nothing arrives mid-configuration.
+2. Drain the output buffer: firmware may have left a keystroke or a command reply.
+3. Read the configuration byte (`0x20`); clear both interrupt enables and the
+   first port's clock-disable; set translation; write it (`0x60`).
+4. Controller self-test (`0xAA`), expecting `0x55`.
+5. **Write the configuration byte again.** Some controllers reset on self-test and
+   lose step 3.
+6. Detect and test the second port ([`MOUSE.md`](MOUSE.md)).
+7. Test the first port (`0xAB`), expecting `0x00`.
 
-An extended code shares its number with an ordinary key: extended `0x1C` is the
-keypad's enter and ordinary `0x1C` the main one. The character tables are indexed
-by the number alone, so consulting them for an extended code would yield the
-character of the wrong key.
-
-An extended event therefore carries no character. The two extended keys that
-genuinely produce one — the keypad's enter and solidus — are left to a later
-phase rather than given a table of their own for two entries.
-
-## 5. The circular buffer
-
-A fixed array of 128 events with two free-running indices, one advanced only by
-the producer and one only by the consumer.
-
-### 5.1 Why the indices are not wrapped
-
-They increase without bound and are masked when used to subscript the array.
-The usual alternative, wrapping each index to the capacity, makes equal indices
-mean either an empty buffer or a full one, and requires a further datum to say
-which. Here the difference of the two indices *is* the occupancy, and unsigned
-arithmetic keeps that true across the wrap of the indices themselves.
-
-The capacity is a power of two so that the reduction of an index to a subscript
-is a bitwise mask rather than a division, the reduction being performed inside an
-interrupt handler.
-
-That property is load-bearing rather than an optimisation, and it is enforced at
-compilation by a `_Static_assert` beside the buffer. Were the capacity changed to
-a value that is not a power of two — one hundred, say — a remainder would remain
-correct while the mask would address only the first sixty-four entries, and the
-buffer would be corrupted silently. The assertion converts that into a build
-failure, and was confirmed to do so by temporarily setting the capacity to one
-hundred and observing the compilation fail.
-
-### 5.2 Why an overrun discards the newest event
-
-A full buffer refuses the new event; it does not overwrite the oldest.
-
-The oldest events are the characters typed first. For a line of input the
-beginning matters more than the end, and a consumer that had read half a line
-would find the half it had not yet read silently rewritten by a later burst. The
-discard is counted, so that the loss is visible in the report rather than merely
-suffered.
-
-### 5.3 Why no lock is required
-
-There is one producer, the interrupt handler, and one consumer. The producer
-advances the write index alone; the consumer advances the read index alone; each
-reads the other's index without modifying it. The event is written *before* the
-write index is advanced, so a consumer that observes the advance is guaranteed a
-complete event beneath it.
-
-With several consumers possible, the consumer's side requires the spinlock
-governing this device. That lock was built by sub-task 6.13 and has not been
-applied here. Sub-task 6.14 started the application processors, but a started
-processor is parked and consumes nothing from this buffer; **sub-task 6.15 is
-what makes a second consumer possible**. The producer's side will not require it:
-there is one keyboard, and therefore one producer.
-
-## 6. The initialisation sequence
-
-The controller's half of it is `Ps2Initialise` and runs once, before this driver
-and before the mouse's:
-
-1. Disable both device ports (`0xAD`, `0xA7`), so that nothing arrives while the
-   controller is being reconfigured and no byte read below belongs to a keystroke
-   rather than to the exchange in progress.
-2. Drain the output buffer. The firmware has been using the keyboard and may have
-   left a keystroke or the tail of a command exchange behind; such a byte would
-   be decoded as a scancode.
-3. Read the configuration byte (`0x20`), clear both ports' interrupt enables and
-   the first port's clock-disable bit, set the translation bit, and write it back
-   (`0x60`).
-4. Run the controller self-test (`0xAA`); expect `0x55`.
-5. **Write the configuration byte again.** The self-test resets the controller
-   upon some implementations, discarding what was written at step 3. Upon an
-   implementation that does not, this is merely redundant. The failure it prevents
-   is a keyboard that works upon the developer's machine and not upon the user's.
-6. Discover whether there is a second port at all, and test it if there is. See
-   [`MOUSE.md`](MOUSE.md), Section 2.3.
-7. Test the first port (`0xAB`); expect `0x00`.
-
-This driver's half is then short, because the controller is already standing:
+The keyboard (`KeyboardInitialise`):
 
 8. Enable the first port (`0xAE`).
-9. Reset the keyboard (`0xFF`); expect the acknowledgement `0xFA`, then `0xAA`
-   reporting its self-test. The second byte is read but not insisted upon, some
-   emulated keyboards omitting it.
+9. Reset the keyboard (`0xFF`): expect `0xFA`, then `0xAA` (read but not required;
+   some emulators omit it).
 10. Enable scanning (`0xF4`).
-11. Drain again; nothing left by the reset is a keystroke.
-12. Set the first port's interrupt enable in the configuration byte.
-13. Register the handler, **then** unmask IR1.
+11. Drain again.
+12. Set the first port's interrupt enable.
+13. Register the handler, **then** unmask IR1; the other order loses a keystroke
+    arriving in between as an unclaimed request.
 
-The order of the last step matters. Were the line unmasked first, a keystroke
-arriving between the two would be recorded by the interrupt controller as an
-unclaimed request and lost.
+The keyboard driver never reconfigures the controller, and refuses to run rather
+than do so: it would silence a mouse already reporting.
 
-This driver does **not** reconfigure the controller, and refuses to run rather
-than doing so: a keyboard driver that reset the controller would silence a mouse
-already reporting.
+**The handler reads exactly one byte**, since the controller raises one request
+per byte; draining in a loop leaves later requests with nothing to read, counted
+as spurious. It asks **which port** the byte came from and hands a mouse byte to
+the mouse decoder: the read cannot be undone, and a lost byte desynchronises
+every later mouse packet.
 
-### 6.1 The handler reads exactly one byte
+## 7. From keystroke to program
 
-The controller raises its request once for each byte it has to offer. A handler
-that drained the buffer in a loop would consume bytes whose requests had not yet
-been delivered, and those requests would then arrive to find nothing to read.
-They would be counted as spurious or unclaimed, and the accounting of
-`docs/design/INTERRUPTS.md`, Section 9, would cease to mean anything.
+Key events reach programs through the terminal
+([`../design/SHELL.md`](../design/SHELL.md)), which turns them into bytes and
+control sequences. Where there is no root filesystem, the kernel's echo loop
+(`KernelEchoLoop`) prints what is typed instead. Its wait is `STI` immediately
+followed by `HLT`: `STI` takes effect after the next instruction, so no interrupt
+can arrive between them and leave the processor halted with nothing to wake it.
 
-### 6.2 The byte read may not be this driver's
+## Verification
 
-Since sub-task 6.5 the handler reads the byte **and asks which port it came
-from**, because both devices deliver through the controller's single output
-buffer. A byte from the second port is handed to the mouse's decoder rather than
-discarded: the read cannot be undone, and a discarded byte is one third of a
-movement packet, which puts that decoder out of step with every packet after it.
-See [`MOUSE.md`](MOUSE.md), Section 5.
+`KernelVerifyKeyboard` in [`../../kernel/test/dev/devices.c`](../../kernel/test/dev/devices.c)
+drives `KeyboardProcessScancode` with exactly the bytes the hardware would send;
+the decoding of set 1 does not depend on the route a byte took.
 
-## 7. Verification
+| Property asserted | The failure it would catch |
+| ----------------- | -------------------------- |
+| An unshifted key yields its lower-case character. | A misindexed table. |
+| A release is a release of the same key. | Bit 7 not removed. |
+| A modifier sets its flag and produces no event. | Modifiers arriving as characters. |
+| Shifted letters give capitals; shifted digits, punctuation. | A shifted table that only changes case. |
+| Caps Lock latches over a full keystroke and capitalises letters. | A latch toggled on release too. |
+| Caps Lock does not alter a digit. | Caps Lock implemented as a second Shift. |
+| Shift with Caps Lock gives lower case. | Inclusive instead of exclusive or. |
+| An extended modifier sets its flag without an event; an extended key is marked and has no character. | The prefix treated as a key; the ordinary twin's character. |
+| Reading characters skips releases. | Every keystroke twice. |
+| An overrun is counted exactly and accepted events survive; the buffer holds exactly its capacity. | Corruption instead of refusal; occupancy off by one. |
 
-A keyboard cannot be made to produce a keystroke by the kernel that drives it, so
-the verification is in two parts.
+The interrupt path from a real key is exercised by typing at the shell, or by the
+QEMU monitor's `sendkey` ([`../project/TESTING.md`](../project/TESTING.md)). The
+log reports the controller present, set 1 by translation, and IR1 on vector 33.
 
-### 7.1 The decoder, driven directly
+## Limitations
 
-`KeyboardProcessScancode` is exposed and the self-test drives it with codes of
-the kernel's own choosing — exactly the bytes the hardware would deliver. This is
-not a concession to testability: the decoding of set 1 is not a property of the
-8042, and a scancode arriving by any other route decodes identically.
-
-| Assertion | The failure it detects |
-| --------- | ---------------------- |
-| An unshifted key yields its lower-case character | The table is misindexed. |
-| A release is decoded as a release, bearing the same key | Bit 7 is not being removed, or is being lost. |
-| A modifier produces no event of its own, and sets its flag | Modifiers reaching consumers of text as spurious characters. |
-| A shifted letter yields its capital, and a shifted digit its punctuation | A shifted table that is a mere case conversion. |
-| Capitals lock latches upon a full keystroke and capitalises a letter | A latch toggled upon release as well, which appears to do nothing. |
-| Capitals lock does **not** alter a digit | The lock implemented as a second shift. |
-| Shift with the lock engaged yields lower case | The two combined as a disjunction rather than an exclusive one. |
-| An extended modifier sets its flag and produces no event | The prefix being treated as a key. |
-| An extended non-modifier is marked extended and bears no character | An extended key decoded as its ordinary twin. |
-| Reading a character skips releases | Every keystroke appearing twice. |
-| An overrun is counted exactly, and the events accepted survive intact | A buffer that corrupts rather than refuses, which is far worse than one that loses keystrokes. |
-| The buffer holds exactly its stated capacity | An off-by-one in the occupancy arithmetic. |
-
-### 7.2 The interrupt path, driven by a real keystroke
-
-The above establishes the decoder and leaves the path from the physical key to
-it — the controller raising IR1, the interrupt controller routing it, the handler
-reading the data port — asserted only as configured state.
-
-That path is exercised by the echo loop `KernelEchoLoop`, which the kernel
-enters at the completion of Phase 3 in place of halting, and which prints every
-character typed. Since sub-task 8.1 the shell precedes it: the kernel starts
-`/bin/sh` where there is a root to read it from, and every keystroke reaches the
-shell through the terminal of `kernel/terminal/terminal.c` — the same path, with
-the key events translated to bytes on the way; `../design/SHELL.md`, Section 2.
-The echo loop remains where there is no root. It was driven from the QEMU
-monitor:
-
-```sh
-( sleep 6; for k in h e l l o spc o x y s; do echo "sendkey $k"; sleep 0.15; done; \
-  sleep 1; echo quit ) \
-  | qemu-system-x86_64 -machine q35 -cpu qemu64 -smp cores=2 -m 512M \
-      -cdrom build/oxys.iso -display none -monitor stdio -serial file:/tmp/kbtest.log
-```
-
-The captured serial output ends `hello oxys`. This is the only assertion in the
-project so far that exercises a device end to end, from a physical event to a
-character, and it is the reason the echo loop exists.
-
-From sub-task 4.1 the loop drains the serial receive buffer as well, so the same
-demonstration is available for the serial adapter; `docs/devices/SERIAL.md`, Section 8.2,
-records it.
-
-The backspace is echoed by `KernelEchoBackspace`, which composes an erasure
-rather than sending the character itself, and which tells the serial terminal
-about a movement into the row above that the display driver made on its own; see
-[`DISPLAY.md`](DISPLAY.md), Section 7.1. The erasure is the three-character
-sequence `"\b \b"`. The backspace moves the cursor and erases nothing, upon the
-display and upon a serial terminal alike, so an echo that wrote it alone would
-leave the character the user meant to delete standing until something else was
-typed over it. The erasure is the echo's business rather than the display
-driver's, because the driver implements the character as ANSI X3.4-1986 defines
-it and a caller that wants something else composes it. Driven the same way:
-
-```sh
-( sleep 6; for k in o x y s spc b a d; do echo "sendkey $k"; sleep 0.15; done; \
-  for i in 1 2 3; do echo "sendkey backspace"; sleep 0.15; done; \
-  for k in g o o d; do echo "sendkey $k"; sleep 0.15; done; \
-  sleep 1; echo quit ) \
-  | qemu-system-x86_64 -machine q35 -cpu qemu64 -smp cores=2 -m 512M \
-      -cdrom build/oxys.iso -display none -monitor stdio -serial file:/tmp/bs.log
-```
-
-The captured output ends `oxys bad` followed by the erasing sequence three times
-and then `good`, which a terminal renders as `oxys good`.
-
-### 7.3 The loop halts the processor, and the order of two instructions matters
-
-The loop executes `STI` followed immediately by `HLT`. Intel SDM, Volume 2B,
-"STI", provides that the instruction's effect is delayed by one instruction, so
-the `HLT` is executed before any interrupt can be taken.
-
-Reversing the two, or placing anything between them, opens a window in which a
-keystroke is serviced and the processor then halts with nothing left to wake it.
-The machine would appear to work and would freeze upon a keystroke that happened
-to fall in the window — which is to say, rarely, and irreproducibly.
-
-## 8. Observed state
-
-At the completion of the self-test under QEMU:
-
-| Quantity | Value |
-| -------- | ----- |
-| Controller | Present; self-test and port test passed |
-| Scan code set | 1, by controller translation |
-| Request line | IR1, vector 33, unmasked |
-| Scancodes decoded by the self-test | 161 |
-| Events produced | 140 |
-| Events discarded by the deliberate overrun | 8 |
-
-## 9. Limitations
-
-1. The lamps are not driven. Capitals lock changes the decoding but not the light,
-   the `0xED` command requiring an acknowledgement exchange that is unattractive
-   to perform from within an interrupt handler. It belongs with the shell of
-   Phase 8, which is the first thing that will care.
-2. Number lock is not tracked, so the keypad always yields digits. The cursor
-   movements it selects require the latch and a second table.
-3. Only the first device port is used. The mouse of sub-task 6.5 occupies the
-   second, which is presently disabled.
-4. The two extended keys that produce characters, the keypad's enter and solidus,
-   produce none.
-5. There is no notion of a keyboard interrupt, a line discipline, or echo control.
-   Those are properties of a terminal rather than of a keyboard and belong to the
-   shell of Phase 8.
-6. The consumer's side of the buffer is unsynchronised. The spinlock it requires
-   was built by sub-task 6.13 and has not been applied here. A processor started
-   by sub-task 6.14 is parked and consumes nothing, and 6.15 gave it only kernel
-   threads; the change that widens a user thread's affinity mask is what makes a
-   second consumer possible. Section 5.3 says why the producer's side needs none.
-7. The "fake shift" sequences are not suppressed. The controller emits `E0 2A`
-   before, and `E0 AA` after, several extended keys — the keypad's solidus, and
-   the cursor keys while number lock is engaged — in order that software unaware
-   of those keys should see a plausible shifted keystroke. This driver declines
-   to treat an extended `0x2A` as a shift, which is correct, but then decodes it
-   as an ordinary key and emits a `KeyEvent` bearing that scancode, `extended`
-   set and no character. A consumer of characters is unaffected, since the event
-   carries none; a consumer that counts key events, such as the window manager of
-   sub-task 9.1, would see phantom keys. Suppressing them requires the driver to
-   recognise the sequence as a whole rather than one code at a time.
+1. The lamps are not driven; `0xED` needs an acknowledged exchange.
+2. Num Lock is not tracked; the keypad always gives digits.
+3. Keypad Enter and keypad `/` give no character.
+4. The controller's "fake shift" sequences (`E0 2A` … `E0 AA` around some extended
+   keys) are decoded as extended keys with no character. Text consumers are
+   unaffected; a consumer counting key events sees phantom keys.
+5. The consumer side has no lock; one consumer is assumed until user threads leave
+   the bootstrap processor.

@@ -15,7 +15,7 @@
  *   - IEEE Std 1003.1-2017, Section 2.10.2, rule 2, and the grammar's
  *     `io_number`: digits delimited by `<` or `>` are a token of their own.
  *   - userland/sh/shell.h: why the quotes are kept, and every bound.
- *   - docs/design/SHELL.md, Section 8.
+ *   - docs/design/SHELL.md.
  *
  * What of Section 2.3 is not here.
  *

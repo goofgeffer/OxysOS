@@ -53,11 +53,11 @@ can be.
 | Protection | Where |
 | ---------- | ----- |
 | Kernel text and read-only data are mapped without write permission | `kernel/arch/x86_64/mm/paging.c`, `PagingAddressIsReadOnly` |
-| `CR0.WP` is set, without which those mappings would be advisory and the kernel could write straight through them | `PagingInitialise`; [`docs/design/INTERRUPTS.md`](docs/design/INTERRUPTS.md), Section 8.4 |
+| `CR0.WP` is set, without which those mappings would be advisory and the kernel could write straight through them | `PagingInitialise`; [`docs/design/INTERRUPTS.md`](docs/design/INTERRUPTS.md) |
 | Every thread's kernel stack sits above a guard page, left mapped and read-only so that an overflow faults upon the write that overflows | `kernel/proc/process.c` |
 | The double fault is delivered upon a stack of its own, so a fault taken upon a bad stack is reported rather than escalating to a reset | `kernel/arch/x86_64/interrupt/exceptions.c`; [`docs/design/PRIVILEGE.md`](docs/design/PRIVILEGE.md) |
 | Every I/O port is denied to privilege level 3 | The I/O map base of the task state segment |
-| A fault raised at privilege level 3 ends that program and not the machine | `ExceptionDispositionOf`; [`docs/design/INTERRUPTS.md`](docs/design/INTERRUPTS.md), Section 8.1 |
+| A fault raised at privilege level 3 ends that program and not the machine | `ExceptionDispositionOf`; [`docs/design/INTERRUPTS.md`](docs/design/INTERRUPTS.md) |
 | A machine's own root volume is mounted read-only unless the operator chose the GRUB entry that permits writing | `kernel/kernel.c`, `KernelMountRootVolume` |
 | The self-tests that write to a real medium run only when the boot loader's command line asks for them | [`docs/project/TESTING.md`](docs/project/TESTING.md) |
 
@@ -81,7 +81,7 @@ misleading by omission.
 | **User address-space layout randomisation.** | A program is loaded where its headers ask. | Not yet planned |
 | **Any filesystem permission model.** No users, no credentials, no ownership. | Whatever can reach a volume can do anything to it. | Phase 7 at the earliest |
 | **Any network stack.** Phase 11 has not begun. | There is no remote attack surface whatever, which is the one respect in which this kernel is currently very secure. | Phase 11 |
-| **Concurrency safety.** Since sub-task 6.14 more than one processor is running, but a started processor has nothing to run: it answers inter-processor interrupts and halts. One structure has been put under a lock — the diagnostic channel, which is the whole of what such a processor touches. | Every other shared structure is unsynchronised by design and is documented as such, each in its own file's header. `docs/design/CONCURRENCY.md`, Section 10, limitation 1, enumerates them; `docs/design/SMP.md` records what a started processor may and may not reach. | Sub-task 6.15 |
+| **Concurrency safety.** Since sub-task 6.14 more than one processor is running, but a started processor has nothing to run: it answers inter-processor interrupts and halts. One structure has been put under a lock — the diagnostic channel, which is the whole of what such a processor touches. | Every other shared structure is unsynchronised by design and is documented as such, each in its own file's header. `docs/design/CONCURRENCY.md` enumerates them; `docs/design/SMP.md` records what a started processor may and may not reach. | Sub-task 6.15 |
 | **Cryptography of any kind.** | No hashing, no ciphers, no random number generation. | Phase 10 |
 
 None of these is an oversight, and each is recorded as a limitation in the design

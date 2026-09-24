@@ -31,7 +31,7 @@ assertions with the failures they catch.
 | Programs | ELF64 programs at privilege level 3; `fork`, `execve`, `exit`, `wait`; 44 system calls; signals, process groups and job control. | [`PROCESS.md`](../design/PROCESS.md), [`PRIVILEGE.md`](../design/PRIVILEGE.md) |
 | C library | Strings, heap, buffered I/O, formatted output, `<time.h>`, the configuration parser, the line editor, the terminal grid, the icon and image formats. | [`LIBC.md`](../design/LIBC.md) |
 | Shell | Line editing with history, pipelines, redirection, built-ins, job control; utilities in `/bin`. | [`SHELL.md`](../design/SHELL.md) |
-| Graphics | A composited framebuffer, 2D primitives, the bitmap face and console, fault screens, the pointer. | [`GRAPHICS.md`](../design/GRAPHICS.md) |
+| Graphics | A composited framebuffer, 2D primitives, the bitmap face and console, fault screens, the pointer. | [`FRAMEBUFFER.md`](../design/FRAMEBUFFER.md), [`DRAWING.md`](../design/DRAWING.md), [`CONSOLE.md`](../design/CONSOLE.md), [`FAULTSCREEN.md`](../design/FAULTSCREEN.md), [`COMPOSITOR.md`](../design/COMPOSITOR.md) |
 | Desktop | A stacking window manager with minimise and full screen; `init` supervising the session; a panel with a launcher, a list of windows and a clock; a background; a terminal, a file manager and a text viewer. | [`WINDOWS.md`](../design/WINDOWS.md), [`SESSION.md`](../design/SESSION.md), [`UTILITIES.md`](../design/UTILITIES.md) |
 | Configuration | `/etc/system.conf`, `/etc/desktop.conf`, `/etc/session.conf`; the shipped copies at `/share/defaults/etc`; the launcher reads its file again at every opening. | [`CONFIG.md`](../design/CONFIG.md), [`PERSIST.md`](../storage/PERSIST.md) |
 
@@ -51,10 +51,9 @@ each run is a row of [`TESTING-RECORD.md`](TESTING-RECORD.md).
 
 - **The physical machine** is an HP Laptop 14-dq0052dx (Celeron N4120, eMMC,
   no serial port); its log is read from the graphical console.
-  [`TESTING.md`](TESTING.md), Section 5.
+  [`TESTING.md`](TESTING.md).
 - **Bochs** needs the source-tree build configured for x86-64 and SMP; the
-  default build on `PATH` cannot run this kernel. [`TESTING.md`](TESTING.md),
-  Section 4A.
+  default build on `PATH` cannot run this kernel. [`TESTING.md`](TESTING.md).
 - **Machine-dependent paths not yet taken** by any run: the XSDT, the Local
   APIC address override, a second I/O APIC, more than two processors, and any
   interrupt source override QEMU does not declare.

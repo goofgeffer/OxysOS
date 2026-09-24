@@ -18,7 +18,7 @@
  *     the initial stack, each naming a string of the form NAME=value.
  *   - libc/crt/crt0.asm: which stores the vector's address here before it
  *     calls `main`.
- *   - docs/design/SHELL.md, Section 17: the environment a program is given,
+ *   - docs/design/SHELL.md: the environment a program is given,
  *     and where it comes from.
  *
  * Why the vector is stored and not copied.

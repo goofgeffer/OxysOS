@@ -13,8 +13,8 @@
  *   - libc/include/config.h: the format, and the parser that reads it.
  *   - kernel/abi/oxys/syscall_abi.h: `power`, `pause`, and the wait and signal
  *     calls the loop is built from.
- *   - docs/design/INIT.md, Section 2: the supervision and the shutdown;
- *     docs/design/CONFIG.md, Section 3: the keys this reads and what each
+ *   - docs/design/INIT.md: the supervision and the shutdown;
+ *     docs/design/CONFIG.md: the keys this reads and what each
  *     means.
  *   - IEEE Std 1003.1-2017: `waitpid`, `pause`, `fork`, `execve`, `kill`.
  *
@@ -58,7 +58,7 @@
  * gives up on it.
  *
  * A bound upon consecutive failures and not a rate, there being no clock a
- * program may read — docs/design/LIBC.md, Section 13. It is what stops a
+ * program may read — docs/design/LIBC.md. It is what stops a
  * service whose program is missing, or which faults upon its first
  * instruction, from being restarted for the machine's whole life; the count is
  * cleared whenever the service is stopped by `init` itself, which is the one

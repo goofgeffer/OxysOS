@@ -8,8 +8,8 @@
  * References:
  *   - ISO/IEC 9899:2011, Section 7.24.6.1 (memset) and 7.24.6.3 (strlen).
  *   - ISO/IEC 9899:2011, Section 7.24.6.2 (strerror), which is not here; the
- *     header records why, and docs/design/LIBC.md, Section 4, at length.
- *   - docs/design/LIBC.md, Section 5: the assertions, each paired with the
+ *     header records why, and docs/design/LIBC.md at length.
+ *   - docs/design/LIBC.md: the assertions, each paired with the
  *     failure it would catch.
  *
  * These two are together because the standard puts them together, and the

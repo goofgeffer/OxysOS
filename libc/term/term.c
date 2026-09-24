@@ -10,9 +10,9 @@
  * References:
  *   - libc/include/term.h: what this is, and why it is here rather than in
  *     /bin/terminal.
- *   - docs/design/TERMINAL.md, Section 3: the five control characters acted
+ *   - docs/design/TERMINAL.md: the five control characters acted
  *     upon, and what is deliberately not.
- *   - docs/design/CONSOLE.md, Section 7: the kernel console's backspace, which
+ *   - docs/design/CONSOLE.md: the kernel console's backspace, which
  *     crosses to the row above; this does the same, because the line editor of
  *     sub-task 8.1 was written against that console and erases a line by
  *     backspacing over it.
@@ -254,7 +254,7 @@ void TermWriteByte(TermScreen *screen, char byte)
     /*
      * Everything else that is not a printable character is dropped. A control
      * byte drawn as a glyph is a screen a person cannot read, and this grid has
-     * no escape sequences to be in the middle of — TERMINAL.md, Section 3,
+     * no escape sequences to be in the middle of — TERMINAL.md
      * records what that costs and what would be needed to pay it.
      */
     if ((byte < 0x20) || (byte == 0x7F))

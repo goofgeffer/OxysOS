@@ -20,7 +20,7 @@
  *   - Intel SDM, Volume 3A, Section 6.15: a write to a read-only page raises a
  *     page fault, in supervisor mode only where CR0.WP is set. That fault is what
  *     the protection established here exists to provoke.
- *   - docs/design/MEMORY-LAYOUT.md, Section 14.
+ *   - docs/design/MEMORY-LAYOUT.md.
  *
  * Concurrency. Cloning walks and modifies the source hierarchy, and is therefore
  * not safe against a concurrent fault upon the same address space. The lock

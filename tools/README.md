@@ -97,7 +97,7 @@ ignores and `make clean` removes.
 It is here because it belongs to no phase, as everything in this directory does,
 and because it is the same kind of thing in the sense that matters: **a
 discipline that was somebody's memory.** For three sub-tasks
-[`../docs/project/TESTING.md`](../docs/project/TESTING.md), Section 4A, printed a
+[`../docs/project/TESTING.md`](../docs/project/TESTING.md) printed a
 configuration for a person to retype, and at sub-task 7.5 somebody retyped it
 wrongly — a `vgaromimage` pointed at the system BIOS — and four self-tests failed
 in a way that looked exactly like a kernel regression. A configuration nobody
@@ -167,8 +167,8 @@ absent rather than failing obscurely.
    and left carrying the original's path.
 4. **Directory READMEs.** Every directory holding tracked material has one, as
    Section 10 of the guidelines requires.
-5. **The unsynchronised-structure list.** Every file named in `CONCURRENCY.md`,
-   Section 10, limitation 1, exists and carries a `Concurrency.` paragraph. That
+5. **The unsynchronised-structure list.** Every file named in `CONCURRENCY.md`
+   exists and carries a `Concurrency.` paragraph. That
    list states this about itself, and the statement was false when first made.
 6. **The assertion count.** `STATUS.md`'s count of self-tests reporting `passed`
    or `sound` is the number in `build/serial.log`. Skipped where no log exists,

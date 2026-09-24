@@ -30,7 +30,7 @@
  *   - kernel/abi/oxys/syscall_abi.h: the failure results these numbers are the
  *     names of, included below so that the correspondence is checked by the
  *     compiler rather than by a reader.
- *   - docs/design/LIBC.md, Section 8: the design of this header and of the
+ *   - docs/design/LIBC.md: the design of this header and of the
  *     translation that is the only thing in this library that writes errno.
  *
  * Why errno is a function call and not a variable.

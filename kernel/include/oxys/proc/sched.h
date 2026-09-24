@@ -42,7 +42,7 @@
  *   **It does not make the kernel safe for a user program upon an application
  *   processor.** The allocators, the filesystem layer and the process tables
  *   that a system call reaches are still unsynchronised, and
- *   docs/design/CONCURRENCY.md, Section 10, limitation 1, enumerates them. The
+ *   docs/design/CONCURRENCY.md enumerates them. The
  *   affinity mask is what expresses that: a user thread's mask names the
  *   bootstrap processor alone, so the constraint is a value in a field that can
  *   be widened in one place when those locks land, rather than a rule written
@@ -153,7 +153,7 @@ _Noreturn void SchedulerEnterIdle(void);
  * The queue is chosen among the processors the thread's affinity permits and
  * that are online, by the shortest queue — which is the whole of the balancing
  * this sub-task performs, and it is performed here because here is the only
- * moment a thread changes processor. See docs/design/SCHEDULER.md, Section 5,
+ * moment a thread changes processor. See docs/design/SCHEDULER.md
  * for why a thread does not migrate afterwards.
  *
  * Returns false where the thread is unusable, already queued, or where its
@@ -184,7 +184,7 @@ void SchedulerYield(void);
  * its processor for the whole of the remaining boot, and every self-test after
  * it would be running against a machine that was quietly switching threads
  * underneath it. There is no reaper, so the thread's table slot is not
- * reclaimed; docs/design/SCHEDULER.md, Section 10, limitation 4, records that.
+ * reclaimed; docs/design/SCHEDULER.md records that.
  *
  * It returns only if the caller is an idle thread, which has nowhere to go.
  */

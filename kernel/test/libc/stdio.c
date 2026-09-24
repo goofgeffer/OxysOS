@@ -7,7 +7,7 @@
  *          giving it streams whose device is memory rather than a descriptor.
  * Key functions: KernelVerifyStdio.
  * References:
- *   - docs/design/LIBC.md, Section 10.5: the table pairing every property
+ *   - docs/design/LIBC.md: the table pairing every property
  *     asserted below with the silent failure that assertion exists to catch.
  *   - ISO/IEC 9899:2011, Section 7.21: the behaviour asserted, cited at each
  *     group of assertions.

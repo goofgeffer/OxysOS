@@ -10,7 +10,7 @@
  * References:
  *   - kernel/abi/oxys/syscall_abi.h: the window calls, `window_text`, and the
  *     resize event a window made full is sent.
- *   - docs/design/UTILITIES.md, Section 3: the design, and what only looking
+ *   - docs/design/UTILITIES.md: the design, and what only looking
  *     establishes.
  *
  * What it shows, and what it does not.

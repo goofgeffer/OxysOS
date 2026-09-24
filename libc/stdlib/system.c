@@ -10,7 +10,7 @@
  *     memory source is a named function rather than a call inside the allocator.
  *   - libc/include/syscall.h: OxysSbrk, and the failure value it returns.
  *   - kernel/abi/oxys/syscall_abi.h: SYSCALL_BRK, which is what lies beneath it.
- *   - docs/design/LIBC.md, Section 9.2: the division of the sub-task into a
+ *   - docs/design/LIBC.md: the division of the sub-task into a
  *     policy that runs anywhere and a source that runs only at privilege level 3.
  *
  * This file is six lines of code and a translation unit of its own, which is

@@ -155,7 +155,7 @@ void IdtSetGate(uint8_t vector, uint64_t handler, uint8_t type_and_attributes);
  * because the two happen at different times: every gate is installed before the
  * task state segment exists, and an index naming an entry of a segment that had
  * not been loaded would be a stack pointer of zero. Refer to
- * docs/design/PRIVILEGE.md, Section 4.
+ * docs/design/PRIVILEGE.md.
  *
  * Returns false where the vector has no gate installed, or where the entry is
  * above the seven the architecture provides.

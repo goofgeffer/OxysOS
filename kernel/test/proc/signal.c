@@ -11,7 +11,7 @@
  *   - userland/signal-check/main.c: the program, and what it asserts.
  *   - kernel/include/oxys/proc/signal.h: the interface the kernel-side
  *     assertions are made against.
- *   - docs/design/PROCESS.md, Section 18.5: the table pairing every property
+ *   - docs/design/PROCESS.md: the table pairing every property
  *     asserted here with the silent failure the assertion exists to catch.
  *
  * What is asserted from the kernel and why.

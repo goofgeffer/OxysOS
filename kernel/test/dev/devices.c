@@ -10,8 +10,8 @@
  *          KernelVerifyKeyboard, KernelVerifySerial, KernelVerifyVga,
  *          KernelVerifyPci.
  * References:
-   - docs/design/INTERRUPTS.md, Section 9.6: the controller assertions.
- *   - docs/design/INTERRUPTS.md, Section 10.6: the request layer's assertions.
+   - docs/design/INTERRUPTS.md: the controller assertions.
+ *   - docs/design/INTERRUPTS.md: the request layer's assertions.
  *   - docs/devices/TIME.md, docs/devices/KEYBOARD.md, docs/devices/SERIAL.md,
  *     docs/devices/DISPLAY.md and docs/devices/PCI.md: each has a verification
  *     section pairing the assertions below with what their failure would mean.

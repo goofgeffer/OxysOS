@@ -17,7 +17,7 @@
  *   - J. E. Bresenham, "A linear algorithm for incremental digital display of
  *     circular arcs", Communications of the ACM 20(2), pages 100 to 106, 1977:
  *     the circle algorithm behind GraphicsFillCircle, integer likewise.
- *   - docs/design/DRAWING.md, Sections 1 to 6: the design, and every
+ *   - docs/design/DRAWING.md: the design, and every
  *     assertion made upon it.
  *
  * Why a surface, when there is only one framebuffer.
@@ -101,7 +101,7 @@ typedef struct GraphicsRectangle
  *
  * It exists because writing a four-byte pixel as four bytes costs four stores
  * and the loop that generates them, and that was measured to be the greater part
- * of what the console spent — see docs/design/CONSOLE.md, Section 6. Where it
+ * of what the console spent — see docs/design/CONSOLE.md. Where it
  * is false every primitive still works, byte at a time; nothing depends upon it
  * for correctness.
  */
@@ -288,9 +288,9 @@ void GraphicsClear(GraphicsSurface *surface, uint32_t colour);
  * zero is one pixel; a negative radius draws nothing.
  *
  * Sub-task 9.1's one addition to the primitives, for the close control of a
- * window's frame, which docs/project/INSPIRATIONS.md, Section 3, wants
+ * window's frame, which docs/project/INSPIRATIONS.md wants
  * geometric and not a glyph. The spans are found by Bresenham's circle
- * algorithm and are integer throughout; see docs/design/DRAWING.md, Section 4.1.
+ * algorithm and are integer throughout; see docs/design/DRAWING.md.
  */
 void GraphicsFillCircle(GraphicsSurface *surface, int32_t centre_x, int32_t centre_y,
                         int32_t radius, uint32_t colour);
@@ -318,7 +318,7 @@ void GraphicsPatternBlock(GraphicsSurface *surface, int32_t x, int32_t y,
  *
  * The pixels drawn are exactly those of the unclipped line that fall within the
  * clip, and this is a stronger promise than it appears; see
- * docs/design/DRAWING.md, Section 4.
+ * docs/design/DRAWING.md.
  */
 void GraphicsDrawLine(GraphicsSurface *surface, int32_t first_x, int32_t first_y,
                       int32_t second_x, int32_t second_y, uint32_t colour);

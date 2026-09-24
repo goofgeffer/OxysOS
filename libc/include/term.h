@@ -12,9 +12,9 @@
  *          TermKeyBytes, TermSequenceFor, TERM_MODIFIER_CONTROL,
  *          TermScrolls, TermBytesWritten.
  * References:
- *   - docs/design/TERMINAL.md, Section 3: what this interprets and what it
+ *   - docs/design/TERMINAL.md: what this interprets and what it
  *     deliberately does not, and why the list is as short as it is.
- *   - docs/design/CONSOLE.md, Sections 6 and 7: the kernel's console, which is
+ *   - docs/design/CONSOLE.md: the kernel's console, which is
  *     the display the Phase 8 shell was written against. What that console does
  *     with a backspace, a carriage return and a line feed is what a program
  *     writing to this one expects, so this does the same thing — including the
@@ -25,7 +25,7 @@
  *
  * Why this is in the C library and not in the program that draws it.
  *
- *   It is the seam of docs/design/LIBC.md, Section 9, applied a third time,
+ *   It is the seam of docs/design/LIBC.md applied a third time,
  *   after the line editor's editing and the configuration's parsing. A grid of
  *   characters with a cursor is pure memory: it reads nothing, writes nothing
  *   and calls nothing, so the kernel's self-test can drive it through a session

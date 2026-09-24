@@ -22,7 +22,7 @@
  *     acknowledgements of several processors are counted without a lock.
  *   - Intel SDM, Volume 3A, Section 10.8.5: the end-of-interrupt every handler
  *     entered by the fixed delivery mode must write.
- *   - docs/design/CONCURRENCY.md, Section 6.
+ *   - docs/design/CONCURRENCY.md.
  *
  * Why one request is in flight at a time.
  *
@@ -30,7 +30,7 @@
  *   makes it one. The alternative — a request block per sending processor, which
  *   the handler would scan — removes the serialisation and is what this will
  *   become if shootdowns are ever measured to be the thing a workload waits for.
- *   It is not built now for the reason docs/devices/APIC.md, Section 7, gives for
+ *   It is not built now for the reason docs/devices/APIC.md gives for
  *   not having built this: a mechanism with nothing to use it is a mechanism
  *   nothing has ever shown to be right. There is one processor started, and the
  *   simple form is the one whose correctness can be argued in a paragraph.
@@ -266,8 +266,8 @@ bool ShootdownToSelf(VirtualAddress address)
      * not safe upon any other; so the condition is enforced rather than assumed.
      *
      * The restriction costs nothing, because the caller is the self-test and its
-     * purpose is exactly the single-processor case: docs/design/ARCHITECTURE.md,
-     * Section 4.1, records that sub-task 6.13 was placed before 6.14 on the
+     * purpose is exactly the single-processor case: docs/design/ARCHITECTURE.md
+     * records that sub-task 6.13 was placed before 6.14 on the
      * understanding that everything in it could be exercised upon one processor,
      * and this is the sentence that has to be true for that to hold.
      */

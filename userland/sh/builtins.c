@@ -22,7 +22,7 @@
  *     `export` are special built-ins and `cd` and `pwd` are not.
  *   - libc/include/syscall.h: OxysChangeDirectory and OxysGetWorkingDirectory,
  *     the two calls beneath `cd` and `pwd`.
- *   - docs/design/SHELL.md, Section 13.
+ *   - docs/design/SHELL.md.
  *
  * What is not here, and why.
  *

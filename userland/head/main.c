@@ -11,7 +11,7 @@
  *   - IEEE Std 1003.1-2017, `head`: "copy the first number of lines of each
  *     input file to standard output"; `-n number`; ten lines by default; with
  *     more than one operand, each is preceded by `==> name <==`.
- *   - docs/design/SHELL.md, Section 30.
+ *   - docs/design/SHELL.md.
  */
 
 #include <errno.h>

@@ -9,11 +9,11 @@
  *          restoration and its nested concealment.
  * Key functions: KernelVerifyMouse, KernelVerifyCursor.
  * References:
- *   - docs/devices/MOUSE.md, Section 8: each assertion below, paired with the
+ *   - docs/devices/MOUSE.md: each assertion below, paired with the
  *     silent failure it catches.
- *   - docs/design/COMPOSITOR.md, Section 1: the pointer, seen from the drawing
+ *   - docs/design/COMPOSITOR.md: the pointer, seen from the drawing
  *     it is built upon.
- *   - docs/project/TESTING-GRAPHICS.md, Section 7: the record of these tests.
+ *   - docs/project/TESTING-GRAPHICS.md: the record of these tests.
  *
  * Neither test needs a mouse, and that is the point of both.
  *

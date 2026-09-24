@@ -275,7 +275,7 @@ bool PersistMountDevice(BlockDevice *chosen, const char *point, PersistReport *r
 
     /*
      * A volume left open by a machine that stopped without shutting down is
-     * marked clean here rather than mounted read-only, PERSIST.md, Section 4:
+     * marked clean here rather than mounted read-only, PERSIST.md:
      * the read-only rule waits for a check this system cannot run, and a
      * configuration that can never again be edited is a worse failure than the
      * one the rule guards against, upon a volume of three small files that this

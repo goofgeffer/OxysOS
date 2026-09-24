@@ -9,10 +9,10 @@
  *          active position as ANSI X3.4-1986 defines them.
  * Key functions: KernelVerifyConsole.
  * References:
- *   - docs/design/CONSOLE.md, Section 4: every assertion below, paired with
+ *   - docs/design/CONSOLE.md: every assertion below, paired with
  *     the silent failure it catches.
  *   - ANSI X3.4-1986: LF, CR, HT and BS.
- *   - docs/devices/DISPLAY.md, Section 6: the same four characters as the
+ *   - docs/devices/DISPLAY.md: the same four characters as the
  *     text-mode driver implements them, which this console must agree with.
  *
  * The font is asserted against a surface in memory, as the primitives of

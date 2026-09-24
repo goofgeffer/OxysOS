@@ -11,11 +11,11 @@
  *          CursorShapeIsInterior, CursorImageSurface, CursorImageMask,
  *          CursorMoveCount, CursorReport.
  * References:
- *   - docs/design/COMPOSITOR.md, Section 1: what the pointer is, seen from the
+ *   - docs/design/COMPOSITOR.md: what the pointer is, seen from the
  *     drawing it is built upon; Section 27.4, what sub-task 6.6 removed from it.
- *   - docs/devices/MOUSE.md, Sections 7 and 8: the shape and every assertion
+ *   - docs/devices/MOUSE.md: the shape and every assertion
  *     made upon it.
- *   - docs/devices/MOUSE.md, Section 1: the division between the device and its
+ *   - docs/devices/MOUSE.md: the division between the device and its
  *     picture, and why it falls where it does.
  *
  * Why a pointer needs anything more than a bitmap, and why it no longer does.

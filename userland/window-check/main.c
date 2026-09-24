@@ -17,7 +17,7 @@
  *   - kernel/abi/oxys/syscall_abi.h: the five calls and the two structures.
  *   - kernel/test/gfx/client.c: the self-test that runs this, reads the pixels
  *     this program blitted, and injects the key it waits for.
- *   - docs/design/WINDOWS.md, Section 11.
+ *   - docs/design/WINDOWS.md.
  *
  * The window is left standing on purpose. The last thing this program does is
  * end without destroying its first window, so that the kernel's self-test can

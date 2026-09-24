@@ -9,7 +9,7 @@
  *          `read` of descriptor 0 at privilege level 3.
  * Key functions: KernelVerifyLine.
  * References:
- *   - docs/design/SHELL.md, Section 5: the table pairing every property
+ *   - docs/design/SHELL.md: the table pairing every property
  *     asserted below with the silent failure the assertion exists to catch.
  *   - libc/include/line.h: the interface, and the table of what each byte does,
  *     which is what the first half asserts byte by byte.
@@ -22,7 +22,7 @@
  *
  * Why this test can assert what a program printed, when no other can.
  *
- *   docs/design/LIBC.md, Section 12.7, limitation 1, records that nothing in
+ *   docs/design/LIBC.md records that nothing in
  *   this kernel can read what a program wrote to the diagnostic path. The editor
  *   is the first thing in this project built so that the limitation does not
  *   apply to it: it writes through a function it is given, and here that

@@ -14,7 +14,7 @@
  *     signed is implementation-defined. Upon x86_64 with this toolchain it is,
  *     which is what makes the paragraph below a correctness matter rather than
  *     a pedantry.
- *   - docs/design/LIBC.md, Section 5: the assertions, each paired with the
+ *   - docs/design/LIBC.md: the assertions, each paired with the
  *     failure it would catch.
  *
  * The one thing these three can get wrong invisibly.

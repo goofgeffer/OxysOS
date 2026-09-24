@@ -16,7 +16,7 @@
  *     of; there is no address syntax, no regular expression and no `s`.
  *   - libc/include/line.h: LineRead and LineEdit, the second of which hands a
  *     line back to be changed, which is what makes `e` an editor's command.
- *   - docs/design/SHELL.md, Section 25.
+ *   - docs/design/SHELL.md.
  *
  * Why a line editor and not a screen.
  *

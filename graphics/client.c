@@ -15,9 +15,9 @@
  * References:
  *   - kernel/abi/oxys/syscall_abi.h: the calls and the two structures that
  *     cross, SyscallWindowRectangle and SyscallWindowEvent.
- *   - docs/design/WINDOWS.md, Sections 10 and 11: the protocol and every
+ *   - docs/design/WINDOWS.md: the protocol and every
  *     assertion made upon it.
- *   - docs/design/SCHEDULER.md, Section 9: the wait channel, and the
+ *   - docs/design/SCHEDULER.md: the wait channel, and the
  *     discipline of testing the condition and sleeping within one masked
  *     section, which WindowClientEvent follows as the pipe does.
  *

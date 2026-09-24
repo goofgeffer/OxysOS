@@ -12,9 +12,9 @@
  *          privilege level 3 through the client protocol.
  * Key functions: KernelVerifyWindows, KernelVerifyCircle.
  * References:
- *   - docs/design/WINDOWS.md, Section 6: every assertion here paired with the
+ *   - docs/design/WINDOWS.md: every assertion here paired with the
  *     silent failure it would catch.
- *   - docs/design/DRAWING.md, Section 4.1: the disc, and its assertions.
+ *   - docs/design/DRAWING.md: the disc, and its assertions.
  *
  * The screen is composed in memory, as every graphical assertion since
  * sub-task 6.3 has been, and for the reason the compositor's self-test gives

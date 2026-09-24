@@ -152,7 +152,7 @@ brings that expectation here would conclude from `Oxys 1.1` that the system-call
 numbers had not moved, which this project has never promised. What it has
 promised is in [`../../LICENSING.md`](../../LICENSING.md), Section 2, and in the
 system-call numbering rule of
-[`../design/PRIVILEGE.md`](../design/PRIVILEGE.md), Section 9.6: a number handed
+[`../design/PRIVILEGE.md`](../design/PRIVILEGE.md): a number handed
 to a program is one that must not change. That promise is made by the interface
 and not by the version number.
 
@@ -363,7 +363,7 @@ release that had been withdrawn — until this document was written.
 has any use for it: the banner is read by whoever is already looking at the
 machine, and a program asking what it runs upon wants something it can compare.
 The name lives in the release notes, the tag annotation and Section 11. This is
-the same reasoning [`../devices/APIC.md`](../devices/APIC.md), Section 7, gives for
+the same reasoning [`../devices/APIC.md`](../devices/APIC.md) gives for
 not having programmed a register nothing yet used — a field with no consumer is a
 field nothing has ever shown to be right.
 
@@ -385,10 +385,10 @@ carrying:
 | Condition | Authority |
 | --------- | --------- |
 | `make verify` passes at the commit being tagged | `PROJECT_GUIDELINES.md`, Section 2 — this is the gate for any change, and a release is not an exception to it |
-| `make clang-check` passes at that commit | [`TOOLCHAIN.md`](TOOLCHAIN.md), Section 9 |
+| `make clang-check` passes at that commit | [`TOOLCHAIN.md`](TOOLCHAIN.md) |
 | Every document affected by the work in it is up to date | `PROJECT_GUIDELINES.md`, Section 2 |
-| The image has been booted under QEMU and VirtualBox, with the runs recorded | [`TESTING.md`](TESTING.md), Sections 2 and 4 |
-| The image has been booted on physical hardware | [`TESTING.md`](TESTING.md), Section 5. **The project owner's call per release**: it is required of a release that claims to be usable, and a release that has not had it says so in its notes rather than being silent |
+| The image has been booted under QEMU and VirtualBox, with the runs recorded | [`TESTING.md`](TESTING.md) |
+| The image has been booted on physical hardware | [`TESTING.md`](TESTING.md). **The project owner's call per release**: it is required of a release that claims to be usable, and a release that has not had it says so in its notes rather than being silent |
 
 A release is cut from `main` and from no other branch, because there is no other
 branch.
@@ -446,7 +446,7 @@ enough to leave implied:
 
 - **It boots by BIOS alone.** The UEFI path is Phase 12, so a machine with no
   compatibility support module will not boot `Oxys 1`.
-  [`TESTING.md`](TESTING.md), Section 3, already records that `make run-uefi` is
+  [`TESTING.md`](TESTING.md) already records that `make run-uefi` is
   expected to fail, and it will still be expected to fail at the release.
 - **It has none of Phase 13's hardening.** No NX, SMEP or SMAP enforcement, no
   write-exclusive-or-execute in kernel mappings, no stack canaries, no address

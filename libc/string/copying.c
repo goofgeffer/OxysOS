@@ -14,7 +14,7 @@
  *   - ISO/IEC 9899:2011, Section 6.7.3.1: the meaning of `restrict`, which is
  *     what permits memcpy to copy forwards without asking whether the objects
  *     overlap.
- *   - docs/design/LIBC.md, Section 3: the group these six belong to, and
+ *   - docs/design/LIBC.md: the group these six belong to, and
  *     Section 5, which pairs each assertion of the self-test with the failure it
  *     would catch.
  *
@@ -110,7 +110,7 @@ char *strcpy(char *restrict destination, const char *restrict source)
  *
  * Neither is repaired here. A strncpy that terminated would be a function with
  * a standard name and non-standard behaviour, which is worse than either the
- * standard function or a differently-named one; docs/design/LIBC.md, Section 6,
+ * standard function or a differently-named one; docs/design/LIBC.md
  * limitation 2, records the bounded copy that ought to exist beside it and why
  * it is not being invented in this sub-task.
  */

@@ -20,7 +20,7 @@
  *     `unlink()`, from which the refusals below take their meaning.
  *   - kernel/test/libc/utilities.c: the fixture this reads, which that file
  *     builds through the filesystem layer before running this.
- *   - docs/design/LIBC.md, Section 12.5: what this asserts and why it exists.
+ *   - docs/design/LIBC.md: what this asserts and why it exists.
  *
  * **Why this program exists, and what it closes.**
  *

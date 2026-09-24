@@ -22,7 +22,7 @@
  *     answers 0xFA to acknowledge a command and 0xFE to ask that it be sent
  *     again. The controller commands, the status register and the configuration
  *     byte are cited in <oxys/dev/ps2.h>, which owns them.
- *   - docs/devices/KEYBOARD.md, Sections 2 and 3: the controller and the
+ *   - docs/devices/KEYBOARD.md: the controller and the
  *     keyboard upon it, and why they are different devices.
  *
  * Where the controller went.

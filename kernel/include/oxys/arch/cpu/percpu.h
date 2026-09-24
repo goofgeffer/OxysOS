@@ -30,7 +30,7 @@
  *     an access a single processor makes to its own storage. Nothing in this
  *     area is written by any processor but its owner, and that is the whole
  *     reason it exists.
- *   - docs/design/CONCURRENCY.md, Sections 3 and 4: what the area holds, why the
+ *   - docs/design/CONCURRENCY.md: what the area holds, why the
  *     first two fields are where they are, and why the interrupt-disable is
  *     counted rather than saved and restored by the caller.
  *
@@ -45,7 +45,7 @@
  *   GS.base answers it in one instruction, because the answer was written there
  *   once when the processor started. The cost is that the register must hold the
  *   area whenever kernel code runs, which is an invariant the entry paths are
- *   responsible for: docs/design/CONCURRENCY.md, Section 3.2, states it and names
+ *   responsible for: docs/design/CONCURRENCY.md states it and names
  *   the four places that maintain it.
  */
 
@@ -184,7 +184,7 @@ bool PerCpuEstablishSegmentBase(void);
  *
  * This is the whole of the mechanism: one load, of the third quadword of the
  * area, through a segment base only privilege level 0 can have written. It is
- * valid wherever kernel code runs, which docs/design/CONCURRENCY.md, Section 3.2,
+ * valid wherever kernel code runs, which docs/design/CONCURRENCY.md
  * defines; it is not valid before PerCpuInitialise has run, and every caller of
  * it runs after that by construction.
  *

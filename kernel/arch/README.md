@@ -4,8 +4,7 @@
 
 **Phase**: none of its own. Every file here was written in the phase its subject
 belongs to and moved here afterwards; the move is recorded in
-[`../../docs/design/ARCHITECTURE.md`](../../docs/design/ARCHITECTURE.md),
-Section 2.4.
+[`../../docs/design/ARCHITECTURE.md`](../../docs/design/ARCHITECTURE.md).
 **Detailed design**: the design documents of the subsystems themselves —
 [`INTERRUPTS.md`](../../docs/design/INTERRUPTS.md),
 [`PRIVILEGE.md`](../../docs/design/PRIVILEGE.md),
@@ -125,7 +124,7 @@ so the interfaces make the same distinction the implementations do:
 
 **This was recorded as the boundary's one loose end and is no longer one.** When
 `arch/x86_64/` was first established the headers were left flat, and
-`ARCHITECTURE.md`, Section 2.4, said plainly that the corpus therefore could not
+`ARCHITECTURE.md` said plainly that the corpus therefore could not
 tell you which of its headers was portable: `<oxys/paging.h>` described a
 four-level hierarchy and sat beside `<oxys/vfs.h>`, which described nothing of
 the sort. Grouping the corpus closed it.

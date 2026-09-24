@@ -18,7 +18,7 @@
  * References:
  *   - docs/design/PROCESS.md: the design of these structures and the reasons for
  *     their shape.
- *   - docs/design/PRIVILEGE.md, Section 3.3 and limitations 4 and 6: each thread
+ *   - docs/design/PRIVILEGE.md and limitations 4 and 6: each thread
  *     has a kernel stack of its own, taken from the arena with a guard beneath
  *     it, and `rsp0` is written whenever the thread that owns it becomes the
  *     current one.
@@ -327,7 +327,7 @@ typedef struct Thread
      * RAX set to zero, which is how a child tells itself apart from its parent.
      *
      * A thread entered at an entry point has every register cleared instead —
-     * see docs/design/PROCESS.md, Section 10 — and that would be wrong here in a
+     * see docs/design/PROCESS.md — and that would be wrong here in a
      * way nothing would report: the System V convention entitles the code after
      * a call to find RBX, RBP and R12 to R15 as it left them, so a child whose
      * preserved registers had been zeroed would return from `fork` into a frame
@@ -353,8 +353,8 @@ typedef struct Thread
      * The affinity is a bitmask over the processor indices of
      * kernel/include/oxys/percpu.h — this kernel's dense numbering, not the
      * firmware's. It is a hard constraint and not a hint: a thread is never
-     * placed upon a processor whose bit is clear. See docs/design/SCHEDULER.md,
-     * Section 4, for why a user thread's mask names the bootstrap processor
+     * placed upon a processor whose bit is clear. See docs/design/SCHEDULER.md
+     * for why a user thread's mask names the bootstrap processor
      * alone, which is a statement about the locks that do not yet exist rather
      * than about scheduling.
      *
@@ -808,7 +808,7 @@ void ProcessReport(void);
  *
  * The child is created READY and does not run. There is one thread of control
  * upon the bootstrap processor, so what starts a child is its parent
- * asking for it by `wait`; see docs/design/PROCESS.md, Section 13.2.
+ * asking for it by `wait`; see docs/design/PROCESS.md.
  *
  * Returns null where a slot, a frame or a paging structure could not be had. The
  * parent is unchanged in that case save for the pages the attempt protected,
@@ -853,7 +853,7 @@ int64_t ProcessExecute(Process *process, const char *path,
  * whoever started it. Does not return.
  *
  * This is a fourth way back from privilege level 3, and not one of the three
- * docs/design/PROCESS.md, Section 10.1, named — those being the fault, the
+ * docs/design/PROCESS.md named — those being the fault, the
  * system-call return, and the pre-emption that does not yet exist. A program
  * could fault its way out and could be returned to by SYSRET; what it could not
  * do was say that it had finished.

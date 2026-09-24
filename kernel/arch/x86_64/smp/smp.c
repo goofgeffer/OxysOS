@@ -44,7 +44,7 @@
  *   the startup interrupt is sent, and handed over through the parameter block
  *   or found by index. The reason is the state of this kernel at this sub-task:
  *   the frame allocator, the kernel arena and the heap are all unsynchronised,
- *   and docs/design/CONCURRENCY.md, Section 10, limitation 1, says so. A
+ *   and docs/design/CONCURRENCY.md says so. A
  *   processor that allocated its own stack would be the second processor in an
  *   allocator that admits one, at the one moment when a corruption would be
  *   indistinguishable from a processor that simply failed to start.
@@ -602,7 +602,7 @@ _Noreturn void SmpApplicationProcessorEntry(uint64_t index)
      * interrupt stack table, and a processor whose task register is null cannot
      * supply one — so a double fault upon a processor without a segment is a
      * triple fault, which is a reset with nothing written anywhere. This project
-     * has met one of those; docs/design/INTERRUPTS.md, Section 5, is the
+     * has met one of those; docs/design/INTERRUPTS.md is the
      * account.
      */
     TssInitialiseProcessor(expected, SmpPreparations[expected].stack_top,

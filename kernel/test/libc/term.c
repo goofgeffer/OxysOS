@@ -9,7 +9,7 @@
  *          in, which no amount of memory can assert.
  * Key functions: KernelVerifyTerm.
  * References:
- *   - docs/design/TERMINAL.md, Section 6: every assertion here paired with the
+ *   - docs/design/TERMINAL.md: every assertion here paired with the
  *     silent failure it would catch.
  *   - libc/include/term.h: the seam, and why the grid is in the C library.
  *   - kernel/terminal/terminal.c: the kernel's own translation of the same

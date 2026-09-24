@@ -36,7 +36,7 @@
 #include <oxys/arch/mm/addrspace.h>
 
 /* The sizes the format fixes. They are asserted against what is decoded rather
- * than used to overlay a structure; see CODING-STANDARDS.md, Section 7.1. */
+ * than used to overlay a structure; see CODING-STANDARDS.md. */
 #define ELF_HEADER_BYTES         64U
 #define ELF_PROGRAM_HEADER_BYTES 56U
 #define ELF_IDENTIFICATION_BYTES 16U
@@ -152,7 +152,7 @@ const char *ElfResultName(ElfResult result);
  * Decodes the file header of an image held in memory.
  *
  * The fields are read byte by byte and assembled, never by laying a structure
- * over the bytes: CODING-STANDARDS.md, Section 7.1. The format's byte order is
+ * over the bytes: CODING-STANDARDS.md. The format's byte order is
  * then visible in the decoder rather than invisible in a cast, and the image
  * need not be aligned for anything.
  *
@@ -167,7 +167,7 @@ ElfResult ElfDecode(const void *image, uint64_t length, ElfHeader *header);
  * Every refusal is a fault an image could otherwise cause: a program header
  * table beyond the end of the file, a segment whose contents lie beyond it, a
  * segment claiming an address in the kernel's half, a size in the file greater
- * than the size in memory. See docs/design/EXECUTABLE.md, Section 4.
+ * than the size in memory. See docs/design/EXECUTABLE.md.
  */
 ElfResult ElfValidate(const void *image, uint64_t length);
 

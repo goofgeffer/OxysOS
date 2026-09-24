@@ -19,7 +19,7 @@
  *     translation-lookaside-buffer entry for the current process context save
  *     those marked global. No mapping here is marked global, so the write
  *     performed by PagingActivate flushes the whole of the buffer.
- *   - docs/design/MEMORY-LAYOUT.md, Section 8: the design of this hierarchy.
+ *   - docs/design/MEMORY-LAYOUT.md: the design of this hierarchy.
  *
  * Concurrency. This code runs once, before any application processor is started,
  * and requires no synchronisation. Any later modification of a mapping shared
@@ -79,7 +79,7 @@ static PhysicalAddress PagingRootTable;
  * upon the kernel root, and a user thread's affinity mask names the bootstrap
  * processor alone — so every writer writes the same value. It becomes wrong the
  * moment a user thread may run elsewhere, and must become per processor in the
- * same change that widens that mask. docs/design/SCHEDULER.md, Section 10,
+ * same change that widens that mask. docs/design/SCHEDULER.md
  * limitation 7, records it so that the two cannot be separated.
  */
 static PhysicalAddress PagingActiveTable;

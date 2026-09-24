@@ -18,7 +18,7 @@
  *   - The same, the base address registers: the control block of a native
  *     channel lies at offset 2 within the second register of its pair, and not
  *     at its base.
- *   - docs/storage/DISK.md, Sections 2.1 to 2.3: why this file exists in the
+ *   - docs/storage/DISK.md: why this file exists in the
  *     shape it does. A machine that boots this kernel found no disk upon it, and
  *     the cause was not a fault in the transfer path — it was a controller this
  *     driver never looked in the right place for, and then a controller of a

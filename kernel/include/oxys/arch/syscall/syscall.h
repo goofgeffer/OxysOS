@@ -32,7 +32,7 @@
  *   - System V Application Binary Interface, AMD64 supplement, Section 3.2.1:
  *     the direction flag is required to be clear at a function's entry, which is
  *     among the reasons it appears in the mask.
- *   - docs/design/LIBC.md, Section 2: why the interface was divided out of this
+ *   - docs/design/LIBC.md: why the interface was divided out of this
  *     file, and what was left behind.
  *
  * What this file no longer holds.
@@ -261,7 +261,7 @@ bool SyscallCopyUserString(uint64_t address, char *destination, size_t capacity)
  * GS names — and it is a *different* variable from the task state segment's
  * `rsp0`, which is what an interrupt from privilege level 3 uses. Both describe
  * the same stack and both must therefore follow the current thread. Until this
- * sub-task only one of them did; see docs/design/PROCESS.md, Section 12.2.
+ * sub-task only one of them did; see docs/design/PROCESS.md.
  */
 void SyscallSetKernelStack(uint64_t top);
 
@@ -273,7 +273,7 @@ void SyscallSetKernelStack(uint64_t top);
  * the kernel was entered — and a routine that switches threads cannot see how
  * the thread it is resuming was entered. These two write the registers instead,
  * so that the state is a consequence of the transition being made rather than of
- * the history of the thread making it. See docs/design/PROCESS.md, Section 12.1.
+ * the history of the thread making it. See docs/design/PROCESS.md.
  */
 void SyscallEstablishKernelGsBase(void);
 void SyscallEstablishUserGsBase(void);

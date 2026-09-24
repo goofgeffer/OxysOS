@@ -19,7 +19,7 @@
  *     volume records every multi-byte field in little-endian order, whatever the
  *     order of the processor reading it, which is why the decoders here exist
  *     and why no structure is ever overlaid upon a buffer of the volume's bytes.
- *     `docs/project/CODING-STANDARDS.md`, Section 7.1, records that rule and the
+ *     `docs/project/CODING-STANDARDS.md` records that rule and the
  *     reasons for it.
  *   - The same, the Superblock chapter: the read-only compatible feature set,
  *     upon which `Ext2Writable` turns.

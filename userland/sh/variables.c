@@ -18,7 +18,7 @@
  *     no operand writes each exported variable as `export NAME=value`.
  *   - IEEE Std 1003.1-2017, Section 2.10.2, rule 7: a word of the form
  *     `NAME=value` before a command's name is a variable assignment.
- *   - docs/design/SHELL.md, Section 12.
+ *   - docs/design/SHELL.md.
  *
  * Why the table is fixed and static.
  *

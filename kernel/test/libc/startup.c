@@ -7,7 +7,7 @@
  *          produced and running it at privilege level 3.
  * Key functions: KernelVerifyStartup.
  * References:
- *   - docs/design/LIBC.md, Section 11.5: what this asserts, what the program
+ *   - docs/design/LIBC.md: what this asserts, what the program
  *     asserts of itself, and why the two halves are both needed.
  *   - userland/startup-check/main.c: the program, which makes its own
  *     assertions and ends with the number that failed.

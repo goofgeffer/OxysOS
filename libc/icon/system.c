@@ -8,7 +8,7 @@
  * Key functions: OxysIconRead.
  * References:
  *   - libc/include/icon.h: the seam this implements, and the format.
- *   - docs/design/SESSION.md, Section 8: what reads icons and when.
+ *   - docs/design/SESSION.md: what reads icons and when.
  *
  * This is the arrangement of libc/config/system.c a fifth time, and for the
  * same reason: the understanding of the bytes can be asserted by the kernel's

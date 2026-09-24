@@ -7,7 +7,7 @@
 ;          to load and run, as signal_image.asm carries signal-check.
 ; Key definitions: KernelProgramInitCheckBegin, KernelProgramInitCheckEnd.
 ; References:
-;   - docs/design/WINDOWS.md, Section 13.3: what the program asserts.
+;   - docs/design/WINDOWS.md: what the program asserts.
 
 bits 64
 

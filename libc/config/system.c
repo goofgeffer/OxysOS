@@ -9,7 +9,7 @@
  * References:
  *   - libc/include/config.h: the seam this implements, and why the parsing is
  *     held apart from the file it is read from.
- *   - docs/design/CONFIG.md, Section 5: the division, and the program at
+ *   - docs/design/CONFIG.md: the division, and the program at
  *     privilege level 3 that asserts this half of it.
  *
  * This is the arrangement of libc/line/system.c a fourth time, and for the same

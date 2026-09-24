@@ -12,7 +12,7 @@
  *   - ISO/IEC 9899:2011, Section 7.22.3: the functions this serves.
  *   - libc/include/syscall.h: OxysSbrk, which is what the shipped
  *     implementation of OxysHeapExtend is written in terms of.
- *   - docs/design/LIBC.md, Section 9: the design of the allocator, the division
+ *   - docs/design/LIBC.md: the design of the allocator, the division
  *     this header is the seam of, and why that division is what makes the policy
  *     assertable at all.
  *
@@ -24,7 +24,7 @@
  * that runs anywhere and is wrong in ways a test can see. **The source** is a
  * system call, and this kernel cannot execute one: SYSRET returns to privilege
  * level 3 unconditionally, so a kernel that called OxysSbrk would leave its own
- * entry path as a user program. docs/design/LIBC.md, Section 8.4, records the
+ * entry path as a user program. docs/design/LIBC.md records the
  * same obstacle for the wrappers of sub-task 7.2.
  *
  * Naming the seam is what lets each be asserted where it can be. The kernel's

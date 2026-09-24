@@ -272,7 +272,7 @@ meet it.
 | -------- | -------- | ------- |
 | `strcoll` | 7.24.4.3 | Compares according to the current locale. There is no locale in this system and no `<locale.h>` to establish one, so it would be `strcmp` under another name — an agreement with the standard that this library could not yet keep. It arrives with the locale. |
 | `strxfrm` | 7.24.4.5 | The same, in the other direction: a transformation defined by a locale that does not exist. |
-| ~~`strerror`~~ | 7.24.6.2 | **Implemented at sub-task 7.2**, which is what this row said would happen: the integers it maps are the failure results of `<oxys/syscall_abi.h>` as the wrappers present them through `errno`, and the table belongs beside the thing that sets `errno`. Section 8.5. |
+| | 7.24.6.2 | **Implemented at sub-task 7.2**, which is what this row said would happen: the integers it maps are the failure results of `<oxys/syscall_abi.h>` as the wrappers present them through `errno`, and the table belongs beside the thing that sets `errno`. Section 8.5. |
 
 **No non-standard function has been added either.** `strnlen`, `strdup`,
 `strlcpy` and `memccpy` are each useful and each is somebody else's standard, not
@@ -315,44 +315,6 @@ sentinel a correct function may produce is not a sentinel.
 | `strstr` finds `"aab"` in `"aaab"` | A search that restarts at the byte where the comparison failed rather than at the byte after the one it began at. |
 | `strtok` skips leading separators, collapses runs of them, and yields no token for a trailing one | The expectation that `strtok` splits fields. It does not, and a caller who believes otherwise gets a token count that is right for the strings they tried. |
 | **A finished `strtok` scan stays finished** | A position left pointing at the subject's terminator. It gives the same answer by accident, and a wrong one the moment the caller begins a new scan of a different string. |
-
-### 5.1 The negative tests, and the one that found something
-
-`PROJECT_GUIDELINES.md`, Section 2, and the practice of
-[`../project/TESTING-SYSTEM.md`](../project/TESTING-SYSTEM.md) require each
-assertion to be confirmed by a defect deliberately inserted. Five were inserted
-and removed. Four behaved as intended:
-
-| Defect inserted | What the run said |
-| --------------- | ----------------- |
-| `memcmp` comparing through plain `char` | `memcmp compared bytes as signed rather than unsigned FAILED.` and `memcmp is not antisymmetric upon a high byte FAILED.` |
-| `memcpy` bounded by `<=` | `memcpy wrote outside the range it was given FAILED.` and `memcpy of zero bytes wrote something FAILED.` |
-| `strncpy` made to terminate what it fills | `strncpy terminated a destination it filled FAILED.` and `strncpy wrote beyond its bound FAILED.` |
-| `memmove` copying forwards in both directions | `memmove upwards over an overlap smeared a byte FAILED.` |
-| `strrchr` keeping the first match instead of the last | `strrchr did not find the last occurrence FAILED.` |
-
-**The fifth found a gap, and it is the reason this section exists.** The guard at
-the head of `strstr` — which returns the haystack when the needle is empty — was
-deleted, and **every assertion still passed**.
-
-The guard had been written with a comment claiming it was what made an empty
-needle work at all, and that was wrong. The search loop already produces the
-right answer for an empty needle against a haystack that is not empty: the inner
-comparison never runs, the needle's terminator is reached at offset zero, and the
-first position matches. The guard is load-bearing in exactly one case — **an
-empty needle in an empty haystack**, where the outer loop performs no iteration
-and the function falls out to null — and the self-test had asserted the empty
-needle only against a subject that was not empty.
-
-So the test asserted a property that could not fail, beside a line of code whose
-comment described a job it was not doing. The assertion now covers the empty
-haystack, and deleting the guard fails it:
-`strstr of an empty needle in an empty haystack did not return the haystack FAILED.`
-The comment in `search.c` was corrected in the same change.
-
-This is the ordinary yield of the negative-test discipline and is recorded at
-this length because the defect it found was in the *test*, which is the class of
-defect a passing run cannot report.
 
 ### 5.2 The second compiler
 
@@ -460,7 +422,7 @@ different things and both are wanted.
 
 ---
 
-## 8. Sub-task 7.2: the system-call wrappers
+## 8. The system-call wrappers
 
 **Phase**: 7, sub-task 7.2, of [`../project/PLAN.md`](../project/PLAN.md).
 
@@ -616,7 +578,7 @@ any privilege level, but the `SYSRET` that ends the kernel's handling of it
 returns to privilege level 3 unconditionally — so a kernel that called `OxysWrite`
 would enter its own entry path and leave it as a user program, upon a stack and
 in an address space that are not a user program's. There is no arrangement in
-which it survives. `PRIVILEGE.md`, Section 9.4, records the same thing from the
+which it survives. `PRIVILEGE.md` records the same thing from the
 other side: since sub-task 6.7 the only executor of `SYSCALL` in this system is a
 program.
 
@@ -695,56 +657,7 @@ must not modify it.
    formatted conversion and no mathematical library to set it. The three numbers
    ISO C requires are defined and nothing writes them.
 
-### 8.7 The negative tests, and the one that found something
-
-`PROJECT_GUIDELINES.md`, Section 2, and the practice of
-[`../project/TESTING-SYSTEM.md`](../project/TESTING-SYSTEM.md) require each
-assertion to be confirmed by a defect deliberately inserted. Seven were inserted
-and removed.
-
-| Defect inserted | What the run said |
-| --------------- | ----------------- |
-| `OxysSyscallResult` negating without the range check | `a failure beyond the reserved range was not refused FAILED.`, `the least representable result was not refused FAILED.` and `a translation left errno at zero FAILED.` — the third being the `INT64_MIN` case arriving exactly as Section 8.2 predicts it would. |
-| `OxysSyscallResult` setting `errno` upon success | `a successful call altered errno FAILED.` and the two assertions beside it. |
-| `strerror`'s table with one entry removed | `strerror returned an empty message FAILED.` |
-| `invoke.asm`'s two-argument routine losing its shift | `the program's calls did not return what they had to return FAILED.` |
-| `invoke.asm`'s three-argument routine losing its shift | The same. |
-| `invoke.asm`'s no-argument routine not placing the number in `RAX` | The same, and `the tick count the program read follows the run FAILED.` |
-| A failure result renumbered in `<oxys/syscall_abi.h>` | `error: static assertion failed: "EBADF does not name SYSCALL_EBADF."` — a compile-time failure, which is the class of report about a two-sided agreement that cannot be missed. |
-
-**The fourth and fifth of those passed the first time they were tried, and that
-is why this section exists.**
-
-The assertion, as first written, was that the program end with a status composed
-of the result of one call that had to fail. `invoke.asm`'s three-argument routine
-was then altered to drop `mov rdx, rcx` — losing the third argument of every
-three-argument call, which is precisely the defect the whole copy-the-bytes
-arrangement exists to catch — and **every assertion passed**.
-
-It passed for a reason worth recording, because the reason is general. The lost
-argument was a *length*, and the kernel bounds a length rather than refusing an
-implausible one: a length of 0x402000 became 4096, the range was readable because
-the program's data page is a whole page, and the write emitted the same string it
-would have emitted anyway. The only trace was a newline that did not appear in
-the log — and nothing was asserting the log.
-
-So the status is now the **sum of what every call returned**, and every call's
-result is in it. The sum is exact and the kernel computes it from the same
-version string the kernel's own call copies; the tick count, which cannot be
-exact, is carried beneath a scale of a million so that its imprecision cannot
-absorb an error in the sum. A second `version` call was added with a capacity
-*smaller* than the string, because a capacity larger than the string is not a
-capacity the result depends upon — which is how the two-argument defect had
-passed as well.
-
-**Two of the seven defects were invisible to the first version of this test, and
-both were defects in the one file the test was written for.** That is the ordinary
-yield of this discipline, and it is recorded at length for the same reason
-Section 5.1 is: a passing run cannot report a test that does not test.
-
----
-
-## 9. Sub-task 7.3: the heap, and the break beneath it
+## 9. The heap, and the break beneath it
 
 **Phase**: 7, sub-task 7.3, of [`../project/PLAN.md`](../project/PLAN.md).
 
@@ -1082,50 +995,7 @@ was refused.
    Each arrives with the sub-task that needs it; the termination functions
    arrived with 7.5, and none of the rest is needed by a heap.
 
-### 9.7 The negative tests, and the two that found something
-
-`PROJECT_GUIDELINES.md`, Section 2, and the practice of
-[`../project/TESTING-SYSTEM.md`](../project/TESTING-SYSTEM.md) require each
-assertion to be confirmed by a defect deliberately inserted. Fourteen were
-inserted and removed.
-
-| Defect inserted | What the run said |
-| --------------- | ----------------- |
-| `calloc` not clearing the block | `a cleared allocation was not all bits zero FAILED.` |
-| `calloc` not checking the product | `a count and size whose product wraps was met FAILED.`, and four more — the refused request having been met, the heap never returned to one block. |
-| `free` not checking the mark | `a pointer that is not an allocation was not refused FAILED.`, `a pointer that is not an allocation was released FAILED.`, **and then the boot did not complete**: the free list had a region's foreign storage upon it and the next walk left the heap. |
-| A shrink not withdrawing its pages | `the program's calls did not return what they had to return FAILED.` and `a page mapped by a growth survived the shrink that gave it back FAILED.` — the program's own view and the kernel's, disagreeing with the same defect. |
-| `HeapInsert` without the forward join | `a heap with nothing allocated is not the heap it started as FAILED.` and three more. |
-| `HeapSplit` leaving a remainder one alignment short | `releasing everything did not give back every byte FAILED.`, and the heap did not return to one block. |
-| `HeapAbsorbNext` never finding the next block | `growing into a free neighbour moved the allocation FAILED.` |
-| `brk` returning the old break rather than the new one | `the program's calls did not return what they had to return FAILED.` |
-| The heap placed without its guard page | `the heap begins without a guard page below it FAILED.` |
-| `HeapTake` not marking the block as handed out | Ten assertions, across four of the six phases. |
-| `OxysHeapAdopt` not checking the usable size | `a region smaller than one block was adopted FAILED.`, `a refused region was counted FAILED.`, and the boot did not complete. |
-| `SYSCALL_BRK` in the dispatch table and not in the switch | `the program's calls did not return what they had to return FAILED.` and the two counters — which is the case the `default` arm of that switch exists for, reported as `ENOSYS` rather than as the number the caller passed. |
-| A failed growth not being undone | **Nothing was reported.** Limitation 5. |
-| `OxysHeapAdopt` not checking `bytes` at its head | **Nothing was reported**, and the check was removed rather than kept. See below. |
-
-**The thirteenth found a limitation and the fourteenth found redundant code.**
-
-The fourteenth is the one worth recording. `OxysHeapAdopt` checked twice that a
-region was large enough: once against `bytes` at its head, and once against the
-usable size after the head and tail below an alignment had been taken off.
-Deleting the first changed nothing any assertion could see — and it could not,
-because the second rejects every region the first does and more besides: a region
-of a hundred bytes beginning sixty bytes before an alignment has forty usable
-ones, which the first check passes and the second does not. The first was
-therefore not a guard but a statement of the same intent in a place where it is
-not yet knowable, and it was deleted. **The check that survived is the one asked
-after the adjustment**, and the comment there now says why.
-
-The thirteenth is limitation 5 above, and is the ordinary yield of this
-discipline: an assertion that does not exist cannot be made to fail, and the only
-way to find out which ones those are is to try.
-
----
-
-## 10. Sub-task 7.4: the buffered stream, and the conversion above it
+## 10. The buffered stream, and the conversion above it
 
 **Phase**: 7, sub-task 7.4, of [`../project/PLAN.md`](../project/PLAN.md).
 
@@ -1224,7 +1094,7 @@ counters are zero; the split is what let that be one assertion each.)
 
 | Stream | Descriptor | Buffering | Why |
 | ------ | ---------- | --------- | --- |
-| `stdin` | 0 | Fully buffered | Nothing read it until sub-task 8.1, when it became the terminal; [`SHELL.md`](SHELL.md), Section 2.4. Its policy is real and asserted; its source reported end-of-file until then, and now reads. |
+| `stdin` | 0 | Fully buffered | Nothing read it until sub-task 8.1, when it became the terminal; [`SHELL.md`](SHELL.md). Its policy is real and asserted; its source reported end-of-file until then, and now reads. |
 | `stdout` | 1 | **Line** buffered | Section 7.21.3, paragraph 7, permits full buffering only where the stream does not refer to an interactive device, and the thing at the far end here is a person reading a console. A fully buffered `stdout` loses the last partial line whenever a program faults, and the last partial line before a fault is the one worth having. |
 | `stderr` | 2 | **Un**buffered | Paragraph 7 requires it not to be fully buffered. A diagnostic still in a buffer when the program dies is a diagnostic that was not issued. |
 
@@ -1281,7 +1151,7 @@ that returns zero rather than as a function that does not exist: an error would
 make every program reading `stdin` report a fault that did not occur. The day
 this kernel acquires a call that reads, the change is the body of one function of
 six lines and nothing else in the library. **That day was sub-task 8.1**, and that
-is what happened; [`SHELL.md`](SHELL.md), Section 2.4, records it and the two
+is what happened; [`SHELL.md`](SHELL.md) records it and the two
 tests that had to stop reading `stdin` because it now reads.
 
 ### 10.4 The conversion
@@ -1446,58 +1316,7 @@ know: it asked for a write, and the write did not happen.
    stream must be usable before a heap has been grown, and the first thing a
    program does with a heap that failed is try to report it.
 
-### 10.8 The negative tests, and the four that found something
-
-Twenty defects were introduced deliberately, one at a time, each built and run.
-
-| The defect introduced | What was reported |
-| --------------------- | ----------------- |
-| The line-buffering flush upon a newline removed | `a line buffered stream did not deliver upon the newline FAILED.` |
-| The buffer emptied *after* the byte that fills it | **Nothing was reported.** See below. |
-| A memory stream that fills not reporting the bytes it could not take | Five assertions, across three phases of the test. |
-| `fwrite` counting an element whose bytes went out only in part | `fwrite counted an element whose bytes went out only in part FAILED.` |
-| `ungetc` not clearing the end-of-file indicator | `ungetc did not clear the end-of-file indicator FAILED.` |
-| `ungetc` accepting a second pushback | That, and `the character pushed back was not the next one read FAILED.` |
-| `fgets` discarding the newline it must keep | `fgets did not stop after the newline, or discarded it FAILED.` |
-| `fgets` returning a null pointer whenever nothing was read | The two assertions upon a count of one — which is the case that condition is about. |
-| `FormatMagnitude` forming `-value` | **Nothing was reported.** Limitation 3. |
-| A zero value with a precision of zero still producing a digit | `a precision was applied wrongly to an integer FAILED.` |
-| The `0` flag not ignored where a precision was given | `the zero flag was not ignored where a precision was given FAILED.` |
-| The alternative form prefixing a zero hexadecimal value | `the hexadecimal conversion or its prefix is wrong FAILED.` |
-| `snprintf` reporting what it stored | Both of the assertions that exist for that. |
-| `setvbuf` accepting a call made after the stream had been used | `setvbuf accepted a call made after the stream had been used FAILED.` |
-| A standard stream that may be closed | Six assertions, including the census's. |
-| An unimplemented conversion produced rather than refused | All three refusal assertions. |
-| The end-of-file indicator consulted after the source rather than before | **Nothing was reported.** See below. |
-| The sign flags allowed through an unsigned conversion | **Nothing was reported.** See below. |
-| The error indicator cleared by a later successful write | **Nothing was reported.** Limitation 4. |
-| A partial delivery counted as a whole one | **Nothing was reported.** See below. |
-
-**Four of the five silent ones were gaps in the assertions and were closed.**
-
-- **The buffer emptied after the append** delivers the same bytes in the same
-  order and overruns the caller's array by one. The one-byte-buffer assertion was
-  upon what arrived at the device and could not see it. The buffer given to
-  `setvbuf` is now an array of two bytes with a sentinel in the second, and the
-  assertion is upon the sentinel.
-- **The end-of-file indicator consulted late** changes nothing a caller can
-  observe except how often the source is asked. The test now records the census
-  before and after three reads past the end and asserts the source was not asked.
-- **The sign flags let through an unsigned conversion** was not covered at all:
-  every assertion upon `+` and space used a signed conversion. There is now one
-  upon `%+u`, `% u` and `%+x`.
-- **A partial delivery counted as a whole one** leaves `OxysStreamDelivered`
-  reporting more than the region holds, which is what a caller measures a region
-  by. There is now an assertion upon that count after a delivery the device
-  refused.
-
-The fifth and the ninth are limitations 4 and 3, and are the ordinary yield of
-this discipline: an assertion that does not exist cannot be made to fail, and the
-only way to find out which ones those are is to try.
-
----
-
-## 11. Sub-task 7.5: the runtime startup object, and the link
+## 11. The runtime startup object, and the link
 
 **Phase**: 7, sub-task 7.5, of [`../project/PLAN.md`](../project/PLAN.md).
 
@@ -1722,54 +1541,12 @@ handed to `exit`.
    finds its strings, which `execve` refusing both vectors was the placeholder
    for. The convention arrived at 7.6, and **`getenv` at 8.4**, when the shell
    first gave a program an environment; `system` waits upon the shell being a
-   thing worth running from a program. [`SHELL.md`](SHELL.md), Section 17.
+   thing worth running from a program. [`SHELL.md`](SHELL.md).
 5. **Nothing links dynamically, and nothing will for some time.** There is no
    loader, no `PLT`, no `.dynamic`, and the startup object ignores the finaliser
    the ABI offers it. A ported toolchain is what will first want any of that.
 
-### 11.7 The negative tests, and the four that found something
-
-Fifteen defects were introduced deliberately, one at a time, each built and run.
-
-| The defect introduced | What was reported |
-| --------------------- | ----------------- |
-| The kernel leaving the stack pointer at the top of the stack | The process self-test, and the program's status — it faulted before printing anything. |
-| `_start` passing the whole of `%rax` to `exit` rather than `%eax` | **Nothing was reported.** Limitation 2. |
-| The environment vector computed without the argument terminator | `the environment vector does not follow the argument vector FAILED.`, and the status. |
-| `*(.text.entry)` removed, so the entry point becomes `main` | `the program is not entered at its first instruction FAILED.` |
-| `exit` flushing the streams before calling what `atexit` registered | **Nothing was reported** — until the program was given a partial line to leave behind. See below. |
-| `atexit` calling its registrations in the order they were made | **Nothing was reported** — same cause, same remedy. |
-| The stack pointer left at the top, after the simplification | Both of the above, again. |
-| The heap's seam refusing every request | Five of the program's own assertions, and the status. |
-| The writable segment given the read-only permission | The program's status: it faulted writing its own `.data`. |
-| The archive built without an index | **Nothing was reported.** GNU `ar` writes the index for `rc` as well; the mutation is not one this toolchain distinguishes. |
-| The `ALIGN(4K)` between segments removed | **Nothing was reported.** Limitation 1. |
-| `-z max-page-size=0x1000` removed | **Nothing was reported**, and the flag was removed for good. See Section 11.4. |
-| The embedded copy not stripped | `the linked program is far larger than the code within it FAILED.` |
-| `_start` passing a constant to `exit` rather than main's value | The status assertion. |
-| The user objects compiled with `-mcmodel=kernel` | **Nothing was reported**, and the note claiming it could not link was corrected. Section 11.4. |
-
-**Four of the six silent ones were answered rather than recorded.**
-
-- **The two `exit` mutations** were invisible because the only evidence was a line
-  in a log that a person reads, and `make verify`'s grep cannot see a line that is
-  missing. The program now leaves a *partial* line in the buffer before `main`
-  returns and a registered function asserts it is still there — which turns both
-  properties into a status the kernel checks.
-- **`-z max-page-size=0x1000`** was silent because it does nothing. Four
-  combinations were measured; the flag was deleted and the two comments that
-  attributed the image's size to it were corrected to name `-n`, which does the
-  work.
-- **`-mcmodel=kernel`** was silent because it links and runs at this load address.
-  The Makefile's claim that the linker would refuse it was false and is now the
-  measurement, together with the reason the flag is wrong anyway.
-
-The remaining two are limitations 1 and 2, and the sixteenth — the archive index —
-is not a defect this toolchain has.
-
----
-
-## 12. Sub-task 7.6: the filesystem calls, the argument vector, and the utilities
+## 12. The filesystem calls, the argument vector, and the utilities
 
 **Phase**: 7, sub-task 7.6, of [`../project/PLAN.md`](../project/PLAN.md).
 
@@ -1806,7 +1583,7 @@ number already handed to a program is a number that must not change.
 Later sub-tasks added to the table by the same rule: `chdir` and `getcwd` at
 8.3, `dup2` and `rmdir` at 8.5, and at 8.6 `pipe` — nineteenth, taking an
 array of two `int` and placing a read end and a write end in it, `OxysPipe` in
-the C library — whose semantics are [`SHELL.md`](SHELL.md), Section 22.2.
+the C library — whose semantics are [`SHELL.md`](SHELL.md).
 
 Each is a validation of the caller's arguments and then a call of the filesystem
 layer of [`../storage/VFS.md`](../storage/VFS.md). None of them reimplements
@@ -2083,43 +1860,6 @@ together says that the program can tell the two apart.
 
 **What none of it asserts is what a program printed**, which is limitation 1.
 
-### 12.6 The negative tests
-
-Thirteen defects were introduced deliberately, one at a time, each built and run.
-
-| The defect introduced | What was reported |
-| --------------------- | ----------------- |
-| The argument count written as zero | `the argument count is not the number of strings that were passed`, two more of `arg-check`'s assertions, and the status. |
-| An empty argument skipped when the information block is built | `a pointer within the argument vector is null`, and both programs faulted — the status being the negated page-fault vector. |
-| `execve` passing null to `ProcessExecute` rather than the vectors it copied | `a vector did not survive execve, or the program it names was not reached`. |
-| The stack pointer not aligned to sixteen | `the stack a program is entered upon is not sixteen-byte aligned`, once per program. |
-| `ProcessCloseDescriptors` doing nothing | `a destroyed process left its open files behind it`, and `the filesystem layer holds descriptors nothing closed`. |
-| The descriptor table cleared to zero | `a fresh process holds a descriptor, so the table was cleared rather than emptied`, and `cat` then failed for want of a descriptor. |
-| A descriptor given out below `SYSCALL_DESCRIPTOR_FIRST` | `a descriptor below the standard three was given out`. |
-| `mkdir` refused nothing | `mkdir created a directory that was already there`. |
-| `unlink` reporting success without removing anything | `rm reported success and the file is still there`, and two more. |
-| Every filesystem refusal reported as `EINVAL` | `ls treated a regular-file operand as a failure`, `mkdir -p could not create a path of missing components`, and two more — the three utilities that act upon `errno`. |
-| `read` reporting a count and copying no bytes | **Nothing was reported.** See below. |
-| `open` accepting any flag it is given | **Nothing was reported.** See below. |
-| `readdir` not terminating the name it copies out | **Nothing was reported.** See below. |
-
-**The first two silent ones were answered rather than recorded**, and the answer
-is `file-check`. Both are now caught by name: the first as `a read reported bytes
-it did not deliver, or delivered the wrong ones`, and the second as `an open
-asking to write was not refused`.
-
-**The third is a restatement of an invariant established elsewhere**, and it is
-kept. The filesystem layer terminates every name it returns, so the kernel's own
-termination can never be the thing that makes a name safe — which is the same
-shape as the six stack-frame zeroes sub-task 7.5 deleted and the second size
-check sub-task 7.3 deleted. It is kept all the same, and the difference is where
-the invariant lives: those two were restatements of a line a few lines above in
-the same function, and this one is a statement made at the boundary between the
-kernel and privilege level 3 about a structure crossing it. A name without a
-terminator is a program reading past the end of its own buffer on the kernel's
-authority, and the boundary is where that must be foreclosed rather than
-inherited.
-
 ### 12.7 Limitations
 
 1. **Nothing asserts what a program printed.** `cat` copying the wrong file, or
@@ -2135,7 +1875,7 @@ inherited.
    it wrote and compares the bytes — the first output in this project asserted
    rather than read. It is a property of that editor's design and not a way
    round this limitation, which stands for every other program;
-   [`SHELL.md`](SHELL.md), Section 3.4.
+   [`SHELL.md`](SHELL.md).
 2. **No program could create or write a file until sub-task 8.5.** `open`
    accepted `SYSCALL_OPEN_READ` and `SYSCALL_OPEN_DIRECTORY` and refused every
    other bit, and `write` reached the two diagnostic descriptors alone; the
@@ -2145,7 +1885,7 @@ inherited.
    caller. **Closed at 8.5**: `open` takes WRITE, CREATE, TRUNCATE and APPEND
    and a mode, `write` reaches a file, `touch` and `cp` are the first
    utilities to use it, and `file-check` asserts the four.
-   [`SHELL.md`](SHELL.md), Section 19.
+   [`SHELL.md`](SHELL.md).
 3. **There was no call that removed a directory until sub-task 8.5**, so `rm`
    had no `-r` and no `-d` and a directory made by `mkdir` could be removed by
    nothing. **Closed at 8.5** by `rmdir`, the call and the utility; a recursive
@@ -2160,7 +1900,7 @@ inherited.
    one, so `ls` with no operand listed the root rather than `.`, and every path
    a program named was absolute in effect. **Closed at 8.3**: each process holds
    one, `chdir` and `getcwd` move and report it, every call resolves a relative
-   path against it, and `ls` lists `.`. [`SHELL.md`](SHELL.md), Section 11.
+   path against it, and `ls` lists `.`. [`SHELL.md`](SHELL.md).
 6. **A directory `mkdir` creates is world-writable.** The mode is 0777, which is
    what POSIX names as the default, and it is not reduced because this system has
    no file mode creation mask — and no credentials for one to belong to. Nothing
@@ -2191,17 +1931,17 @@ inherited.
     process control block and is guarded by nothing, as the break of sub-task 7.3
     is; the filesystem layer beneath it was written for one thread of control.
     A user thread's affinity names the bootstrap processor alone, so the case
-    cannot arise, and [`CONCURRENCY.md`](CONCURRENCY.md), Section 10, limitation
+    cannot arise, and [`CONCURRENCY.md`](CONCURRENCY.md) limitation
     1, is where it is counted with the rest.
 
-## 13. Sub-task 8.7: `<signal.h>`, and what the wrappers gained
+## 13. `<signal.h>`, and what the wrappers gained
 
 **Implementation**: [`../../libc/include/signal.h`](../../libc/include/signal.h),
 [`../../libc/signal/signal.c`](../../libc/signal/signal.c), the restorer at
 the end of [`../../libc/syscall/invoke.asm`](../../libc/syscall/invoke.asm),
 and seven wrappers in [`../../libc/syscall/calls.c`](../../libc/syscall/calls.c).
-The kernel's half is [`PROCESS.md`](PROCESS.md), Section 18. Asserted by
-`signal-check`, [`PROCESS.md`](PROCESS.md), Section 18.5.
+The kernel's half is [`PROCESS.md`](PROCESS.md). Asserted by
+`signal-check`, [`PROCESS.md`](PROCESS.md).
 
 `<signal.h>` is ISO/IEC 9899:2011, Section 7.14 — `sig_atomic_t`, `SIG_DFL`,
 `SIG_IGN`, `SIG_ERR`, `signal` and `raise` — with IEEE Std 1003.1-2017's `kill`
@@ -2245,14 +1985,14 @@ numbered and sent by nothing.
 Two wrappers were added after the sub-task, on 2026-09-16, for two utilities:
 `OxysLink`, `link()`, the twenty-eighth call, and `OxysProcessInformation`,
 the twenty-ninth, which fills a `SyscallProcessInformation` for one slot of the
-process table. [`SHELL.md`](SHELL.md), Section 30.
+process table. [`SHELL.md`](SHELL.md).
 
-## 14. Sub-task 9.2: the window calls
+## 14. The window calls
 
 **Implementation**: six wrappers in [`../../libc/syscall/calls.c`](../../libc/syscall/calls.c),
 declared in [`../../libc/include/syscall.h`](../../libc/include/syscall.h), over
 the calls 29 to 34 of `<oxys/syscall_abi.h>` — thirty-five in all. The kernel's
-half is [`WINDOWS.md`](WINDOWS.md), Section 10, and `window-check` asserts them,
+half is [`WINDOWS.md`](WINDOWS.md) and `window-check` asserts them,
 Section 11 of that document.
 
 `OxysWindowCreate`, `OxysWindowDestroy`, `OxysWindowMove`, `OxysWindowBlit`,
@@ -2268,16 +2008,16 @@ does not hold, as it is a descriptor the caller does not hold.
 
 There is no drawing library above the calls and no face: a program draws
 rectangles and discs with arithmetic of its own, as `userland/windows/main.c`
-does, and cannot draw text. [`WINDOWS.md`](WINDOWS.md), Section 12, limitation
+does, and cannot draw text. [`WINDOWS.md`](WINDOWS.md) limitation
 4, is where that is owed, and 9.6 is where it is paid.
 
-## 15. Sub-task 9.3: `power` and `pause`
+## 15. `power` and `pause`
 
 **Implementation**: two wrappers in [`../../libc/syscall/calls.c`](../../libc/syscall/calls.c),
 declared in [`../../libc/include/syscall.h`](../../libc/include/syscall.h), over
 the calls 35 and 36 of `<oxys/syscall_abi.h>` — thirty-seven in all — and one
 more `errno`, `EPERM`, the twenty-fourth. The kernel's half is
-[`INIT.md`](INIT.md), Sections 2.4 and 4.
+[`INIT.md`](INIT.md).
 
 `OxysPower` stops the machine and does not return upon success. It is the first
 call in this system a program may be refused for **being the wrong program**:

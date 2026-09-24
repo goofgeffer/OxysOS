@@ -45,7 +45,7 @@ which is how the services are written. A value is trimmed of the space either
 side; quote it where a `#` belongs in it. **A line that cannot be read costs
 that line and not the file**: the program reports it with its number and carries
 on with what it could read, which is the whole reason the format is shaped this
-way and is set out in `CONFIG.md`, Section 2.1.
+way and is set out in `CONFIG.md`.
 
 ## What belongs here
 
@@ -58,4 +58,4 @@ upon that text being right.
 
 **Nothing here survives a reboot.** `/etc` is upon the initial ramdisk, which is
 memory, so a file edited upon the running machine is gone at the next boot. The
-complete list is `CONFIG.md`, Section 7.
+complete list is `CONFIG.md`.

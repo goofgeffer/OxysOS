@@ -7,7 +7,7 @@
 ;          kernel/test/libc/config.c to load and run.
 ; Key definitions: KernelProgramConfigCheckBegin, KernelProgramConfigCheckEnd.
 ; References:
-;   - docs/design/CONFIG.md, Section 6: what the program asserts.
+;   - docs/design/CONFIG.md: what the program asserts.
 
 bits 64
 

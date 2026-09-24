@@ -11,7 +11,7 @@
  *          OxysIconParse, OxysIconAt, OxysIconWidth, OxysIconHeight,
  *          OxysIconCompose, OxysIconRead.
  * References:
- *   - docs/design/SESSION.md, Section 8: what icons are for, where they live,
+ *   - docs/design/SESSION.md: what icons are for, where they live,
  *     and why they are files rather than a header compiled in.
  *   - art/README.md: the format, and the one command that makes a file of it
  *     from a picture somebody drew.

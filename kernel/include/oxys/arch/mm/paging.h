@@ -226,7 +226,7 @@ PhysicalAddress PagingUnmapPageIn(PhysicalAddress root, VirtualAddress virtual_a
  *
  * From sub-task 6.13 that is two operations and not one: the instruction reaches
  * the executing processor alone, so the others are told by inter-processor
- * interrupt and waited for. See docs/design/CONCURRENCY.md, Section 6.
+ * interrupt and waited for. See docs/design/CONCURRENCY.md.
  */
 void PagingInvalidatePage(VirtualAddress address);
 

@@ -24,7 +24,7 @@
 ;   - kernel/include/oxys/proc/process.h: PROCESS_USER_STACK_FRAME_BYTES, which
 ;     is the kernel's half of this contract — the six eightbytes it leaves upon
 ;     the stack so that the reads below reach mapped memory.
-;   - docs/design/LIBC.md, Section 11.2: why this is assembly, what it does not
+;   - docs/design/LIBC.md: why this is assembly, what it does not
 ;     do, and what a program may assume before its first statement.
 ;
 ; Why this is assembly and not C.

@@ -558,7 +558,7 @@ bool ExceptionInstallInterruptStacks(void)
      * a shutdown: the machine resets with nothing written anywhere.
      *
      * This project has already met one. The account is in
-     * docs/design/INTERRUPTS.md, Section 5, where an unmapped descriptor table
+     * docs/design/INTERRUPTS.md where an unmapped descriptor table
      * turned a general-protection exception into a triple fault and a reboot
      * loop, and the cause had to be found from QEMU's own trace because the
      * kernel emitted nothing. With an entry of the interrupt stack table the

@@ -15,7 +15,7 @@
  *     which BootMemoryType is derived.
  *   - Multiboot2 Specification 2.0, Section 3.6.6: the boot module, from which
  *     BootModule is derived.
- *   - docs/design/ARCHITECTURE.md, Section 1, premise 3: boot-protocol neutrality is a
+ *   - docs/design/ARCHITECTURE.md premise 3: boot-protocol neutrality is a
  *     design constraint of the project, not a later accommodation.
  */
 

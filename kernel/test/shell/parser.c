@@ -11,7 +11,7 @@
  *          to run built-ins, programs, redirections and pipelines.
  * Key functions: KernelVerifyShell.
  * References:
- *   - docs/design/SHELL.md, Section 9: the table pairing every property
+ *   - docs/design/SHELL.md: the table pairing every property
  *     asserted below with the silent failure the assertion exists to catch.
  *   - IEEE Std 1003.1-2017, Sections 2.2, 2.3, 2.7 and 2.10: what a line is
  *     required to tokenise and parse into, which is what the expectations

@@ -7,7 +7,7 @@
  *          read through the filesystem and put through the same parser.
  * Key functions: KernelVerifyIcon.
  * References:
- *   - docs/design/SESSION.md, Section 8: what icons are for, and every
+ *   - docs/design/SESSION.md: what icons are for, and every
  *     assertion here paired with the silent failure it would catch.
  *   - libc/include/icon.h: the format and the seam.
  *   - art/README.md: the command that made the shipped file.

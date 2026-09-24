@@ -12,11 +12,11 @@
  *   - docs/storage/INITRD.md: the initial ramdisk in full — why it is an EXT2
  *     image rather than an archive of its own, why it is not copied, and what
  *     this driver is therefore permitted to assume.
- *   - docs/storage/BLOCK.md, Section 3: the four refusals the layer makes before
+ *   - docs/storage/BLOCK.md: the four refusals the layer makes before
  *     a driver is reached, which is why nothing below re-tests them.
  *   - Multiboot2 Specification 2.0, Section 3.6.6: the module tag that states
  *     where the boot loader put the image.
- *   - docs/design/MEMORY-LAYOUT.md, Section 9: the direct map, through which
+ *   - docs/design/MEMORY-LAYOUT.md: the direct map, through which
  *     every physical address below is addressed.
  *
  * What this driver is, and the one thing that makes it different from the other
@@ -52,7 +52,7 @@
  *   processors transferring simultaneously would each read or write correctly —
  *   a transfer is a copy between disjoint ranges — but the block layer's
  *   accounting above it is not safe, and neither is the buffer cache. See
- *   docs/design/CONCURRENCY.md, Section 10, limitation 1.
+ *   docs/design/CONCURRENCY.md.
  */
 
 #include <oxys/dev/storage/ramdisk.h>

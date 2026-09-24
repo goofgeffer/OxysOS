@@ -23,7 +23,7 @@
  *   - kernel/abi/oxys/syscall_abi.h: the call numbers, the failure results and
  *     the register convention. This header declares symbols; that one declares
  *     none, and the division is the licensing one recorded in
- *     docs/design/LIBC.md, Section 2.
+ *     docs/design/LIBC.md.
  *   - Intel 64 and IA-32 Architectures Software Developer's Manual, Volume 2B,
  *     "SYSCALL": the instruction places the address of the following
  *     instruction in RCX and RFLAGS in R11, so neither survives a call.
@@ -32,7 +32,7 @@
  *     which is what the raw invocations below shift by one place.
  *   - ISO/IEC 9899:2011, Section 7.5: the errno these wrappers set, and the rule
  *     that no library function sets it to zero.
- *   - docs/design/LIBC.md, Section 8: the design of this sub-task, what is
+ *   - docs/design/LIBC.md: the design of this sub-task, what is
  *     asserted of it and what is not.
  *
  * Why the names are this project's and not POSIX's.
@@ -46,7 +46,7 @@
  * and returning three results rather than a pointer. A function
  * bearing a standard name and behaving otherwise is worse than either the
  * standard function or a differently named one, which is the same judgement
- * docs/design/LIBC.md, Section 4, records about strlcpy and strdup. The POSIX
+ * docs/design/LIBC.md records about strlcpy and strdup. The POSIX
  * spellings arrive when the semantics do, and the names here comply meanwhile
  * with PROJECT_GUIDELINES.md, Section 4, under which a global function is
  * PascalCase.
@@ -113,7 +113,7 @@ int64_t OxysSyscallInvoke3(uint64_t number, uint64_t first, uint64_t second,
  * It is a function of its own, and exported, for a reason that is not tidiness:
  * it is the only part of this sub-task that can be executed by anything other
  * than a program at privilege level 3, so it is the only part the kernel's
- * boot-time self-test can assert directly. See docs/design/LIBC.md, Section 8.4.
+ * boot-time self-test can assert directly. See docs/design/LIBC.md.
  */
 int64_t OxysSyscallResult(int64_t result);
 

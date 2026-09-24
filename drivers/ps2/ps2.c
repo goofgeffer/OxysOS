@@ -29,7 +29,7 @@
  *     of scan code set 2 into set 1.
  *   - The PS/2 device command set: a device answers 0xFA to acknowledge and 0xFE
  *     to ask that the command be sent again.
- *   - docs/devices/KEYBOARD.md, Section 2: the controller, as distinct from the
+ *   - docs/devices/KEYBOARD.md: the controller, as distinct from the
  *     keyboard reached through it.
  *
  * Why every wait is bounded.

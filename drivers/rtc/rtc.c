@@ -13,7 +13,7 @@
  *   - kernel/include/oxys/dev/rtc.h: the MC146818A data sheet's address map,
  *     Table 3, registers A and B and the update cycle; and the Intel register
  *     that places the index at port 0x70.
- *   - docs/devices/TIME.md, Section 10: the design, and every assertion made
+ *   - docs/devices/TIME.md: the design, and every assertion made
  *     upon it.
  *
  * Concurrency. RtcInitialise runs once, upon the bootstrap processor, before

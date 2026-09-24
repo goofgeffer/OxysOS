@@ -12,7 +12,7 @@
 ;   - kernel/arch/x86_64/smp/smp_trampoline.asm: the same technique one phase
 ;     earlier, for the real-mode trampoline, and the Makefile dependency that
 ;     guarantees the file exists before this is assembled.
-;   - docs/design/LIBC.md, Section 11.5: why the program is carried in the image
+;   - docs/design/LIBC.md: why the program is carried in the image
 ;     rather than placed upon a disk.
 ;
 ; Why the program is embedded rather than read from a medium.

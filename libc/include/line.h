@@ -26,7 +26,7 @@
  *     terminal's choice and not the program's.
  *   - IEEE Std 1003.1-2017, Section 11.1.9 and the `stty` utility: the erase
  *     character is DEL or BS according to the terminal, so both delete.
- *   - docs/design/SHELL.md, Section 3: the design, the redraw discipline that
+ *   - docs/design/SHELL.md: the design, the redraw discipline that
  *     needs nothing of a terminal but backspace, and the limitations.
  *
  * Why this is in the C library, when ISO/IEC 9899:2011 has no such thing.

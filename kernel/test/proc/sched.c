@@ -8,7 +8,7 @@
  *          back when a quantum expires.
  * Key functions: KernelVerifyScheduler.
  * References:
- *   - docs/design/SCHEDULER.md, Section 7: the assertions, each paired with the
+ *   - docs/design/SCHEDULER.md: the assertions, each paired with the
  *     silent failure it exists to catch.
  *   - The same, Section 7.3: why the admission below is made with this
  *     processor's interrupts masked, and why only one of the two fields it reads

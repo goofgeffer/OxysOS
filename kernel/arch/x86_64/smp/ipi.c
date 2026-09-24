@@ -19,7 +19,7 @@
  *     delivery mode must write the end-of-interrupt register before returning.
  *   - Intel SDM, Volume 2B, "HLT": the instruction halts the processor until an
  *     interrupt, a debug exception, a non-maskable interrupt or a reset.
- *   - docs/design/CONCURRENCY.md, Section 5.
+ *   - docs/design/CONCURRENCY.md.
  *
  * Why every send here carries the assert level and the edge trigger.
  *

@@ -3,8 +3,8 @@
 # `art/` — The Mark, and What Is Generated From It
 
 **Phase**: 9, beside sub-task 9.5, of [`../docs/project/PLAN.md`](../docs/project/PLAN.md).
-**Detailed design**: [`../docs/design/SESSION.md`](../docs/design/SESSION.md),
-Section 3.2, which is where the mark is drawn and why the boot screen and the
+**Detailed design**: [`../docs/design/SESSION.md`](../docs/design/SESSION.md)
+which is where the mark is drawn and why the boot screen and the
 desktop must draw the same one.
 **Licence**: CC0-1.0, and that is the reason this directory exists rather than
 the artwork living beside whichever program draws it —
@@ -30,7 +30,7 @@ It is drawn upon by two things under two different licences: the kernel's boot
 screen and power screen, which are `LGPL-3.0-or-later`, and the session, which
 is `MIT`. Artwork that belonged to either could not be used by the other without
 a relicensing this project may not perform — the same wall the font stands
-behind, [`../docs/design/SESSION.md`](../docs/design/SESSION.md), Section 4 — so
+behind, [`../docs/design/SESSION.md`](../docs/design/SESSION.md) — so
 the mark is placed in the public domain, where both may take it, and kept in one
 directory so that there is one of it.
 
@@ -127,7 +127,7 @@ for minutes at a time is not the problem a label upon a panel is, and no second
 thing has to agree with it about either colour.
 
 `/etc/desktop.conf` ships `accent = system` to name this header from a file —
-[`../docs/design/CONFIG.md`](../docs/design/CONFIG.md), Section 4.2.
+[`../docs/design/CONFIG.md`](../docs/design/CONFIG.md).
 
 ## `icons/` — the pictures the launcher draws, which are files
 
@@ -143,7 +143,7 @@ an entry to `/etc/session.conf`, and nothing draws one before `/` is mounted. A
 picture compiled in would need the system rebuilt to change, and a launcher
 whose entries are read from a file cannot have its pictures fixed at compile
 time without the two disagreeing the first time somebody edits it.
-[`../docs/design/SESSION.md`](../docs/design/SESSION.md), Section 8.
+[`../docs/design/SESSION.md`](../docs/design/SESSION.md).
 
 The conversion is one command, recorded here rather than made a rule of the
 `Makefile` — for the reason `logo.h`'s is: a build rule would put ImageMagick in
@@ -184,8 +184,7 @@ conversion this replaced reduced to twenty-four and then made every pixel below
 half alpha nothing and every other opaque, because version 1 of the format had
 no answer between; the edge was a staircase, and the session enlarged it by two.
 Version 2 carries the fraction, and the session mixes it with the panel —
-`OxysIconCompose`, [`../docs/design/SESSION.md`](../docs/design/SESSION.md),
-Section 8.
+`OxysIconCompose`, [`../docs/design/SESSION.md`](../docs/design/SESSION.md).
 
 **Transparency and not opacity** in the top byte, `255 - alpha`, so that a pixel
 wholly opaque has a top byte of zero and is the `0x00RRGGBB` the window protocol

@@ -9,7 +9,7 @@
  * Key functions: KernelHeapInitialise, KernelAllocate, KernelAllocateZeroed,
  *          KernelFree, KernelHeapReport, HeapSizeClassFor, HeapRefillClass.
  * References:
- *   - docs/design/MEMORY-LAYOUT.md, Section 11: the design of the heap, and
+ *   - docs/design/MEMORY-LAYOUT.md: the design of the heap, and
  *     Section 11.4 for the sizes that are refused as unrepresentable.
  *   - Bonwick, J., "The Slab Allocator: An Object-Caching Kernel Memory
  *     Allocator", USENIX Summer 1994. Consulted for the object-caching concept
@@ -317,7 +317,7 @@ void KernelFree(void *address)
      * would require removing its remaining objects from the class free list,
      * which is singly linked and offers no means of finding them. The page is
      * therefore retained and reused by the next allocation of its class. This is
-     * a deliberate limitation, recorded in docs/design/MEMORY-LAYOUT.md, Section 11.4.
+     * a deliberate limitation, recorded in docs/design/MEMORY-LAYOUT.md.
      */
 }
 

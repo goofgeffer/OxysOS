@@ -11,7 +11,7 @@
  * References:
  *   - libc/include/config.h: the seam; the parsing half is asserted by
  *     kernel/test/libc/config.c, which needs no program.
- *   - docs/design/CONFIG.md, Section 6.
+ *   - docs/design/CONFIG.md.
  *
  * Why this asserts the shipped files and not only the reading.
  *

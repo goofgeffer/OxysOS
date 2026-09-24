@@ -22,7 +22,7 @@
  *     extended codes 0x47 to 0x53 of the cursor and editing keys.
  *   - kernel/include/oxys/dev/keyboard.h: the event this consumes, and the
  *     modifier flags upon it.
- *   - docs/design/SHELL.md, Section 2: the design, and the reasons recorded in
+ *   - docs/design/SHELL.md: the design, and the reasons recorded in
  *     the header of this file's interface.
  *
  * Why the devices are polled by the reader and not drained by their interrupt
@@ -54,7 +54,7 @@
  *   system call upon the bootstrap processor, to which every user thread is
  *   pinned — so no lock is taken; two readers would race upon the read index
  *   and each would receive part of what the other was owed. See
- *   docs/design/CONCURRENCY.md, Section 10, limitation 1.
+ *   docs/design/CONCURRENCY.md.
  */
 
 #include <oxys/terminal/terminal.h>

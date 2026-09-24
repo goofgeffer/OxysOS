@@ -13,7 +13,7 @@
  *     Chapter 6 and Table 6-1: the architecture-defined exceptions, their
  *     mnemonics, and which of them deliver an error code. Each screen's text is
  *     an account of what the processor is reporting, and is cited there.
- *   - docs/design/FAULTSCREEN.md, Sections 1 and 2: the design, and the assertion
+ *   - docs/design/FAULTSCREEN.md: the design, and the assertion
  *     table for it.
  *
  * Why these exist, and why there is more than one of them.

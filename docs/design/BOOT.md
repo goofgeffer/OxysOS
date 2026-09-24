@@ -1,253 +1,212 @@
 <!-- SPDX-FileCopyrightText: 2026 The Oxys-OS Authors -->
 <!-- SPDX-License-Identifier: CC0-1.0 -->
-# The Oxys-OS Boot Sequence
+# The Boot Sequence
 
-**Corresponding phase**: Phase 1, sub-tasks 1.3 to 1.6.
+**Phase**: sub-tasks 1.3 to 1.6 of [`../project/PLAN.md`](../project/PLAN.md).
+**Source**: [`../../boot/boot.asm`](../../boot/boot.asm),
+[`../../linker.ld`](../../linker.ld),
+[`../../boot/grub/grub.cfg`](../../boot/grub/grub.cfg).
+**Specifications**: Multiboot2 Specification 2.0, Sections 3.1, 3.3 and 3.6;
+Intel SDM, Volume 3A, Sections 3.4.5, 4.1.2 and 4.5; Volume 2A, `CPUID`.
 
-**Specifications**: Multiboot2 Specification 2.0, Sections 3.1 and 3.3; Intel 64
-and IA-32 Architectures Software Developer's Manual, Volume 3A, Sections 3.4.5,
-4.1.2 and 4.5; Volume 2A, "CPUID".
+How control passes from the firmware to `KernelMain`: the Multiboot2 header
+GRUB loads the image by, the checks made before leaving 32-bit mode, the
+boot-time paging hierarchy, the entry into long mode, and the jump to the
+higher half.
 
 ## 1. Overview
 
-Control passes through six stages between the firmware and the C entry point of
-the kernel.
-
 ```
 Firmware (BIOS)
-      |
       v
-GRUB 2, in Multiboot2 mode
-      |  Loads the ELF64 image at physical 0x00100000.
-      |  Establishes the machine state of Multiboot2 Section 3.3.
+GRUB 2, Multiboot2      Loads the ELF64 image at physical 0x00100000 and
+      |                 establishes the machine state of Multiboot2 Section 3.3.
       v
-_start                       32-bit protected mode, paging disabled
-      |  Establishes a stack; preserves EAX and EBX.
-      |  Validates the Multiboot2 magic value.
-      |  Confirms CPUID and Intel 64 availability.
-      |  Constructs the boot-time paging hierarchy.
-      |  Sets CR4.PAE, IA32_EFER.LME, CR0.PG.
-      |  Loads the 64-bit GDT and performs a far jump.
+_start                  32-bit protected mode, paging disabled.
+      |                 Establishes a stack; preserves EAX and EBX; checks the
+      |                 magic value, CPUID and Intel 64; builds the boot-time
+      |                 paging hierarchy; sets CR4.PAE, IA32_EFER.LME, CR0.PG;
+      |                 loads the 64-bit GDT and far-jumps.
       v
-BootLongModeEntry            64-bit mode, identity-mapped low memory
-      |  Loads the data segment selectors.
-      |  Performs an indirect jump through a 64-bit immediate.
+BootLongModeEntry       64-bit mode, identity-mapped low memory.
+      |                 Loads the data selectors; jumps through a 64-bit register.
       v
-KernelEntryHigh              64-bit mode, higher-half virtual addresses
-      |  Establishes the kernel stack; clears RBP.
-      |  Marshals the preserved values into RDI and RSI.
+KernelEntryHigh         64-bit mode, higher-half addresses.
+      |                 Establishes the kernel stack; clears RBP; passes the
+      |                 information address in RDI and the magic in RSI.
       v
-KernelMain                   C, System V AMD64 calling convention
+KernelMain              C, System V AMD64 calling convention.
 ```
 
 ## 2. The Multiboot2 header
 
-The header is emitted into the section `.multiboot_header`, which `linker.ld`
-places at the very beginning of the image. This satisfies the requirement of the
-Multiboot2 Specification, Section 3.1, that the header appear within the first
-32768 bytes of the file and be aligned on an 8-byte boundary.
+The header is the section `.multiboot_header`, which `linker.ld` places first in
+the image, so that it lies within the first 32,768 bytes and on an 8-byte
+boundary (Multiboot2, Section 3.1).
 
-Its fields, in the order prescribed by Section 3.1.1, are as follows.
+| Offset | Field | Value | Multiboot2 |
+| ------ | ----- | ----- | ---------- |
+| 0 | `magic` | `0xE85250D6` | 3.1.2 |
+| 4 | `architecture` | `0`, i386 protected mode | 3.1.2 |
+| 8 | `header_length` | 48 | 3.1.2 |
+| 12 | `checksum` | Makes the sum of the first four fields zero, modulo 2^32 | 3.1.2 |
+| 16 | framebuffer tag | Type 5, flags 1, size 20; width, height, depth 0 | 3.1.10 |
+| 36 | padding | Four bytes, to align the next tag on 8 bytes | 3.1.3 |
+| 40 | end tag | Type 0, flags 0, size 8 | 3.1.3 |
 
-| Offset | Field | Value | Authority |
-| ------ | ----- | ----- | --------- |
-| 0 | `magic` | `0xE85250D6` | Section 3.1.2 |
-| 4 | `architecture` | `0` (32-bit protected mode of i386) | Section 3.1.2 |
-| 8 | `header_length` | The length of the header in bytes, magic fields included | Section 3.1.2 |
-| 12 | `checksum` | The value which, added to the preceding three fields, yields an unsigned 32-bit sum of zero | Section 3.1.2 |
-| 16 | framebuffer tag | Type `5`, flags `1`, size `20`, then width, height and depth all `0` | Section 3.1.10 |
-| 36 | padding | Four bytes, so that the tag below begins upon an 8-byte boundary | Section 3.1.3 |
-| 40 | terminating tag | Type `0`, flags `0`, size `8` | Section 3.1.3 |
+- **The framebuffer tag** asks the loader for a linear framebuffer; zero width,
+  height and depth mean no preference. Its **optional flag is set**, because the
+  kernel boots without one: the text display, the serial port and a framebuffer
+  initialisation that returns false are all there. Clearing it would declare the
+  image unloadable without a framebuffer, which is untrue.
+  [`FRAMEBUFFER.md`](FRAMEBUFFER.md).
+- **No module-alignment tag** (Section 3.1.11). The initial ramdisk is read
+  through the direct map at byte granularity, and `FrameMarkRange` reserves
+  every frame a module touches, so alignment changes nothing. A tag that changes
+  no behaviour is a tag someone will one day reason from.
 
-One optional request tag is emitted, since sub-task 6.2: the framebuffer tag of
-Section 3.1.10, whose presence is what causes the boot loader to supply the
-framebuffer information tag of Section 3.6.12. Width, height and depth are all
-zero, which that section defines as no preference.
+## 3. What the loader supplies
 
-Its **optional bit is set**, and that is a statement about this kernel rather
-than a formality: clearing it would declare that the image must not be loaded at
-all unless a framebuffer can be supplied, which is untrue — there is a text
-display driver, a serial port, and an initialisation written to return false and
-let the boot proceed. See [`FRAMEBUFFER.md`](FRAMEBUFFER.md), Section 2.
+The kernel reads these tags of the boot information structure:
 
-The header is accordingly 48 bytes rather than 24, the four bytes at offset 36
-being the padding that returns the terminating tag to an 8-byte boundary.
+| Tag | Multiboot2 | Used for |
+| --- | ---------- | -------- |
+| Command line | 3.6.1 | The boot options of [`CONFIG.md`](CONFIG.md) and [`INIT.md`](INIT.md). |
+| Boot loader name | 3.6.2 | The boot report. |
+| Module | 3.6.6 | The initial ramdisk ([`../storage/INITRD.md`](../storage/INITRD.md)). |
+| ELF sections | 3.6.7 | The boot report. |
+| Memory map | 3.6.8 | The frame allocator ([`MEMORY-LAYOUT.md`](MEMORY-LAYOUT.md)). |
+| Framebuffer | 3.6.12 | [`FRAMEBUFFER.md`](FRAMEBUFFER.md). |
+| ACPI RSDP, old and new | 3.6.16, 3.6.17 | [`../devices/ACPI.md`](../devices/ACPI.md). |
 
-### 2.1 The module-alignment tag is deliberately absent
+**Modules are found by name, never by position.** `grub.cfg` loads
+`/boot/initrd.img` under the name `initrd`. A kernel that took the first module
+would load the wrong one, silently, the day a second is added, since every
+module is just a range of bytes. Up to `BOOT_MODULE_MAXIMUM` (4) modules are
+recorded, and any beyond are reported; recording only one would leave no set to
+choose from by name.
 
-Sub-task 7.7 has the boot loader carry an initial ramdisk as a module, and
-Multiboot2, Section 3.1.11, defines a header tag by which an image may require
-its modules to be page aligned. This header does not carry it.
+**Module extents are reserved** from the frame allocator with the kernel image,
+the boot information and the frame bitmap: the memory map reports them as
+available (Section 3.6.8).
 
-It would change nothing. The ramdisk is read through the direct map at byte
-granularity, so alignment cannot affect a transfer; and the frames it occupies
-are reserved by `FrameMarkRange`, which reserves every frame a range touches in
-its entirety — so a module sharing its first or last frame with something else
-costs that frame, and nothing is ever issued from beneath a module either way.
+## 4. The machine state at entry
 
-Eight bytes that change no behaviour are eight bytes somebody will one day reason
-from. The same judgement removed `-z max-page-size=0x1000` from the user link at
-sub-task 7.5, where it was measured to change the output by not one byte.
-[`../storage/INITRD.md`](../storage/INITRD.md), Section 4.5.
+Multiboot2, Section 3.3, guarantees the following, and the kernel relies on each.
 
-### 2.2 What the boot loader supplies in return
+| Element | State | Use |
+| ------- | ----- | --- |
+| `EAX` | `0x36D76289` | Checked by `_start` and again by `KernelMain`. |
+| `EBX` | Physical address of the boot information | Preserved and passed to `KernelMain`. |
+| `CS` | 32-bit execute/read, base 0, limit 4 GiB | Code runs before the kernel's GDT exists. |
+| `DS`, `ES`, `FS`, `GS`, `SS` | 32-bit read/write, base 0, limit 4 GiB | Flat data access. |
+| A20 gate | Enabled | No A20 code is needed. |
+| `CR0` | `PE` set, `PG` clear | Long mode may set `PG` directly. |
+| `EFLAGS` | `VM` and `IF` clear | Interrupts are masked while there is no IDT. |
 
-The tags the kernel consumes from the boot information structure are the memory
-map (Section 3.6.8), the framebuffer (3.6.12), the ELF sections (3.6.7), the two
-ACPI pointers (3.6.16 and 3.6.17), the boot loader's name (3.6.2) and the command
-line (3.6.1) — and, since sub-task 7.7, **the module tag of Section 3.6.6**.
+Everything else is undefined. In particular there is no stack, so `_start`
+sets one before its first `call`.
 
-A module tag carries the physical start and end addresses of one file the boot
-loader placed in memory, and a zero-terminated string naming it; one tag appears
-per module. `boot/grub/grub.cfg` loads `/boot/initrd.img` under the name
-`initrd`, and the kernel finds it **by that name and never by position** — a
-kernel that took the first module would find the right thing until the day a
-second module is added, and a module is a range of bytes, so nothing would say it
-had found the wrong one.
+## 5. Feature checks
 
-Up to `BOOT_MODULE_MAXIMUM` modules are recorded and the truncation is reported.
-Recording one would have made the *set* of modules something the kernel cannot
-represent, and a kernel that cannot represent a set cannot select from it by name.
+Before the long-mode transition, `_start` makes three checks. A failure writes
+one character to the VGA text buffer at physical `0xB8000`, which is addressable
+while paging is off, and halts.
 
-Their extents lie in memory the map reports as available — Section 3.6.8 warns
-that the map "includes the regions occupied by kernel, mbi, segments and modules"
-— so they are reserved from the frame allocator alongside the kernel image, the
-boot information structure and the frame bitmap. `MEMORY-LAYOUT.md`, Section 6.
+| Check | Method | Character |
+| ----- | ------ | --------- |
+| Multiboot2 handover | `EAX` equals `0x36D76289` | `M` |
+| `CPUID` present | `EFLAGS.ID` (bit 21) can be toggled | `C` |
+| Intel 64 present | Leaf `0x80000000` reports at least `0x80000001`, and leaf `0x80000001` sets `EDX` bit 29 | `L` |
 
-## 3. The machine state at entry
+## 6. The boot-time paging hierarchy
 
-The Multiboot2 Specification, Section 3.3, guarantees the following state upon
-entry to `_start`, and Oxys-OS depends upon each guarantee.
+Long mode cannot be entered with paging off, so a hierarchy is built first,
+mapping the first gibibyte of physical memory twice:
 
-| Element | Guaranteed state | Use made of it |
-| ------- | ---------------- | -------------- |
-| `EAX` | `0x36D76289` | Validated by `_start`, and again by `KernelMain`. |
-| `EBX` | The 32-bit physical address of the Multiboot2 information structure | Preserved; consumed by `KernelReportBootState` and, from Phase 2, by the memory-map parser. |
-| `CS` | A 32-bit read/execute segment, base 0, limit `0xFFFFFFFF` | Permits execution before the kernel's own GDT is loaded. |
-| `DS`, `ES`, `FS`, `GS`, `SS` | 32-bit read/write segments, base 0, limit `0xFFFFFFFF` | Permits data access with flat addressing. |
-| A20 gate | Enabled | No A20 enabling code is required. |
-| `CR0` | `PE` set, `PG` clear | The long-mode transition may set `PG` directly. |
-| `EFLAGS` | `VM` clear, `IF` clear | Interrupts are already masked; no IDT is yet installed. |
+1. **At linear 0.** When `CR0.PG` is set the instruction pointer still holds a
+   low address, and the next fetch must succeed.
+2. **At `0xFFFFFFFF80000000`**, where the kernel is linked.
 
-The specification declares every other register and flag undefined. In
-particular no stack is supplied, and `_start` therefore establishes one before
-issuing any `call` instruction.
+The permanent hierarchy built in sub-task 2.3 ([`MEMORY-LAYOUT.md`](MEMORY-LAYOUT.md))
+replaces this one and drops the identity mapping. The boot structures are then
+unreferenced; their frames lie inside the kernel image and stay reserved. The
+twenty kibibytes are not reclaimed, since freeing memory still in use is the
+larger risk.
 
-## 4. Feature detection
+## 7. The long-mode transition
 
-Two checks precede the long-mode transition. A failure of either writes a
-distinguishing character to the VGA text buffer at physical `0x000B8000` and
-halts, that buffer being directly addressable while paging remains disabled.
+In the order of Intel SDM, Volume 3A, Section 4.1.2:
 
-| Check | Method | Failure code |
-| ----- | ------ | ------------ |
-| Multiboot2 handover | `EAX` compared against `0x36D76289` | `M` |
-| `CPUID` availability | `EFLAGS.ID` (bit 21) is toggled and the change observed | `C` |
-| Intel 64 availability | `CPUID` leaf `0x80000000` must report at least `0x80000001`; leaf `0x80000001` must return `EDX` bit 29 set | `L` |
-
-## 5. The boot-time paging hierarchy
-
-Long mode requires paging to be enabled; the processor cannot enter IA-32e mode
-with paging disabled. A hierarchy is therefore constructed before the
-transition. Its layout is described in `MEMORY-LAYOUT.md`, Section 3.
-
-Two mappings of the same first gibibyte of physical memory are established:
-
-1. **The identity mapping**, at linear address `0x0000000000000000`. It is
-   indispensable, because at the instant `CR0.PG` is set the instruction pointer
-   still holds a low address, and the very next instruction fetch must succeed.
-2. **The higher-half mapping**, at linear address `0xFFFFFFFF80000000`, at which
-   the kernel proper is linked.
-
-The identity mapping is retained until the permanent kernel page tables are
-constructed in Phase 2, sub-task 2.3, at which point it is removed. From that
-point the structures described in this section are dead: nothing refers to them,
-and the frames they occupy lie within the kernel image and are reserved by the
-frame allocator. Reclaiming them is deferred, being an optimisation of some
-twenty kibibytes with a corresponding risk of releasing memory still in use.
-
-## 6. The long-mode transition
-
-The sequence follows Intel SDM, Volume 3A, Section 4.1.2 exactly.
-
-1. `MOV CR3, BootPml4` — install the paging-structure root.
-2. Set `CR4.PAE` (bit 5) — four-level paging requires physical address extension.
-3. Set `IA32_EFER.LME` (bit 8 of MSR `0xC0000080`) by `RDMSR`/`WRMSR`.
-4. Set `CR0.PG` (bit 31) — enabling paging activates IA-32e mode.
-
-At the completion of step 4 the processor is in IA-32e **compatibility** mode,
-because `CS.L` is still clear. Sixty-four-bit mode is entered by loading a code
-segment whose `L` flag is set, which is accomplished by the far jump in step 6.
-
-5. `LGDT [BootGdtDescriptor]` — load a table containing a null descriptor, a
-   64-bit code descriptor at selector `0x08`, and a data descriptor at selector
+1. `MOV CR3, BootPml4`.
+2. Set `CR4.PAE` (bit 5); four-level paging requires it.
+3. Set `IA32_EFER.LME` (bit 8 of MSR `0xC0000080`).
+4. Set `CR0.PG` (bit 31). The processor is now in IA-32e compatibility mode,
+   because `CS.L` is clear.
+5. `LGDT` a table of a null descriptor, 64-bit code at `0x08` and data at
    `0x10`.
-6. `JMP 0x08:BootLongModeEntry` — a far jump that reloads `CS` and enters
-   64-bit mode.
+6. `JMP 0x08:BootLongModeEntry`, which loads a code segment with `L` set and
+   enters 64-bit mode.
 
-## 7. The transfer to the higher half
+## 8. The jump to the higher half
 
-The far jump of step 6 encodes a 32-bit offset and therefore cannot name an
-address in the upper half of the address space. A trampoline, `BootLongModeEntry`,
-is consequently placed in the identity-mapped boot section. It loads the data
-segment selectors and then performs an indirect jump through a register loaded
-with a 64-bit immediate:
+The far jump carries a 32-bit offset and cannot reach the upper half, so
+`BootLongModeEntry` sits in the identity-mapped boot section, loads the data
+selectors, and jumps through a register:
 
 ```
 mov rax, KernelEntryHigh
 jmp rax
 ```
 
-`KernelEntryHigh` resides in the `.text` section and therefore executes at its
-higher-half virtual address. It establishes the 64 KiB kernel stack, clears
-`RBP` to terminate the frame-pointer chain, loads `RDI` with the Multiboot2
-information address and `RSI` with the Multiboot2 magic value in accordance with
-the System V AMD64 calling convention, and calls `KernelMain`. Should
-`KernelMain` return, which it is not designed to do, the processor is halted
-permanently with interrupts masked.
+`KernelEntryHigh` runs at its higher-half address. It sets the 64 KiB kernel
+stack, clears `RBP` to end the frame-pointer chain, puts the information address
+in `RDI` and the magic in `RSI`, and calls `KernelMain`. If `KernelMain` returns,
+the processor halts with interrupts masked.
 
-## 8. The program headers
+## 9. The program headers
 
-A segment carries one set of permissions, so a section may share a segment only
-with sections of the same permissions. Left to itself the linker packs sections
-into as few segments as it can and gives each the union of the permissions of
-what it holds, which is how an image acquires a segment that is readable,
-writable and executable at once — the condition the linker warns of. `linker.ld`
-declares the segments in a `PHDRS` block instead, so the division is stated
-rather than inferred:
+A segment has one set of permissions. Left alone, the linker packs sections into
+as few segments as it can with the union of their permissions, which produces a
+segment both writable and executable. `linker.ld` therefore states the segments
+in a `PHDRS` block:
 
 | Segment | Flags | Holds |
 | ------- | ----- | ----- |
-| `boot` | `r-x` | The Multiboot2 header and the 32-bit entry code. |
-| `bootdata` | `rw-` | The boot GDT, the preserved boot loader values, the boot stack and the four boot-time paging structures. |
+| `boot` | `r-x` | The Multiboot2 header and the 32-bit entry code (`.boot`). |
+| `bootdata` | `rw-` | The boot GDT, the preserved loader values, the boot stack, the boot paging structures (`.boot.data`). |
 | `text` | `r-x` | The 64-bit kernel code. |
-| `rodata` | `r--` | Constants, string literals and read-only tables. |
-| `data` | `rw-` | Initialised writable data, followed by `.bss`. |
+| `rodata` | `r--` | Constants, string literals, read-only tables. |
+| `data` | `rw-` | Initialised data, then `.bss`. |
 
-The division that made this possible is between the boot code and the boot data.
-They were one output section, `.boot`, because both are linked at their physical
-addresses and both are finished with before the permanent tables of Phase 2 are
-built; but the entry code is executed and never written, and the paging
-structures are written and never executed, so nothing but their common lifetime
-placed them together. They are now `.boot` and `.boot.data`, adjacent and each
-in a segment of its own.
+Every output section carries `ALIGN(4K)` twice: before the colon it sets the
+section's address; after it, the section's alignment, which becomes the
+segment's. Without the second, a segment inherits the largest input alignment
+(16 or 32 bytes) and its file offset stops being congruent to its address modulo
+a page, as `p_align` requires; a loader could then only copy the segment, not map
+it with its permissions.
 
-Every output section carries `ALIGN(4K)` twice. The first, before the colon,
-sets the address at which the section begins; the second, after it, sets the
-section's own alignment, which the linker takes as the alignment of the segment
-holding it. Without the second, a segment would inherit the largest alignment
-among its input sections — 16 or 32 bytes — and its file offset would no longer
-be congruent to its address modulo a page, as `p_align` obliges. That congruence
-is what allows a loader to map the file rather than copy it, and so to apply the
-permissions these headers declare. The image accordingly presents five `LOAD`
-segments, each page-aligned in both address and file offset, and none both
-writable and executable.
+These flags are a declaration, not an enforcement: GRUB copies segments without
+applying them, and the mappings that enforce permissions are the ones
+`PagingInitialise` builds ([`MEMORY-LAYOUT.md`](MEMORY-LAYOUT.md)). The
+declaration is for the mapping loader of Phase 12 and for every tool that reads
+the image.
 
-This is the image's own statement of its permissions and not an enforcement of
-them. GRUB copies the segments to their physical addresses and does not apply
-their flags, and this kernel is running with paging of its own making within a
-few instructions; the mappings that actually enforce anything are the ones
-`PagingInitialise` builds, described in
-[`MEMORY-LAYOUT.md`](MEMORY-LAYOUT.md), Section 5. What the headers give is a
-correct declaration for the loader of Phase 12, which maps rather than copies,
-and for every tool that reads the image in the meantime.
+## Verification
+
+Boot is verified by reaching the rest of the self-test: `make verify` fails if
+the completion banner is absent, and nothing reaches the banner without every
+stage above. `KernelMain` checks the magic value again before using `EBX`.
+
+| Property | The failure it would catch |
+| -------- | -------------------------- |
+| The serial log begins with the boot report, naming the loader and the command line. | A header GRUB rejects, or a lost `EBX`. |
+| `readelf -l build/oxys.elf` lists five `LOAD` segments, none `RWE`, each page-aligned in address and offset. | A section placed in the wrong segment. |
+| The initial ramdisk self-test ([`../storage/INITRD.md`](../storage/INITRD.md)) finds the module named `initrd`. | A module found by position, or its frames handed out. |
+
+## Limitations
+
+1. The boot-time paging structures are not reclaimed (Section 6).
+2. The failure characters `M`, `C` and `L` are shown only on a VGA text
+   display; a machine without one halts silently.
+3. There is no UEFI path until Phase 12.

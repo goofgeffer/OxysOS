@@ -9,7 +9,7 @@
  * References:
  *   - IEEE Std 1003.1-2017, `tail`: "copy the last part of a file"; `-n
  *     number`, the last `number` lines; ten by default.
- *   - docs/design/SHELL.md, Section 30.
+ *   - docs/design/SHELL.md.
  *
  * The whole input is read before anything is written, because the last lines
  * of a stream are unknowable until it ends; it is kept in a buffer that grows

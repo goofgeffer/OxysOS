@@ -109,7 +109,6 @@ source of truth for progress, and nothing below restates it.
 | [`MEMORY-LAYOUT.md`](docs/design/MEMORY-LAYOUT.md) | The physical and virtual address space layout, the paging hierarchy, and the allocators above it. |
 | [`INTERRUPTS.md`](docs/design/INTERRUPTS.md) | The interrupt descriptor table, the stubs and the dispatcher, the exception handlers, and the 8259A interrupt controllers. |
 | [`PRIVILEGE.md`](docs/design/PRIVILEGE.md) | The apparatus of a privilege transition: the user-mode descriptors, the task state segment and its trusted stacks, the registers that configure `SYSCALL`, and the entry path, dispatch table and argument validation built upon them. |
-| [`GRAPHICS.md`](docs/design/GRAPHICS.md) | The index of the five documents that describe the graphical work of sub-tasks 6.2 to 6.6, and why it is five documents rather than one. |
 | [`FRAMEBUFFER.md`](docs/design/FRAMEBUFFER.md) | The framebuffer: how it is asked for, what is validated about it, why its pages are write-combining, how it is mapped, and what became of the text console that had the screen. |
 | [`DRAWING.md`](docs/design/DRAWING.md) | The drawing primitives: the surface they name instead of the framebuffer, the clipping that is a memory-safety boundary rather than a convenience, and the pixel, rectangle, line and blit. |
 | [`CONSOLE.md`](docs/design/CONSOLE.md) | The bitmap font drawn for this project, the console that draws the boot log with it, and the measurement that found the console slow and the specialisation that fixed it. |
@@ -169,7 +168,7 @@ and acquire their documents when material is first placed within them.
 alone and carries no `README.md`; [`LICENSING.md`](LICENSING.md) describes it.
 `.github/` likewise carries none: it holds the configuration by which GitHub
 runs the verification, not material of the system, and
-[`docs/project/TOOLCHAIN.md`](docs/project/TOOLCHAIN.md), Section 10, describes
+[`docs/project/TOOLCHAIN.md`](docs/project/TOOLCHAIN.md) describes
 it.
 
 ## Root documents

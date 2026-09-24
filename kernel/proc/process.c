@@ -35,7 +35,7 @@
  *   the parent's own thread of control. Everything a program can observe of the
  *   ordering is preserved — a child runs after the fork that made it and before
  *   the wait that collects it — and concurrency is not. It is recorded here and
- *   in docs/design/PROCESS.md, Section 13.2, rather than left to be discovered.
+ *   in docs/design/PROCESS.md rather than left to be discovered.
  *
  * Identifiers are numbers and not indices.
  *
@@ -56,7 +56,7 @@
  *
  * **The lock does not make the allocators safe.** ThreadCreate takes a kernel
  * stack from the arena while holding it, and the arena is unsynchronised;
- * docs/design/CONCURRENCY.md, Section 10, limitation 1, still names it. What
+ * docs/design/CONCURRENCY.md still names it. What
  * makes that sound is that the one path a second processor takes through this
  * file — ThreadAdoptCurrent — allocates nothing.
  *
@@ -67,7 +67,7 @@
  * over the first's — a leak of every frame the first obtained and a heap holding
  * pages it did not put there. There are no userland threads yet, and a user
  * thread's affinity names the bootstrap processor alone, so the case cannot
- * arise; docs/design/CONCURRENCY.md, Section 10, limitation 1, is where it is
+ * arise; docs/design/CONCURRENCY.md is where it is
  * counted with the rest.
  */
 
@@ -117,7 +117,7 @@ static uint64_t ProcessTerminations;
  *
  * **It does not make the allocators safe.** ThreadCreate takes a kernel stack
  * from the arena while holding this lock, and the arena is still unsynchronised;
- * docs/design/CONCURRENCY.md, Section 10, limitation 1, still names it. What
+ * docs/design/CONCURRENCY.md still names it. What
  * makes that sound today is that the one path a second processor takes through
  * here — ThreadAdoptCurrent — allocates nothing, describing a stack that
  * already exists. A user thread created upon an application processor would
@@ -184,7 +184,7 @@ static uint32_t ProcessProcessorIndex(void)
  *
  * The default mask is the argument rather than a constant here, because the two
  * kinds of thread this kernel makes want different ones and the difference is
- * the subject of docs/design/SCHEDULER.md, Section 4.
+ * the subject of docs/design/SCHEDULER.md.
  */
 static void ThreadInitialiseScheduling(Thread *thread, uint64_t affinity)
 {
@@ -380,7 +380,7 @@ static Process *ProcessAllocate(const char *name, const Process *parent,
          * this kernel does not, because inheriting one means two processes
          * sharing one open file and one file position, and the filesystem layer
          * has no reference count upon an open file to make that safe.
-         * docs/design/PROCESS.md, Section 14.
+         * docs/design/PROCESS.md.
          */
         for (size_t slot = 0U; slot < PROCESS_DESCRIPTOR_CAPACITY; ++slot)
         {
@@ -994,7 +994,7 @@ static void ThreadScheduledEntry(void)
      * A kernel thread that returns has nowhere to go: nothing called it, so
      * there is no caller to return to, and this kernel has no reaper. It stops
      * rather than falling off the prepared frame into whatever lies beneath it.
-     * docs/design/SCHEDULER.md, Section 10, limitation 4, records what that
+     * docs/design/SCHEDULER.md records what that
      * costs.
      */
     for (;;)
@@ -1199,7 +1199,7 @@ void ThreadTrampolineEntry(void)
      * because that is how a child tells itself apart from its parent.
      *
      * The other path clears every register instead, for the reason
-     * docs/design/PROCESS.md, Section 10, gives: whatever stands in a register at
+     * docs/design/PROCESS.md gives: whatever stands in a register at
      * that moment is a kernel address as often as not. That reasoning does not
      * reach a forked child, every value it inherits being one its parent already
      * had at privilege level 3.
@@ -2080,7 +2080,7 @@ Process *ProcessFork(Process *parent, const SyscallFrame *frame)
      * and their positions, and since VfsHold exists that is what happens. Until
      * this sub-task a child inherited nothing, the filesystem layer having no
      * count of holders and a shared file closed by either being closed for
-     * both; docs/design/PROCESS.md, Section 14, records the interval.
+     * both; docs/design/PROCESS.md records the interval.
      */
     for (size_t index = 0U; index < PROCESS_DESCRIPTOR_CAPACITY; ++index)
     {
@@ -2118,7 +2118,7 @@ Process *ProcessFork(Process *parent, const SyscallFrame *frame)
      * And the child joins the rotation, since sub-task 8.6.
      *
      * Until then a child ran when its parent waited for it, upon the parent's
-     * own flow of control, which docs/design/PROCESS.md, Section 13.2, recorded
+     * own flow of control, which docs/design/PROCESS.md recorded
      * as the one departure from the call it is named after. A pipeline cannot
      * be run that way: the writer must sleep when the pipe is full and the
      * reader must run meanwhile, which is two threads the scheduler switches
@@ -2235,7 +2235,7 @@ int64_t ProcessExecute(Process *process, const char *path,
      * opens the file in the child, places it at 0 or 1, and the program it
      * then becomes must find it there. The table is the process's own and
      * the process is the same one, so nothing leaks: what it holds it holds
-     * until it closes or ends. docs/design/PROCESS.md, Section 14.
+     * until it closes or ends. docs/design/PROCESS.md.
      */
 
     stack = ProcessCreateUserStack(process, arguments);

@@ -12,7 +12,7 @@
  *   - kernel/include/oxys/fs/persist.h: what is asserted, and why the test
  *     mounts the device it composed rather than searching for the label a
  *     real disk would carry.
- *   - docs/storage/PERSIST.md, Section 6: every assertion here paired with the
+ *   - docs/storage/PERSIST.md: every assertion here paired with the
  *     silent failure it would catch.
  *
  * It runs inside the virtual filesystem's self-test, upon its root volume and
@@ -192,7 +192,7 @@ void KernelVerifyPersist(BlockDevice *device, uint8_t *store, size_t size)
      * reached the medium. Mounted read-only instead, a person's configuration
      * could never again be edited after the first time the machine was
      * switched off by closing its window. **Observed** while this was written:
-     * the first form wrote nothing and said nothing, PERSIST.md, Section 4.
+     * the first form wrote nothing and said nothing, PERSIST.md.
      */
     VerifyPersistRequire(report.marked_clean,
                          "a volume left open was not marked clean before it was mounted");

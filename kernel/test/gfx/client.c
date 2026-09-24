@@ -11,11 +11,11 @@
  *          left the kernel's own standing.
  * Key functions: KernelVerifyClients, VerifyClientsHand, VerifyClientsRun.
  * References:
- *   - docs/design/WINDOWS.md, Section 11: every assertion here paired with the
+ *   - docs/design/WINDOWS.md: every assertion here paired with the
  *     silent failure it would catch.
  *   - userland/window-check/main.c: the program, and what it asserts for
  *     itself.
- *   - docs/design/SCHEDULER.md, Section 7: the fixture thread that blocks
+ *   - docs/design/SCHEDULER.md: the fixture thread that blocks
  *     itself when done, which this file's hand is another of.
  *
  * Why there is a kernel thread.

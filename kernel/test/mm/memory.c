@@ -11,7 +11,7 @@
  *          KernelVerifyAllocators, KernelVerifyReferenceCounting,
  *          KernelVerifyCopyOnWrite, KernelVerifyAddressSpaces.
  * References:
-   - docs/design/MEMORY-LAYOUT.md, Sections 10 and 11: the properties each
+   - docs/design/MEMORY-LAYOUT.md: the properties each
  *     assertion below establishes, and the silent failure each would catch.
  *   - Intel 64 and IA-32 Architectures Software Developer's Manual, Volume 3A,
  *     Table 4-15: the paging-structure entry flags the assertions read.

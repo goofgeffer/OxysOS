@@ -12,9 +12,9 @@
  * Key functions: KernelVerifyVfs, KernelVerifyVfsPipes, KernelVfsProbeVolume,
  *          KernelVfsMountedDevice.
  * References:
- *   - docs/storage/VFS.md, Section 10: every assertion below, paired with the
+ *   - docs/storage/VFS.md: every assertion below, paired with the
  *     silent failure it catches.
- *   - docs/storage/INITRD.md, Section 6.3: why KernelVfsProbeVolume takes the
+ *   - docs/storage/INITRD.md: why KernelVfsProbeVolume takes the
  *     mount point and the path as arguments since sub-task 7.7, having had both
  *     written into it before.
  *   - IEEE Std 1003.1-2017: the depth bound upon following symbolic links, and

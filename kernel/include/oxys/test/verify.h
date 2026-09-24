@@ -32,7 +32,7 @@
  * References:
  *   - PROJECT_GUIDELINES.md, Section 2, the testing mandate: every milestone
  *     must be bootable and testable.
- *   - docs/project/TESTING.md, Section 1: what `make verify` asserts, and why a
+ *   - docs/project/TESTING.md: what `make verify` asserts, and why a
  *     self-test that fails must say so rather than halt.
  *
  * Why these are declared rather than being local to the entry point.
@@ -235,7 +235,7 @@ void KernelVerifyApicRouting(void);
  * does. The last two are behavioural: an interrupt a processor sends to itself
  * is delivered like any other, so the whole path — send, gate, handler,
  * invalidation, acknowledgement — is exercised before there is a second
- * processor to exercise it against. docs/design/ARCHITECTURE.md, Section 4.1,
+ * processor to exercise it against. docs/design/ARCHITECTURE.md
  * records that as the condition upon which 6.13 was placed before 6.14.
  */
 void KernelVerifyPerCpu(void);

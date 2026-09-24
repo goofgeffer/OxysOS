@@ -15,7 +15,7 @@
  *     The lines expected below are what those bytes edit into, and the two
  *     files must agree.
  *   - libc/include/line.h: LineRead, and the table of what each byte does.
- *   - docs/design/SHELL.md, Section 5: what is asserted at privilege level 3
+ *   - docs/design/SHELL.md: what is asserted at privilege level 3
  *     and what is asserted by the kernel, and why the division falls where it
  *     does.
  *

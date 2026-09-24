@@ -40,7 +40,7 @@
 ;   - Intel SDM, Volume 3A, Section 2.5: CR0.WP, which is per processor and must
 ;     therefore be set here as boot/boot.asm's successor set it upon the
 ;     bootstrap processor.
-;   - docs/design/SMP.md, Sections 3 and 4.
+;   - docs/design/SMP.md.
 ;
 ; Why this is a flat binary and not a linked section.
 ;

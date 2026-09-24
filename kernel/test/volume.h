@@ -10,9 +10,9 @@
  *          KernelComposeVolume, KernelFileBuffer, KernelFileByteAt, and the
  *          geometry of the composed volume.
  * References:
- *   - docs/storage/EXT2.md, Section 4: the layout of the composed volume, block
+ *   - docs/storage/EXT2.md: the layout of the composed volume, block
  *     by block and inode by inode, and the reason each thing within it is there.
- *   - docs/storage/VFS.md, Section 10: the second volume, and why it is a copy
+ *   - docs/storage/VFS.md: the second volume, and why it is a copy
  *     of the first with exactly one field altered.
  *   - The EXT2 field offsets themselves are in <oxys/fs/ext2.h> and are not
  *     restated here: a fixture that restated them would agree with a mistaken

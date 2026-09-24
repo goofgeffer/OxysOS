@@ -407,7 +407,7 @@ static void SchedulerHandleTick(TrapFrame *frame)
      * call, which runs with interrupts masked, or a halt with them enabled at
      * a point where no reader stands mid-way; and it is confined to this
      * processor because the terminal's queue is one of the structures
-     * docs/design/CONCURRENCY.md, Section 10, limitation 1, enumerates.
+     * docs/design/CONCURRENCY.md enumerates.
      */
     if (SchedulerIndex() == 0U)
     {
@@ -429,7 +429,7 @@ static void SchedulerHandleTick(TrapFrame *frame)
      * The kernel beneath a system call is not written to be pre-empted: the
      * allocators, the filesystem layer and the process tables are
      * unsynchronised against a second thread entering them upon the same
-     * processor, and docs/design/CONCURRENCY.md, Section 10, limitation 1,
+     * processor, and docs/design/CONCURRENCY.md
      * enumerates them. A user thread is therefore taken from the processor only
      * at privilege level 3 — where it holds nothing of the kernel's — or where
      * it gives the processor up itself, asleep in `wait`, upon a pipe, or at
@@ -509,7 +509,7 @@ bool SchedulerStartOnThisProcessor(void)
      * ThreadStart succeeds or fails according to whether a thread is current,
      * and kernel/test/verify_lifecycle.c asserts the failing branch — so the
      * bootstrap processor joins the rotation only when something has given it a
-     * thread to join as. docs/design/SCHEDULER.md, Section 10, limitation 1,
+     * thread to join as. docs/design/SCHEDULER.md
      * records what that costs.
      */
     if (SchedulerIdleThreads[index] == NULL)
@@ -819,7 +819,7 @@ size_t SchedulerWake(const void *channel)
      * readers see the end, and which of several sleepers a wake was meant for
      * is not a question the channel can answer. Each re-tests its condition
      * and sleeps again if it was not the one. The table is walked because the
-     * sleepers are not linked; docs/design/SCHEDULER.md, Section 9, records
+     * sleepers are not linked; docs/design/SCHEDULER.md records
      * what a list would buy and when it is worth having.
      */
     for (size_t index = 0U; index < THREAD_CAPACITY; ++index)

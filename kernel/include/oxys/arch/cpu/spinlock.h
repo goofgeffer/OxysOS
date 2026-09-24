@@ -29,7 +29,7 @@
  *     loop and reduces the power it consumes, and de-pipelines the loop so that
  *     the processor leaving it does not pay the memory-order violation penalty
  *     the speculated reads would otherwise incur.
- *   - docs/design/CONCURRENCY.md, Section 2: why the lock is a ticket lock, why
+ *   - docs/design/CONCURRENCY.md: why the lock is a ticket lock, why
  *     it masks interrupts unconditionally, and what each of its two panics
  *     catches.
  *

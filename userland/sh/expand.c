@@ -12,13 +12,13 @@
  *   - IEEE Std 1003.1-2017, Section 2.6 (Word Expansions): the order — tilde,
  *     parameter, command, arithmetic, field splitting, pathname expansion,
  *     quote removal — of which parameter expansion and quote removal are here
- *     and the rest are recorded as absent in docs/design/SHELL.md, Section 15.
+ *     and the rest are recorded as absent in docs/design/SHELL.md.
  *   - IEEE Std 1003.1-2017, Section 2.6.2 (Parameter Expansion): `${name}` and
  *     `$name`, the name being the longest sequence of the characters of a
  *     name; and Section 2.5.2, the special parameter `?`.
  *   - IEEE Std 1003.1-2017, Section 2.2: the quoting this respects, restated
  *     from lexer.c because the two must agree about what a backslash escapes.
- *   - docs/design/SHELL.md, Section 12.
+ *   - docs/design/SHELL.md.
  *
  * Why expansion and quote removal are one pass.
  *

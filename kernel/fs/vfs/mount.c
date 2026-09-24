@@ -11,7 +11,7 @@
  *          VfsMountAt, VfsMountCount, VfsRootIsMounted, VfsMountVolume,
  *          VfsMountIsBusy, VfsUnmount, VfsMountRoot.
  * References:
- *   - docs/storage/VFS.md, Section 5: a mount is found through the node it
+ *   - docs/storage/VFS.md: a mount is found through the node it
  *     covers and never through a path prefix — which is the decision the obvious
  *     alternative gets silently wrong, a prefix match calling `/usrlocal` a path
  *     within a volume mounted at `/usr`.

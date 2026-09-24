@@ -130,8 +130,8 @@ LDFLAGS := -n -T $(LINKER_SCRIPT) -Map $(KERNEL_MAP) -z max-page-size=0x1000
 # project that can run code at all, and kernel/test/libc/string.c is what
 # asserts them. Sub-task 7.5 adds the user-mode link, at which point the same
 # sources are compiled a second time — with the flags a program requires, which
-# are not these — into a library a program links against. docs/design/LIBC.md,
-# Section 7, records both paths and why the first exists.
+# are not these — into a library a program links against. docs/design/LIBC.md
+# records both paths and why the first exists.
 #
 # They are named in a list of their own rather than merged into C_SOURCES so that
 # the boundary is legible in one place, and so that the second compilation has a
@@ -178,7 +178,7 @@ LIBC_SOURCES := libc/string/copying.c \
 # pattern rule as the kernel's assembly, there being nothing about the flags that
 # differs — NASM has no include root and no code model.
 #
-# docs/design/LIBC.md, Section 8.1, records why the invocation is a translation
+# docs/design/LIBC.md records why the invocation is a translation
 # unit of assembly rather than inline assembly inside the C wrappers: it must
 # contain no relocation, so that kernel/test/libc/wrappers.c can copy the bytes
 # this library ships into a program's address space and execute them at privilege
@@ -435,7 +435,7 @@ $(BUILD_DIR)/kernel/test/shell/%.c.o: kernel/test/shell/%.c
 #
 # The same C library sources are compiled a second time, with the flags a program
 # requires rather than the kernel's, and collected into an archive a program links
-# against. docs/design/LIBC.md, Section 7, foresaw this: it is why LIBC_SOURCES is
+# against. docs/design/LIBC.md foresaw this: it is why LIBC_SOURCES is
 # a list of its own rather than merged into C_SOURCES.
 #
 # **The flag that had to change is -mcmodel=kernel**, and the reason is not the
@@ -655,7 +655,7 @@ $(BUILD_DIR)/kernel/arch/x86_64/smp/smp_trampoline.asm.o: $(TRAMPOLINE_BINARY)
 # composer and nothing else; a volume e2fsprogs composed proves the reader
 # consistent with an implementation that has never seen this one. That is the
 # same argument the `clang-check` target rests upon and the same one
-# docs/storage/EXT2-VERIFICATION.md, Section 6, made by hand three sub-tasks
+# docs/storage/EXT2-VERIFICATION.md made by hand three sub-tasks
 # ago — except that this runs at every boot rather than upon the day somebody
 # remembers to run it.
 #
@@ -670,7 +670,7 @@ $(BUILD_DIR)/kernel/arch/x86_64/smp/smp_trampoline.asm.o: $(TRAMPOLINE_BINARY)
 #
 #   -b 1024   The block size the EXT2 implementation is written against and the
 #             only one the buffer cache of sub-task 4.6 holds. A 4096-byte volume
-#             is readable — EXT2-VERIFICATION.md, Section 6, records one being
+#             is readable — EXT2-VERIFICATION.md records one being
 #             read — but 1024 is the size every self-test asserts against.
 #   -r 1      Revision 1, which is what supplies the three feature words the
 #             superblock reader of sub-task 5.1 refuses an unknown bit in. The
@@ -733,7 +733,7 @@ INITRD_CONFIGURATION := etc/system.conf etc/desktop.conf etc/session.conf
 # `/share/defaults/etc`, read-only, where it stays reachable when a persistent
 # `/etc` covers the first — so that a person can take the shipped file back
 # with `cp` and the session can fall back to it when theirs offers nothing.
-# One source, two places; docs/storage/PERSIST.md, Section 3.
+# One source, two places; docs/storage/PERSIST.md.
 
 # The `/share/icons` hierarchy of sub-task 9.6: the pictures the launcher draws
 # beside its entries. They are files upon the ramdisk and not a header compiled
@@ -989,7 +989,7 @@ toolcheck:
 # quietly tolerating. Its first run found exactly one such thing: `kernel/arch/x86_64/cpu/tss.c`
 # named a 32-bit register to an instruction defined upon r/m16, which GNU as had
 # accepted and assembled correctly for as long as the file has existed.
-# `docs/project/TESTING.md`, Section 22, records the reasoning at length.
+# `docs/project/TESTING.md` records the reasoning at length.
 #
 # clang needs no cross-toolchain of its own: it is multi-target by construction,
 # so `--target=x86_64-elf` is the whole of the configuration. Every flag of
@@ -1007,8 +1007,8 @@ toolcheck:
 #   correctly aligned — Multiboot2 Specification, Section 3.6.2, requires every
 #   tag to begin upon an 8-byte boundary — but that guarantee is made by the boot
 #   loader and is invisible to a compiler. This is one of the two documented
-#   exceptions to the no-overlay rule of docs/project/CODING-STANDARDS.md,
-#   Section 7.1, and is admitted there for precisely this reason: the structure
+#   exceptions to the no-overlay rule of docs/project/CODING-STANDARDS.md
+#   and is admitted there for precisely this reason: the structure
 #   is not read from a medium, its fields are naturally aligned by the
 #   specification, and no byte-order decision arises. The suppression is confined
 #   to this target; -Wcast-align remains in force under GCC for every other file.

@@ -31,7 +31,7 @@
 ;   - kernel/abi/oxys/syscall_abi.h: the kernel reads the call number from RAX
 ;     and the arguments from RDI, RSI, RDX, R10, R8 and R9 — the fourth register
 ;     differing from the C convention because SYSCALL has taken RCX.
-;   - docs/design/LIBC.md, Section 8: why this is a translation unit of assembly
+;   - docs/design/LIBC.md: why this is a translation unit of assembly
 ;     rather than inline assembly inside the C wrappers.
 ;
 ; The shift, and why it is what these routines are for.

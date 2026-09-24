@@ -17,7 +17,7 @@
  *     for which the flushing of streams is implementation-defined.
  *   - ISO/IEC 9899:2011, Section 7.22.4.1: abort.
  *   - libc/include/syscall.h: OxysExit, which is what ends a program here.
- *   - docs/design/LIBC.md, Section 11.3: the design of this sub-task's runtime,
+ *   - docs/design/LIBC.md: the design of this sub-task's runtime,
  *     and why the order of the two things exit does is not free.
  *
  * Why this is a translation unit of its own and not part of heap.c.

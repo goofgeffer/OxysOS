@@ -19,7 +19,7 @@
  * specification would be composed into it and then asserted against itself. A
  * probe produces a volume a tool outside this kernel — `e2fsck`, `debugfs`,
  * `dumpe2fs` — can judge, and that is how the defect in the recorded deletion
- * time described in docs/storage/VFS.md, Section 11.1, was found: every
+ * time described in docs/storage/VFS.md was found: every
  * assertion in this directory passed, and the volume was nevertheless wrong.
  *
  * The probe that writes is selected by the boot loader's command line and never

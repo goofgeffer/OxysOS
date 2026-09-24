@@ -21,7 +21,7 @@
  *   - Tool Interface Standard, Executable and Linking Format, and the ELF-64
  *     Object File Format: the file header and the program header table, whose
  *     field offsets are the ones <oxys/exec/elf.h> decodes.
- *   - docs/design/LIBC.md, Section 8.4 and Section 9.5: the two self-tests that
+ *   - docs/design/LIBC.md and Section 9.5: the two self-tests that
  *     use this, and why each of them has to be a program rather than a call.
  *
  * Why this exists, and why it is here rather than in kernel/.

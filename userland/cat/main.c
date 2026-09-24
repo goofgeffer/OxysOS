@@ -16,7 +16,7 @@
  *     for the reason below.
  *   - kernel/abi/oxys/syscall_abi.h: the calls beneath `OxysOpen`, `OxysRead`
  *     and `OxysClose`.
- *   - docs/design/LIBC.md, Section 12.3: the five utilities and what each is
+ *   - docs/design/LIBC.md: the five utilities and what each is
  *     for.
  *
  * What this does not do, and why each is a property of the system.

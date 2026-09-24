@@ -8,7 +8,7 @@ thing: arithmetic upon surfaces, drawn into by whoever owns a window; and from
 9.2 the client side of it, by which the owner is a process. This directory was
 created by sub-task 6.2 and completed by 6.6; what Phase 9 adds to it needs
 something to own a window, which is why it waited.
-**Detailed design**: [`../docs/design/GRAPHICS.md`](../docs/design/GRAPHICS.md), which is the index of the five documents this directory is described by; and [`../docs/design/WINDOWS.md`](../docs/design/WINDOWS.md) for `window.c` and `client.c`.
+**Detailed design**: [`FRAMEBUFFER.md`](../docs/design/FRAMEBUFFER.md), [`DRAWING.md`](../docs/design/DRAWING.md), [`CONSOLE.md`](../docs/design/CONSOLE.md), [`FAULTSCREEN.md`](../docs/design/FAULTSCREEN.md) and [`COMPOSITOR.md`](../docs/design/COMPOSITOR.md); and [`../docs/design/WINDOWS.md`](../docs/design/WINDOWS.md) for `window.c` and `client.c`.
 
 ## Purpose
 
@@ -95,7 +95,7 @@ Full citations are held in
 
 ## Present limitations
 
-The complete lists are `docs/design/FRAMEBUFFER.md`, Section 10; `docs/design/DRAWING.md`, Section 7; `docs/design/CONSOLE.md`, Section 3; `docs/design/COMPOSITOR.md`, Section 2.7; and `docs/design/WINDOWS.md`, Section 9.
+The complete lists are `docs/design/FRAMEBUFFER.md`; `docs/design/DRAWING.md`; `docs/design/CONSOLE.md`; `docs/design/COMPOSITOR.md`; and `docs/design/WINDOWS.md`.
 The four that govern what can be built next:
 
 1. **There is no scaling blit**, and a line is one pixel wide and unantialiased.
@@ -123,7 +123,7 @@ The four that govern what can be built next:
 
 The console was measured, after it worked, at **15.2% of the whole boot**, and
 the cause was not where it had been guessed at.
-[`../docs/design/CONSOLE.md`](../docs/design/CONSOLE.md), Section 6,
+[`../docs/design/CONSOLE.md`](../docs/design/CONSOLE.md)
 records the figures, what was actually wrong, and the three changes that brought
 it to 4.5%. The remaining factor named there was the framebuffer read a scroll
 performs; sub-task 6.6 removed it, a scroll now blitting the back buffer upon

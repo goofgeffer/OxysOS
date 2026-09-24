@@ -2,169 +2,109 @@
 <!-- SPDX-License-Identifier: CC0-1.0 -->
 # The PCI Bus
 
-**Phase**: 4, sub-task 4.3, of [`PLAN.md`](../project/PLAN.md).
+**Phase**: sub-task 4.3 of [`../project/PLAN.md`](../project/PLAN.md).
+**Source**: [`../../drivers/pci/pci.c`](../../drivers/pci/pci.c),
+[`../../kernel/include/oxys/dev/pci.h`](../../kernel/include/oxys/dev/pci.h).
+**Specifications**: PCI Local Bus Specification 3.0 (configuration mechanism
+one, the type 0 and type 1 headers, base address registers); PCI Code and ID
+Assignment Specification (class codes). Both are registered in
+[`../project/REFERENCES.md`](../project/REFERENCES.md), which records how the
+first, not publicly distributed, was cross-checked.
 
-**Authority**: `PROJECT_GUIDELINES.md`, Sections 2, 3 and 6. Every assertion of
-hardware behaviour below carries a citation, and every specification named is
-registered in [`REFERENCES.md`](../project/REFERENCES.md).
+The enumeration of the PCI configuration space: what functions the machine
+contains and where each answers. The legacy devices (timer, keyboard, serial,
+interrupt controllers) sit at addresses inherited from the IBM PC; every later
+device (disk, network or display controller) answers at an address assigned at
+configuration time, which only this space reveals. The enumeration claims and
+configures nothing; drivers search what it records.
 
-**Implementation**: [`../drivers/pci/pci.c`](../../drivers/pci/pci.c),
-[`../kernel/include/oxys/dev/pci.h`](../../kernel/include/oxys/dev/pci.h).
+## 1. Configuration mechanism one
 
-## 1. What the enumeration is for
-
-Every device the kernel has driven so far was found by knowing where it is. The
-interval timer is at `0x0040`, the keyboard controller at `0x0060`, the serial
-adapter at `0x03F8`, the interrupt controllers at `0x0020` and `0x00A0`. Those
-addresses are not discovered; they are inherited from the IBM Personal Computer
-and its successors, and a kernel may assume them because a machine that
-contradicted them would not boot anything else either.
-
-No device introduced after that arrangement may be assumed in the same way. A
-disk controller, a network controller, a graphics adapter — each answers at an
-address assigned to it when the machine was configured, and the only way to learn
-that address is to ask. The PCI configuration space is the mechanism for asking,
-and it is the reason this sub-task precedes the disk driver rather than following
-it.
-
-The enumeration claims nothing and configures nothing. It establishes what the
-machine contains and where each part of it answers; the drivers of Phase 4 and
-beyond search what it recorded.
-
-## 2. Configuration space access mechanism one
-
-Two I/O locations are used: CONFIG_ADDRESS at `0x0CF8` and CONFIG_DATA at
-`0x0CFC`, both thirty-two bits wide. An address is written to the first and the
-register then appears at the second. The address is composed as follows:
+Two 32-bit I/O ports: CONFIG_ADDRESS at `0x0CF8` and CONFIG_DATA at `0x0CFC`.
+An address written to the first selects the register that appears at the second.
 
 | Bits | Field |
 | ---- | ----- |
-| 31 | Enable. Accesses to CONFIG_DATA are translated into configuration cycles only while it is set. |
+| 31 | Enable; CONFIG_DATA accesses become configuration cycles only while set. |
 | 30–24 | Reserved. |
-| 23–16 | Bus number, 0 to 255. |
-| 15–11 | Device number, 0 to 31. |
-| 10–8 | Function number, 0 to 7. |
-| 7–2 | Register number, selecting one of the 64 double words of the function's 256-byte configuration space. |
-| 1–0 | Always zero; every configuration access is aligned to a double word. |
+| 23–16 | Bus, 0 to 255. |
+| 15–11 | Device, 0 to 31. |
+| 10–8 | Function, 0 to 7. |
+| 7–2 | Register: one of the 64 double words of the 256-byte space. |
+| 1–0 | Zero; accesses are double-word aligned. |
 
-Two consequences shape the accessors in `pci.c`.
+- **Every hardware access is a double word.** The 16- and 8-bit readers read the
+  containing double word and shift out the field; the 16-bit writer reads,
+  replaces its half and writes back. A 16-bit `IN` from `0x0CFE` would rely on
+  the host bridge rather than the specification.
+- **Callers need not align offsets.** `PciComposeAddress` masks the offset with
+  `0xFC`, so a byte field's offset yields the double word that holds it.
+- **Detection.** An enabled address is written to CONFIG_ADDRESS and read back;
+  a machine without the mechanism returns something else. CONFIG_DATA is not
+  touched, so the probe disturbs nothing.
 
-**Every access at the hardware is a double word.** `PciReadConfiguration16` and
-`PciReadConfiguration8` read the containing double word and extract the field
-from it, using the low bits of the offset as a shift; `PciWriteConfiguration16`
-reads, replaces its half and writes back. A kernel that issued a sixteen-bit `IN`
-against `0x0CFE` would be relying upon a behaviour of the host bridge rather than
-upon the specification, and the specification is what is portable.
+## 2. Absence
 
-**The offset need not be aligned by the caller.** `PciComposeAddress` masks it
-with `0xFC`, which is exactly what the field is, so a caller may pass the offset
-of a byte-wide field such as the class code and get the double word holding it.
+A configuration access to a function that does not exist completes without
+error and reads all ones. A vendor identifier of `0xFFFF` therefore means
+nothing answered. There is no error or timeout to detect, which is why the
+verification below asserts that particular things are found: an enumerator with
+its address arithmetic wrong reads `0xFFFF` everywhere and reports an empty
+machine, indistinguishable from a correct report of one.
 
-### 2.1 Detecting the mechanism
+## 3. The walk
 
-CONFIG_ADDRESS is a readable register, and that is how its presence is
-established: an enabled address is written and read back, and a machine that does
-not implement the mechanism returns something other than what was written. The
-probe touches CONFIG_DATA not at all, so nothing is disturbed by asking.
+- **Function zero first.** Functions 1 to 7 are examined only if bit 7 of the
+  header type is set (multifunction). A single-function device need not decode
+  the function number and may answer all eight as itself.
+- **Buses are reached, not swept.** The host bridge at `0:0.0` is examined; if
+  it is multifunction, each function is a host bridge rooting the bus of its
+  function number. Each bus found is queued. Scanning a bus records every
+  function; a PCI-to-PCI bridge (class `0x06`, subclass `0x04`) queues the bus
+  named by its secondary bus number (offset `0x19`). Sweeping all 256 buses is
+  8,192 probes of buses that mostly do not exist.
+- **The queue is explicit**, not the call stack, so a deep topology cannot
+  exhaust the 64 KiB boot stack.
+- **Each bus is visited once**, recorded in a 256-bit map. The specification
+  forbids a bridge naming a bus already visited; one bit per bus is cheaper
+  insurance than a walk that cycles forever on hardware that does.
 
-## 3. What absence looks like
+## 4. What is recorded
 
-"When a configuration access attempts to select a device that does not exist, the
-host bridge will complete the access without error, dropping all data on writes
-and returning all ones on reads." A vendor identifier of `0xFFFF` therefore means
-that nothing answered — there is no error to detect, and no timeout to wait for.
+The unit is a **function**, since each is identified, classified and driven
+separately (the q35 board's ICH9 presents its LPC bridge, SATA controller and
+SMBus controller as functions 0, 2 and 3 of device 31). Each entry holds:
+bus, device and function; vendor and device identifiers; revision, programming
+interface, subclass and class; header layout and the multifunction bit;
+interrupt line and pin; and the six base address registers.
 
-This is convenient and it is also the reason Section 6 exists. An enumerator
-whose address arithmetic is wrong reads addresses that decode to nothing, finds
-`0xFFFF` everywhere, and reports an empty machine. The report is identical to the
-one a correct enumerator would produce upon a machine with no devices, so nothing
-about the failure is visible in it.
+- **Base address registers are read for header type 0 only.** A bridge's header
+  holds bus numbers and address windows where a type 0 header holds registers 4
+  to 6.
+- **`PciBarBase` strips the type bits.** Bit 0 set means I/O; clear means memory,
+  where bits 2–1 give the width (value 2: the next register holds the upper 32
+  bits) and bit 3 marks prefetchable. An address still carrying these bits is off
+  by up to fifteen, or is a port read as memory: hardware that is nearly right.
+- **The table holds 64 functions**, and any beyond are counted and reported.
 
-## 4. The walk
+## Verification
 
-A device is examined at function zero first. The remaining seven are examined
-only if bit 7 of its header type register was set, which is what marks a device
-as multifunction: the specification does not require a device to decode a
-function number it does not implement, and a single-function device may answer
-every function number with a copy of itself. An enumerator that probed all eight
-regardless would report each such device eight times.
+`KernelVerifyPci` in [`../../kernel/test/dev/devices.c`](../../kernel/test/dev/devices.c).
 
-Buses are reached rather than swept:
+| Property asserted | The failure it would catch |
+| ----------------- | -------------------------- |
+| Mechanism one answers its own probe. | An enumeration against a machine without it, reporting an empty machine. |
+| An address nothing decodes reads all ones. | A bridge signalling absence some other way, invalidating the walk. |
+| The 16- and 8-bit readers agree with the 32-bit one. | A shift from the wrong offset bits, giving a plausible wrong number. |
+| Something was found and bus 0 was scanned. | A field in the wrong position of the address. |
+| No function was dropped for want of room. | Later devices missing without explanation. |
+| A host bridge (class `0x06`, subclass `0x00`) stands at `0:0.0`. | The walk reading somewhere other than it believes. |
+| An index beyond the table, or a search starting beyond it, finds nothing. | An uninitialised entry returned as a device. |
+| Every recorded function has a valid vendor. | Absence recorded as a device. |
+| Every base address has its type bits removed. | A driver sent to a nearly-right address. |
 
-1. The host bridge at `0:0.0` is examined. Where it is multifunction, each of its
-   functions is a separate host bridge and is the root of the bus bearing its
-   function number.
-2. Each bus so identified is queued.
-3. Scanning a bus records every function upon it. A function of class `0x06`,
-   subclass `0x04` — a PCI-to-PCI bridge — has behind it the bus named by its
-   secondary bus number at offset `0x19`, and that bus is queued in turn.
-4. The queue is worked through until it is empty.
-
-The alternative, probing all 256 buses, is not wrong but it is 8192 device probes
-against buses that mostly do not exist, and it cannot distinguish a bus that is
-absent from one that a bridge would have named.
-
-Two properties are worth stating because they are what keep the walk finite:
-
-- **The queue is explicit, not the call stack.** A bridge queues its secondary
-  bus rather than descending into it, so the depth of the tree is not the depth
-  of the recursion, and a deeply nested topology cannot exhaust the 64 KiB boot
-  stack.
-- **Each bus is visited once.** A bitmap of 256 bits records which have been
-  scanned. The specification does not permit a topology in which a bridge names a
-  bus already visited; hardware that presented one would send a recursive walk
-  around a cycle forever, and one bit per bus is a cheaper insurance than a hang.
-
-## 5. What is recorded
-
-The unit recorded is a **function**, not a device. A multifunction device
-presents as many as it implements, each separately identified, separately
-classified and separately driven; the ICH9 chipset of the QEMU q35 board presents
-its LPC bridge, its storage controller and its SMBus controller as functions 0, 2
-and 3 of device 31.
-
-Each entry holds the geographical address, the vendor and device identifiers, the
-revision, the programming interface, the subclass and class code, the header
-layout and whether the device is multifunction, the interrupt line and pin, and
-the six base address registers.
-
-The base address registers are read only for header type 0. A bridge's header
-holds its bus numbers and its address windows where a standard header holds base
-addresses four to six, and reading them as base addresses would describe regions
-that do not exist.
-
-`PciBarBase` removes the type and attribute bits, which is the whole of the
-decoding this kernel needs: bit 0 clear denotes memory and set denotes I/O; for
-memory, bits 2 and 1 give the width, the value 2 meaning that the register is the
-lower half of a 64-bit address whose upper half is the register following it, and
-bit 3 marks the region prefetchable. A base address that still carried those bits
-would be a port number, or an address off by as much as fifteen — which is to say
-it would address hardware that is nearly right.
-
-The table holds 64 functions. That is far beyond what any machine this kernel
-runs upon presents, and the count of any that did not fit is reported rather than
-silently dropped.
-
-## 6. Verification
-
-The enumeration is unfalsifiable by inspection, for the reason given in Section
-3: a wrong answer looks exactly like a machine with nothing in it. `KernelVerifyPci`
-therefore asserts that particular things were found, and that the accessors agree
-with one another.
-
-| Property asserted | The silent failure it would catch |
-| ----------------- | --------------------------------- |
-| Mechanism one answers its own probe. | An enumeration conducted against a machine that does not implement it, which would report nothing and appear merely empty. |
-| An address nothing decodes reads as all ones. | A host bridge that reports absence some other way, invalidating the test the whole walk rests upon. |
-| The 16-bit and 8-bit accessors agree with the 32-bit one. | A shift taken from the wrong bits of the offset, which yields a plausible number rather than an obviously wrong one. |
-| Something was found, and the first bus was scanned. | Address arithmetic with a field in the wrong position. |
-| No function was discarded for want of room. | A machine larger than the table, whose later devices would be missing without explanation. |
-| A host bridge stands at `0:0.0`, of class `0x06` and subclass `0x00`. | The walk reading somewhere other than where it believes it is reading. |
-| An index beyond the table reports nothing; a search beginning beyond it finds nothing. | An off-by-one that returns an uninitialised entry as a device. |
-| Every recorded function has a valid vendor identifier. | Absence recorded as a device. |
-| Every base address has had its type bits removed. | A driver directed to an address off by up to fifteen, or to a port number read as memory. |
-
-Observed upon the QEMU q35 board:
+The log on QEMU q35, checkable against what QEMU emulates (ICH9, the standard
+VGA adapter, an Intel gigabit controller):
 
 ```
 Bus self-test passed.
@@ -177,27 +117,14 @@ PCI: 6 functions upon 1 buses, 0 beyond the table.
   0:31.3  0x8086:0x2930  SMBus controller (class 0xC, subclass 0x5, interface 0x0), IRQ 10
 ```
 
-Each entry is checkable against what QEMU is known to emulate, which is the
-external corroboration the self-test cannot supply: the ICH9 chipset of the q35
-board, the QEMU standard VGA adapter, and an Intel gigabit network controller.
+## Limitations
 
-## 7. Limitations
-
-1. **Nothing is configured.** Base addresses are read, never assigned. The
-   firmware assigns them before the kernel runs, and a kernel that reassigned
-   them would have to reassign all of them consistently.
-2. **No capability list.** The pointer at offset `0x34` is not followed, so MSI,
-   MSI-X and PCI Express capabilities are invisible. Nothing yet needs them; the
-   interrupt of a PCI device is taken from its interrupt line, which the firmware
-   has routed.
-3. **No interrupt routing.** The interrupt line register is recorded and
-   believed. Deriving the line from the pin and the bridge topology requires the
-   ACPI routing tables, which belong to a later phase.
-4. **Mechanism one only.** Mechanism two is not implemented; it was deprecated
-   long before any machine this kernel targets, and the enhanced mechanism of PCI
-   Express, which maps configuration space into memory, requires the ACPI MCFG
-   table to locate it.
-5. **A fixed table.** Sixty-four functions, with the excess counted rather than
-   recorded.
-6. **The enumeration is performed once.** Nothing here supports a device
-   appearing or leaving afterwards.
+1. Nothing is configured: base addresses are read as the firmware assigned them.
+2. The capability list (offset `0x34`) is not followed, so MSI, MSI-X and PCI
+   Express capabilities are invisible.
+3. Interrupt routing is not derived; the interrupt line register the firmware
+   filled is believed. Deriving it needs the ACPI routing tables.
+4. Mechanism one only. The memory-mapped PCI Express mechanism needs the ACPI
+   MCFG table.
+5. At most 64 functions.
+6. Enumeration happens once; no hot plug.

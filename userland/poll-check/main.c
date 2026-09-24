@@ -11,7 +11,7 @@
  * References:
  *   - kernel/abi/oxys/syscall_abi.h: SYSCALL_POLL, SyscallPollEntry,
  *     SYSCALL_POLL_WINDOWS, SYSCALL_POLL_NO_WAIT, SYSCALL_ENOTTY.
- *   - docs/design/TERMINAL.md, Section 6: every assertion here paired with the
+ *   - docs/design/TERMINAL.md: every assertion here paired with the
  *     silent failure it would catch.
  *
  * Why the blocking wait is asserted with a child and not with a timer.
@@ -201,7 +201,7 @@ int main(void)
      * `tcgroup` upon a process whose standard input is not the terminal is
      * ENOTTY. Without it a shell started anywhere takes the terminal from the
      * shell a person is typing at, which is how the machine came to livelock;
-     * docs/design/SHELL.md, Section 2.6.
+     * docs/design/SHELL.md.
      *
      * The child is the one that tries it, because the parent's own standard
      * input **is** the terminal and a parent that redirected its own would have

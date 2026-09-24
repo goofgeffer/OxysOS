@@ -7,7 +7,7 @@
  *          implements.
  * Key functions: KernelVerifyString.
  * References:
- *   - docs/design/LIBC.md, Section 5: the table pairing every property asserted
+ *   - docs/design/LIBC.md: the table pairing every property asserted
  *     below with the silent failure that assertion exists to catch.
  *   - ISO/IEC 9899:2011, Section 7.24: the behaviour each assertion is made
  *     against. Where the standard's behaviour is surprising — strncpy not
@@ -451,7 +451,7 @@ static void VerifyStringSearch(void)
      * second case can tell a correct implementation from one that omits the
      * guard, and the first version of this test asserted only the first — so
      * deleting the guard from libc/string/search.c changed nothing the test
-     * could see. docs/design/LIBC.md, Section 5.1, records that run.
+     * could see. docs/design/LIBC.md records that run.
      */
     VerifyStringRequire(strstr(subject, "") == subject,
                         "strstr of an empty needle did not return the haystack");

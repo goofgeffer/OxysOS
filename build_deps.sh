@@ -24,7 +24,7 @@
 #   DRY_RUN=1       Report what would be installed and install nothing.
 #
 # References:
-#   - docs/project/TOOLCHAIN.md, Section 1: the tools the build requires, and
+#   - docs/project/TOOLCHAIN.md: the tools the build requires, and
 #     Section 10.1, which is why the compiler is not among these packages.
 #   - apt-get(8).
 # ==============================================================================
@@ -60,7 +60,7 @@ TOOLCHAIN_PACKAGES=(
     libisl-dev
 )
 
-# Optional. The second compiler of TOOLCHAIN.md Section 9 builds nothing and is
+# Optional. The second compiler of TOOLCHAIN.md builds nothing and is
 # required by no target but clang-check, so its absence is reported rather than
 # treated as a fault.
 OPTIONAL_PACKAGES=(

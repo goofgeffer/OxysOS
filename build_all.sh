@@ -26,7 +26,7 @@
 #   PREFIX=<dir>       Passed to build_toolchain.sh. Default ~/opt/cross.
 #
 # References:
-#   - docs/project/TOOLCHAIN.md, Sections 1, 6 and 8.
+#   - docs/project/TOOLCHAIN.md.
 #   - docs/project/TESTING.md: the procedure `make verify` performs.
 #   - PROJECT_GUIDELINES.md, Section 2: a change is not final until it has been
 #     verified, which is why the last step is the verification and not the build.
@@ -81,7 +81,7 @@ StepToolchain() {
 
 StepBuild() {
     Announce "3 of 4: the kernel and the ISO"
-    # The toolchain is not upon the default PATH, as TOOLCHAIN.md Section 8
+    # The toolchain is not upon the default PATH, as TOOLCHAIN.md
     # records. It is placed there for this process alone rather than for the
     # invoking shell, a script that edited a profile being a script that changes
     # a machine in a way nothing here records.

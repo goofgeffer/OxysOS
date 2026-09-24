@@ -127,7 +127,7 @@ is asserted upon configuration headers composed in memory.
 
 Everything above is machinery this project wrote, asserting against fixtures this
 project composed, and its characteristic failure is agreement.
-[`docs/project/TESTING.md`](docs/project/TESTING.md), Section 7, sets out the
+[`docs/project/TESTING.md`](docs/project/TESTING.md) sets out the
 argument and lists the independent judges available. Use them: `e2fsck` found a
 defect every self-test had passed, and the second compiler found another on its
 first run.
@@ -202,7 +202,7 @@ owner's decision.
 | Where the work stands and what is next | [`docs/project/PLAN.md`](docs/project/PLAN.md) |
 | What the system does today | [`docs/project/STATUS.md`](docs/project/STATUS.md) |
 | Why a subsystem is built as it is | its document in [`docs/`](docs/) |
-| Why the phases are in this order | [`docs/design/ARCHITECTURE.md`](docs/design/ARCHITECTURE.md), Section 4 |
+| Why the phases are in this order | [`docs/design/ARCHITECTURE.md`](docs/design/ARCHITECTURE.md) |
 | How anything is tested | [`docs/project/TESTING.md`](docs/project/TESTING.md) and the three documents it heads |
 | The rules that bind all of it | [`PROJECT_GUIDELINES.md`](PROJECT_GUIDELINES.md) |
 | What is expected of conduct, as against of work | [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) |

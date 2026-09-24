@@ -15,7 +15,7 @@
  *     being defined here a second time.
  *   - System V Application Binary Interface, AMD64 supplement, Section 3.1.2:
  *     the LP64 model, in which size_t is 64 bits.
- *   - docs/design/LIBC.md, Sections 3 and 4: what is implemented here, what is
+ *   - docs/design/LIBC.md: what is implemented here, what is
  *     not, and the reason in each case.
  *
  * Two functions of Section 7.24 are absent, and neither is absent by oversight.
@@ -137,7 +137,7 @@ char *strstr(const char *haystack, const char *needle);
  * null. The position is kept in a static object, which makes this function the
  * only one in this header that is neither re-entrant nor safe to call from two
  * threads at once — a property of the interface the standard defines, recorded
- * in docs/design/LIBC.md, Section 6, limitation 3, rather than repaired here
+ * in docs/design/LIBC.md rather than repaired here
  * under the same name.
  */
 char *strtok(char *restrict string, const char *restrict separators);

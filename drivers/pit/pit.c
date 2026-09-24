@@ -62,7 +62,7 @@
 
 /* The data port of counter 0, and the write-only control register. The data
  * ports of counters 1 and 2 are not defined, this driver having no use for
- * either; docs/devices/TIME.md, Section 2, records what they are attached to. */
+ * either; docs/devices/TIME.md records what they are attached to. */
 #define PIT_CHANNEL0_DATA UINT16_C(0x0040)
 #define PIT_COMMAND       UINT16_C(0x0043)
 
@@ -109,7 +109,7 @@ static bool PitRunning;
  *
  * The end-of-interrupt is not signalled here; the routing layer of
  * drivers/pic/pic.c does so upon this handler's return, for the reason given in
- * docs/design/INTERRUPTS.md, Section 9.4.
+ * docs/design/INTERRUPTS.md.
  */
 static void PitHandleTick(TrapFrame *frame)
 {

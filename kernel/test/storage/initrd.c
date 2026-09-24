@@ -8,7 +8,7 @@
  *          actually booted with rather than against one this test composed.
  * Key functions: KernelVerifyInitrd.
  * References:
- *   - docs/storage/INITRD.md, Section 7: what this asserts, in the four groups
+ *   - docs/storage/INITRD.md: what this asserts, in the four groups
  *     below, and the two things nothing here can assert.
  *   - Multiboot2 Specification 2.0, Section 3.6.6: the module tag the ramdisk
  *     arrives in.

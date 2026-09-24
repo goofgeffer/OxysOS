@@ -269,8 +269,7 @@
  * The fields are held in the processor's own types and order, not in the
  * volume's. Every quantity upon an EXT2 volume is stored little-endian whatever
  * the machine, so the decoding is explicit and performed once here rather than
- * being a property of how a structure happens to be laid out; see docs/storage/EXT2.md,
- * Section 3.
+ * being a property of how a structure happens to be laid out; see docs/storage/EXT2.md.
  */
 typedef struct Ext2Superblock
 {
@@ -811,7 +810,7 @@ void Ext2ReportDirectory(BlockDevice *device, const Ext2Superblock *superblock,
  * made into a buffer and the buffer marked dirty, so a caller that requires the
  * volume to be consistent upon the medium must call BufferSync. Without a
  * journal there is no way to make a sequence of such writes atomic, and this
- * kernel does not pretend otherwise; see docs/storage/EXT2-FILES.md, Section 3.6.
+ * kernel does not pretend otherwise; see docs/storage/EXT2-FILES.md.
  * ---------------------------------------------------------------------------
  */
 

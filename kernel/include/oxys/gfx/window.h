@@ -26,8 +26,8 @@
  *     button pressed in a window binds the pointer to that window until every
  *     button is released — are the ones that document defines, and they are
  *     taken as notions and not as an interface. No request, event or type of
- *     that protocol is adopted; docs/project/INSPIRATIONS.md, Section 5.
- *   - docs/project/INSPIRATIONS.md, Section 3: the appearance the frame is
+ *     that protocol is adopted; docs/project/INSPIRATIONS.md.
+ *   - docs/project/INSPIRATIONS.md: the appearance the frame is
  *     designed against, and the idiom it is required not to have.
  *
  * Why the manager is in the kernel, and what that decides.
@@ -51,7 +51,7 @@
  *   and never draws the frame — a frame the owner drew would be a frame every
  *   owner drew differently, and the one thing a person recognises a window by
  *   is that they all have the same one. The frame is flat, by
- *   docs/project/INSPIRATIONS.md, Section 3, and the reason that section gives.
+ *   docs/project/INSPIRATIONS.md and the reason that section gives.
  *
  * Where an event goes.
  *
@@ -220,7 +220,7 @@ typedef struct WindowEvent
  * The colours the manager draws with, supplied rather than named because a
  * pixel value means nothing without an encoding; for the display that is
  * FramebufferEncode, and for the self-test's surface it is whatever the test
- * says. docs/design/WINDOWS.md, Section 4, records the palette the entry point
+ * says. docs/design/WINDOWS.md records the palette the entry point
  * supplies and why each colour is what it is.
  */
 /*
@@ -310,7 +310,7 @@ uint64_t WindowSession(void);
  * which each program carries its own face is a system whose text does not match
  * itself. The face is also the kernel's under the kernel's licence and `libc/`
  * is under another, so a copy in the library would be a relicensing this
- * project may not perform; docs/design/SESSION.md, Section 4.
+ * project may not perform; docs/design/SESSION.md.
  *
  * Returns false where the window does not exist or the text is unreadable.
  * Characters the face does not cover are drawn as nothing rather than refused,

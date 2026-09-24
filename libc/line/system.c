@@ -14,7 +14,7 @@
  *   - kernel/abi/oxys/syscall_abi.h: descriptor 0, which since sub-task 8.1 is
  *     the terminal, and what a `read` of it promises — at least one byte, and
  *     no more than were typed.
- *   - docs/design/SHELL.md, Section 3.4: the division, and the program at
+ *   - docs/design/SHELL.md: the division, and the program at
  *     privilege level 3 that asserts this half of it.
  *
  * This is the arrangement of libc/stdlib/system.c and libc/stdio/system.c a

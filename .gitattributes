@@ -18,7 +18,7 @@
 # References:
 #   - gitattributes(5): the `text`, `eol`, `binary`, `diff` and `export-ignore`
 #     attributes, and the `linguist-*` attributes GitHub reads.
-#   - docs/project/CODING-STANDARDS.md, Section 4: indentation is four spaces
+#   - docs/project/CODING-STANDARDS.md: indentation is four spaces
 #     and tabulation characters appear only where GNU Make requires them.
 # ==============================================================================
 

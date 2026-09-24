@@ -10,7 +10,7 @@
  * Key functions: KernelVerifyRtc.
  * References:
  *   - kernel/include/oxys/dev/rtc.h: the data sheet's Table 3 and register B.
- *   - docs/devices/TIME.md, Section 10: every assertion here paired with the
+ *   - docs/devices/TIME.md: every assertion here paired with the
  *     silent failure it would catch.
  *
  * Why the expected seconds are written as numbers.

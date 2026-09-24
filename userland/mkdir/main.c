@@ -13,7 +13,7 @@
  *     existing directory is not an error. The exit status is 0 where every
  *     directory was created and greater than zero otherwise.
  *   - kernel/abi/oxys/syscall_abi.h: SYSCALL_MKDIR, beneath `OxysMakeDirectory`.
- *   - docs/design/LIBC.md, Section 12.3: the five utilities and what each is
+ *   - docs/design/LIBC.md: the five utilities and what each is
  *     for.
  *
  * The mode, and what this system does not have.
@@ -23,7 +23,7 @@
  *   to belong to. So a directory made here is world-writable, and that is a
  *   property of a system with one user and no permission checking rather than a
  *   decision this program makes. docs/design/PROCESS.md records the absence of
- *   credentials; docs/design/LIBC.md, Section 12.7, limitation 6, records this
+ *   credentials; docs/design/LIBC.md records this
  *   consequence of it.
  *
  *   **-m is not implemented.** Its argument is a symbolic mode of the form

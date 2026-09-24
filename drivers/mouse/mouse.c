@@ -29,7 +29,7 @@
  *     succession cause a device that has a wheel to answer 0x03 to the
  *     identifier command and to send four-byte packets thereafter, the fourth
  *     byte carrying the wheel movement in its low four bits.
- *   - docs/devices/MOUSE.md, Sections 3 to 6: the packet, the framing, the
+ *   - docs/devices/MOUSE.md: the packet, the framing, the
  *     position, and what is asserted about each.
  *
  * Why the always-set bit is a framing test and not a curiosity.

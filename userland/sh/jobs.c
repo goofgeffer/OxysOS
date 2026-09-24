@@ -23,7 +23,7 @@
  *     is chosen; `setpgid`, and why both the parent and the child call it.
  *   - IEEE Std 1003.1-2017, `sh`, EXTENDED DESCRIPTION, Job Control: the `%n`
  *     job identifier, and the report of a job's state.
- *   - docs/design/SHELL.md, Section 28.
+ *   - docs/design/SHELL.md.
  *
  * Why both the parent and the child set the group.
  *
@@ -261,7 +261,7 @@ static void ShellJobContinued(ShellJob *job)
  * group. A shell that went on setting groups without a terminal would put its
  * children where nothing could reach them.
  *
- * docs/design/TERMINAL.md, Section 5, and docs/design/SHELL.md, Section 28.
+ * docs/design/TERMINAL.md and docs/design/SHELL.md.
  */
 static bool ShellHasTerminal;
 

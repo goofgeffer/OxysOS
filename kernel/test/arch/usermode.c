@@ -8,7 +8,7 @@
  *          what it did.
  * Key functions: KernelVerifyContextSwitch, KernelVerifyUserMode.
  * References:
- *   - docs/design/PROCESS.md, Sections 9 and 10: the design of the switch and
+ *   - docs/design/PROCESS.md: the design of the switch and
  *     the descent, and these assertions paired with what each would catch.
  *
  * The program is written here, in machine code.

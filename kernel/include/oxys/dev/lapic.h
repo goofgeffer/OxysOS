@@ -253,8 +253,8 @@ bool LocalApicInitialiseThisProcessor(void);
 /*
  * Signals the completion of an interrupt, per Intel SDM, Volume 3A, Section
  * 10.8.5. It is called by the routing layer of kernel/arch/x86_64/interrupt/irq.c upon the return
- * of a device handler, and by nothing else; see docs/design/INTERRUPTS.md,
- * Section 10.3, for why a device driver does not signal for itself.
+ * of a device handler, and by nothing else; see docs/design/INTERRUPTS.md
+ * for why a device driver does not signal for itself.
  */
 void LocalApicSignalEndOfInterrupt(void);
 

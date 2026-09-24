@@ -143,18 +143,19 @@ done
 # ---------------------------------------------------------------------------
 # 5. The unsynchronised-structure list is true.
 #
-# CONCURRENCY.md, Section 10, limitation 1, names each file that still holds an
+# CONCURRENCY.md names each file that still holds an
 # unsynchronised structure, and states that every file named carries a
 # `Concurrency.` paragraph in its header. That claim was false for five files
 # when it was first made, and the audit that found it was done by hand.
 # ---------------------------------------------------------------------------
 section 'Concurrency notes'
 
-concurrency_list="$(sed -n '/\*\*Everything else is still unsynchronised\*\*/,/^$/p' \
-                    docs/design/CONCURRENCY.md | grep -o '`[a-z0-9_/]*\.c`' | tr -d '`' | sort -u)"
+concurrency_list="$(sed -n '/^## Unsynchronised structures/,/^## Verification/p' \
+                    docs/design/CONCURRENCY.md | grep '^| `' \
+                    | grep -o '`[a-z0-9_/]*\.c`' | tr -d '`' | sort -u)"
 
 if [ -z "$concurrency_list" ]; then
-    fail "CONCURRENCY.md, Section 10, limitation 1: could not find the list of unsynchronised files."
+    fail "CONCURRENCY.md: could not find the list of unsynchronised files."
 else
     while IFS= read -r file; do
         [ -n "$file" ] || continue
@@ -384,6 +385,34 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# 11. A reference to a numbered section names a section that exists.
+#
+# The defect this catches: a document rewritten and renumbered, leaving the
+# citations of its old sections pointing at text that is not there, or worse,
+# at different text under the same number. Only a document whose name is unique
+# in the repository can be resolved, and the records of the past (HISTORY.md,
+# TESTING-RECORD.md, the release notes) cite the documents as they then were.
+# ---------------------------------------------------------------------------
+section 'Section references'
+
+git grep -hoE '[A-Za-z0-9_-]+\.md`?(\]\([^)]*\))?,? Sections? [0-9]+[A-Z]?(\.[0-9]+)*' \
+        -- ':!docs/project/HISTORY.md' ':!docs/project/TESTING-RECORD.md' \
+           ':!docs/project/RELEASE-*.md' \
+    | sed -E 's/^([A-Za-z0-9_-]+\.md).* Sections? /\1 /' | sort -u \
+    | while read -r name number; do
+        matches="$(git ls-files "*/$name" "$name")"
+        [ "$(printf '%s\n' "$matches" | grep -c .)" -eq 1 ] || continue
+        escaped="$(printf '%s' "$number" | sed 's/\./\\./g')"
+        grep -qE "^#+ $escaped(\.| )" "$matches" \
+            || printf '%s\t%s\n' "$matches" "$number"
+    done > /tmp/oxys-sections.$$
+
+while IFS=$'\t' read -r file number; do
+    [ -n "${file:-}" ] && fail "A reference cites $file, Section $number, which has no such heading."
+done < /tmp/oxys-sections.$$
+rm -f /tmp/oxys-sections.$$
+
 
 printf '\n== Summary\n'
 printf 'docs-check: %d error(s), %d advisory/advisories.\n' "$errors" "$advisories"

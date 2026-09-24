@@ -13,7 +13,7 @@
 ;   SmpTrampolineImageEnd   - One past its last byte.
 ;
 ; References:
-;   - docs/design/SMP.md, Section 3: why the trampoline is a flat binary
+;   - docs/design/SMP.md: why the trampoline is a flat binary
 ;     assembled at a fixed origin rather than a section of this image, and why
 ;     it is therefore embedded rather than linked.
 ;

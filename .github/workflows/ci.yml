@@ -10,7 +10,7 @@
 #
 # Jobs:
 #   clang-check - Compiles every translation unit with the second compiler of
-#                 docs/project/TOOLCHAIN.md, Section 9. Builds nothing. Requires
+#                 docs/project/TOOLCHAIN.md. Builds nothing. Requires
 #                 no cross-toolchain, clang being multi-target by construction,
 #                 and so reports within about a minute.
 #   verify      - Builds the cross-toolchain, builds the ISO, executes it under
@@ -21,7 +21,7 @@
 # workflow and a contributor's machine cannot be given two different recipes.
 #
 # References:
-#   - docs/project/TOOLCHAIN.md, Sections 1, 9, 10 and 11.
+#   - docs/project/TOOLCHAIN.md.
 #   - docs/project/TESTING.md: the verification procedure this workflow runs.
 #   - PROJECT_GUIDELINES.md, Section 2: no change is final until it has been
 #     verified and the documents affected by it have been updated.

@@ -18,7 +18,7 @@
  *   - IEEE Std 1003.1-2017, `wc`, OPTIONS: -c bytes, -l newlines, -w words,
  *     any of which selects that count alone, in the order above whatever the
  *     order given.
- *   - docs/design/SHELL.md, Section 22.4.
+ *   - docs/design/SHELL.md.
  *
  * What is not here: `-m`, the count of characters, which in this system's one
  * encoding is the count of bytes; and a `-` operand, the standard input being

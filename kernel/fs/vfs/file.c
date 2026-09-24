@@ -10,7 +10,7 @@
  * Key functions: VfsFileOf, VfsOpenFileCount, VfsOpen, VfsHold, VfsClose, VfsRead,
  *          VfsWrite, VfsSeek, VfsTell, VfsReadDirectory, VfsFileAttributes.
  * References:
- *   - docs/storage/VFS.md, Sections 7 and 8: the open file, and why the position
+ *   - docs/storage/VFS.md: the open file, and why the position
  *     belongs to it and not to the node — which is why two descriptors upon one
  *     file read independently of one another while writing to the same bytes.
  *   - IEEE Std 1003.1-2017, the definitions of `read`, `write` and `lseek`: a
@@ -291,7 +291,7 @@ bool VfsClose(int descriptor)
          * until something syncs it, and a machine switched off by closing its
          * window — which is how an emulator is most often stopped — would lose
          * an edit a person had saved and been told was saved.
-         * docs/storage/PERSIST.md, Section 5. The ramdisk at the root is memory
+         * docs/storage/PERSIST.md. The ramdisk at the root is memory
          * and lasts no longer than the cache, so it is not synced for nothing.
          */
         const bool durable = ((file->flags & VFS_OPEN_WRITE) != 0U) &&

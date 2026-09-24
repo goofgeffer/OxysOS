@@ -43,7 +43,7 @@ Sections relied upon:
   obliges the boot loader to emit the framebuffer information tag below.
 - **3.1.11**, the module-alignment tag placed in the image header: it declares
   that the image requires its modules to be page aligned. **This kernel does not
-  carry it**, and `docs/design/BOOT.md`, Section 2.1, records why: the ramdisk is
+  carry it**, and `docs/design/BOOT.md` records why: the ramdisk is
   read through the direct map at byte granularity and its frames are reserved by
   a range that rounds outward to whole frames, so alignment would change nothing.
 - **3.6.6**, the modules tag, type 3: after the common `type` and `size` fields,
@@ -347,7 +347,7 @@ The consequence this project depends upon, which the paper states and which is
 easily forgotten: the choice at each step depends upon the error accumulated
 *since the start*. A line begun at a different point is therefore a different
 line, which is why `graphics/draw.c` clips per pixel rather than by moving the
-endpoints. See `docs/design/DRAWING.md`, Section 4.
+endpoints. See `docs/design/DRAWING.md`.
 
 Used by: `graphics/draw.c`, `kernel/test/gfx/graphics.c`,
 `docs/design/DRAWING.md`.
@@ -367,7 +367,7 @@ The consequence this project depends upon: the walk visits the rows from the top
 to the diagonal, and the rows from the diagonal to the side are the same points
 with the coordinates exchanged. `graphics/draw.c` fills a disc as spans, one to a
 row, taking each span's half-width from the walk; the row upon the diagonal is
-produced by both and filled twice. See `docs/design/DRAWING.md`, Section 4.1.
+produced by both and filled twice. See `docs/design/DRAWING.md`.
 Retrieved on 2026-09-17.
 
 Used by: `graphics/draw.c`, `kernel/test/gfx/windows.c`,
@@ -378,7 +378,7 @@ Robert W. Scheifler, X Consortium Standard, X Version 11 Release 7.7.
 `https://www.x.org/releases/X11R7.7/doc/xproto/x11protocol.html`
 
 Not a specification this project implements, and no request, event, type or
-encoding of it is adopted — [`INSPIRATIONS.md`](INSPIRATIONS.md), Section 5,
+encoding of it is adopted — [`INSPIRATIONS.md`](INSPIRATIONS.md)
 which permits a reason to be taken and forbids a thing. Three notions are
 relied upon as notions, restated for one pointer and one screen:
 
@@ -764,8 +764,8 @@ Sections relied upon:
   vector. The reference warns that the bit must not be *written* zero — the
   `0xD1` form, which writes the output port whole — because that holds the
   processor in reset rather than pulsing it, and nothing can then release it.
-  `KernelPower` uses the pulse and not the write; `docs/design/INIT.md`,
-  Section 4.2. Retrieved on 2026-09-17.
+  `KernelPower` uses the pulse and not the write; `docs/design/INIT.md`.
+  Retrieved on 2026-09-17.
 - **The keyboard controller**: the 8042 is decoded at port `0x60` for data and
   `0x64` for the status register when read and the command register when written;
   status bit 0 is set while the output buffer holds a byte for the processor and
@@ -1315,7 +1315,7 @@ symlink, device, fifo, socket) to avoid the need to check the inode itself"; and
 decisively, "FILETYPE is an INCOMPAT flag because older kernels would think a
 filename was longer than 256 characters". That last sentence is the reason this
 kernel decides the width of `name_len` from the feature flag alone and not from
-the revision; see [`../storage/EXT2-FILES.md`](../storage/EXT2-FILES.md), Section 1.2.
+the revision; see [`../storage/EXT2-FILES.md`](../storage/EXT2-FILES.md).
 
 Used by: `kernel/fs/ext2/`, `kernel/include/oxys/fs/ext2.h`.
 
@@ -1484,7 +1484,7 @@ Cycle"** — "After the UIP bit goes high, the update cycle begins 244 µs later
 and during the update, of up to 1984 µs, the time and calendar bytes are not
 accessible; three methods of reading around it, the first of which the driver
 uses. Applied in [`../../drivers/rtc/rtc.c`](../../drivers/rtc/rtc.c) and
-[`../devices/TIME.md`](../devices/TIME.md), Section 10.
+[`../devices/TIME.md`](../devices/TIME.md).
 
 ### Intel Platform Controller Hub, NMI_EN at offset 70h
 Intel Corporation. Intel 400 Series Chipset On-Package Platform Controller Hub

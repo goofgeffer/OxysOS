@@ -11,7 +11,7 @@
  *   - ISO/IEC 9899:2011, Section 7.24.5.1 (memchr), 7.24.5.2 (strchr),
  *     7.24.5.3 (strcspn), 7.24.5.4 (strpbrk), 7.24.5.5 (strrchr), 7.24.5.6
  *     (strspn), 7.24.5.7 (strstr) and 7.24.5.8 (strtok).
- *   - docs/design/LIBC.md, Section 5: the assertions, each paired with the
+ *   - docs/design/LIBC.md: the assertions, each paired with the
  *     failure it would catch.
  *
  * Two conversions, and they are not the same one.
@@ -122,7 +122,7 @@ char *strrchr(const char *string, int c)
  * two lengths. A 256-entry table would make it linear and is what a library
  * sized for a compiler will eventually want; it is not built here because the
  * table costs a quarter of a kilobyte of stack in functions that are presently
- * called upon sets of two or three bytes. docs/design/LIBC.md, Section 6,
+ * called upon sets of two or three bytes. docs/design/LIBC.md
  * limitation 1, records the measurement that would justify changing it.
  *
  * The terminator is deliberately not a member of any set: the loop stops before
@@ -199,12 +199,12 @@ char *strpbrk(const char *string, const char *accept)
  * was added with a comment claiming it was what made *every* empty needle work,
  * and the self-test asserted the empty needle against a haystack that was not
  * empty — so deleting the guard altogether changed no result the test could see.
- * docs/design/LIBC.md, Section 5.1, records the negative test that found it and
+ * docs/design/LIBC.md records the negative test that found it and
  * the assertion that now covers it.
  *
  * The search is the product of the two lengths in the worst case. A
  * Boyer-Moore or Knuth-Morris-Pratt search would be linear and would want a
- * table proportional to the needle; docs/design/LIBC.md, Section 6, limitation
+ * table proportional to the needle; docs/design/LIBC.md limitation
  * 1, records that this is deliberate and what would justify revisiting it.
  */
 char *strstr(const char *haystack, const char *needle)
@@ -241,7 +241,7 @@ char *strstr(const char *haystack, const char *needle)
  * call at once and that a caller may not interleave two scans with. It is a
  * property of the interface and not of this implementation; strtok_s and
  * strtok_r exist elsewhere precisely because of it, and neither is invented
- * here under a standard name. docs/design/LIBC.md, Section 6, limitation 3.
+ * here under a standard name. docs/design/LIBC.md.
  */
 static char *StringTokenPosition;
 

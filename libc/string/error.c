@@ -16,7 +16,7 @@
  *     call. This implementation returns a distinct array for each number and
  *     overwrites nothing, which is permitted and is the stronger promise.
  *   - ISO/IEC 9899:2011, Section 7.5: the numbers, which are in <errno.h>.
- *   - docs/design/LIBC.md, Section 8.5: why this function arrives with the
+ *   - docs/design/LIBC.md: why this function arrives with the
  *     wrappers and not with the rest of Section 7.24.
  *
  * Why this function is here and not in the same change as the rest of 7.24.

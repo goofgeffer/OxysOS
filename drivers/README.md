@@ -3,8 +3,8 @@
 # `drivers/` — Device Drivers
 
 **Phase**: 1, sub-task 1.7, for the early output drivers. Phase 4 in full.
-**Detailed design**: [`../docs/design/ARCHITECTURE.md`](../docs/design/ARCHITECTURE.md),
-Section 6, records the diagnostic policy these drivers serve.
+**Detailed design**: [`../docs/design/ARCHITECTURE.md`](../docs/design/ARCHITECTURE.md)
+records the diagnostic policy these drivers serve.
 
 ## Purpose
 
@@ -31,18 +31,18 @@ below where they used to be described records the move.
 
 | Path | Device | Interface | Phase |
 | ---- | ------ | --------- | ----- |
-| `vga/vga.c` | The VGA text-mode display, mode 3. Displaced by the framebuffer of sub-task 6.2 wherever the boot loader leaves the adapter in a graphics mode; see `docs/devices/DISPLAY.md`, Section 1.1. | `<oxys/dev/vga.h>` | 1, 4.2 |
+| `vga/vga.c` | The VGA text-mode display, mode 3. Displaced by the framebuffer of sub-task 6.2 wherever the boot loader leaves the adapter in a graphics mode; see `docs/devices/DISPLAY.md`. | `<oxys/dev/vga.h>` | 1, 4.2 |
 | `serial/serial.c` | The 16550-compatible UART at COM1, interrupt-driven. | `<oxys/dev/serial.h>` | 1, 4.1 |
 | `pic/pic.c` | The pair of cascaded 8259A interrupt controllers. Retired at sub-task 6.12; it holds no handler table and routes nothing. | `<oxys/dev/pic.h>` | 3, 6.12 |
 | `apic/lapic.c` | The Local APIC: one per logical processor; what completes every interrupt from sub-task 6.12 onward; from sub-task 6.13 the command register through which one processor interrupts another; from sub-task 6.14 `LocalApicInitialiseThisProcessor`, by which a started processor enables and programmes its own controller; and from sub-task 6.15 the timer that pre-empts it, calibrated against the interval timer because the architecture states no rate for it. | `<oxys/dev/lapic.h>` | 6.12, 6.13, 6.14, 6.15 |
 | `apic/ioapic.c` | The I/O APIC: the redirection table that decides what vector an interrupt input presents, and to which processor. | `<oxys/dev/ioapic.h>` | 6.12 |
 | `pit/pit.c` | Counter 0 of the 8253 interval timer, the system tick; from sub-task 6.14 `PitBusyWaitMicroseconds`, the counter-watching wait the startup protocol's delays are measured by; and from sub-task 6.15 the reference the local APIC timers are calibrated against. | `<oxys/dev/pit.h>` | 3, 6.14, 6.15 |
-| `rtc/rtc.c` | Sub-task 9.7. The real-time clock the PC carries from the MC146818A, read through ports `0x70` and `0x71` in both of its data modes and both of its hour modes, twice until two readings agree so that no update cycle is read across; and the date turned into seconds since 1970 and back. Read at every `time` call, the interval timer being the fallback. `../docs/devices/TIME.md`, Section 10. |
+| `rtc/rtc.c` | Sub-task 9.7. The real-time clock the PC carries from the MC146818A, read through ports `0x70` and `0x71` in both of its data modes and both of its hour modes, twice until two readings agree so that no update cycle is read across; and the date turned into seconds since 1970 and back. Read at every `time` call, the interval timer being the fallback. `../docs/devices/TIME.md`. |
 | `ps2/ps2.c` | The 8042 keyboard controller itself, and the two device ports it presents. | `<oxys/dev/ps2.h>` | 3, 6.5 |
 | `keyboard/keyboard.c` | The PS/2 keyboard upon the controller's first port. | `<oxys/dev/keyboard.h>` | 3 |
 | `mouse/mouse.c` | The PS/2 mouse upon the controller's second port. | `<oxys/dev/mouse.h>` | 6.5 |
 | `pci/pci.c` | The PCI bus: configuration-space enumeration by mechanism one. | `<oxys/dev/pci.h>` | 4.3 |
-| `ata/` | The ATA disk, in programmed input/output mode, divided into six translation units and a private header; `../docs/design/ARCHITECTURE.md`, Section 2.2, records why. | `<oxys/dev/storage/ata.h>` | 4.4 |
+| `ata/` | The ATA disk, in programmed input/output mode, divided into six translation units and a private header; `../docs/design/ARCHITECTURE.md` records why. | `<oxys/dev/storage/ata.h>` | 4.4 |
 | `ata/internal.h` | What those units share: the register, status, control and command constants, the table of devices found, the addresses each channel answers at, the accounting, and the register-level discipline. | — | 4.4 |
 | `ata/ata.c` | The state, the refusals, the initialisation, the device accessors and the binding to the block layer. | `<oxys/dev/storage/ata.h>` | 4.4 |
 | `ata/port.c` | The task file: the settling delay a selection must be followed by, the two waits every command is bracketed by, and the reset of a channel. | — | 4.4 |
@@ -87,7 +87,7 @@ and it will not retreat past the **erase limit**, a position recorded by
 `VgaSetEraseLimit` before which no backspace may pass. The limit is what
 distinguishes a line of input from the boot log above it, the driver having no
 other way to tell them apart; whoever reads the input sets it. See
-[`../docs/devices/DISPLAY.md`](../docs/devices/DISPLAY.md), Section 6.
+[`../docs/devices/DISPLAY.md`](../docs/devices/DISPLAY.md).
 
 The driver is asserted at each boot by `KernelVerifyVga`, which checks the cursor
 movements, the erase limit, the read-back of the hardware cursor position from
@@ -256,8 +256,8 @@ it presents itself through, and the layer knows nothing of ATA.
 
 [`../docs/storage/BLOCK.md`](../docs/storage/BLOCK.md) and
 [`../docs/storage/BUFFER.md`](../docs/storage/BUFFER.md) describe them, as they
-did before; [`../docs/design/ARCHITECTURE.md`](../docs/design/ARCHITECTURE.md),
-Section 2.3, records the move.
+did before; [`../docs/design/ARCHITECTURE.md`](../docs/design/ARCHITECTURE.md)
+records the move.
 
 ### `serial/` — the COM1 diagnostic port
 
@@ -302,7 +302,7 @@ sub-task 6.12 — masks the pair entirely when the APIC supersedes it.
 This driver differs from the others in that it is not a peripheral but a
 mechanism by which other peripherals are heard. It consequently owns the
 end-of-interrupt protocol on behalf of all of them, for the reasons set out in
-[`../docs/design/INTERRUPTS.md`](../docs/design/INTERRUPTS.md), Section 9.4.
+[`../docs/design/INTERRUPTS.md`](../docs/design/INTERRUPTS.md).
 
 **It holds no handler table and routes nothing.** Sub-task 6.12 moved that to
 `kernel/arch/x86_64/interrupt/irq.c`, because which driver claims IR1 is a property of the machine
@@ -330,7 +330,7 @@ which one processor sends an interrupt to another. This driver owns the register
 and the bounded waits upon its delivery status; it owns none of the meanings a
 vector carries, exactly as it owns none of the meanings a device request line
 carries. What the vectors mean is
-[`../docs/design/CONCURRENCY.md`](../docs/design/CONCURRENCY.md), Section 5.
+[`../docs/design/CONCURRENCY.md`](../docs/design/CONCURRENCY.md).
 
 **Sub-task 6.14 sends the startup sequence through that same register**, and adds
 `LocalApicInitialiseThisProcessor`: a started processor must set the global
@@ -356,8 +356,7 @@ AT, compatible with the Motorola MC146818A data sheet, whose address map, Table
 "NMI Enable (and Real Time Clock Index)" register at `0x70`, whose bit 7 is
 written clear so that non-maskable interrupts stay as the machine left them.
 The two-digit year is placed in 2000 to 2099, there being no century register
-whose place it knows. [`../docs/devices/TIME.md`](../docs/devices/TIME.md),
-Section 10.
+whose place it knows. [`../docs/devices/TIME.md`](../docs/devices/TIME.md).
 
 
 ### `pit/` — the interval timer
@@ -398,8 +397,7 @@ drivers each keeping their own idea of it would each write back the other's bits
 as they last saw them — the mouse driver enabling its own interrupt would restore
 the translation bit to whatever it was when the mouse driver first looked, and
 the keyboard would then deliver scan code set 2 while decoding it as set 1. The
-whole argument is in [`../docs/devices/MOUSE.md`](../docs/devices/MOUSE.md),
-Section 2.
+whole argument is in [`../docs/devices/MOUSE.md`](../docs/devices/MOUSE.md).
 
 The second port's existence is discovered rather than assumed: no register
 reports how many ports there are, so the port is enabled and the configuration

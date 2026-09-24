@@ -426,7 +426,7 @@ void SyscallSetKernelStack(uint64_t top)
  * the second thing that function does is clear GS.base, so a version that
  * cleared first would have nothing left to read the area through.
  *
- * docs/design/PROCESS.md, Section 12, records why a context switch writes these
+ * docs/design/PROCESS.md records why a context switch writes these
  * registers instead of exchanging them: which of the two holds the area depends
  * upon how the kernel was entered and not upon which thread is running, and a
  * switch cannot tell those apart.
@@ -469,7 +469,7 @@ void SyscallEstablishUserGsBase(void)
  * **A write still reaches no file**, which is the one place where the
  * descriptors of 7.6 stop short: `open` accepts the read flags alone, so there
  * is no descriptor a program could write to even if this accepted one. See
- * docs/design/LIBC.md, Section 12.7, limitation 2.
+ * docs/design/LIBC.md.
  */
 
 /* Defined with the filesystem calls below, and used by the write above them. */
@@ -1161,9 +1161,9 @@ static int64_t SyscallDoTerminalGroup(uint64_t group)
      * `ShellJobsInitialise` claims it before the first prompt and cannot know
      * it is not the one at the keyboard. That is the trap `/etc/session.conf`
      * described and kept the launcher clear of, and the livelock of
-     * docs/design/SHELL.md, Section 2.6, was reached through it. The shell in
+     * docs/design/SHELL.md was reached through it. The shell in
      * a window is now refused here and runs without job control, which is
-     * docs/design/TERMINAL.md, Section 5.
+     * docs/design/TERMINAL.md.
      */
     if ((process == NULL) ||
         (ProcessDescriptorFile(process, SYSCALL_DESCRIPTOR_INPUT) != VFS_NO_DESCRIPTOR))
@@ -1389,7 +1389,7 @@ static int64_t SyscallDoProcessInformation(uint64_t index, uint64_t address)
 
     /*
      * The state is the thread's where the process is neither stopped nor
-     * ended: docs/design/PROCESS.md, Section 19, limitation 4, records that a
+     * ended: docs/design/PROCESS.md records that a
      * process's own state field is not derived from its threads', and what
      * `ps` should say is what the thread is doing.
      */
@@ -1715,7 +1715,7 @@ static int64_t SyscallDoClose(uint64_t descriptor)
  * never nothing, so that a program can tell the terminal from a file at its end
  * by the one property that distinguishes them: a file that has run out stays
  * run out, and a terminal has more the moment somebody types. Nothing here
- * echoes and nothing assembles a line; docs/design/SHELL.md, Section 2, says
+ * echoes and nothing assembles a line; docs/design/SHELL.md says
  * why the program does both.
  *
  * The caller's buffer is judged before the wait and not after it. The wait may
@@ -1968,7 +1968,7 @@ static int64_t SyscallDoReadDirectory(uint64_t descriptor, uint64_t address)
  * file mode creation mask is applied, this system having none: a program that
  * wants 0755 asks for 0755. IEEE Std 1003.1-2017 has `mkdir` reduce the mode by
  * the process's mask, and the mask belongs with the credentials this kernel does
- * not yet have — docs/design/PROCESS.md, Section 14.
+ * not yet have — docs/design/PROCESS.md.
  */
 static int64_t SyscallDoMakeDirectory(uint64_t path_address, uint64_t permissions)
 {
@@ -1998,7 +1998,7 @@ static int64_t SyscallDoMakeDirectory(uint64_t path_address, uint64_t permission
 /* Removes a name. A directory is refused with EISDIR by the layer beneath, which
  * is what lets `rm` report what IEEE Std 1003.1-2017 requires it to report for an
  * operand naming a directory without -r. There is no call that removes a
- * directory; docs/design/LIBC.md, Section 12.7, limitation 3. */
+ * directory; docs/design/LIBC.md. */
 static int64_t SyscallDoUnlink(uint64_t path_address)
 {
     char path[SYSCALL_PATH_MAXIMUM + 1U];
@@ -2129,7 +2129,7 @@ static int64_t SyscallDoGetWorkingDirectory(uint64_t address, uint64_t capacity)
  * Makes one descriptor name what another names, of sub-task 8.5: IEEE Std
  * 1003.1-2017's `dup2`, by which the shell's child places the file it opened
  * at 0, 1 or 2 before it becomes the program. The decisions are the process
- * table's; docs/design/SHELL.md, Section 19.
+ * table's; docs/design/SHELL.md.
  */
 static int64_t SyscallDoDuplicate(uint64_t from, uint64_t to)
 {

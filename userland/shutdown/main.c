@@ -8,7 +8,7 @@
  * References:
  *   - kernel/abi/oxys/syscall_abi.h: `procinfo`, by which the process named
  *     `init` is found, and `kill`, by which it is asked.
- *   - docs/design/WINDOWS.md, Section 13.2: why this asks rather than acts.
+ *   - docs/design/WINDOWS.md: why this asks rather than acts.
  *
  * It does not call `power` itself. The kernel reserves that to `init`, and for
  * a reason a person can see: the machine is stopped in order — the desktop

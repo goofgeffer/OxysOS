@@ -26,7 +26,7 @@
  *   - libc/include/stream.h: the seam beneath a stream — the one place this
  *     machinery touches the system — and the memory stream by which the
  *     buffering policy is exercised without one.
- *   - docs/design/LIBC.md, Section 10: the design of this sub-task, what is
+ *   - docs/design/LIBC.md: the design of this sub-task, what is
  *     asserted of it and what is not.
  *
  * What of <stdio.h> is here, and what is not.
@@ -77,7 +77,7 @@
  *   it is refused here, deliberately and with the refusal reported. What it
  *   costs is that a conforming program using %n does not work; what it buys is
  *   that a program which passes a string it received to printf cannot be made to
- *   write memory by it. docs/design/LIBC.md, Section 10.6, records the trade.
+ *   write memory by it. docs/design/LIBC.md records the trade.
  *
  * Why input exists at all when nothing can supply it.
  *
@@ -267,7 +267,7 @@ void setbuf(FILE *stream, char *buffer);
  * conforming, and the two available answers are "print something arbitrary and
  * return a count that is wrong in a way nobody checks" or "refuse and say so".
  * A caller that checks the result — which is the whole point of it being
- * returned — is told. docs/design/LIBC.md, Section 10.6.
+ * returned — is told. docs/design/LIBC.md.
  */
 int fprintf(FILE *stream, const char *format, ...);
 int vfprintf(FILE *stream, const char *format, va_list arguments);

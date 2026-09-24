@@ -318,7 +318,7 @@ struct VfsNode
 
     /*
      * How many holders the node has. A node reaching zero is released at once
-     * rather than retained: see docs/storage/VFS.md, Section 5.
+     * rather than retained: see docs/storage/VFS.md.
      */
     uint32_t references;
 
@@ -574,7 +574,7 @@ bool VfsRemoveDirectory(const char *path);
  * last descriptor closed, which requires a list of files that have no name and
  * are not yet gone; this kernel has no such list, and the alternative to
  * refusing is to free the inode and the blocks beneath a descriptor still
- * reading them. The reason is recorded in docs/storage/VFS.md, Section 9.3.
+ * reading them. The reason is recorded in docs/storage/VFS.md.
  */
 bool VfsUnlink(const char *path);
 

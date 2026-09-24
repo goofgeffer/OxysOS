@@ -27,7 +27,7 @@
  *   be statics still if C offered any way of sharing them among a group of files
  *   without also offering them to everybody.
  *
- *   `docs/design/ARCHITECTURE.md`, Section 2.2, records the rule.
+ *   `docs/design/ARCHITECTURE.md` records the rule.
  */
 
 #ifndef OXYS_DRIVERS_ATA_INTERNAL_H
@@ -140,7 +140,7 @@ extern const char *AtaError;
  * in native mode answers at the addresses its base address registers give, and a
  * driver that assumed the legacy ones would find no disk upon any machine whose
  * channels are elsewhere — which is a real fault and not a theoretical one; see
- * `docs/storage/DISK.md`, Section 2.1.
+ * `docs/storage/DISK.md`.
  */
 extern uint16_t AtaChannelIoBase[ATA_CHANNEL_COUNT];
 extern uint16_t AtaChannelControlBase[ATA_CHANNEL_COUNT];

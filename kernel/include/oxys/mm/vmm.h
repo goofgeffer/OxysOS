@@ -9,7 +9,7 @@
  * References:
  *   - Intel 64 and IA-32 Architectures Software Developer's Manual, Volume 3A,
  *     Section 4.5: the 4 KiB page is the unit of mapping.
- *   - docs/design/MEMORY-LAYOUT.md, Sections 2 and 10: the placement and design of the
+ *   - docs/design/MEMORY-LAYOUT.md: the placement and design of the
  *     arena.
  */
 
@@ -22,8 +22,7 @@
 /*
  * The base and extent of the kernel arena, the region from which virtually
  * contiguous kernel allocations are issued. It is disjoint from both the direct
- * physical map and the kernel image window; refer to docs/design/MEMORY-LAYOUT.md,
- * Section 2.
+ * physical map and the kernel image window; refer to docs/design/MEMORY-LAYOUT.md.
  */
 #define KERNEL_ARENA_BASE UINT64_C(0xFFFFC00000000000)
 #define KERNEL_ARENA_SIZE UINT64_C(0x0000200000000000) /* 32 TiB. */

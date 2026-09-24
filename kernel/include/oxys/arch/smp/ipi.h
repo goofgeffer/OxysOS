@@ -24,7 +24,7 @@
  *   - Intel SDM, Volume 3A, Section 10.8.5: a fixed-delivery interrupt is in
  *     service until its handler writes the end-of-interrupt register, so a
  *     handler here must signal exactly as a device handler does.
- *   - docs/design/CONCURRENCY.md, Section 5.
+ *   - docs/design/CONCURRENCY.md.
  *
  * Why the vectors are the highest available.
  *
@@ -46,8 +46,8 @@
 /*
  * The translation-lookaside-buffer shootdown, and the general halt.
  *
- * The shootdown is the reason this layer exists: docs/design/CONCURRENCY.md,
- * Section 6, describes what it carries. The halt is what a panicking processor
+ * The shootdown is the reason this layer exists: docs/design/CONCURRENCY.md
+ * describes what it carries. The halt is what a panicking processor
  * sends before it prints, so that the machine being explained stops changing
  * while the explanation is written.
  */

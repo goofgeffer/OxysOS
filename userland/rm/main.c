@@ -14,7 +14,7 @@
  *     to any remaining files". The exit status is 0 where every entry was
  *     removed and greater than zero otherwise.
  *   - kernel/abi/oxys/syscall_abi.h: SYSCALL_UNLINK, beneath `OxysUnlink`.
- *   - docs/design/LIBC.md, Section 12.3: the five utilities and what each is
+ *   - docs/design/LIBC.md: the five utilities and what each is
  *     for.
  *
  * What is implemented, and what each absence is a property of.

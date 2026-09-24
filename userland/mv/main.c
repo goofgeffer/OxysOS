@@ -13,7 +13,7 @@
  *     done by copying, which this does not do — EXDEV is reported instead.
  *   - IEEE Std 1003.1-2017, `link()` and `unlink()`: the two calls a rename
  *     is made of where there is no `rename()`, which this kernel has not.
- *   - docs/design/SHELL.md, Section 30.
+ *   - docs/design/SHELL.md.
  *
  * Why two calls and not one.
  *

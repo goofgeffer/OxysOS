@@ -21,7 +21,7 @@
  *     of each span of a disc, in integers likewise.
  *   - PROJECT_GUIDELINES.md, Section 8: floating point is prohibited in the
  *     kernel, which is why every calculation here is integer.
- *   - docs/design/DRAWING.md, Sections 1 to 6: the design and its limits.
+ *   - docs/design/DRAWING.md: the design and its limits.
  *
  * The rule that governs this file.
  *
@@ -183,7 +183,7 @@ bool GraphicsSurfaceInitialise(GraphicsSurface *surface, void *pixels, uint32_t 
      *
      * The alignment is established rather than assumed. A framebuffer's pitch is
      * the boot loader's to choose and is not obliged to be a multiple of
-     * anything; docs/design/FRAMEBUFFER.md, Section 3, records that it is read and
+     * anything; docs/design/FRAMEBUFFER.md records that it is read and
      * not computed.
      */
     surface->whole_words = (bytes_per_pixel == 4U) &&
@@ -866,8 +866,7 @@ bool GraphicsBlit(GraphicsSurface *destination, int32_t x, int32_t y,
          * framebuffer back, and a framebuffer is write-combining, where reads
          * are uncached — so the read is the expensive half and a quarter as many
          * of them is the whole of the gain. Removing the read altogether needs
-         * the back buffer of sub-task 6.6; see docs/design/CONSOLE.md,
-         * Section 6.3.
+         * the back buffer of sub-task 6.6; see docs/design/CONSOLE.md.
          */
         const bool by_words = destination->whole_words && source->whole_words;
 

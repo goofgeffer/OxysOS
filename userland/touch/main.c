@@ -12,7 +12,7 @@
  *     exist". This system keeps no clock, so the first half is not done and
  *     the second is the whole of what `touch` is here.
  *   - libc/include/syscall.h: OxysOpen with SYSCALL_OPEN_CREATE.
- *   - docs/design/SHELL.md, Section 19.3.
+ *   - docs/design/SHELL.md.
  *
  * What is not here: the timestamps, there being no clock to take one from;
  * `-a`, `-m`, `-c`, `-r` and `-t`, each of which is about them. An operand

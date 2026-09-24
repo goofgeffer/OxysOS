@@ -14,7 +14,7 @@
  *     is judged against.
  *   - userland/arg-check/main.c: the program this becomes, and the vector it
  *     expects — which is the vector below, and must remain so.
- *   - docs/design/LIBC.md, Section 12.5: what this asserts.
+ *   - docs/design/LIBC.md: what this asserts.
  *
  * Why this program has no assertions of its own.
  *

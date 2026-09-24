@@ -46,8 +46,8 @@
 ;
 ; Note upon the segment base exchange, added at sub-task 6.13.
 ;   The kernel keeps its per-processor data area in GS.base while it executes and
-;   in IA32_KERNEL_GS_BASE while a user program does; docs/design/CONCURRENCY.md,
-;   Section 3.2, states the invariant. An interrupt that arrives while a user
+;   in IA32_KERNEL_GS_BASE while a user program does; docs/design/CONCURRENCY.md
+;   states the invariant. An interrupt that arrives while a user
 ;   program is running therefore enters kernel code with the program's value in
 ;   the register, and every spinlock the handler takes reaches for the area
 ;   through it. The exchange below restores the invariant on the way in and undoes
@@ -186,7 +186,7 @@ InterruptCommonStub:
 
     ; And back, if the frame says control is returning to privilege level 3. The
     ; frame is read again rather than a decision being remembered, because a
-    ; handler is permitted to alter it — docs/design/INTERRUPTS.md, Section 7.2 —
+    ; handler is permitted to alter it — docs/design/INTERRUPTS.md —
     ; and the exchange must match the privilege level being returned to and not
     ; the one that was left.
     test    qword [rsp + 144], 3

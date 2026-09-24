@@ -26,7 +26,7 @@ the boundary between the two falls.
 directory's include root in reach so that nothing here can become part of it by
 accident. The one exception is named explicitly by a rule in the
 [`../Makefile`](../Makefile): the boot-time self-test that asserts this code.
-[`../docs/design/LIBC.md`](../docs/design/LIBC.md), Section 7, explains why that
+[`../docs/design/LIBC.md`](../docs/design/LIBC.md) explains why that
 self-test is presently the only thing that runs any of this, and what sub-task
 7.5 changes about it.
 
@@ -41,7 +41,7 @@ self-test is presently the only thing that runs any of this, and what sub-task
 | [`string/miscellaneous.c`](string/miscellaneous.c) | 7.24.6: `memset`, `strlen`. |
 | [`string/error.c`](string/error.c) | 7.24.6.2: `strerror`. Added at sub-task 7.2 rather than 7.1, the numbers it maps being the ones the wrappers set. |
 | [`include/errno.h`](include/errno.h) | ISO/IEC 9899:2011, Section 7.5: `errno`, and the numbers a library function may set it to. Each of the kernel's failure results negated, with a `_Static_assert` holding the two halves together. |
-| [`include/syscall.h`](include/syscall.h) | The thirty-seven system-call wrappers — the six of sub-task 9.2 the window calls, `../docs/design/LIBC.md`, Section 14 —, `OxysSbrk` beside them, the raw invocation beneath them, and the translation of a kernel result into a result and an `errno`. |
+| [`include/syscall.h`](include/syscall.h) | The thirty-seven system-call wrappers — the six of sub-task 9.2 the window calls, `../docs/design/LIBC.md` —, `OxysSbrk` beside them, the raw invocation beneath them, and the translation of a kernel result into a result and an `errno`. |
 | [`syscall/invoke.asm`](syscall/invoke.asm) | The `SYSCALL` instruction itself, one routine per number of arguments; since 8.7 the signal restorer as well, outside the range the self-test copies. It holds no relocation, which is what lets the self-test copy its bytes into a program and run them at privilege level 3. |
 | [`syscall/result.c`](syscall/result.c) | The translation, and the `errno` object — the only thing in this library that writes `errno`. |
 | [`syscall/calls.c`](syscall/calls.c) | The thirty-seven wrappers: the arguments named rather than numbered. `OxysSbrk` is built here from `OxysBrk` rather than given a call of its own, the kernel having no need to know that a caller thinks in increments. |
@@ -64,13 +64,13 @@ self-test is presently the only thing that runs any of this, and what sub-task
 | [`line/system.c`](line/system.c) | `LineRead`, and `LineEdit` which begins the line as a given text: the prompt written to descriptor 1, the bytes read from descriptor 0 one at a time, the editor's output carried to descriptor 1 between them. A translation unit of its own so that the editing may be asserted without it, and the first thing in this library that reads the standard input. |
 | [`config/config.c`](config/config.c) | Sub-task 9.4: the parser of the system configuration format — the section, the key, the value, the comment, the quoting, the repeated section that is a list, and every fault recorded against its line rather than raised. It touches no descriptor and allocates nothing, which is what lets the kernel's self-test assert the whole of the format. `../docs/design/CONFIG.md`. |
 | [`config/system.c`](config/system.c) | Sub-task 9.4: the one place that parser touches the system — the file opened, read whole, and handed to it. The seam of `line/system.c` a fourth time. |
-| [`icon/icon.c`](icon/icon.c) | Sub-task 9.6: the icon format — four bytes of magic, a version, an extent, and one little-endian pixel per position whose top byte is its transparency, `0xFF000000` being a position the picture does not cover; version 2 of 2026-09-23 allows every transparency between, and version 1 is still read. `OxysIconCompose` fits an icon to a square upon a colour, averaging each pixel weighted by its opacity. It refuses a file whose length is not exactly the pixels its extent calls for, which is what stops a truncated file becoming a picture of whatever followed it in memory. `../docs/design/SESSION.md`, Section 8. |
+| [`icon/icon.c`](icon/icon.c) | Sub-task 9.6: the icon format — four bytes of magic, a version, an extent, and one little-endian pixel per position whose top byte is its transparency, `0xFF000000` being a position the picture does not cover; version 2 of 2026-09-23 allows every transparency between, and version 1 is still read. `OxysIconCompose` fits an icon to a square upon a colour, averaging each pixel weighted by its opacity. It refuses a file whose length is not exactly the pixels its extent calls for, which is what stops a truncated file becoming a picture of whatever followed it in memory. `../docs/design/SESSION.md`. |
 | [`icon/system.c`](icon/system.c) | Sub-task 9.6: the one place that reader touches the system — the file opened, read whole, and handed to the parser. The seam of `line/system.c` a fifth time. |
-| [`image/image.c`](image/image.c) | 2026-09-23: the image format of `include/image.h` — twelve bytes of header and then runs of one colour that never cross the end of a row — judged whole by the parser, and drawn by a scaler that covers a rectangle of any size one row at a time, averaging where it reduces and repeating where it enlarges, cut to the middle rather than stretched. It holds nothing decoded. `../docs/design/SESSION.md`, Section 9. |
+| [`image/image.c`](image/image.c) | 2026-09-23: the image format of `include/image.h` — twelve bytes of header and then runs of one colour that never cross the end of a row — judged whole by the parser, and drawn by a scaler that covers a rectangle of any size one row at a time, averaging where it reduces and repeating where it enlarges, cut to the middle rather than stretched. It holds nothing decoded. `../docs/design/SESSION.md`. |
 | [`image/system.c`](image/system.c) | 2026-09-23: the one place the image reader touches the system — the file read whole into a buffer the caller supplies, since every translation unit here is linked into the kernel as well and a static buffer the size of a background would be spent there on nothing. |
 | [`time/time.c`](time/time.c) | Sub-task 9.7: `gmtime` and `gmtime_r` of ISO/IEC 9899:2011, Section 7.27.3.3 — seconds since 1970 into a date, a time of day, a weekday and a day of the year. Written apart from the kernel's conversion, which is under another licence, and asserted against the same host-computed values. |
 | [`time/system.c`](time/system.c) | Sub-task 9.7: `time`, by the `time` call; `(time_t)-1` where the machine's clock gave no date. |
-| [`term/term.c`](term/term.c) | Sub-task 9.6: the character grid a terminal emulator draws — what stands where, where the cursor is, which rows have changed, and the five control characters it acts upon — since 2026-09-24 the form feed `clear` writes — including the backspace that crosses to the row above because the line editor erases with one. Since 2026-09-23 `TermResize` gives it a new size, keeping the cursor's row, for a window made full. It touches no descriptor, which is what lets the kernel's self-test drive it without a window. `../docs/design/TERMINAL.md`, Section 3. |
+| [`term/term.c`](term/term.c) | Sub-task 9.6: the character grid a terminal emulator draws — what stands where, where the cursor is, which rows have changed, and the five control characters it acts upon — since 2026-09-24 the form feed `clear` writes — including the backspace that crosses to the row above because the line editor erases with one. Since 2026-09-23 `TermResize` gives it a new size, keeping the cursor's row, for a window made full. It touches no descriptor, which is what lets the kernel's self-test drive it without a window. `../docs/design/TERMINAL.md`. |
 | [`term/keys.c`](term/keys.c) | Sub-task 9.6: one key, as a window delivers it, into the bytes a terminal sends for it — the control character for a letter with control held, and the ECMA-48 sequence for each of the seven cursor and editing keys. It is the kernel's own table written a second time, a program under this licence not being able to link the kernel's, and the self-test asserts the two agree rather than trusting that they do. |
 | [`include/signal.h`](include/signal.h) | ISO/IEC 9899:2011, Section 7.14, and IEEE Std 1003.1-2017's `kill`: the signals, `SIG_DFL`, `SIG_IGN`, `SIG_ERR`, `signal`, `raise` and `kill`, of sub-task 8.7. Each number is asserted against the kernel's. |
 | [`signal/signal.c`](signal/signal.c) | The three functions, and the one place the restorer — the routine a handler returns through, at the end of `syscall/invoke.asm` — is named. |
@@ -83,7 +83,7 @@ missing.
 The two `stdlib/` units divide the heap **by what can fail**: the policy calls
 nothing that can fail for a reason outside the C language, and the source is a
 system call. That division is the whole of why either half can be asserted at
-all, and [`../docs/design/LIBC.md`](../docs/design/LIBC.md), Section 9.1, is the
+all, and [`../docs/design/LIBC.md`](../docs/design/LIBC.md) is the
 argument for it.
 
 ## What this directory is not
@@ -93,7 +93,7 @@ It is not where the system-call interface is defined. That is
 same permissive licence and which this library includes. The wrappers of sub-task
 7.2 are declared and defined here, but the numbers they pass are the kernel's,
 and `kernel/abi/` holds constants and a convention and never a symbol.
-[`../docs/design/LIBC.md`](../docs/design/LIBC.md), Section 2, records why the
+[`../docs/design/LIBC.md`](../docs/design/LIBC.md) records why the
 two are apart.
 
 ## Specifications implemented
@@ -138,7 +138,7 @@ holds. The corpus is enumerated in
 [`../kernel/test/libc/wrappers.c`](../kernel/test/libc/wrappers.c) and
 [`../kernel/test/libc/heap.c`](../kernel/test/libc/heap.c), all run by
 `make verify` at every boot.
-[`../docs/design/LIBC.md`](../docs/design/LIBC.md), Section 5, holds the table
+[`../docs/design/LIBC.md`](../docs/design/LIBC.md) holds the table
 pairing each of the first test's assertions with the silent failure it exists to
 catch, and Section 5.1 records the negative test that found a defect in the test
 itself; Section 8.4 holds the same table for the second, and Section 8.7 the
@@ -162,7 +162,7 @@ output function — so [`../kernel/test/libc/line.c`](../kernel/test/libc/line.c
 drives the editing with the bytes a terminal sends and compares, byte for byte,
 what it wrote; then places a session upon the kernel's terminal and runs
 `userland/line-check`, which reads it through `LineRead` at privilege level 3.
-[`../docs/design/LIBC.md`](../docs/design/LIBC.md), Section 12.7, limitation 1,
+[`../docs/design/LIBC.md`](../docs/design/LIBC.md)
 records why nothing else here can be asserted that way;
-[`../docs/design/SHELL.md`](../docs/design/SHELL.md), Section 5, holds the
+[`../docs/design/SHELL.md`](../docs/design/SHELL.md) holds the
 tables and the negative test that showed the point of it.

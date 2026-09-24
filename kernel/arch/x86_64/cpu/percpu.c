@@ -18,7 +18,7 @@
  *     identifier of the executing logical processor.
  *   - Intel SDM, Volume 2B, "CLI" and "STI": the interrupt flag, and that STI's
  *     effect is delayed by one instruction.
- *   - docs/design/CONCURRENCY.md, Sections 3 and 4.
+ *   - docs/design/CONCURRENCY.md.
  *
  * Why the areas are a static array and not an allocation.
  *

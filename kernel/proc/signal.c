@@ -23,7 +23,7 @@
  *     process image", and signals set to be ignored stay so.
  *   - Intel SDM, Volume 3A, Section 6.15: the exception vectors, from which
  *     SignalFromVector chooses the signal a fault is reported as.
- *   - docs/design/PROCESS.md, Section 18.
+ *   - docs/design/PROCESS.md.
  *
  * Why a sender never edits the target.
  *
@@ -42,8 +42,8 @@
  *   kernel, so the pending word and the dispositions are never written by two
  *   threads at once. The masked sections below are what the wait channel's
  *   sleep requires, and what keeps the tick handler's send from interleaving
- *   with a system call's take upon the same word. docs/design/CONCURRENCY.md,
- *   Section 10, limitation 1, counts this file with the rest.
+ *   with a system call's take upon the same word. docs/design/CONCURRENCY.md
+ *   counts this file with the rest.
  */
 
 #include <oxys/proc/signal.h>

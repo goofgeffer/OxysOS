@@ -10,7 +10,7 @@
  * References:
  *   - art/logo.h: the table and the three functions that draw it.
  *   - art/README.md: the command that made the table.
- *   - docs/design/SESSION.md, Section 3.2: where it is drawn, and every
+ *   - docs/design/SESSION.md: where it is drawn, and every
  *     assertion here paired with the silent failure it would catch.
  *
  * Why a generated table is asserted at all.

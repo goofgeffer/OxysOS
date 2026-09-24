@@ -8,7 +8,7 @@
 ;          signal-check.
 ; Key definitions: KernelProgramWindowCheckBegin, KernelProgramWindowCheckEnd.
 ; References:
-;   - docs/design/WINDOWS.md, Section 11: what the program asserts.
+;   - docs/design/WINDOWS.md: what the program asserts.
 
 bits 64
 

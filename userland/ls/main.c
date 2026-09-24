@@ -14,7 +14,7 @@
  *     entries, including those whose names begin with a <period>."
  *   - kernel/abi/oxys/syscall_abi.h: SyscallDirectoryEntry, which is what
  *     `OxysReadDirectory` fills, and SYSCALL_OPEN_DIRECTORY.
- *   - docs/design/LIBC.md, Section 12.3: the five utilities and what each is
+ *   - docs/design/LIBC.md: the five utilities and what each is
  *     for.
  *
  * What this implements of `ls`, and what it does not.
@@ -28,7 +28,7 @@
  *   sorting would need every name held at once — which means a heap sized by a
  *   directory this program has not finished reading. The entries appear in the
  *   order the filesystem returns them, which for EXT2 is the order they stand in
- *   the directory's blocks. docs/design/LIBC.md, Section 12.7, limitation 4.
+ *   the directory's blocks. docs/design/LIBC.md.
  *
  *   **One entry per line, always.** POSIX writes one per line when the output is
  *   not a terminal and columns when it is. This system cannot tell: there is no
@@ -185,7 +185,7 @@ int main(int argc, char *argv[])
          * sub-task 8.3 it does: every process holds a working directory and
          * the kernel resolves a relative path against it. Until then this
          * named the root, there being no call that set or reported one —
-         * docs/design/LIBC.md, Section 12.7, limitation 5, which that sub-task
+         * docs/design/LIBC.md which that sub-task
          * closed.
          */
         return ListDirectory(".", all, false) ? EXIT_SUCCESS : EXIT_FAILURE;

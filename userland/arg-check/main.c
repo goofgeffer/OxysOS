@@ -15,7 +15,7 @@
  *     vector ends with a null entry.
  *   - ISO/IEC 9899:2011, Section 5.1.2.2.1, paragraph 2: `argv[argc]` shall be a
  *     null pointer, and the strings shall be modifiable by the program.
- *   - docs/design/LIBC.md, Section 12.5: what this asserts and what the kernel
+ *   - docs/design/LIBC.md: what this asserts and what the kernel
  *     asserts of it afterwards.
  *
  * Why a program of its own, when five utilities already read their arguments.

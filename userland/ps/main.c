@@ -12,7 +12,7 @@
  *     name, which are the ones this has; the state column is this system's.
  *   - kernel/abi/oxys/syscall_abi.h: SyscallProcessInformation and the
  *     `procinfo` call, which is one slot of the table per call.
- *   - docs/design/SHELL.md, Section 30.
+ *   - docs/design/SHELL.md.
  */
 
 #include <errno.h>

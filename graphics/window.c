@@ -21,7 +21,7 @@
  *     the window that received it, and it ends when every button is released.
  *     The rule is taken as a rule and restated for one window and one pointer;
  *     nothing of that protocol's form is adopted.
- *   - docs/project/INSPIRATIONS.md, Section 3: flat surfaces, depth by
+ *   - docs/project/INSPIRATIONS.md: flat surfaces, depth by
  *     stacking, geometry as the character; and no bevel, ever.
  *
  * The stack is an array of identifiers and not a list.
@@ -36,8 +36,8 @@
  * The damage is one rectangle, as the compositor's is.
  *
  *   The region a composition must redraw accumulates as the rectangle enclosing
- *   every change since the last, for the reason docs/design/COMPOSITOR.md,
- *   Section 2.3, gives: it cannot be exhausted. Within that rectangle the ground
+ *   every change since the last, for the reason docs/design/COMPOSITOR.md
+ *   gives: it cannot be exhausted. Within that rectangle the ground
  *   and every intersecting window are painted again, bottom to top; a window
  *   that had not changed is repainted where it intersects, which is the cost of
  *   a scheme that keeps no list. It is the compositor's own cost, and the same
@@ -51,7 +51,7 @@
  * here is locked: the two cannot interleave upon the one processor that
  * reaches either. A user thread upon a second processor is what would make
  * the queue a producer and a consumer upon two processors, and the lock this
- * file would then need is the one docs/design/CONCURRENCY.md, Section 10,
+ * file would then need is the one docs/design/CONCURRENCY.md
  * limitation 1, lists this file as lacking.
  */
 

@@ -8,7 +8,7 @@
  *          screen.
  * Key functions: KernelVerifyImage.
  * References:
- *   - docs/design/SESSION.md, Section 9: what the background is for, and every
+ *   - docs/design/SESSION.md: what the background is for, and every
  *     assertion here paired with the silent failure it would catch.
  *   - libc/include/image.h: the format, the scaler, and the seam.
  *   - art/README.md: the command that made the shipped file.

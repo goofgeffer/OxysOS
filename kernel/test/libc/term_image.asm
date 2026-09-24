@@ -7,7 +7,7 @@
 ;          kernel/test/libc/term.c to load and run.
 ; Key definitions: KernelProgramPollCheckBegin, KernelProgramPollCheckEnd.
 ; References:
-;   - docs/design/TERMINAL.md, Section 6: what the program asserts.
+;   - docs/design/TERMINAL.md: what the program asserts.
 
 bits 64
 

@@ -262,7 +262,7 @@ conference discs, beta programmes, subscriber downloads — and not because anyo
 curated them; the vendors' own archives have holes. Many copies in many hands
 beats one copy in one directory, and one directory is what this is. The builds of
 this project most likely to exist in ten years are therefore the released ones
-named in [`VERSIONING.md`](VERSIONING.md), Section 11.1, because those are the
+named in [`VERSIONING.md`](VERSIONING.md) because those are the
 ones that will leave this machine.
 
 

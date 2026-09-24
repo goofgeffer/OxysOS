@@ -20,7 +20,7 @@
  *     integer argument is widened to before it is converted.
  *   - libc/stdio/internal.h: the two counters this file keeps in the census
  *     libc/stdio/stream.c owns.
- *   - docs/design/LIBC.md, Section 10.4: the conversions implemented, those
+ *   - docs/design/LIBC.md: the conversions implemented, those
  *     refused, and why a refusal is reported rather than ignored.
  *
  * One engine, eight names.

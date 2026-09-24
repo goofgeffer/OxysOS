@@ -2,283 +2,137 @@
 <!-- SPDX-License-Identifier: CC0-1.0 -->
 # The Drawing Primitives
 
-**Corresponding phase**: 6, sub-task 6.3 — the surface, the clipping that bounds
-every write to it, and the pixel, rectangle, line and blit drawn within that
-bound; and, from sub-task 9.1, the disc of Section 4.1.
-
-**Authority**: `PROJECT_GUIDELINES.md`, Sections 2 and 4.
-
-**Implemented by**: [`../../graphics/draw.c`](../../graphics/draw.c),
+**Phase**: sub-task 6.3 of [`../project/PLAN.md`](../project/PLAN.md); the disc
+from 9.1.
+**Source**: [`../../graphics/draw.c`](../../graphics/draw.c),
 [`../../kernel/include/oxys/gfx/graphics.h`](../../kernel/include/oxys/gfx/graphics.h).
-
-**Asserted by**: `KernelVerifyGraphics` in
-[`../../kernel/test/gfx/graphics.c`](../../kernel/test/gfx/graphics.c); the disc
-by `KernelVerifyCircle` in
-[`../../kernel/test/gfx/windows.c`](../../kernel/test/gfx/windows.c).
-
 **Specifications**: J. E. Bresenham, "Algorithm for computer control of a digital
-plotter", IBM Systems Journal 4(1), pages 25 to 30, 1965; and, for the disc,
-J. E. Bresenham, "A linear algorithm for incremental digital display of circular
-arcs", Communications of the ACM 20(2), pages 100 to 106, 1977.
+plotter", *IBM Systems Journal* 4(1), 25–30, 1965; J. E. Bresenham, "A linear
+algorithm for incremental digital display of circular arcs", *CACM* 20(2),
+100–106, 1977.
 
-**Where this sits**: the second of the five documents the graphical work of
-sub-tasks 6.2 to 6.6 is divided into. [`GRAPHICS.md`](GRAPHICS.md) is the index
-and records why they are five. The measurement that later specialised these
-primitives for the console is [`CONSOLE.md`](CONSOLE.md), Section 6, and it is
-recorded there because the console is what it was measured upon.
+The surface and what is drawn on it: pixel, filled and outlined rectangle, line,
+disc, pattern block and blit, all bounded by one clip. Blending and the clip stack
+belong to the compositor and are described in [`COMPOSITOR.md`](COMPOSITOR.md);
+the fast word-wide paths were justified by the measurement in
+[`CONSOLE.md`](CONSOLE.md).
 
----
+## 1. The surface
 
-## 1. The primitives (sub-task 6.3)
+Every primitive takes a `GraphicsSurface`: base, width, height, pitch, pixel size,
+clip. The framebuffer is one surface among others, which is necessary because:
 
-Sub-task 6.2 supplied memory and facts about it. Sub-task 6.3 supplies the
-operations that write into it: a pixel, a line, a filled and an outlined
-rectangle, a blit, and the clipping that governs all of them.
+- a **blit** needs two surfaces;
+- **assertions** need a surface in ordinary memory, of known size, cheap to read
+  (the framebuffer may not exist and is slow to read through write-combining);
+- **double buffering** ([`COMPOSITOR.md`](COMPOSITOR.md)) is handing the same code
+  a back buffer instead.
 
-## 2. The surface, and why the primitives do not name the framebuffer
+A surface owns nothing: it describes memory someone else supplied, so the same
+code draws into the framebuffer, a `.bss` array, or a window's content.
 
-Every primitive takes a `GraphicsSurface`: a rectangle of pixels, with a pitch, a
-pixel size and a clip. The framebuffer is one such surface and is not privileged
-among them.
+`whole_words` is set when pixels are four bytes, the base is word-aligned and the
+pitch is a multiple of four; then the pixel, fill, pattern block and blit use
+word-wide loops. Other depths use the byte path.
 
-Writing to the framebuffer directly would have been shorter by one argument and
-worse in three ways.
+## 2. Clipping is the memory-safety boundary
 
-**Blit has no meaning with one surface.** It copies from somewhere to somewhere,
-so a framebuffer-only design would have had to name the framebuffer twice or
-invent a second thing anyway — which is the surface, arrived at by a longer road.
+Every primitive computes a byte offset and writes there; a shape that escaped its
+bounds would write into whatever is mapped next. So:
 
-**Nothing could be asserted without a display.** A primitive is judged by which
-pixels it set and which it left alone. The framebuffer answers that badly: it may
-not exist, it is slow to read through a write-combining mapping, and its size is
-whatever the boot loader chose. A surface in ordinary memory answers it exactly,
-and that is what the whole of the self-test is built upon.
+- **The arithmetic lives in one place**, `GraphicsRectangleIntersect`.
+  `GraphicsSetClip` intersects its argument with the surface, so a clip is always
+  inside its surface and no argument can widen it.
+- **A shape is clipped once**, and the surviving span is written with no test in
+  the loop. The bound is computed once, where it can be read, rather than by a
+  per-pixel test that must stay right in every loop.
+- **Coordinates are signed** (a negative origin is the natural way to place a shape
+  half off the edge) and **bounded** by `GRAPHICS_COORDINATE_LIMIT`: a line between
+  distant points iterates once per step of its longer axis even when drawing
+  nothing, so an unbounded coordinate is an unbounded loop. Beyond the bound, a
+  shape is refused.
 
-**The double buffering of sub-task 6.6 is the substitution of one surface for
-another.** A caller that had named the framebuffer everywhere could not be handed
-a back buffer instead.
+## 3. The line
 
-A surface owns nothing. It is a description of memory somebody else supplied,
-with no allocation and no lifetime, which is what lets the same code draw into a
-framebuffer, into a `.bss` array and, later, into a window's backing store.
+Bresenham's algorithm: integers only (`PROJECT_GUIDELINES.md`, Section 8, forbids
+floating point in the kernel).
 
-## 3. Clipping is the memory-safety boundary
+**The clip is tested per pixel, not applied to the endpoints.** The algorithm's
+choices depend on an error accumulated from the start point; clipping the
+endpoints starts elsewhere and lights different pixels, so a line crossing the
+seam between two clipped regions would kink. The promise is: **the pixels drawn
+are exactly those of the unclipped line that lie within the clip**, at a cost of
+two comparisons per step.
 
-Every routine here computes a byte offset into a surface and writes to it. A
-shape that escapes its bounds does not draw in the wrong place — it writes into
-whatever the arena mapped next. **Clipping is therefore not a convenience and not
-an optimisation; it is the boundary that makes the whole graphical stack safe**,
-and everything else follows from treating it that way.
+## 4. The disc
 
-Two decisions come out of it.
+`GraphicsFillCircle`, for a window's close control ([`WINDOWS.md`](WINDOWS.md)),
+is a stack of spans, one per row, each a rectangle fill, so the clip is applied by
+the fill and no pixel is tested. Each half-width comes from Bresenham's 1977 circle
+algorithm, walking the arc from the top to the diagonal with an integer measure of
+distance from the true circle; the eight-fold symmetry supplies the other rows. The
+row on the diagonal comes from both reflections and is simply filled twice with one
+colour, rather than special-cased.
 
-**It is implemented once.** `GraphicsRectangleIntersect` is the only place the
-arithmetic lives. `GraphicsSetClip` intersects whatever it is given with the
-surface, so a clip is *always* within its surface and no caller can widen it by
-any argument, however large or negative. That is what lets every primitive treat
-the clip as sound without inspecting it.
+## 5. The blit
 
-**The shape is clipped once, and the surviving span is then written with no test
-in the loop at all.** This is faster than testing each pixel, but speed is not
-why it is written this way: the bound is computed once, from arithmetic checked
-once, in a place a reader can look at. A loop that tested each pixel would be
-correct only for as long as every one of its tests stayed correct.
+`GraphicsBlit` copies a rectangle between surfaces or within one.
 
-Coordinates are signed, because placing a shape half off the edge is the ordinary
-case and the natural way to say it is a negative origin. They are bounded by
-`GRAPHICS_COORDINATE_LIMIT`, because a line between two very distant points costs
-one iteration per step of its longer axis even when it writes nothing: an
-unbounded coordinate is an unbounded loop. A coordinate outside the bound is
-refused, and a refusal is better than a machine that appears to have stopped.
+- **Different pixel sizes are refused**: a byte copy would give the right size in
+  the wrong colours.
+- **If the destination clip trims the copy, the source is trimmed by exactly as
+  much**; otherwise the result is shifted rather than cropped.
+- **Overlap within one surface decides the direction.** Copying forwards reads
+  bytes already overwritten and smears the image. Rows run bottom-up when the
+  destination is below the source, and right-to-left when it is to the right on
+  the same row. Scrolling is exactly this case.
 
-## 4. The line, and the one place this differs from the usual arrangement
+## Verification
 
-The line is Bresenham's: integer throughout, no division, no floating point —
-which `PROJECT_GUIDELINES.md`, Section 8, prohibits in the kernel in any case.
+`KernelVerifyGraphics` in [`../../kernel/test/gfx/graphics.c`](../../kernel/test/gfx/graphics.c)
+draws on a memory surface of 32 by 16 four-byte pixels **in rows of 40**. The eight
+padding pixels per row hold a sentinel no test writes, and are checked after every
+operation: a primitive stepping by width instead of pitch still writes inside the
+array, only to the wrong pixels, and the padding makes that a direct assertion.
 
-**The clip is tested per pixel rather than applied to the endpoints first, and
-that is a deliberate departure from the usual arrangement.** Clipping the
-endpoints and drawing between the clipped ones is what most implementations do,
-and it is faster. It also draws a *different line*.
+| Property asserted | The failure it would catch |
+| ----------------- | -------------------------- |
+| An empty or negative rectangle is empty; a missed intersection is empty **and not negative**. | A backwards region; a negative extent that passes one loop bound and fails another. |
+| Touching rectangles do not overlap; a rectangle does not contain the column past its edge. | Adjacent regions sharing a column; the containment test everything clips with, off by one. |
+| A clip of `{-1000, -1000, 100000, 100000}` is confined to the surface; a clip outside it is empty and nothing draws. | A widened clip; a broken cheapest rejection. |
+| One pixel set changes one pixel; a pixel outside writes nothing and reads zero. | Overlapping address arithmetic; an unenforced boundary. |
+| A fill covers exactly its area, corners included, stopping one short of its extent. | Off by one either way. |
+| A rectangle straddling the corner leaves exactly the 5×5 inside. | A rectangle dropped entirely because part was outside. |
+| A 6×4 outline is exactly 16 pixels and hollow. | Doubled corners (wrong under blending); a fill. |
+| `GraphicsClear` fills the clip, not the surface. | An erase that cannot target a region. |
+| A horizontal line includes both ends; a point-to-itself line is one pixel. | Off by one; termination tested before drawing. |
+| A diagonal is as long as its longer axis and passes through its middle. | Wrong error accumulation. |
+| A line drawn backwards lights the same pixels. | Edges depending on drawing order. |
+| **A clipped line lights exactly the unclipped line's pixels inside the clip** (drawn both ways and compared). | Clipping moving the line. |
+| A coordinate past the limit draws nothing. | An unbounded loop. |
+| A blit between pixel sizes is refused; a rectangle arrives whole and in place. | Wrong colours; wrong offsets. |
+| A blit trimmed by the clip takes the right part of a source with distinct halves. | A shifted image. |
+| Moving rows up and down within one surface both work; a blit clipped away entirely succeeds. | Smearing; a correct no-op reported as a refusal. |
+| **The padding is intact after all of these.** | Width used for pitch. |
 
-The algorithm chooses at each step from an error accumulated since the start.
-Begin at a different start and a different error accumulates, and here and there
-a different pixel is lit. The visible result is that a shape crossing the edge of
-a clip is displaced by a pixel where it crosses — invisible until two clipped
-regions meet along a seam and the line running through them has a kink in it.
+`KernelVerifyCircle` in [`../../kernel/test/gfx/windows.c`](../../kernel/test/gfx/windows.c):
 
-So the header promises something stronger: **the pixels drawn are exactly those
-of the unclipped line that fall within the clip.** The cost is two comparisons
-per step. Section 6 asserts the promise directly, by drawing the line both ways
-and comparing pixel for pixel.
+| Property asserted | The failure it would catch |
+| ----------------- | -------------------------- |
+| The centre is filled; each axis reaches exactly the radius. | A wrong initial error term: a disc of the wrong radius. |
+| For radius 5, `(3, 4)` is filled and `(4, 4)` is not. | A step on the wrong sign: square corners. |
+| The disc is symmetric in both axes, with nothing outside its bounding square. | A reflection with a wrong sign; a span from the wrong reflection. |
+| A disc at the surface's corner writes nothing into the padding. | A span escaping the surface. |
 
+The self-test also draws a figure on the framebuffer for a person to judge
+([`../project/TESTING-GRAPHICS.md`](../project/TESTING-GRAPHICS.md)): a frame whose
+edges lean if the pitch is wrong; crossed diagonals that meet at the centre only if
+the line is exact; a panel clipped down its middle, where fill and line stop dead
+without the line changing slope; and a blitted copy that must match.
 
-### 4.1 The disc, sub-task 9.1's one addition
+## Limitations
 
-A window's close control is a disc, for the reason [`WINDOWS.md`](WINDOWS.md),
-Section 4, gives: [`../project/INSPIRATIONS.md`](../project/INSPIRATIONS.md),
-Section 3, asks that the character be carried by geometry, and a circle where
-everything else is a rectangle is the one control a person is asked to find.
-There was no curve, so `GraphicsFillCircle` was added, and it is the only
-primitive added since sub-task 6.6.
-
-**It is a stack of spans, one to a row, and each span is a rectangle fill.**
-The clip is therefore applied by the fill, once per span, and nothing in the
-disc tests a pixel — the rule of Section 3, unchanged. The half-width of each
-span comes from Bresenham's circle algorithm of 1977, which walks the arc from
-the top to the diagonal keeping an integer measure of the current point's
-distance from the true circle and steps inward exactly when the measure says the
-point outside is the farther; the eight-fold symmetry then gives the rows the
-walk did not visit, the arc from the diagonal to the side being the first arc
-with its coordinates exchanged. Integer throughout, as `PROJECT_GUIDELINES.md`,
-Section 8, requires.
-
-The row upon the diagonal is produced by both reflections and is filled twice,
-with one colour, rather than special-cased: a branch existing for one row in a
-hundred is a branch that is wrong for one row in a hundred.
-
-| Property asserted | The silent failure it would catch |
-| ----------------- | --------------------------------- |
-| The centre is filled, and each axis reaches exactly the radius and no further | An off-by-one in the initial error term, which draws a disc of the wrong radius that looks like a disc |
-| The diagonal is where the integer algorithm places it: `(3, 4)` filled and `(4, 4)` not, for a radius of five | A step taken on the wrong sign of the measure, which squares the corners |
-| The disc is symmetric about its centre in both axes | A reflection with a sign wrong, which fills one quadrant with another's spans |
-| No pixel lies outside the bounding square | A span whose width was computed from the wrong reflection |
-| A disc at the corner of the surface is clipped and writes nothing into the padding | A span escaping the surface by the difference between pitch and width, which the fill's clip exists to prevent and which this asserts it does |
-## 5. The blit, and the direction of the copy
-
-`GraphicsBlit` copies a rectangle between surfaces, or within one.
-
-**A blit between differing pixel sizes is refused, not performed.** Copying byte
-by byte across depths would produce an image of exactly the right size in
-entirely the wrong colours, which looks like a fault in the drawing and is a
-fault in the caller.
-
-**The destination's clip may trim the copy, and the source must then be trimmed
-by exactly as much.** Trimming one without the other copies the right number of
-pixels from the wrong place — a shifted image rather than a cropped one, which is
-the harder of the two to notice.
-
-**Where the surfaces are the same and the regions overlap, the direction of the
-copy decides whether it is correct.** Copying forwards through an overlap reads
-bytes the copy has already overwritten, and the image smears in the direction of
-the move. Rows are therefore taken from the bottom where the destination lies
-below the source, and each row from its right where the destination lies to the
-right on the same row.
-
-This is not a corner case to be tidy about. **Scrolling is exactly the overlapping
-case** — the whole screen moved up by one row of text — and it is what the console
-of sub-task 6.4 is built upon.
-
-## 6. Verification of the primitives
-
-`KernelVerifyGraphics` asserts against a surface composed in memory: 32 by 16
-pixels of four bytes, **in rows of 40**.
-
-The pitch exceeds the width deliberately, and the eight pixels of padding on each
-row are filled with a sentinel no test ever writes. A primitive that stepped from
-row to row by the width instead of the pitch would still write inside the array —
-it would simply write the wrong pixels — and every assertion about the image would
-then have to be relied upon to notice. The padding turns that into a direct
-assertion, made after each operation so that a failure names the operation that
-caused it.
-
-### 6.1 Rectangles and the clip
-
-| Assertion | What its failure would mean |
-| --------- | --------------------------- |
-| A rectangle of zero or negative extent is empty | A caller could ask for a region that runs backwards. |
-| An intersection that misses is empty **and not negative** | A negative extent passes a `< width` loop bound by doing nothing and fails one computed as an end coordinate. |
-| Rectangles that merely touch do not overlap | Every adjacent pair of regions would share a column. |
-| A rectangle does not contain the column past its right edge | An off-by-one in the fundamental containment test, which everything else clips with. |
-| A clip of `{-1000, -1000, 100000, 100000}` is confined to the surface | The clip could be widened past the surface, and no primitive checks it. |
-| A clip wholly outside the surface is empty, and drawing against it writes nothing | Every primitive's cheapest rejection is broken. |
-
-### 6.2 Pixels, fills and outlines
-
-| Assertion | What its failure would mean |
-| --------- | --------------------------- |
-| Setting one pixel changes exactly one | The address arithmetic overlaps neighbours. |
-| A pixel outside the surface writes nothing and reads as zero | The boundary is not enforced on either path. |
-| A fill covers exactly its area, reaches its corners, and stops one short of its extent | The commonest off-by-one, in both directions. |
-| A rectangle straddling the top-left corner leaves exactly the 5×5 that remains | A fill that dropped the whole rectangle because part fell outside would look identical from the point of view of memory. |
-| An outline of 6×4 is exactly 16 pixels | Doubled corners, or short edges. Doubling is harmless for an opaque colour and ceased to be harmless at sub-task 6.6, which admitted blending: a corner written twice is blended twice and is the wrong colour. |
-| An outline is hollow | It is a fill. |
-| `GraphicsClear` fills the clip, not the surface | It could not be used to erase one region of a screen. |
-| **The padding is intact after every one of these** | A row was addressed by the width instead of the pitch. |
-
-### 6.3 The line
-
-| Assertion | What its failure would mean |
-| --------- | --------------------------- |
-| A horizontal line includes both endpoints | The commonest off-by-one here. |
-| A line from a point to itself is one pixel, not none | The loop tests its termination before drawing. |
-| A diagonal's length is its longer axis, and it passes through its own middle | The error accumulation is wrong. |
-| A line drawn backwards lights **the same pixels** | Bresenham accumulates from one end; a careless implementation is not symmetric, and a shape's edges would depend upon the order they were drawn in. |
-| **A clipped line lights exactly the pixels the unclipped line lights inside the clip** | Clipping moved the line. This is the promise of Section 4, asserted pixel for pixel: the unclipped line is drawn and its pixels inside the region recorded, the surface is cleared entirely, and the same line is drawn clipped. |
-| A coordinate beyond the limit draws nothing | An unbounded loop. |
-
-### 6.4 The blit
-
-| Assertion | What its failure would mean |
-| --------- | --------------------------- |
-| Differing pixel sizes are refused | An image of the right size in the wrong colours. |
-| A rectangle arrives whole and in position | The offset arithmetic is wrong. |
-| A blit trimmed by the clip takes **the right part** of the source | A shifted image rather than a cropped one. The source is given a distinguishable left and right half so the two are told apart. |
-| Moving rows **up** within one surface moves them | The copy read bytes it had already overwritten. |
-| Moving rows **down** within one surface moves them | The row order was not reversed; the first row read would smear down the region. |
-| A blit clipped away entirely returns success | An operation that correctly did nothing was reported as a refusal. |
-
-### 6.5 What a person judges
-
-The self-test also draws upon the framebuffer, and that figure is judged by eye;
-`docs/project/TESTING-GRAPHICS.md`, Section 2, records what to look for. It is composed so
-that looking at it establishes something: a frame around the whole screen, whose
-vertical edges lean if the pitch is wrong; a panel with its diagonals crossing,
-which meet at the centre only if the line is exact; a second panel drawn through
-a clip covering its left half, where the fill and the line must stop dead at the
-boundary without the line changing slope; and the first panel blitted below
-itself, which must be identical and in the right place.
-
-### 6.6 The negative test
-
-`GraphicsPixelAddress` was changed to step by the width instead of the pitch. Six
-assertions fired, in six independent primitives — the fill, the clipped fill, the
-clear, the line, the blit and the trimmed blit — each reporting that it had
-written into the row padding. The edit was then reverted.
-
-## 7. Limitations of the primitives
-
-1. ~~**There is no clip stack.**~~ Resolved by sub-task 6.6: `GraphicsPushClip`
-   and `GraphicsPopClip`, four deep, intersecting rather than replacing. See
-   [`COMPOSITOR.md`](COMPOSITOR.md), Section 2.5.
-2. ~~**There is no blending.**~~ Resolved by sub-task 6.6:
-   `GraphicsBlendPixel` and `GraphicsBlendSurface`, combining the channels apart
-   through `FramebufferDecode`. The outline's care not to write a corner twice,
-   taken in anticipation of this, is now load-bearing. See [`COMPOSITOR.md`](COMPOSITOR.md), Section 2.2.
-3. **Lines are one pixel wide and unantialiased**, ~~and there are no curves~~ —
-   there is one, since sub-task 9.1: the filled disc of Section 4.1, for a
-   window's close control. An outline circle, an arc and an ellipse are not
-   drawn, nothing needing them yet. A thicker line is several lines, which
-   nothing needs yet.
-4. **The blit does not scale.** Source and destination rectangles are the same
-   size by construction.
-5. **Nothing is safe against concurrent drawing.** Two processors drawing upon
-   one surface require the lock sub-task 6.13 built, and since sub-task 6.14
-   there are two processors. That lock is still not taken here, and should not
-   be: a primitive is far too small a thing to own a lock, and the right place is
-   the surface's owner — [`COMPOSITOR.md`](COMPOSITOR.md), limitation 6, is where
-   that obligation is recorded and where 6.14 discharged the part of it that the
-   ordinary diagnostic path represents. **The change that widens a user thread's
-   affinity mask is what makes the
-   remainder contended**, by giving a second processor something to draw.
-6. ~~**No fast path uses the pixel size.**~~ Resolved in the course of sub-task
-   6.4, by the measurement of [`CONSOLE.md`](CONSOLE.md), Section 6, which is the specialisation this
-   limitation said did not yet exist a justification for. A surface records
-   `whole_words` — four bytes to the pixel, a word-aligned base and a pitch that
-   is a multiple of four — and where it holds, the pixel, the fill, the pattern
-   block and the blit each take a word-wide loop of their own rather than a test
-   inside the byte loop. The byte path remains and is what a surface of any other
-   depth still uses.
-
----
-
+1. Lines are one pixel wide and not antialiased; the only curve is the filled disc.
+2. The blit does not scale.
+3. No lock. A primitive is too small to own one; the surface's owner must
+   ([`COMPOSITOR.md`](COMPOSITOR.md)).

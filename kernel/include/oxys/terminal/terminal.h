@@ -24,7 +24,7 @@
  *     sends for those keys, so they are what the keyboard is made to send too.
  *   - IBM Personal Computer AT technical reference, scan code set 1: the codes
  *     of the extended keys translated below, each prefixed by 0xE0.
- *   - docs/design/SHELL.md, Section 2: why the translation is made here and not
+ *   - docs/design/SHELL.md: why the translation is made here and not
  *     in the keyboard driver or in the program, and what a program may assume of
  *     the stream.
  *
@@ -42,7 +42,7 @@
  *   mode has, and the only arrangement under which a line editor can move a
  *   cursor. A canonical mode, in which the kernel assembles lines and a program
  *   reads them whole, would need to be built in front of this one; nothing yet
- *   wants it, and docs/design/SHELL.md, Section 6, records what it would cost.
+ *   wants it, and docs/design/SHELL.md records what it would cost.
  *
  * Why the keys are translated to control sequences rather than to a code of this
  * kernel's own.
@@ -124,7 +124,7 @@ size_t TerminalRead(char *buffer, size_t capacity);
  * which an interrupt cannot arrive between the enable and the halt. The yield
  * before it is sub-task 8.6's: the caller is the `read` system call upon the
  * bootstrap processor, and since a pipeline's children share that processor a
- * reader that halted would halt them too. docs/design/SHELL.md, Sections 2.3
+ * reader that halted would halt them too. docs/design/SHELL.md
  * and 22.3, say why the reader yields rather than sleeping upon a channel.
  * Returns false, since sub-task 8.7, where a signal is pending upon the
  * caller, so that the read reports EINTR and the signal is delivered.

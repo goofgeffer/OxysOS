@@ -2,44 +2,23 @@
 <!-- SPDX-License-Identifier: CC0-1.0 -->
 # `docs/devices/` — The Hardware the Kernel Drives
 
-One document per device. Each describes what the hardware is, what its
-specification actually says — quoted and cited, never recalled — and why the
-driver treats it as it does; each ends with the limitations of the driver as it
-stands.
+One document per device: what the hardware is, what its specification says (cited,
+never recalled), why the driver treats it as it does, what the self-test asserts,
+and what the driver does not yet do.
 
-| Document | Device | Driver | Phase |
-| -------- | ------ | ------ | ----- |
-| [`TIME.md`](TIME.md) | Counter 0 of the 8253 programmable interval timer, and the system tick derived from it; since sub-task 9.7 the real-time clock, the date read from it, and the alarm. | [`../../drivers/pit/`](../../drivers/pit/), [`../../drivers/rtc/`](../../drivers/rtc/) | 3.6, 9.7 |
-| [`DISPLAY.md`](DISPLAY.md) | The VGA text-mode display: its register configuration, cursor, attributes and control characters — and, since sub-task 6.2, the graphics mode that displaces it. | [`../../drivers/vga/`](../../drivers/vga/) | 1.7, 4.2 |
-| [`SERIAL.md`](SERIAL.md) | The 16550 serial adapter at COM1, the channel every automated test reads. | [`../../drivers/serial/`](../../drivers/serial/) | 1.7, 4.1 |
-| [`KEYBOARD.md`](KEYBOARD.md) | The PS/2 keyboard upon the controller's first port, and the controller it is reached through. | [`../../drivers/ps2/`](../../drivers/ps2/), [`../../drivers/keyboard/`](../../drivers/keyboard/) | 3.7 |
-| [`MOUSE.md`](MOUSE.md) | The PS/2 mouse upon the controller's second port, and the pointer drawn from it. | [`../../drivers/mouse/`](../../drivers/mouse/), [`../../graphics/cursor.c`](../../graphics/cursor.c) | 6.5 |
-| [`PCI.md`](PCI.md) | The PCI bus: how a machine is asked what it contains. | [`../../drivers/pci/`](../../drivers/pci/) | 4.3 |
-| [`ACPI.md`](ACPI.md) | The firmware's description tables: how a machine is asked what interrupt controllers it has. | [`../../kernel/acpi/`](../../kernel/acpi/) | 6.12 |
-| [`APIC.md`](APIC.md) | The Local APIC and the I/O APIC, which retire the 8259A pair. | [`../../drivers/apic/`](../../drivers/apic/) | 6.12 |
+| Document | Device | Phase |
+| -------- | ------ | ----- |
+| [`SERIAL.md`](SERIAL.md) | The 16550 UART at COM1, which every automated test reads. | 1.7, 4.1 |
+| [`DISPLAY.md`](DISPLAY.md) | The VGA text console. | 1.7, 4.2 |
+| [`TIME.md`](TIME.md) | The 8254 interval timer, the real-time clock, `time` and `alarm`. | 3.6, 9.7 |
+| [`KEYBOARD.md`](KEYBOARD.md) | The PS/2 keyboard, and the 8042 controller's initialisation. | 3.7 |
+| [`PCI.md`](PCI.md) | The PCI configuration space: what the machine contains. | 4.3 |
+| [`MOUSE.md`](MOUSE.md) | The PS/2 mouse, the shared 8042 controller, and the pointer. | 6.5 |
+| [`ACPI.md`](ACPI.md) | The MADT: which interrupt controllers exist and how ISA lines reach them. | 6.12 |
+| [`APIC.md`](APIC.md) | The Local APIC and I/O APIC. | 6.12–6.15 |
 
-The storage devices are documented apart, in [`../storage/`](../storage/), because
-the disk is the bottom of a stack rather than a device on its own. The framebuffer
-is documented apart likewise, in
-[`../design/FRAMEBUFFER.md`](../design/FRAMEBUFFER.md), because nothing programs it:
-the boot loader sets the mode and hands over an address, and there is no
-conversation with hardware to describe.
-
-[`ACPI.md`](ACPI.md) crosses that line from the other side. The tables are not a
-device and nothing programs them, but they answer the question [`PCI.md`](PCI.md)
-answers — how a machine is asked what it contains — and [`APIC.md`](APIC.md),
-which is unambiguously a device document, cannot be read without them.
-
-[`MOUSE.md`](MOUSE.md) is the one document here that crosses that line, and says
-where the line is: the mouse is a device in the sense these documents mean, while
-the pointer drawn from it is arithmetic upon memory and would be identical if the
-position came from somewhere else. The two are documented together because the
-division between them is the design.
-
-## What these documents have in common
-
-Each contains a table pairing every property its device's boot-time self-test
-asserts with the silent failure that assertion exists to catch. A device driver's
-characteristic defect is one the machine cannot notice — a cursor that does not
-move, a sector that is not the one asked for, an interrupt that is never heard —
-and the self-tests are written against that class of failure specifically.
+Elsewhere: disks and SD cards are the bottom of the storage stack
+([`../storage/`](../storage/README.md)); the framebuffer is set up by the boot
+loader, not programmed, and is [`../design/FRAMEBUFFER.md`](../design/FRAMEBUFFER.md).
+`ACPI.md` describes tables rather than a device, and is here because `APIC.md`
+cannot be read without it.

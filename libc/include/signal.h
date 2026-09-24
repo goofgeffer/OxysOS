@@ -18,7 +18,7 @@
  *     one a program written for the standard expects; `kill()`.
  *   - kernel/abi/oxys/syscall_abi.h: the numbers, which are the kernel's and
  *     are asserted below to be what this header repeats.
- *   - docs/design/LIBC.md, Section 13.
+ *   - docs/design/LIBC.md.
  *
  * What a handler may do.
  *

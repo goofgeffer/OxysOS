@@ -9,7 +9,7 @@
  *          OxysImageScalerBegin, OxysImageScalerRow.
  * References:
  *   - libc/include/image.h: the format, and why it is runs.
- *   - docs/design/SESSION.md, Section 9: what reads images and when.
+ *   - docs/design/SESSION.md: what reads images and when.
  *
  * Concurrency. None; a scaler is one program's memory.
  */

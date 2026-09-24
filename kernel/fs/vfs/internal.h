@@ -27,7 +27,7 @@
  *   into six; before the division they were file-scope statics, and they would
  *   be statics still if C offered any way of sharing them among a chosen few.
  *
- *   `docs/design/ARCHITECTURE.md`, Section 2.2, records the rule.
+ *   `docs/design/ARCHITECTURE.md` records the rule.
  *
  * Nothing here is guarded against concurrent access.
  *
@@ -35,7 +35,7 @@
  *   the lock of sub-task 6.13. The node cache is the most urgent of them: two
  *   processors acquiring the same file at once would each find no node holding
  *   it and each make one, and two nodes for one file is exactly the condition
- *   this layer exists to prevent — see `docs/storage/VFS.md`, Section 6.
+ *   this layer exists to prevent — see `docs/storage/VFS.md`.
  */
 
 #ifndef OXYS_FS_VFS_INTERNAL_H
@@ -104,7 +104,7 @@ extern VfsMount *VfsRootMount;
  * mount but the root, the root being the ramdisk. A change to such a volume is
  * written back when it completes, since 2026-09-23 for a file closed and since
  * 2026-09-24 for a name made or removed — an emulator stopped by closing its
- * window would otherwise lose it. docs/storage/PERSIST.md, Section 5.
+ * window would otherwise lose it. docs/storage/PERSIST.md.
  */
 static inline bool VfsMountIsDurable(const VfsMount *mount)
 {

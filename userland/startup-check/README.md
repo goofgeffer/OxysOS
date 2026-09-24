@@ -4,8 +4,7 @@
 
 **Phase**: 7, sub-task 7.5, of
 [`../../docs/project/PLAN.md`](../../docs/project/PLAN.md).
-**Detailed design**: [`../../docs/design/LIBC.md`](../../docs/design/LIBC.md),
-Section 11.5.
+**Detailed design**: [`../../docs/design/LIBC.md`](../../docs/design/LIBC.md).
 
 ## Purpose
 

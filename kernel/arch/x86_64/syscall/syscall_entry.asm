@@ -63,7 +63,7 @@
 ;   function of an ordinary structure. A branch here that returned differently
 ;   for a caller the kernel trusts would be a test hook in the one path where a
 ;   test hook is indistinguishable from a privilege-escalation bug. See
-;   docs/design/PRIVILEGE.md, Section 9.4.
+;   docs/design/PRIVILEGE.md.
 ; ==============================================================================
 
 section .text

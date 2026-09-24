@@ -6,7 +6,7 @@
  *          arguments, without executing SYSCALL.
  * Key functions: KernelVerifySyscall.
  * References:
- *   - docs/design/PRIVILEGE.md, Section 9: the entry path, the table and the
+ *   - docs/design/PRIVILEGE.md: the entry path, the table and the
  *     validation; Section 9.5, these assertions paired with what each catches.
  *
  * Why nothing here executes SYSCALL.

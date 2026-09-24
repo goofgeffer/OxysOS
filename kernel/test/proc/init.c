@@ -8,7 +8,7 @@
  *          `pause` — by running init-check at privilege level 3.
  * Key functions: KernelVerifyInit, VerifyInitOrphans, VerifyInitRun.
  * References:
- *   - docs/design/WINDOWS.md, Section 13.3: every assertion here paired with
+ *   - docs/design/WINDOWS.md: every assertion here paired with
  *     what it would catch.
  *   - userland/init-check/main.c: the program, and what it asserts for itself.
  *

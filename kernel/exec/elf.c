@@ -15,7 +15,7 @@
  *
  *   An ELF image is a format defined outside this project and read from a
  *   medium, so every field is read byte by byte and assembled rather than by
- *   laying a C structure over the bytes — CODING-STANDARDS.md, Section 7.1. The
+ *   laying a C structure over the bytes — CODING-STANDARDS.md. The
  *   image is then not required to be aligned for anything, the format's byte
  *   order is visible in the decoder instead of invisible in a cast, and a header
  *   whose fields the compiler would have padded differently cannot be misread.

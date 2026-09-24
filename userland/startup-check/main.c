@@ -15,7 +15,7 @@
  *     uses the three-parameter form the ABI names.
  *   - ISO/IEC 9899:2011, Section 7.22.4.4: exit, and the order in which it calls
  *     what atexit registered and flushes what the streams hold.
- *   - docs/design/LIBC.md, Section 11.5: what this asserts and what the kernel
+ *   - docs/design/LIBC.md: what this asserts and what the kernel
  *     checks of it afterwards.
  *
  * How this reports, and why it reports twice.

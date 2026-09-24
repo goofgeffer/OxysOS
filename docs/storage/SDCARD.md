@@ -2,227 +2,155 @@
 <!-- SPDX-License-Identifier: CC0-1.0 -->
 # The SD Card and the Embedded MultiMediaCard
 
-**Phase**: 4, sub-task 4.8, of [`PLAN.md`](../project/PLAN.md).
-
-**Authority**: `PROJECT_GUIDELINES.md`, Sections 2, 3 and 6. Every assertion of
-hardware behaviour below carries a citation, and every specification named is
-registered in [`REFERENCES.md`](../project/REFERENCES.md).
-
-**Implementation**: [`../../drivers/sdhci/sdhci.c`](../../drivers/sdhci/sdhci.c),
+**Phase**: sub-task 4.8 of [`../project/PLAN.md`](../project/PLAN.md).
+**Source**: [`../../drivers/sdhci/sdhci.c`](../../drivers/sdhci/sdhci.c),
 [`../../kernel/include/oxys/dev/storage/sdhci.h`](../../kernel/include/oxys/dev/storage/sdhci.h).
+**Specifications**: SD Host Controller Simplified Specification 4.20; SD
+Physical Layer Simplified Specification 8.00; JEDEC JESD84-B51 (eMMC). All in
+[`../project/REFERENCES.md`](../project/REFERENCES.md).
 
-## 1. Why this driver exists
+The driver for storage behind an SD host controller: a removable SD card, or an
+embedded MultiMediaCard soldered to the board. Many inexpensive laptops have no
+other storage, and their controller is classed as a system peripheral (class
+`0x08`, subclass `0x05`), not mass storage, so neither [`DISK.md`](DISK.md) nor
+[`AHCI.md`](AHCI.md) finds anything on them. The machine of
+[`../project/TESTING.md`](../project/TESTING.md) that reported the problem, an
+HP Laptop 14-dq0052dx, is one.
 
-An inexpensive laptop has no disk in any sense the other two storage drivers
-understand. Its system sits upon an **embedded MultiMediaCard** part, which is
-attached to a host controller the PCI assignment specification classes as a
-*system peripheral* — class `0x08`, subclass `0x05` — and not as mass storage.
-Such a machine carries **no mass-storage controller at all**.
+## 1. Two devices
 
-That is not a corner case. It is the machine this whole line of work was reported
-from — an **HP Laptop 14-dq0052dx**: an Intel Celeron N4120, four gibibytes of
-memory, 64 GB of eMMC storage and nothing else, booted from a USB drive. Its full
-specification is in [`../project/TESTING.md`](../project/TESTING.md), Section
-5.1. Neither the ATA driver of sub-task 4.4 nor the AHCI driver of 4.7 will ever
-find anything upon it, and no setting in its firmware would give them something
-to find. The kernel told its owner the machine had no disk, of a laptop
-that had just booted from its own storage; see [`DISK.md`](DISK.md), Section 2.3.
+The **host controller** is on the PCI bus; the **card** holds the data and has a
+command set of its own. Before a block can be read, a card must be woken, asked
+what it is, given an address, asked its size and selected, each by a command sent
+through the controller and answered by the card. Most of this driver is that
+protocol, not register programming.
 
-## 2. Two devices, not one
-
-The thing upon the bus is the **host controller**. The thing that holds the data
-is a **card**, and it is a second device with a command set of its own.
-
-Most of this driver is that second conversation rather than register programming.
-A card must be woken, asked what it is, given an address, asked how large it is,
-and selected, before a single block may be read — and each of those is a command
-sent through the controller and answered by the card.
-
-This is the first driver in the kernel with that shape. An ATA disk answers
-registers; a card answers a protocol carried over registers.
-
-## 3. The controller
+## 2. The controller
 
 | Register | Offset | Use |
 | -------- | ------ | --- |
-| Block size | `004h` | Fixed at 512 |
-| Block count | `006h` | One: each block is a command of its own |
-| Argument | `008h` | The card's, not the controller's |
-| Transfer mode | `00Ch` | Direction, and that the block count is meaningful |
-| Command | `00Eh` | **Written last**: writing it is what issues the command |
+| Block size | `004h` | 512 |
+| Block count | `006h` | 1; each block is its own command |
+| Argument | `008h` | The card's argument |
+| Transfer mode | `00Ch` | Direction; block count enable |
+| Command | `00Eh` | Written last: writing it issues the command |
 | Response | `010h`–`01Ch` | Four registers; a long response fills all four |
-| Buffer data port | `020h` | Where a block is moved, a word at a time |
-| Present state | `024h` | The inhibits, the buffer flags, and whether a card is there |
-| Power control | `029h` | The bus voltage, and the power |
-| Clock control | `02Ch` | The divider, and the two enables |
-| Timeout control | `02Eh` | Left at its greatest value |
-| Software reset | `02Fh` | All, or the command and data lines alone |
-| Normal interrupt status | `030h` | Polled; nothing is enabled to signal |
-| Error interrupt status | `032h` | What a command failed with |
+| Buffer data port | `020h` | A block moves through it a word at a time |
+| Present state | `024h` | Inhibits, buffer flags, card present |
+| Power control | `029h` | Bus voltage and power |
+| Clock control | `02Ch` | Divider and the two enables |
+| Timeout control | `02Eh` | Left at its maximum |
+| Software reset | `02Fh` | All, or the command and data lines |
+| Normal interrupt status | `030h` | Polled |
+| Error interrupt status | `032h` | Why a command failed |
 | Capabilities | `040h` | The base clock |
-| Version | `0FEh` | Reported, not acted upon |
+| Version | `0FEh` | Reported only |
 
-Three details are worth stating because each is silent when wrong.
+- **The command register is written last**, because writing it starts the
+  command with whatever the other registers hold.
+- **Status enables are set; signal enables are clear.** No handler is registered,
+  so nothing may interrupt; but a clear status enable reports nothing at all, and
+  every command would appear to hang.
+- **The clock divider field holds half the divisor** (version 2 of the
+  specification). Writing the divisor whole runs the card at twice the intended
+  rate: a bus that works until it does not.
 
-**The command register is written last.** Every other register it reads must be
-in place first, because writing it is what starts the command.
-
-**The status bits are enabled although nothing may signal.** No handler is
-registered for this controller, so the *signal* enables are cleared — a request
-nothing claims is a request nothing claims. But the *status* enables are what
-this driver polls, and a controller whose status enable is clear reports nothing
-at all: the command would appear to hang forever, which reads as broken hardware.
-
-**The clock divider register holds half of the divider.** The eight-bit field of
-the second version of the specification is the divisor divided by two. A divisor
-written whole runs the card at twice the rate intended, which is a bus that works
-until it does not.
-
-## 4. Bringing up a card
+## 3. Bringing up a card
 
 ```
-CMD0   GO_IDLE_STATE      every card begins here, whatever the firmware left
-CMD8   SEND_IF_COND       the version test — and not merely informative
-ACMD41 SD_SEND_OP_COND    repeated until the card has finished powering up
-  or
-CMD1   SEND_OP_COND       the same, for an embedded card
-CMD2   ALL_SEND_CID       read and discarded; the command is what moves the card on
-CMD3   SEND/SET_RELATIVE_ADDRESS
-CMD9   SEND_CSD           the capacity
+CMD0   GO_IDLE_STATE            every card starts here, whatever the firmware left
+CMD8   SEND_IF_COND             the version test
+ACMD41 SD_SEND_OP_COND          repeated until power-up completes (SD)
+  or CMD1 SEND_OP_COND          the same, for eMMC
+CMD2   ALL_SEND_CID             read and discarded; it moves the card on
+CMD3   SEND/SET_RELATIVE_ADDR
+CMD9   SEND_CSD                 the capacity
 CMD7   SELECT_CARD
-CMD16  SET_BLOCKLEN       512
+CMD16  SET_BLOCKLEN             512
 ```
 
-**CMD8 is not merely informative.** A card of the second version will not
-complete its power-up sequence unless it has been asked, so the answer decides
-both the kind of card and the argument of the command that follows. A card of the
-first version does not answer at all, which is not an error and must not be
-treated as one.
+- **CMD8 decides the next argument.** A version 2 card will not finish power-up
+  unless asked; a version 1 card does not answer, which is not an error.
+- **The power-up command a card answers tells its kind.** An SD card answers
+  ACMD41 (CMD55 then CMD41); eMMC does not implement it and answers CMD1. The
+  driver tries the first and falls back to the second: a driver that stopped at
+  an unanswered ACMD41 finds nothing on an eMMC laptop.
+- **eMMC is given an address.** CMD3 asks an SD card for the address it chose,
+  and tells an eMMC part which to use. Any value but zero, which deselects.
 
-**Which power-up command a card answers is how its kind is established.** An SD
-card answers ACMD41 — CMD55 followed by CMD41 — and an embedded MultiMediaCard
-does not implement ACMD41 at all; it answers CMD1. The driver tries the first and
-falls back to the second, which is the whole reason it exists: the machine that
-reported the fault has no removable card, and a driver that gave up when ACMD41
-went unanswered would find nothing there.
+## 4. Capacity
 
-**An embedded card is given an address rather than reporting one.** CMD3 asks an
-SD card what address it has chosen and *tells* an embedded card what address to
-use. Any value but zero will serve; zero is what deselects.
-
-## 5. How large the card is
-
-This is the arithmetic in the driver most likely to be wrong and least likely to
-say so.
-
-There are two encodings of a card's size in the card specific data, chosen by the
-`CSD_STRUCTURE` field, and they differ in every respect that matters:
+The card specific data (CSD) encodes size in one of two ways, selected by
+`CSD_STRUCTURE`:
 
 | | Version 1 | Version 2 |
 | --- | --- | --- |
-| Fields read | `C_SIZE`, `C_SIZE_MULT`, `READ_BL_LEN` | `C_SIZE` alone |
-| Where `C_SIZE` sits | bits 73:62 | bits 69:48 |
-| Its width | 12 bits | 22 bits |
-| The units | bytes, after two multiplications | 512 kibibytes |
+| Fields | `C_SIZE`, `C_SIZE_MULT`, `READ_BL_LEN` | `C_SIZE` |
+| `C_SIZE` bits | 73:62 (12 bits) | 69:48 (22 bits) |
+| Unit | bytes, after two multiplications | 512 KiB |
 
-A capacity computed by the wrong one of them is not a small error. It is wrong by
-a factor of thousands — and a block layer told a card is larger than it is will
-read beyond the end of it and be answered with nothing.
+The wrong encoding is wrong by a factor of thousands, and a block layer told a
+card is larger than it is reads past its end.
 
-There is a second trap on top of the first. **The response registers hold the
-card specific data with its low eight bits removed**, the CRC and the end bit
-having been stripped by the controller, so bit *N* of the specific data lies at
-bit *N* − 8 of the response. Every field in the implementation is therefore named
-by its position in the specific data and shifted by that eight in one place,
-because reading the specification against code that has already subtracted is how
-a field ends up one nibble from where it belongs.
+**The response registers hold the CSD without its low eight bits** (the
+controller strips the CRC and end bit), so CSD bit *N* is response bit *N* − 8.
+Fields are named by their CSD position and shifted by eight in one place, so the
+code can be checked against the specification without doing the subtraction.
 
-A structure this driver does not know yields **zero** rather than a guess, and a
-card whose capacity is zero is not registered.
+An unknown structure yields a capacity of zero, and a card of zero capacity is
+not registered.
 
-## 6. A transfer
+## 5. Transfers
 
-One block, one command — CMD17 to read and CMD24 to write — repeated for a
-request of several. The controller can master the bus and this driver does not
-ask it to: direct memory access here means composing a descriptor table in a
-second format, for a second engine, with a second set of alignment rules, and
-the AHCI driver of sub-task 4.7 already carries the cost of that arrangement
-where it buys the most. Here it would buy a faster path to a medium that is
-itself the slow part.
+- **One block per command**: CMD17 reads, CMD24 writes.
+- **Programmed I/O.** Every word crosses the buffer data port. Bus mastering
+  would need a second descriptor format and engine for a medium that is itself
+  the slow part. The caller's buffer needs no alignment and no lifetime beyond
+  the call.
+- **The argument is a block number or a byte offset**, by bit 30 of the
+  operating conditions register (card capacity status). A byte-addressed card
+  given a block number reads 512 times too far; at block zero the two agree,
+  which is how the mistake survives a casual test.
+- **A write is complete at transfer complete**, not when the last word moves:
+  until then it is still in the card, and reporting success earlier reports what
+  the driver does not know.
 
-Every block therefore moves through the buffer data port a word at a time, as the
-ATA driver of sub-task 4.4 moves a sector. The caller's buffer needs no alignment
-and no residence beyond the call, which is the compensation.
+## Verification
 
-**The argument is a block number or a byte offset, according to the card.** Bit
-30 of the operating conditions register — the card capacity status — is the
-authority. A byte-addressed card given a block number reads from 512 times the
-wrong place, and upon block zero the two are the same, which is what makes the
-mistake survive a casual test.
+`KernelVerifySdhci` in [`../../kernel/test/storage/stack.c`](../../kernel/test/storage/stack.c).
+The arithmetic is asserted on composed values, since no available card uses the
+version 1 encoding (cards of 2 GiB and below) and a wrong command register shows
+only as a card that never appears. The composing helper takes each field's CSD
+position, so it can be checked against the specification directly.
 
-**A transfer is not finished when the last word has moved.** A write is still in
-the card, and the transfer complete bit is what says it has been committed. A
-caller told a write succeeded before that has been told something the driver does
-not know.
+| Property asserted | The failure it would catch |
+| ----------------- | -------------------------- |
+| A version 2 capacity is `(C_SIZE + 1) * 1024` blocks. | A capacity wrong by thousands. |
+| The largest version 2 capacity neither overflows nor truncates. | A 32-bit intermediate. |
+| A version 1 capacity applies both multiplier and block length. | The same, the other way. |
+| The two encodings disagree on the same bits. | Without this, a driver ignoring `CSD_STRUCTURE` passes the rows above by accident. |
+| An unknown structure yields zero. | A guessed capacity. |
+| CMD17 is composed with its index, the data bit, both checks and a 48-bit response. | A malformed read command. |
+| A long response is composed with the index check off. | Every CMD2 and CMD9 failing an index check that a 136-bit response cannot pass: a machine with no storage. |
+| An unchecked response (the OCR) has neither check. | A correct answer rejected; its CRC and index fields carry register bits. |
 
-## 7. Verification
+Where a card answers, the transfers are asserted too:
 
-### 7.1 The arithmetic, upon values composed rather than obtained
+| Property asserted | The failure it would catch |
+| ----------------- | -------------------------- |
+| A block read twice into differently seeded buffers agrees over the whole block. | A short transfer; the seeds still differ where nothing was written. |
+| Nothing beyond the block was written. | A long transfer. |
+| A two-block read starts with the one-block read and continues with the next block. | An argument that does not advance, or advances by the wrong unit. |
+| Out-of-range, zero-count, over-limit and bufferless requests are refused. | The controller asked to attempt what it should never see. |
+| With the write option, a pattern written to the last block reads back, and the block is restored. | The write path and the completion wait. |
 
-`KernelVerifySdhci` asserts the two decisions that need no hardware.
+Not asserted: the two argument forms are not told apart (a card read consistently
+in the wrong form is self-consistent). Mounting a volume from the card is the
+test that catches it.
 
-| Property asserted | The silent failure it would catch |
-| ----------------- | --------------------------------- |
-| A version 2 capacity is `(C_SIZE + 1) * 1024` blocks | Section 5: a capacity wrong by a factor of thousands |
-| The greatest version 2 capacity does not overflow or truncate | A 32-bit intermediate in a computation whose answer needs more |
-| A version 1 capacity applies both the multiplier and the block length | The same, in the other direction |
-| The two encodings **disagree** upon the same bits | This is what makes `CSD_STRUCTURE` load-bearing. If they agreed, a driver that ignored the field would pass every row above by accident |
-| An unknown structure yields zero | A capacity guessed at, and a card registered as larger than it is |
-| CMD17 is composed with its index, the data bit, both checks and a 48-bit response | — |
-| A **long** response is composed with the index check **off** | A response of 136 bits carries no command index. Left checked, every CMD2 and CMD9 reports an index error and the card is never identified — which presents as a machine with no storage |
-| An **unchecked** response is composed with neither check | The operating conditions register comes back with neither a CRC nor an index, both fields carrying part of the register instead. Checking either rejects a card that answered correctly |
-
-The values are composed because no card available to this project uses the first
-encoding — it belongs to cards of two gibibytes and below — and because a command
-register that is wrong cannot be observed to be wrong except by the card failing
-to appear. The helper that composes them takes each field's position **in the
-card specific data**, so that a reader may check it against the specification
-without doing the subtraction of Section 5 in their head.
-
-### 7.2 The transfers, where a card answered
-
-| Property asserted | The silent failure it would catch |
-| ----------------- | --------------------------------- |
-| A block read twice into **differently seeded** buffers agrees over the whole block | A transfer shorter than a block. The two buffers still differ wherever the card did not write |
-| Nothing beyond the block was written | A transfer longer than one |
-| A two-block read begins with what a one-block read returned, and its second block is what a read of the following block returns | Two commands whose arguments did not advance, or advanced by the wrong unit |
-| A range beyond the card, a count of zero, a count beyond the driver's limit and an absent buffer are each refused | A request the controller was asked to attempt that it should never have seen |
-| With the option given: a pattern written to the final block reads back byte for byte, and the block is restored | The write path entirely, and any failure of the completion wait |
-
-The seeding of the first row is not incidental. It was added to the AHCI driver's
-self-test after two reads compared against each other passed with a region
-descriptor's byte count halved; the same reasoning applies here and the same
-assertion is made.
-
-### 7.3 What is still not asserted
-
-**The byte-addressed and block-addressed forms of the transfer argument are not
-told apart by any assertion.** Block zero is byte zero, so the two agree there;
-and a card read consistently by the wrong form returns data that is
-self-consistent, so the two-block assertion of Section 7.2 passes. The mistake is
-caught only from outside — a volume that will not mount — and that is how it is
-tested here, by mounting one.
-
-**The embedded MultiMediaCard path is written from the specification and has not
-been run.** No emulator available to this project presents an eMMC part: QEMU's
-`sd-card` is an SD card, and VirtualBox has no SD host controller at all. What can
-be asserted without one is asserted — the command composition, the capacity
-arithmetic — and CMD1 itself awaits the machine that reported the fault. This is
-recorded rather than papered over.
-
-### 7.4 The machines used
-
-QEMU, with an SD card attached to an `sdhci-pci` controller:
+To attach a card under QEMU (a 16 MiB image presents a byte-addressed SD card, a
+4 GiB image a block-addressed SDHC card, so both paths are reached by size
+alone):
 
 ```sh
 qemu-system-x86_64 -machine q35 -cpu qemu64 -smp cores=2 -m 512M \
@@ -233,32 +161,18 @@ qemu-system-x86_64 -machine q35 -cpu qemu64 -smp cores=2 -m 512M \
     -display none -serial file:sd.log
 ```
 
-Both capacity encodings are reached by changing the size of the image alone: an
-image of 16 mebibytes presents as a byte-addressed SD card and one of four
-gibibytes as a block-addressed SDHC card, and the driver's two paths are
-exercised without either being asked for.
+VirtualBox has no SD host controller, so only the hardware-free half runs there.
 
-**VirtualBox presents no SD host controller**, so this driver's live half has no
-second machine. The half that needs no hardware runs upon both and passes upon
-both. That is stated here rather than left for a reader to notice.
+## Limitations
 
-## 8. Limitations
-
-1. **One card, one slot.** A controller with several slots is programmed as
-   though it had the first alone. Nothing available here has more.
-2. **Programmed input/output.** Every word crosses the buffer data port. The
-   controller can master the bus; see Section 6 for why it is not asked to.
-3. **One block per command.** A multi-block transfer is a command per block
-   rather than CMD18 with a stop. It is simpler and it is slower, and the block
-   layer above bounds how much either matters.
-4. **The eMMC path is untested.** Section 7.3.
-5. **No high-speed modes.** The bus runs at 25 MHz once the card is selected.
-   The four-bit data width, the high-speed timings and the UHS modes each need a
-   negotiation of their own and each is a way to make an untested path faster.
-6. **No hot plug.** The slot is examined once, at initialisation. A card
-   inserted afterwards is not noticed, there being nothing yet to tell.
-7. **No card removal detection during a transfer.** A card pulled mid-command is
-   reported as a timeout, which is what it looks like from here.
-8. **No error recovery beyond a reset of the command and data lines.** What to
-   retry and how often is a policy, and the block layer is where a policy
-   belongs.
+1. The eMMC path (CMD1, the assigned address) is written from the specification
+   and has not run: no available emulator presents an eMMC part.
+2. One card, one slot; a multi-slot controller is driven as its first slot.
+3. Programmed I/O only.
+4. One command per block; no CMD18 with a stop.
+5. The bus runs at 25 MHz, one data line; no 4-bit width, high-speed or UHS
+   modes.
+6. The slot is examined once; no hot plug, and a card removed mid-command is
+   reported as a timeout.
+7. Error recovery is a reset of the command and data lines; retry policy belongs
+   to the block layer.

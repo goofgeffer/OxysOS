@@ -11,10 +11,10 @@
  * Key functions: KernelVerifyPerCpu, KernelVerifySpinlock, KernelVerifyIpi,
  *          KernelVerifyShootdown, KernelVerifyApplicationProcessors.
  * References:
- *   - docs/design/CONCURRENCY.md, Section 8: the assertions, each paired with
+ *   - docs/design/CONCURRENCY.md: the assertions, each paired with
  *     the silent failure it exists to catch.
  *   - Intel SDM, Volume 3A, Sections 4.10.4.1, 4.10.5, 8.1.2.2, 10.6 and 10.6.1.
- *   - docs/design/ARCHITECTURE.md, Section 4.1: sub-task 6.13 was placed before
+ *   - docs/design/ARCHITECTURE.md: sub-task 6.13 was placed before
  *     6.14 upon the argument that everything in it can be exercised upon one
  *     processor. These are the assertions that argument has to be true for.
  *
@@ -118,7 +118,7 @@ void KernelVerifyPerCpu(void)
 
     /*
      * GS.base must hold the area while kernel code is executing. This is the
-     * invariant of docs/design/CONCURRENCY.md, Section 3.2, read back from the
+     * invariant of docs/design/CONCURRENCY.md read back from the
      * register rather than assumed; the model-specific register is the only
      * place the value actually lives.
      */

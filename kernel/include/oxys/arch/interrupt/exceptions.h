@@ -169,8 +169,7 @@ void ExceptionInitialise(void);
  *
  * It is separate from ExceptionInitialise because it must run after the task
  * state segment has been loaded, and the gates are installed before that. The
- * reasons are recorded at the definition and in docs/design/PRIVILEGE.md,
- * Section 4.
+ * reasons are recorded at the definition and in docs/design/PRIVILEGE.md.
  *
  * Returns false where the gate is absent or the entry is not one the
  * architecture provides.

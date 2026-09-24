@@ -11,7 +11,7 @@
  *     directory entry specified by each dir operand", each being empty; the
  *     exit status is 0 where every operand was removed.
  *   - libc/include/syscall.h: OxysRemoveDirectory, and the refusals it reports.
- *   - docs/design/SHELL.md, Section 19.3.
+ *   - docs/design/SHELL.md.
  *
  * `-p`, which removes each component of the operand in turn, is not here.
  */

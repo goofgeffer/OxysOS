@@ -44,7 +44,7 @@ static uint64_t BlockErrors;
 /*
  * Records a request the layer declined to pass to a driver. It is counted
  * separately from a failure of the hardware, for the reason given in
- * docs/storage/DISK.md, Section 7: a refusal is this layer working, and a figure that
+ * docs/storage/DISK.md: a refusal is this layer working, and a figure that
  * added the two together would show a healthy machine accumulating errors.
  */
 static bool BlockRefuse(BlockDevice *device)

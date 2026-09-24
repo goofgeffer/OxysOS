@@ -9,7 +9,7 @@
  * References:
  *   - libc/include/stream.h: OxysStreamCensus, whose `conversions` and
  *     `rejections` these two increment, and which is where a caller reads them.
- *   - docs/design/LIBC.md, Section 10.2: the division of this sub-task, of which
+ *   - docs/design/LIBC.md: the division of this sub-task, of which
  *     this header is a consequence rather than a part.
  *
  * Why this is a private header and not two more declarations in <stream.h>.

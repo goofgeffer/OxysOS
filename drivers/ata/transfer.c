@@ -21,7 +21,7 @@
  *   - The same, FLUSH CACHE: a write is not durable until the device has been
  *     told to commit it, so the flush is issued within the same sequence as the
  *     write and not deferred.
- *   - docs/storage/DISK.md, Section 5: why there is deliberately no `REP OUTSW`
+ *   - docs/storage/DISK.md: why there is deliberately no `REP OUTSW`
  *     to match the `REP INSW` of the read path.
  *
  * Every judgement about a request is made here and once. The block layer above

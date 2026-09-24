@@ -12,7 +12,7 @@
  *     path named by target_file"; the exit status is 0 where the file was
  *     copied.
  *   - libc/include/syscall.h: OxysOpen, OxysRead, OxysWrite, OxysClose.
- *   - docs/design/SHELL.md, Section 19.3.
+ *   - docs/design/SHELL.md.
  *
  * What is not here: the second and third forms, which copy into a directory
  * and need a name joined to a path; `-R`, `-p`, `-f` and `-i`. One source and

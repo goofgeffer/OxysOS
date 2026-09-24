@@ -10,7 +10,7 @@
  *          reads a file.
  * Key functions: KernelVerifyConfig.
  * References:
- *   - docs/design/CONFIG.md, Section 6: every assertion here paired with the
+ *   - docs/design/CONFIG.md: every assertion here paired with the
  *     silent failure it would catch.
  *   - libc/include/config.h: the seam, and why the parsing is apart from the
  *     file it is read from.

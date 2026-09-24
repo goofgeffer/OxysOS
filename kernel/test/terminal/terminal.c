@@ -9,7 +9,7 @@
  *          machine at which nobody is typing.
  * Key functions: KernelVerifyTerminal.
  * References:
- *   - docs/design/SHELL.md, Section 5: the table pairing every property
+ *   - docs/design/SHELL.md: the table pairing every property
  *     asserted below with the silent failure the assertion exists to catch.
  *   - kernel/include/oxys/terminal/terminal.h: what is promised of the stream.
  *   - kernel/test/dev/devices.c: the keyboard's own self-test, whose technique

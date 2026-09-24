@@ -9,7 +9,7 @@
  *   - libc/include/time.h: ISO/IEC 9899:2011, Section 7.27.1, the ranges —
  *     `tm_mon` from zero, `tm_year` from 1900, `tm_yday` from zero, which
  *     `date`'s `%j` counts from one.
- *   - docs/devices/TIME.md, Section 10: the assertions paired with the failures.
+ *   - docs/devices/TIME.md: the assertions paired with the failures.
  *
  * `time` itself reaches SYSCALL and cannot be run here; the panel's clock and
  * `/bin/date` are what show it working, and `signal-check` asserts it at

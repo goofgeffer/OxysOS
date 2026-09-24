@@ -13,9 +13,9 @@
  *          Ext2VfsReadDirectory, Ext2VfsCreate, Ext2VfsCreateDirectory,
  *          Ext2VfsLink, Ext2VfsUnlink, Ext2VfsRemoveDirectory, Ext2VfsSync.
  * References:
- *   - docs/storage/VFS.md, Section 3: the operations vector and the contracts
+ *   - docs/storage/VFS.md: the operations vector and the contracts
  *     common to every entry of it.
- *   - docs/storage/VFS.md, Section 8: the mark a mount leaves upon a volume it
+ *   - docs/storage/VFS.md: the mark a mount leaves upon a volume it
  *     has opened for writing, and why it is made at the mount and not at the
  *     unmount.
  *   - Poirier, D., "The Second Extended File System: Internal Layout", the
@@ -76,7 +76,7 @@ static Ext2Inode *Ext2VfsInodeOf(const VfsNode *node)
  * a failed lookup and a directory whose records are malformed are both `false`
  * with a different sentence behind them — so the code assigned here is the
  * likeliest of the outcomes the operation admits and the sentence is the
- * authority. That is stated as a limitation in docs/storage/VFS.md, Section 12.6,
+ * authority. That is stated as a limitation in docs/storage/VFS.md
  * rather than concealed: a caller acting upon the code alone will occasionally
  * act upon the wrong one, and a caller printing the sentence never will.
  */

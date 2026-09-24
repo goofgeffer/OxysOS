@@ -9,7 +9,7 @@
  * Key functions: KernelVerifyIdt, KernelVerifyInterruptStubs,
  *          KernelVerifyDispatcher, KernelVerifyExceptions.
  * References:
-   - docs/design/INTERRUPTS.md, Section 6: the table pairing every assertion
+   - docs/design/INTERRUPTS.md: the table pairing every assertion
  *     with the silent failure it catches.
  *   - Intel SDM, Volume 3A, Section 6.12.1 and Figure 6-4: the stack frame the
  *     processor constructs, against which the frame the stubs build is checked.

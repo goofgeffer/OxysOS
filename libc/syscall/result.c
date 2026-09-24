@@ -17,7 +17,7 @@
  *   - kernel/abi/oxys/syscall_abi.h: the failure results this translates, which
  *     are negative so that a caller may tell a failure from a length without a
  *     second register.
- *   - docs/design/LIBC.md, Section 8.2: the translation, and the bound it
+ *   - docs/design/LIBC.md: the translation, and the bound it
  *     refuses beyond.
  *
  * Why this is a function of its own.
@@ -45,7 +45,7 @@
  * function so that it can stop being one without any program that reads errno
  * being affected — the caller resolves OxysErrnoAddress, not the object, so the
  * day a thread has an errno of its own this file changes and nothing else does.
- * docs/design/LIBC.md, Section 8.6, limitation 1.
+ * docs/design/LIBC.md.
  *
  * Its initial value is zero, as Section 7.5, paragraph 3, requires of the
  * initial thread at program startup. It is an object of static storage duration

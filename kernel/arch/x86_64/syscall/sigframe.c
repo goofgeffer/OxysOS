@@ -27,7 +27,7 @@
  *     masked rather than trusted.
  *   - IEEE Std 1003.1-2017, `sigaction()`: a handler receives the signal
  *     number as its argument and, upon returning, the interrupted program
- *     resumes; docs/design/PROCESS.md, Section 18.3.
+ *     resumes; docs/design/PROCESS.md.
  *
  * Why there are two frames and one delivery.
  *

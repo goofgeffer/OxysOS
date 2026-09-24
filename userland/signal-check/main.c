@@ -15,7 +15,7 @@
  *     SIGKILL and SIGSTOP cannot be caught.
  *   - kernel/abi/oxys/syscall_abi.h: the status encoding the assertions read.
  *   - kernel/test/proc/signal.c: the self-test that runs this.
- *   - docs/design/PROCESS.md, Section 18.5.
+ *   - docs/design/PROCESS.md.
  *
  * Why the children compute rather than sleep where they can.
  *

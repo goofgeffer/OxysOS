@@ -21,7 +21,7 @@ tests establish is elsewhere, and so is the record of what has actually been run
 **Why four.** This was one document of 1,757 lines, of which three quarters were
 per-subsystem chapters that nobody reads in sequence and one eighth was a table
 of dated results that everybody scrolls past them to reach. The division is the
-one [`../design/ARCHITECTURE.md`](../design/ARCHITECTURE.md), Section 2.2, states
+one [`../design/ARCHITECTURE.md`](../design/ARCHITECTURE.md) states
 for a translation unit that has stopped being readable as one thing, applied to a
 document: **along the lines a reader's question falls upon.** *How do I run it,
 and where?* is this document. *What does the test of X establish?* is the two
@@ -62,7 +62,7 @@ and its exit status may be relied upon.
 
 **From sub-task 3.7 the target always runs for the full 25 seconds.** The kernel
 no longer halts at the end of initialisation; where a keyboard is present it
-enters the echo loop of `docs/devices/KEYBOARD.md`, Section 7.2, and the run is ended by
+enters the echo loop of `docs/devices/KEYBOARD.md` and the run is ended by
 the `timeout` that bounds it. The assertion is unaffected, the expected string
 having been emitted before the loop is entered.
 
@@ -129,7 +129,7 @@ that queue is asserted only where the queue is the bootstrap processor's — the
 admission and the read being made with this processor's interrupts masked, and no
 other processor being able to take from this one's queue. A thread queued
 elsewhere is left to the assertions about the rotation, which are not races.
-[`../design/SCHEDULER.md`](../design/SCHEDULER.md), Section 7.3.
+[`../design/SCHEDULER.md`](../design/SCHEDULER.md).
 
 **A first attempt was rejected by measurement**, and that is the part worth
 keeping. Pinning the fixture to the bootstrap processor made the fields stable
@@ -163,8 +163,8 @@ the serial line in every boot, which is what `make verify` and this target's
 then three windows a person can operate, and the shell runs upon the serial
 line, which is where this target's terminal is attached. **The banner is quiet
 upon that entry too, since sub-task 9.3** — the boot screen stands in its place
-from the moment there is a back buffer, [`../design/INIT.md`](../design/INIT.md),
-Section 5. The **`Oxys-OS (Shell-only)`** entry gives
+from the moment there is a back buffer, [`../design/INIT.md`](../design/INIT.md).
+The **`Oxys-OS (Shell-only)`** entry gives
 the shell the screen, quiet: the banner and a prompt and nothing between, which
 is what the default entry showed through Phase 8. The **`Oxys-OS (Shell
 Diagnostics)`** entry — named *diagnostics* until 9.1 — shows the log upon the
@@ -172,8 +172,7 @@ screen first, and is the one to boot when a person at the machine is diagnosing
 a boot. It replaced the "serial console diagnostics" entry, whose `serial=com1`
 option had been read by nothing since Phase 1. `KernelPanic` restores the
 display whatever the entry, a machine that has stopped having to say why.
-`kernel/kernel.c`, `KernelDisplaySetQuiet`; [`../design/WINDOWS.md`](../design/WINDOWS.md),
-Section 7.2.
+`kernel/kernel.c`, `KernelDisplaySetQuiet`; [`../design/WINDOWS.md`](../design/WINDOWS.md).
 
 ### 2.1 Typing at the shell, and driving it without a person
 
@@ -494,7 +493,7 @@ recorded**. The machine and the run are Section 5.1.
 ### 5.1 The machine the storage work was reported from
 
 One physical machine has run this kernel, and every fault recorded in
-[`../storage/DISK.md`](../storage/DISK.md), Sections 2.1 to 2.3, was reported
+[`../storage/DISK.md`](../storage/DISK.md) was reported
 from it. It is named here once, and the other documents cite this section rather
 than restating it.
 
@@ -520,7 +519,7 @@ It has **four cores**, where the QEMU configuration this project verifies agains
 runs two. The application-processor bring-up of sub-task 6.14 has therefore not
 yet met a real machine, and when it does it will meet one with more processors
 than any test has used — which exercises the reservation of `PER_CPU_MAXIMUM`,
-the serial bring-up of [`../design/SMP.md`](../design/SMP.md), Section 7, and the
+the serial bring-up of [`../design/SMP.md`](../design/SMP.md) and the
 refusals of its Section 7.1, none of which QEMU's two processors reach.
 
 It is a **UEFI-era machine**, and the kernel has no UEFI boot path until Phase
@@ -536,7 +535,7 @@ external ports are USB Type-C and Type-A, HDMI, a headphone jack and the power
 connector; there is no DE-9 port and no 16550 at `0x3F8` for `SerialInitialise`
 to find. A USB-to-serial adapter would not help, there being no USB stack in this
 kernel to drive one — and reaching a USB device is a longer road than this
-project has taken, as [`../storage/DISK.md`](../storage/DISK.md), Section 2.3,
+project has taken, as [`../storage/DISK.md`](../storage/DISK.md)
 records.
 
 So the log was read **from the screen**, upon the graphical console of sub-task
@@ -591,7 +590,7 @@ same specification, sharing none of this project's assumptions. The value of one
 is inversely proportional to how much it has in common with the code it judges.
 
 **The case that proves it.** `e2fsck` found the defect in the recorded deletion
-time described in [`../storage/VFS.md`](../storage/VFS.md), Section 11.1. `i_dtime`
+time described in [`../storage/VFS.md`](../storage/VFS.md). `i_dtime`
 is overloaded in EXT2 — a deletion time, or the link to the next inode upon the
 orphan list, distinguished by magnitude — so the constant 1 recorded for want of
 a clock made every freed inode appear orphaned. Every assertion in
@@ -605,7 +604,7 @@ composed with the same misunderstanding.
 | ----- | ------------------------- | ----- |
 | `grub-file --is-x86-multiboot2` | This project's reading of the Multiboot2 header format. Run at every link. | `Makefile`, the `all` target |
 | `e2fsck`, `debugfs`, `dumpe2fs` | This project's reading of EXT2. | Sections 7 and 12.1 |
-| `clang` | `x86_64-elf-gcc`, and therefore what one toolchain tolerates. | [`TOOLCHAIN.md`](TOOLCHAIN.md), Section 9 |
+| `clang` | `x86_64-elf-gcc`, and therefore what one toolchain tolerates. | [`TOOLCHAIN.md`](TOOLCHAIN.md) |
 | Two independent renderings of a specification | A single transcription of a document not publicly distributed. | [`REFERENCES.md`](REFERENCES.md) |
 | Real hardware | Every emulator's approximation of a machine. | Sections 10.1 and 10.2 |
 
@@ -613,7 +612,7 @@ Each has already returned something. `grub-file` fails the build outright if the
 header is malformed. `e2fsck` found the defect above. `clang` found, upon its
 first run, that `kernel/arch/x86_64/cpu/tss.c` named a 32-bit register to an instruction the
 architecture defines upon r/m16 — which GNU `as` had accepted, and assembled
-correctly, for as long as the file existed. The physical machine of [`TESTING.md`](TESTING.md), Section 5.1
+correctly, for as long as the file existed. The physical machine of [`TESTING.md`](TESTING.md)
 found two, and both changed the design rather than the code.
 
 ### 7.2 The judges available and not yet used

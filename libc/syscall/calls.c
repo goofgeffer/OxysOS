@@ -22,7 +22,7 @@
  *   - kernel/abi/oxys/syscall_abi.h: the call numbers and what each call means.
  *   - kernel/arch/x86_64/syscall/syscall.c: the kernel's half, which is what these agree with.
  *   - ISO/IEC 9899:2011, Section 7.5: the errno OxysSyscallResult sets.
- *   - docs/design/LIBC.md, Section 8.3: what each wrapper does with its
+ *   - docs/design/LIBC.md: what each wrapper does with its
  *     arguments, and the two places it does something a reader would not guess.
  *
  * What a wrapper is for, given that it is four lines.

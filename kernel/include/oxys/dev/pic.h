@@ -149,8 +149,7 @@ bool PicRequestIsSpurious(uint8_t irq);
  * Called by the routing layer upon the return of a device handler. A device
  * driver neither may nor need call it: the signalling is a property of this
  * controller rather than of any device, and forgetting it would silence not the
- * device but every line of lower priority. See docs/design/INTERRUPTS.md,
- * Section 9.4.
+ * device but every line of lower priority. See docs/design/INTERRUPTS.md.
  */
 void PicSendEndOfInterrupt(uint8_t irq);
 

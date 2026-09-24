@@ -8,7 +8,7 @@
  * Key functions: VfsNodeHold, VfsNodeAcquire, VfsNodeRelease, VfsNodesHeld,
  *          VfsNodeAttributes.
  * References:
- *   - docs/storage/VFS.md, Section 6: the node, why one file must be one node,
+ *   - docs/storage/VFS.md: the node, why one file must be one node,
  *     and why nothing is retained after its last reference goes.
  *
  * A node is the identity of a file within the kernel: two callers reaching one

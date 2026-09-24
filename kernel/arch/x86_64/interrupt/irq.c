@@ -19,7 +19,7 @@
  *   - ACPI Specification 6.5, Sections 5.2.12.4 and 5.2.12.5: the identity
  *     mapping of the request lines onto the first sixteen global system
  *     interrupts, and the overrides that depart from it.
- *   - docs/design/INTERRUPTS.md, Section 10: the design this file implements.
+ *   - docs/design/INTERRUPTS.md: the design this file implements.
  *
  * Why the mask state is recorded here as well as in the controller.
  *

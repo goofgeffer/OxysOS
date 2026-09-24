@@ -8,9 +8,9 @@
  *          volume, and collects what it ended with.
  * Key functions: KernelVerifyFork, KernelVerifyLifecycle.
  * References:
- *   - docs/design/PROCESS.md, Sections 12 and 13: the design of these four
+ *   - docs/design/PROCESS.md: the design of these four
  *     calls, and these assertions paired with what each would catch.
- *   - docs/design/MEMORY-LAYOUT.md, Section 14: the copy-on-write cloning a fork
+ *   - docs/design/MEMORY-LAYOUT.md: the copy-on-write cloning a fork
  *     is built upon.
  *   - Intel 64 and IA-32 Architectures Software Developer's Manual, Volume 2A
  *     and 2B: the encodings the two programs are assembled from. `MOV r32,

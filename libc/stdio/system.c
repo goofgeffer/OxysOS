@@ -13,7 +13,7 @@
  *   - libc/include/syscall.h: OxysWrite, and what it returns.
  *   - kernel/abi/oxys/syscall_abi.h: the fourteen calls this kernel has, and
  *     descriptor 0, which since sub-task 8.1 a `read` reaches the terminal by.
- *   - docs/design/LIBC.md, Section 10.2: the division of the sub-task into a
+ *   - docs/design/LIBC.md: the division of the sub-task into a
  *     policy that runs anywhere and a pair of transfers that run only at
  *     privilege level 3.
  *

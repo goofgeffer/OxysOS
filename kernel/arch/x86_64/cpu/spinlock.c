@@ -22,7 +22,7 @@
  *     than exchanges, and why nothing here depends upon a store being visible
  *     before a subsequent load of another address.
  *   - Intel SDM, Volume 2B, "PAUSE".
- *   - docs/design/CONCURRENCY.md, Section 2.
+ *   - docs/design/CONCURRENCY.md.
  *
  * The bound upon the wait, and why there is one.
  *

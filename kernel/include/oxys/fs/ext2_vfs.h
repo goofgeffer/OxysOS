@@ -7,9 +7,9 @@
  *          volume may be mounted as.
  * Key definitions: Ext2VfsInitialise.
  * References:
- *   - docs/storage/VFS.md, Section 3: what a filesystem must supply to be
+ *   - docs/storage/VFS.md: what a filesystem must supply to be
  *     mountable, and why the binding stands apart from the format.
- *   - docs/storage/VFS.md, Section 8: the mount, and what it records upon a
+ *   - docs/storage/VFS.md: the mount, and what it records upon a
  *     volume it has opened for writing.
  *
  * This header exists rather than the declaration being added to `ext2.h`

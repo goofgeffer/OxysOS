@@ -16,13 +16,13 @@
  *     the root, runs the shell upon a session that invokes it, and checks the
  *     status the shell ends with. The two must agree about the vector and the
  *     environment below.
- *   - docs/design/SHELL.md, Section 18.
+ *   - docs/design/SHELL.md.
  *
  * Why this program is written onto the root by the test rather than embedded
  * in the shell's path.
  *
  *   The shell finds a program by executing a pathname, and a check program
- *   is not shipped in /bin (docs/storage/INITRD.md, Section 2). So the test
+ *   is not shipped in /bin (docs/storage/INITRD.md). So the test
  *   writes it to /verify/env-check for the duration of the session and removes
  *   it afterwards — which is itself an assertion that a program written onto
  *   the root at run time can be found, loaded and run.

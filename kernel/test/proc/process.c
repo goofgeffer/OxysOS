@@ -8,7 +8,7 @@
  *          while a slot is, and that destruction gives everything back.
  * Key functions: KernelVerifyProcess.
  * References:
- *   - docs/design/PROCESS.md, Section 6: these assertions paired with the silent
+ *   - docs/design/PROCESS.md: these assertions paired with the silent
  *     failure each would catch.
  *
  * Nothing here runs a thread. There is nothing yet that could: no context has a

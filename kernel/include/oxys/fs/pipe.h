@@ -20,7 +20,7 @@
  *     writes on the same pipe"; a write to a pipe "that is not open for
  *     reading by any process" fails with EPIPE, and a signal is also sent —
  *     which this kernel sends since sub-task 8.7.
- *   - docs/design/SHELL.md, Section 22: what the pipe is for and why it is an
+ *   - docs/design/SHELL.md: what the pipe is for and why it is an
  *     open file of the filesystem layer rather than a thing of its own.
  *
  * Why a pipe is an open file.

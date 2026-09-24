@@ -12,9 +12,9 @@
  *          KernelComposeGroupDescriptor, KernelFileBufferMatches,
  *          KernelFileBufferIsZero, KernelSameString.
  * References:
- *   - docs/storage/EXT2.md, Section 4: the layout composed below, block by block
+ *   - docs/storage/EXT2.md: the layout composed below, block by block
  *     and inode by inode, and the reason each thing within it is there.
- *   - docs/storage/VFS.md, Section 10: the second volume, and why it differs
+ *   - docs/storage/VFS.md: the second volume, and why it differs
  *     from the first in exactly one field.
  *   - The Second Extended File System, Dave Poirier: the format. Every field
  *     offset written below is named in <oxys/fs/ext2.h>; none is restated here,

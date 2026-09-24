@@ -16,7 +16,7 @@
  *     SD host controller — the last being a system peripheral and not mass
  *     storage at all, which is why a machine whose system is upon an embedded
  *     MultiMediaCard part carries no mass-storage controller whatever.
- *   - docs/storage/DISK.md, Sections 2.2, 2.3, 7.2 and 7.3: the reason this
+ *   - docs/storage/DISK.md: the reason this
  *     report is as long as it is.
  *
  * Why a driver has a report of this size.

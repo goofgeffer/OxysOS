@@ -14,7 +14,7 @@
  *   - XTerm Control Sequences (Dickey): the forms in which Home, End, Delete
  *     and the cursor keys arrive, all of which are accepted.
  *   - libc/include/line.h: the interface, and the table of what each byte does.
- *   - docs/design/SHELL.md, Section 3: the redraw discipline below and why it
+ *   - docs/design/SHELL.md: the redraw discipline below and why it
  *     asks nothing of a display but a backspace.
  *
  * The one assumption made of the display, and why it is the only one.

@@ -8,7 +8,7 @@
  *          a volume this kernel composed and then inspecting what it did to it.
  * Key functions: KernelVerifyUtilities.
  * References:
- *   - docs/design/LIBC.md, Section 12.5: what this asserts, what each program
+ *   - docs/design/LIBC.md: what this asserts, what each program
  *     asserts of itself, and what nothing here can assert.
  *   - userland/arg-check/main.c: the program that compares the vector it was
  *     given against the vector it expects, and ends with the number of
@@ -36,7 +36,7 @@
  *   is detectable: a `cat` that could not open its file exits with a failure,
  *   and a `cat` that opened a directory exits with a failure, and those two are
  *   machine-readable statements about the calls beneath it.
- *   docs/design/LIBC.md, Section 12.7, limitation 1.
+ *   docs/design/LIBC.md.
  *
  * Why the negative cases outnumber the positive ones.
  *

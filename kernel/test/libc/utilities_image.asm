@@ -21,7 +21,7 @@
 ;   - kernel/test/libc/utilities.c: the self-test that loads these and runs them.
 ;   - kernel/test/libc/startup_image.asm: the same technique at sub-task 7.5,
 ;     for one program, and the reasoning it records applies unchanged here.
-;   - docs/design/LIBC.md, Section 12.5: why the programs are carried in the
+;   - docs/design/LIBC.md: why the programs are carried in the
 ;     image rather than placed upon a disk.
 ;
 ; Why eight programs are embedded and only one is written to the volume.

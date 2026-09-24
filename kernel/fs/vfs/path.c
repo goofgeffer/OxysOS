@@ -14,7 +14,7 @@
  *     with a separator resolves from the root; successive separators are
  *     equivalent to one; a component that is not the last must be a directory;
  *     and a trailing separator asserts that what the path names is a directory.
- *   - docs/storage/VFS.md, Sections 4 and 5: the rules above and where each is
+ *   - docs/storage/VFS.md: the rules above and where each is
  *     applied, and why `.` and `..` are not interpreted here.
  *
  * VfsWalk takes a length as well as a path, and that is what makes the rest of

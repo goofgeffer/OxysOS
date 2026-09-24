@@ -13,7 +13,7 @@
  *     `-c` write only a count; with more than one operand each line is
  *     preceded by its file's name; the status is 0 where a line was selected,
  *     1 where none was, and greater than 1 where an error occurred.
- *   - docs/design/SHELL.md, Section 30.
+ *   - docs/design/SHELL.md.
  *
  * What is not here: a regular expression. The pattern is a string and a line
  * matches where it holds the string; `-E` and the basic expressions of the

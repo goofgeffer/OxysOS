@@ -19,7 +19,7 @@
  *   - kernel/include/oxys/proc/process.h: PROCESS_USER_STACK_TOP, which is
  *     where the stack is, and PROCESS_BREAK_MAXIMUM, which bounds the heap that
  *     grows upward from just above this image.
- *   - docs/design/LIBC.md, Section 11.4: the link procedure of which this is
+ *   - docs/design/LIBC.md: the link procedure of which this is
  *     one half.
  *
  * Why four mebibytes, and not one or zero.

@@ -9,9 +9,9 @@
  * Key functions: KernelVerifyAcpi, KernelVerifyLocalApic, KernelVerifyIoApic,
  *          KernelVerifyApicRouting.
  * References:
- *   - docs/devices/ACPI.md, Section 7: the assertions upon the tables, each
+ *   - docs/devices/ACPI.md: the assertions upon the tables, each
  *     paired with the silent failure it exists to catch.
- *   - docs/devices/APIC.md, Section 8: the assertions upon the two controllers.
+ *   - docs/devices/APIC.md: the assertions upon the two controllers.
  *   - ACPI Specification 6.5, Sections 5.2.5.3, 5.2.6 and 5.2.12.
  *   - Intel SDM, Volume 3A, Sections 10.4.3, 10.4.4, 10.5.2 and 10.9.
  *   - Intel 82093AA I/O APIC datasheet, Sections 3.2.2 and 3.2.4.

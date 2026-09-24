@@ -10,7 +10,7 @@
  *          PersistRelease, PersistEtc, PersistReportWrite.
  * References:
  *   - docs/storage/PERSIST.md: the design, and every assertion made upon it.
- *   - docs/storage/VFS.md, Sections 5 and 8: how a mount covers a directory,
+ *   - docs/storage/VFS.md: how a mount covers a directory,
  *     and the mark a writable mount leaves upon a volume.
  *   - The Second Extended File System, Dave Poirier, the superblock's
  *     `s_volume_name` (offset 120, sixteen bytes) and `s_state`, whose two bits
@@ -20,7 +20,7 @@
  * Why a volume of its own, over `/etc`, and not a directory of a larger one.
  *
  *   One disk holding `/etc` and `/home` would need `/etc` bound to a directory
- *   of that disk. This layer walks by node alone, VFS.md, Section 5.1, so the
+ *   of that disk. This layer walks by node alone, as VFS.md explains, so the
  *   directory would be one node reached by two paths, and `..` from it could
  *   not tell which it came by — `cd /etc; cd ..` would arrive in the disk's
  *   root rather than at `/`, silently. A volume mounted directly upon `/etc`
@@ -28,7 +28,7 @@
  *
  * Why by label.
  *
- *   The root is chosen by name, VFS.md, Section 8.2, so that a stranger's disk
+ *   The root is chosen by name, as VFS.md explains, so that a stranger's disk
  *   is never mounted where this system's files belong; the same reasoning
  *   applies twice over to a volume mounted for writing over `/etc`. Only a
  *   volume whose superblock names itself PERSIST_ETC_LABEL is taken, and a disk
@@ -71,7 +71,7 @@ typedef struct PersistReport
  * either way.
  *
  * A volume found not cleanly unmounted, with no errors recorded, is marked
- * clean before it is mounted — PERSIST.md, Section 4, says why this and only
+ * clean before it is mounted — PERSIST.md says why this and only
  * this volume is — and one with errors recorded is mounted read-only.
  */
 bool PersistMountByLabel(const char *label, const char *point, PersistReport *report);

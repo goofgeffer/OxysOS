@@ -19,7 +19,7 @@
  *   - libc/include/heap.h: the same seam, one sub-task earlier, and the note
  *     there upon why a named function is better than a call buried inside the
  *     policy. This header is that argument applied a second time.
- *   - docs/design/LIBC.md, Section 10.2: the division of sub-task 7.4 into a
+ *   - docs/design/LIBC.md: the division of sub-task 7.4 into a
  *     policy that runs anywhere and a pair of transfers that run only at
  *     privilege level 3.
  *

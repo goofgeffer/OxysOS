@@ -22,7 +22,7 @@
  *   - IEEE Std 1003.1-2017, `sigaction()` and `signal()`: SIG_DFL and SIG_IGN,
  *     and that a handler is reset to the default by `exec` while an ignored
  *     signal stays ignored.
- *   - docs/design/PROCESS.md, Section 18: the design, and what a delivered
+ *   - docs/design/PROCESS.md: the design, and what a delivered
  *     signal does to the process it reaches.
  *
  * What a signal is here.

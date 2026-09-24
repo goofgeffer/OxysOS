@@ -132,7 +132,7 @@ Every page is zeroed, for the reason [`EXECUTABLE.md`](EXECUTABLE.md), Section
 5.3 gives: a frame arrives holding whatever its last owner left in it, and a
 stack is the first thing a program reads.
 
-### 5.3 The heap, of sub-task 7.3
+### 5.3 The heap
 
 Sub-task 7.3 gave the process control block a third extent beside the image and
 the stack: **the break**, being the address one past the last byte of the region
@@ -161,8 +161,8 @@ Three consequences fall to this file rather than to the call:
   it was still using.
 
 The placement and the guard page beneath it are
-[`MEMORY-LAYOUT.md`](MEMORY-LAYOUT.md), Section 15; the call itself is
-[`LIBC.md`](LIBC.md), Section 9.2.
+[`MEMORY-LAYOUT.md`](MEMORY-LAYOUT.md); the call itself is
+[`LIBC.md`](LIBC.md).
 
 ## 6. Identifiers are numbers, not indices
 
@@ -210,49 +210,7 @@ while there is one thread of control (limitation 3); it becomes assertable, and
 must be asserted, when something makes more than one
 program's death possible.
 
-### 7.1 The negative tests
-
-Each was applied to `kernel/proc/process.c`, confirmed, and reverted.
-
-| The damage | What the run reported |
-| ---------- | --------------------- |
-| The guard page left writable. | `the page beneath a thread's stack is writable, so it is not a guard` |
-| A process destroyed without destroying its threads. | `a thread outlived the process that owned it` **and** `the arena did not return to what it held before` — the second being the one that would have caught it even had the first been thought unnecessary |
-| `TssSetKernelStack` not called when a thread becomes current. | `making a thread current did not point rsp0 at its stack` and `rsp0 did not follow the thread that became current` |
-
-## 8. Observed state
-
-`ProcessReport` is emitted at the end of the self-tests, and upon QEMU with the
-`q35` machine and 512 MiB it reads:
-
-```
-Processes: 0 of 64, threads 0 of 128; created 4 and 6 since the start.
-Processes: no thread is current; 1 program(s) have run and ended.
-```
-
-**Both numbers matter and the second pair of the first line is the one worth
-reading.** Zero occupied slots against four processes and six threads created is
-the assertion of Section 7 restated by the tables themselves: everything the
-self-tests of this sub-task and of 6.10 built was given back, so a leak would
-show here as a non-zero occupancy long before it showed as an exhausted arena.
-The counts are cumulative and never decrease, which is what makes them useful for
-that comparison.
-
-**The second line said `nothing has run` until the review that followed sub-task
-6.10.** It was printed immediately below the log of a program running — the
-program's own line of output, and the trace of the fault it raised on purpose,
-stand a few lines above it. The statement was defensible on a narrow reading, no
-thread being current at the moment the report is reached: the tests adopt a
-thread, switch away from it, switch back, and release everything before they
-return. But a report is read by whoever is looking at the log, not by whoever
-wrote the condition, and a line that contradicts the evidence directly above it
-teaches its reader that the report is not to be trusted.
-
-The two facts are now separated. Whether a thread is current is one question;
-whether anything has run is another, and the termination count already answered
-it. The kernel says `nothing has run` only when nothing has.
-
-## 9. The switch, of sub-task 6.10
+## 9. The switch
 
 ### 9.1 Why it is a function call
 
@@ -310,7 +268,7 @@ a kernel address as often as not, and handing one to a program that then prints
 it is a disclosure no fault would report.
 
 
-### 10.2 What stands upon the stack, of sub-task 7.5
+### 10.2 What stands upon the stack
 
 The table above says `RSP` is "the top of the process's user stack", and until
 sub-task 7.5 it was — which is one byte past the last mapped byte.
@@ -339,7 +297,7 @@ instruction using an aligned move, inside a function the program did not write.
 that will never read it. A contract that depended upon what the kernel guessed
 about its caller would not be one.
 
-[`LIBC.md`](LIBC.md), Section 11.1, records the rest, including an earlier
+[`LIBC.md`](LIBC.md) records the rest, including an earlier
 version of this that wrote the six zeroes explicitly and was deleted when a
 negative test showed the write could not be observed.
 
@@ -358,13 +316,13 @@ aligned to sixteen after the frame is sized and not before, the information
 block ending wherever the last string ended; and the writes go through the direct
 map of the frames the mapping loop above already held, because the paging layer
 offers no walk of an address space that is not the active one and the space being
-filled very often is not. [`LIBC.md`](LIBC.md), Section 12.2, holds the whole of
+filled very often is not. [`LIBC.md`](LIBC.md) holds the whole of
 it and the reasoning for each part.
 
 **This is also where a process acquires its descriptor table**, which is emptied
 at creation and is a field of the process control block rather than of the
 address space: a descriptor outlives an `execve` in every system that has one,
-and since sub-task 8.5 in this one too — Section 14. [`LIBC.md`](LIBC.md), Section 12.1.2.
+and since sub-task 8.5 in this one too — Section 14. [`LIBC.md`](LIBC.md).
 ### 10.1 How the kernel gets back
 
 Three ways, and this sub-task implements two of them.
@@ -421,17 +379,7 @@ register**. And `RCX` holding the return address with `R11` holding the flags is
 | The program ended, and its process is marked ended | The termination path of Section 10.1 |
 | **The exit status is −6** | The vector the program faulted upon, negated. Six is the undefined instruction it executed on purpose, so this says the program reached its *last* instruction and not merely its first — and it is what caught the address space not being switched, which faulted at the entry with vector 14 instead |
 
-### 10.4 The negative tests
-
-| The damage | What the run reported |
-| ---------- | --------------------- |
-| The code selector pushed without its requested privilege level of 3. | `KERNEL PANIC: An unrecoverable processor exception was raised within the kernel.` The descent did not descend: the program ran at privilege level 0, where its undefined instruction is a fault belonging to the machine |
-| The address space not switched before the thread is entered. | `A fault was raised outside the kernel, at privilege level 3, vector 0xE` and `User mode self-test FAILED` — a page fault at the entry point, the program's pages not being mapped in the space it was entered in. Caught by the exit status being −14 rather than −6 |
-| The termination not performed upon a fault outside the kernel. | `KERNEL PANIC: A fault outside the kernel was raised by nothing this kernel started.` Which is what this path did before this sub-task, so the panic is the previous behaviour restored |
-| The six preserved registers written onto the prepared frame. | **Found during development, not as a deliberate test.** A return to address zero; see Section 9.2 |
-| `RFLAGS` pushed without bit 1. | Nothing. The processor forces the bit whether or not it is written, so the assertion this was meant to justify does not exist and the comment says so instead |
-
-## 11. The four calls, of sub-task 6.11
+## 11. The four calls
 
 Until this sub-task a program could be started and could stop. It could not make
 another program, could not become another program, and could not say that it had
@@ -475,8 +423,8 @@ sub-task the kernel itself reads `GS` on every lock, and a handler entered from
 privilege level 3 would otherwise reach for the area through a base of zero. The
 argument below is unaffected: a switch still cannot tell how the kernel was
 entered, and still must not have to. See
-[`CONCURRENCY.md`](CONCURRENCY.md), Section 3.3, and
-[`INTERRUPTS.md`](INTERRUPTS.md), Section 3.3.
+[`CONCURRENCY.md`](CONCURRENCY.md) and
+[`INTERRUPTS.md`](INTERRUPTS.md).
 
 A context switch cannot tell those apart and must not have to. The thread it
 resumes may be one suspended inside a system call, and the closing `SWAPGS` of
@@ -502,7 +450,7 @@ the history of the thread making it.
 `SYSCALL` performs no stack switch. The entry path therefore cannot read `rsp0`
 — it has no stack from which to reach the task state segment — and reads a field
 of the block `GS` names instead. From sub-task 6.13 that block is the
-per-processor area of [`CONCURRENCY.md`](CONCURRENCY.md), Section 3; the field is
+per-processor area of [`CONCURRENCY.md`](CONCURRENCY.md); the field is
 the same field at the same offset, and nothing below changes. **Two variables
 describe one stack**, and until this sub-task only one of them followed the
 current thread.
@@ -573,7 +521,7 @@ the child's kernel stack for the trampoline and admits its thread to the
 bootstrap processor's run queue, and the child runs when the parent sleeps in
 `wait`, sleeps upon a pipe, or is pre-empted at privilege level 3 — whichever is
 first. Section 17 records what that required, and
-[`SCHEDULER.md`](SCHEDULER.md), Section 9, the scheduler's half of it. The
+[`SCHEDULER.md`](SCHEDULER.md) the scheduler's half of it. The
 departure is closed: the ordering a program can observe is the ordering the
 standard promises, and a child of a parent that never waits runs all the same.
 
@@ -614,7 +562,7 @@ level 3 begins at the top of that stack again.
 **Arguments and environment were refused until sub-task 7.6, and are now
 carried.** They were refused for want of a convention about where a program
 finds them upon its stack; the convention is the System V ABI's own and
-[`LIBC.md`](LIBC.md), Section 12.2, holds it. What this kernel does about it is
+[`LIBC.md`](LIBC.md) holds it. What this kernel does about it is
 in two halves. `SyscallCopyUserVector` copies every string out of the caller's
 memory into a `ProcessArguments` upon the kernel stack **before**
 `ProcessExecute` is called — because the address space those strings stand in is
@@ -635,7 +583,7 @@ places it at 0, 1 or 2 by `dup2`, and the program the child then becomes must
 find it there; so `execve` keeps the table, which is the process's own and the
 process the same one, and what it holds it holds until it closes or ends.
 Nothing leaks by that: `ProcessDestroy` closes what remains.
-[`LIBC.md`](LIBC.md), Section 12.1.2, and [`SHELL.md`](SHELL.md), Section 19.
+[`LIBC.md`](LIBC.md) and [`SHELL.md`](SHELL.md).
 
 ## 15. `exit` and `wait`
 
@@ -755,57 +703,7 @@ a mishandled `GS.base` would fail at.
 | A copy-on-write fault was resolved | Section 15.1: the pages were never shared, or the kernel refused to write to one it had itself protected |
 | Both tables return to what they held | A leak of a process, a thread or an address space per program run |
 
-### 16.1 The negative tests
-
-Each was applied, confirmed, and reverted.
-
-| The damage | What the run reported |
-| ---------- | --------------------- |
-| `SyscallSetKernelStack` not called when a thread becomes current (Section 12.2). | A page fault in **supervisor mode** at `0x652000`, the parent having returned by `SYSRET` through registers its child's system call had overwritten. `RCX` held `0xC0000102`, which is the number of `IA32_KERNEL_GS_BASE` and not an address of anything |
-| `SyscallEstablishKernelGsBase` not called upon a switch (Section 12.1). | `page not present, read, supervisor mode, faulting linear address 0x8` — the entry path reading its kernel stack out of the block `GS` no longer names, at the parent's first system call after its faulting child was collected |
-| The thread to return to cleared rather than restored (Section 15.2). | `KERNEL PANIC: A program ended that nothing this kernel started had begun.` |
-| The copy-on-write page not resolved for the kernel's write (Section 15.1). | `three programs did not end`, `the child did not replace itself with the program upon the volume`, `no copy-on-write fault was resolved` — and the report showing **two processes still occupying the table**, both `ready`, both never run |
-| The child's `RAX` left as its parent's. | `the child would not see zero returned from fork`, and then every assertion of the second test, the child having taken the parent's branch and waited for a child of its own that does not exist |
-
-### 16.2 Observed state
-
-Upon QEMU with the `q35` machine and 512 MiB:
-
-```
-Processes: 0 of 64, threads 0 of 128; created 9 and 11 since the start.
-Processes: 3 fork(s), 1 execution(s), 3 child(ren) collected.
-Processes: no thread is current; 4 program(s) have run and ended.
-Copy-on-write: faults resolved 6, frames duplicated 4, resolved without duplication 2.
-Address spaces: clones 4, pages shared 56, of which protected 36.
-```
-
-The four clones are one apiece from the address-space self-test of sub-task 2.8
-and the fork self-test above, and two from the program's two forks. Three forks
-are counted against them because the address-space test clones a hierarchy
-without making a process of it, which is the distinction between the two numbers.
-
-**The forks and the collections are printed together because they must balance.**
-A process forked and never collected is a slot that stays occupied, so the
-difference between those two numbers is the number of children nobody has waited
-for — which is the leak this sub-task can produce and the tables above cannot
-show by themselves.
-
-The trace the second child's fault produces is worth reading beside Section 13.1:
-
-```
-  vector 6: #UD Invalid Opcode
-  RIP 0x401074  CS 0x2B  RFLAGS 0x246
-  RSP 0x700000000000  SS 0x23
-  RAX 0x0  RCX 0x401035  RDX 0x4A  RSI 0x402000  RDI 0x402200
-```
-
-`RAX` of zero is the child seeing what a child sees. `RCX` of `0x401035` is the
-address after its parent's `SYSCALL`, which is where it resumed. And `RDX`,
-`RSI` and `RDI` hold the length, the string and the status address its parent had
-left in them before forking — the inheritance of Section 13.1, in registers no
-part of the kernel wrote.
-
-## 17. Sub-task 8.6: the child that runs beside its parent
+## 17. The child that runs beside its parent
 
 **Implementation**: `ProcessFork`, `ProcessWait`, `ThreadStart`,
 `ThreadTerminateCurrent`, `ThreadSwitchTo` and `ThreadDestroy` in
@@ -813,8 +711,8 @@ part of the kernel wrote.
 `return_to`, `wait_channel`, `critical_depth`, `interrupts_were_enabled` and
 `adopted` of `Thread` in
 [`../../kernel/include/oxys/proc/process.h`](../../kernel/include/oxys/proc/process.h).
-The scheduler's half is [`SCHEDULER.md`](SCHEDULER.md), Section 9; what it was
-all for is [`SHELL.md`](SHELL.md), Section 22.
+The scheduler's half is [`SCHEDULER.md`](SCHEDULER.md); what it was
+all for is [`SHELL.md`](SHELL.md).
 
 The pipeline needed two programs alive at once, and this kernel had never had
 two: a child ran upon its parent's flow of control, inside the parent's `wait`,
@@ -858,7 +756,7 @@ runs programs, one at a time.
 `ProcessWait` scans for a child, prefers one that has ended, and — where none
 has and the caller is a thread the scheduler can put to sleep — sleeps upon its
 own process and scans again when woken. The scan and the sleep are one masked
-section, the discipline `SCHEDULER.md`, Section 9.1, sets out. A caller with no
+section, the discipline `SCHEDULER.md` sets out. A caller with no
 thread to sleep upon is the kernel's own flow of control inside the fork
 self-test, and it takes the path `wait` always took: the child is withdrawn from
 the queue the fork put it upon — a queued thread started by a call would be
@@ -874,7 +772,7 @@ thread pushed next, and the idle thread's push records that interrupts were
 enabled; the sleeper's pop, restoring what the processor recorded, would have
 enabled interrupts inside a system call. `ThreadSwitchTo` saves the depth and the
 flag into the outgoing thread and loads the incoming thread's.
-[`CONCURRENCY.md`](CONCURRENCY.md), Section 4.1, holds the whole of the
+[`CONCURRENCY.md`](CONCURRENCY.md) holds the whole of the
 reasoning and the window it closes.
 
 ### 17.5 Verification
@@ -894,7 +792,7 @@ the concurrency beneath it did.
 | A parent that forks and waits is resumed after the child ends, with the child's status. | A parent woken by nobody, or returned to the boot flow. |
 | Every self-test after the first sleep still passes. | Interrupts enabled inside a system call after a resume from idle. |
 
-## 18. Sub-task 8.7: signals, process groups and `waitpid`
+## 18. Signals, process groups and `waitpid`
 
 **Implementation**: [`../../kernel/proc/signal.c`](../../kernel/proc/signal.c)
 behind [`../../kernel/include/oxys/proc/signal.h`](../../kernel/include/oxys/proc/signal.h)
@@ -907,7 +805,7 @@ stand in, the frame a handler is entered upon, and `sigreturn`. `ProcessWaitFor`
 and the descriptors released at the ending in
 [`../../kernel/proc/process.c`](../../kernel/proc/process.c); the eight calls in
 [`../../kernel/arch/x86_64/syscall/syscall.c`](../../kernel/arch/x86_64/syscall/syscall.c);
-the terminal's half in [`SHELL.md`](SHELL.md), Section 28. Asserted by
+the terminal's half in [`SHELL.md`](SHELL.md). Asserted by
 [`../../kernel/test/proc/signal.c`](../../kernel/test/proc/signal.c) and
 [`../../userland/signal-check/main.c`](../../userland/signal-check/main.c).
 
@@ -1028,8 +926,7 @@ names the process after the program — the last component of the path — so
 that a listing names what runs and not the shell every child was forked from;
 and `procinfo` reports one slot of the table, the state taken from the thread
 where the process is neither stopped nor ended, limitation 4 of Section 19
-being why the process's own field would not do. [`SHELL.md`](SHELL.md),
-Section 30.
+being why the process's own field would not do. [`SHELL.md`](SHELL.md).
 
 ### 18.5 Verification, and what it found
 
@@ -1060,7 +957,7 @@ ready through a pipe before the parent sends. And the SIGPIPE child wrote
 before the parent had closed its own read end, so a reader existed and the
 write succeeded; the read end is closed before the fork now.
 
-### 18.6 Sub-task 9.2: a thread launched, and a process's windows
+### 18.6 A thread launched, and a process's windows
 
 Two things the window client protocol asked of this layer, both small.
 `ThreadLaunch` hands a thread to the scheduler without waiting for it — prepared
@@ -1075,20 +972,20 @@ And a process's windows are destroyed at its ending, in `ThreadTerminateCurrent`
 beside the release of its descriptors and for the same reason: what a process
 that has ended held is given back at the ending and not at the collecting.
 `ProcessDestroy` releases them as well, for a process destroyed without having
-run. [`WINDOWS.md`](WINDOWS.md), Section 10.2.
+run. [`WINDOWS.md`](WINDOWS.md).
 
 **Sub-task 9.3 gives back a third thing in the same place: the children.**
 `ProcessAdoptOrphansOf` hands every child of the ending process to `init` — the
 process the kernel was told of by `ProcessSetInit` — and wakes it where one of
 them had already ended and is waiting for a collector. `ProcessPause` arrived
 with it, suspending a caller until a signal, which is what an `init` with no
-child to `wait` upon waits in. [`INIT.md`](INIT.md), Sections 2 and 3, hold the
+child to `wait` upon waits in. [`INIT.md`](INIT.md) hold the
 reasoning; what belongs here is that the ending is where it happens, and that
 it is the same reason as for the descriptors and the windows.
 
-## 19. Present limitations
+## 19. Limitations
 
-1. ~~**Nothing has run.**~~ A program has: see Section 10.2. What has not
+1. A program has: see Section 10.2. What has not
    happened is pre-emption — nothing takes a processor away from a thread that
    has not given it up — until sub-task 6.15, whose local timer does exactly that
    for any thread the scheduler has placed upon a run queue. A program still
@@ -1097,7 +994,7 @@ it is the same reason as for the descriptors and the windows.
    a hundred and twenty-eight threads, found by walking. Nothing here is on a
    path that runs often, and a hash of identifiers is worth writing when
    something is.
-3. ~~**One thread of control.**~~ **Closed at sub-task 8.6.** `ThreadStart`
+3. **Closed at sub-task 8.6.** `ThreadStart`
    records the thread to return to upon the started thread rather than in a
    single variable, a child of `fork` is admitted to the scheduler at the fork,
    and `wait` sleeps: two programs run at once, upon the bootstrap processor,
@@ -1125,15 +1022,15 @@ it is the same reason as for the descriptors and the windows.
    heap of sub-task 7.3 does grow**, and it is the counter-example that shows why
    the stack does not: a heap grows because a program *asks*, by a system call
    naming exactly how far, and nothing has to guess what a fault meant.
-9. ~~**A child runs only when its parent waits for it.**~~ **Closed at sub-task
+9. **Closed at sub-task
    8.6**, Sections 13.2 and 17.2: a child runs beside its parent from the fork.
    What remains of this limitation is its second half — a parent that ends
    before waiting leaves its child in the table with a parent identifier naming
    nobody, and the child, when it ends, wakes nobody and stays there. There is
    no `init` to reparent an orphan to until Phase 9.
-10. ~~**`execve` takes no arguments and no environment.**~~ **Closed at sub-task
+10. **Closed at sub-task
     7.6.** The convention it was waiting for is the System V ABI's own, and
-    [`LIBC.md`](LIBC.md), Section 12.2, holds it: the strings at the top of the
+    [`LIBC.md`](LIBC.md) holds it: the strings at the top of the
     new stack, the pointers below them, the argument count at the stack pointer.
     Both vectors are accepted, bounded by
     `SYSCALL_ARGUMENT_COUNT_MAXIMUM` and `SYSCALL_ARGUMENT_BYTES_MAXIMUM`, and
@@ -1141,10 +1038,10 @@ it is the same reason as for the descriptors and the windows.
     against. **What replaced it was narrower until sub-task 8.5**: a child of `fork` inherited no
     descriptor and `execve` closed every one, because sharing an open file
     between two processes needs a reference count upon it that the filesystem
-    layer did not have. `LIBC.md`, Section 12.7, limitation 8, recorded it, and the
+    layer did not have. `LIBC.md` recorded it, and the
     shell's redirection at 8.5 is what needed it: the layer counts holders since
     then, a child inherits every descriptor, and `execve` keeps them. Section 14.
-11. ~~**A status is a quadword and nothing more.**~~ **Closed at sub-task 8.7**:
+11. **Closed at sub-task 8.7**:
     `wait` and `waitpid` report a kind and a number — exited, signalled or
     stopped, and the code or the signal — in the encoding of
     `<oxys/syscall_abi.h>`, which the C library agrees with. `exit_status`
@@ -1166,9 +1063,9 @@ it is the same reason as for the descriptors and the windows.
     delivering upon the exception's frame and deciding what a handler that
     returns to the faulting instruction should meet, which is a decision worth
     making when something wants it.
-15. ~~**An orphan is nobody's.**~~ **Closed at sub-task 9.3.** A process whose
+15. **Closed at sub-task 9.3.** A process whose
     parent has ended is given to `init`, which collects it;
-    [`INIT.md`](INIT.md), Section 3, holds the adoption and the three decisions
+    [`INIT.md`](INIT.md) holds the adoption and the three decisions
     in it, and Section 18.6 below is where in this file it happens. What remains
     is that `init` may itself be killed, and that nothing but the desktop is
     told to stop at a shutdown — Section 7 of that document.

@@ -9,7 +9,7 @@
  * Key functions: VfsStat, VfsStatLink, VfsTruncate, VfsCreateDirectory,
  *          VfsUnlink, VfsRemoveDirectory, VfsLink, VfsReadLink, VfsSync.
  * References:
- *   - docs/storage/VFS.md, Sections 9 and 10: what each of these refuses and
+ *   - docs/storage/VFS.md: what each of these refuses and
  *     why — a directory removed while it still holds entries, a file destroyed
  *     while something still has it open, a link across a mount point.
  *   - IEEE Std 1003.1-2017, the definitions of `unlink`, `rmdir` and `link`: the

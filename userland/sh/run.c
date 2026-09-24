@@ -32,7 +32,7 @@
  *     command runs in a subshell environment, the shell waits for the last
  *     command, and the status is the last command's unless `!` inverts it.
  *   - IEEE Std 1003.1-2017, `pipe()`: the read end first, the write end second.
- *   - docs/design/SHELL.md, Sections 16 and 22.
+ *   - docs/design/SHELL.md.
  *
  * Why the search tries each candidate by executing it.
  *

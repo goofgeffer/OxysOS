@@ -111,7 +111,7 @@ pixels:
   holding the focus, a paler one for every other band, and a dark brown ink.
   [`../../art/palette.h`](../../art/palette.h) is the whole of it — one header
   the kernel and the session both read, so that a colour cannot be decided
-  twice — and [`../design/SESSION.md`](../design/SESSION.md), Section 3.2, is
+  twice — and [`../design/SESSION.md`](../design/SESSION.md) is
   where it is drawn.
 - **Legibility first.** Where a playful choice and a legible one disagree, the
   legible one is taken. A desktop that is pleasant to look at and hard to read
@@ -132,7 +132,7 @@ This remains a preference of taste and is stated as one, and the colours and the
 mark it is now carried out in are the project owner's own —
 [`../../art/README.md`](../../art/README.md). **Sub-task 9.1 is the first thing
 built against it**, on 2026-09-17, and
-[`../design/WINDOWS.md`](../design/WINDOWS.md), Section 4, is where the window's
+[`../design/WINDOWS.md`](../design/WINDOWS.md) is where the window's
 frame and the palette are judged against this section: a flat band, a one-pixel
 border, one blue reserved for the focus, and a disc for the one control — the
 geometry was reached, the bevel was not reached for, and rounded corners and any

@@ -31,7 +31,7 @@
  *     and `io_redirect`, of which parser.c implements the subset below.
  *   - IEEE Std 1003.1-2017, Section 2.7 (Redirection): the operators and what
  *     each means, so that the structure records the meaning and not the text.
- *   - docs/design/SHELL.md, Section 8: what of the grammar is here, what is
+ *   - docs/design/SHELL.md: what of the grammar is here, what is
  *     refused by name, and why the tokeniser keeps the quotes.
  *
  * Why the tokeniser keeps the quotes.

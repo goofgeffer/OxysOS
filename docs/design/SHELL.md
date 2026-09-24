@@ -31,7 +31,7 @@ asserted by [`../../kernel/test/terminal/terminal.c`](../../kernel/test/terminal
 [`../../kernel/test/libc/line.c`](../../kernel/test/libc/line.c) and
 [`../../userland/line-check/main.c`](../../userland/line-check/main.c).
 
-## 1. Sub-task 8.1: what it is, and what it is not
+## 1. What it is, and what it is not
 
 The plan's line for it is "line editing with history", and that is what a
 person sees: a prompt, a line that can be edited with the cursor keys, Home,
@@ -144,7 +144,7 @@ one program at a time. So the processor that halts has nothing else to do, and
 the interrupt that wakes it is the one the program was waiting for. When there
 are two programs, a `read` that halts the processor stops both; the right shape
 then is a wait queue the scheduler can block a thread upon, which
-[`SCHEDULER.md`](SCHEDULER.md), Section 10, limitation 8, already records as
+[`SCHEDULER.md`](SCHEDULER.md) already records as
 absent. Section 6 counts it, and Section 22.3 records what 8.6 did about it.
 
 **The queue is bounded and the bound discards the newest.** For the reason the
@@ -154,7 +154,7 @@ yet read. The discard is counted and the report shows it.
 
 ### 2.4 `stdin`, and the one function that changed
 
-[`LIBC.md`](LIBC.md), Section 10.2, divided the stream machinery into a policy
+[`LIBC.md`](LIBC.md) divided the stream machinery into a policy
 and two transfers, and said of the second — `OxysStreamFill`, which returned
 end-of-file because there was no call that reads — that "the day a read call
 exists, one function of six lines changes and every program above it keeps
@@ -184,7 +184,7 @@ typed, which is a defect that presents as a shell that answers to some keys.
 and the shell's ending reattaches it. The serial line is read regardless: it is
 the shell's whichever of the two has the keyboard, and the shell upon the
 default entry is reached that way. The two entries that give the shell the
-screen never detach it. [`WINDOWS.md`](WINDOWS.md), Section 5.2.
+screen never detach it. [`WINDOWS.md`](WINDOWS.md).
 
 ### 2.6 One terminal, one reader — and the livelock that proved it
 
@@ -221,7 +221,7 @@ back. One reader remains and makes progress.
 keeping. The single-reader rule still holds and is still unenforced by any
 mutual exclusion; what is enforced now is that a reader which has lost the
 terminal stops waiting for it.
-[`CONCURRENCY.md`](CONCURRENCY.md), Section 10, limitation 1, keeps the queue.
+[`CONCURRENCY.md`](CONCURRENCY.md) keeps the queue.
 
 ## 3. The line editor
 
@@ -294,7 +294,7 @@ for want of memory would be a shell that could not report the failure.
 
 ### 3.4 The division, made a third time
 
-[`LIBC.md`](LIBC.md), Sections 9.1 and 10.2, divided the heap and the streams
+[`LIBC.md`](LIBC.md) divided the heap and the streams
 into a *policy* that runs anywhere and a *transfer* that executes `SYSCALL`,
 so that the policy could be asserted by the kernel and the transfer by a
 program. The editor is divided the same way and for the same reason: the
@@ -303,7 +303,7 @@ a descriptor, and `LineRead` — the one function that does — is a translation
 unit of its own above `OxysRead` and `OxysWrite`.
 
 **This is the first thing in this project built so that what a program prints
-can be asserted.** [`LIBC.md`](LIBC.md), Section 12.7, limitation 1, records
+can be asserted.** [`LIBC.md`](LIBC.md) records
 that nothing in the kernel can read what a program wrote to the diagnostic
 path, so a program whose whole output is text proves only that it did not
 fault. The editor's output goes through a function it is given, and the
@@ -312,32 +312,6 @@ editing key produces — the character echoed, the tail redrawn, the backspaces
 that return the cursor — are compared byte for byte. Section 5 records the one
 defect class this catches that nothing else could: a redraw that leaves the
 line right and the screen wrong.
-
-## 4. The shell at sub-task 8.1 (superseded by Section 8.5)
-
-At 8.1 it prompted with `oxys$ `, read a line through `LineRead`, remembered
-it if it was not empty, and printed `sh: no tokeniser yet, so nothing runs:`
-followed by the line. Since 8.2 it parses the line and describes the structure;
-Section 8.5. Control-D upon an empty line ends it, and there is no `exit` word:
-that is a built-in of sub-task 8.3, and a word recognised specially here would
-be the beginning of a parser written in the wrong file.
-
-**The kernel starts it** when the boot finishes, where there is a root to read
-it from and a keyboard or a serial adapter to type at. It is started again when
-it ends by its own choice — control-D, or since 8.3 `exit [n]`, whatever the
-number — because the alternative is a machine that halts the first time
-somebody presses control-D; it is *not* started again when it ends by a fault,
-because a shell that faulted at once would be started at once, for ever, and
-the log would be that. (Until 8.3 any non-zero status stopped the restart,
-which `exit 9` showed to be wrong: a status the shell chose is an ending.)
-Where there is no root — a boot
-whose ramdisk was not found — the echo loop of Phase 3 remains, as the
-demonstration of the interrupt path it always was.
-
-`/bin/sh` is upon the ramdisk beside the five utilities, and it is embedded in
-the kernel image as they are, so that the ramdisk self-test compares it byte
-for byte against the copy that was built. [`../storage/INITRD.md`](../storage/INITRD.md),
-Section 2.
 
 ## 5. Verification
 
@@ -400,17 +374,6 @@ sub-task were made by typing at the shell under QEMU over the serial line and
 under VirtualBox at the PS/2 keyboard — and it is the one property of this
 sub-task that a person sees and no assertion does.
 
-### 5.4 The negative tests, and the one that found the point
-
-Three defects were inserted deliberately, each observed to be caught, and each
-reverted.
-
-| Defect inserted | Caught by | What it showed |
-| --------------- | --------- | -------------- |
-| The right-arrow key translated to the left-arrow's sequence. | The terminal test's assertion upon the seven sequences in order. | — |
-| An insertion that redraws the tail and does not backspace over it. | The editor test's captured output alone. **`line-check` passed** — the line was right and only the screen was wrong. | That the captured output is not a nicety: it is the only assertion in this project that can see the class of defect a person would see first. |
-| The history recording a repeated line twice. | Eight assertions of the editor test, and `line-check`'s count of the history. | — |
-
 ## 6. Limitations
 
 1. **The terminal is raw and there is no canonical mode.** `fgets` upon `stdin`
@@ -421,12 +384,12 @@ reverted.
    and delivery by the line — is what would close it, and `tcgetattr` and
    `tcsetattr` of IEEE Std 1003.1-2017, Section 11, are the interface a program
    would switch it with. Nothing yet wants it; the shell wants raw.
-2. ~~**A `read` of the terminal halts the processor.**~~ **Amended at sub-task
+2. **Amended at sub-task
    8.6**, Section 22.3: a read of the terminal yields to whatever the run queue
    holds and halts only when it holds nothing, so a pipeline's children run
    while the shell — or `cat` at the head of a pipeline — waits for a key. It
-   does not sleep upon the wait queue of [`SCHEDULER.md`](SCHEDULER.md),
-   Section 9, because the bytes arrive through an interrupt handler and nothing
+   does not sleep upon the wait queue of [`SCHEDULER.md`](SCHEDULER.md)
+   because the bytes arrive through an interrupt handler and nothing
    yet wakes a thread from one; 8.7's signals are what will.
 3. **A line longer than the display is wide is drawn wrongly once it wraps.**
    Section 3.2. The line itself is right; the display of it is not, upon a
@@ -434,7 +397,7 @@ reverted.
    because their backspace crosses a row boundary. It needs the editor to move
    the cursor up, which needs a display that interprets CUU, which none of the
    three do.
-4. ~~**Nothing interrupts a program.**~~ **Closed at sub-task 8.7**, Section
+4. **Closed at sub-task 8.7**, Section
    28.3: control-C is SIGINT to the foreground group. Until then it was byte 3, ignored by the
    editor; a program that does not return to the prompt cannot be stopped from
    the keyboard. That is sub-task 8.7's terminal signal delivery, and there is
@@ -453,7 +416,7 @@ reverted.
    defect; none is wanted before there are commands to complete.
 8. **None of this is synchronised.** The terminal's queue is touched by the
    one flow of control that reads it, which is the property that makes it
-   correct without a lock, and [`CONCURRENCY.md`](CONCURRENCY.md), Section 10,
+   correct without a lock, and [`CONCURRENCY.md`](CONCURRENCY.md)
    limitation 1, counts it with the rest.
 
 ## 7. What a person sees
@@ -474,7 +437,7 @@ produces `sh: no tokeniser yet, so nothing runs: world`; pressing Up recalls
 it. Control-D upon an empty line prints `sh: end of input.`, the kernel reports
 that the shell ended at the end of its input, and starts it again.
 
-## 8. Sub-task 8.2: the tokeniser and the parser
+## 8. The tokeniser and the parser
 
 **Implementation**: [`../../userland/sh/shell.h`](../../userland/sh/shell.h),
 [`../../userland/sh/lexer.c`](../../userland/sh/lexer.c) and
@@ -580,7 +543,7 @@ stranger arrangement than a library's and should be visible as one. The
 `Makefile`'s program rule was generalised in the same change: a program is
 every `.c` file in its directory, where it had been `main.c` alone.
 
-## 9. Verification of sub-task 8.2
+## 9. Verification
 
 ### 9.1 The tokeniser
 
@@ -632,7 +595,7 @@ empty simple command made legal, caught by the two UNEXPECTED assertions —
 while the shell, run upon the same session, still ended with zero, because it
 printed an empty pipeline and nothing asserts what it prints.
 
-## 10. Limitations of sub-task 8.2
+## 10. Limitations
 
 1. **No expansion.** `$HOME`, `$1`, `$?`, `~`, `` `…` ``, `$(…)`, `$((…))`,
    field splitting and pathname expansion are all absent; a `$` is a character
@@ -647,11 +610,11 @@ printed an empty pipeline and nothing asserts what it prints.
 4. **The bounds are small**, and sixteen words to a command is the smallest of
    them: it is the argument vector's own bound and a command with more would be
    refused by the kernel in any case. A larger vector is the change
-   [`LIBC.md`](LIBC.md), Section 12.7, limitation 9, describes.
+   [`LIBC.md`](LIBC.md) describes.
 5. **Nothing runs.** The structure is built and described, and 8.3 and 8.4 are
    what act upon it.
 
-## 11. Sub-task 8.3: the working directory
+## 11. The working directory
 
 **Implementation**: `working_directory` in
 [`../../kernel/include/oxys/proc/process.h`](../../kernel/include/oxys/proc/process.h),
@@ -668,7 +631,7 @@ set at creation and copied by `ProcessFork` in
 [`../../kernel/test/proc/directory.c`](../../kernel/test/proc/directory.c).
 
 `cd` is the first thing in the plan's line for 8.3, and it presumes something
-this kernel did not have: [`LIBC.md`](LIBC.md), Section 12.7, limitation 5,
+this kernel did not have: [`LIBC.md`](LIBC.md)
 records that every path a program named was absolute in effect, a relative one
 resolving against the root. So the sub-task begins in the kernel.
 
@@ -774,7 +737,7 @@ composed and their statuses seen; a redirection upon a built-in is named and
 not performed until 8.5, and a pipeline of more than one command is refused
 until 8.6.
 
-## 14. Verification of sub-task 8.3
+## 14. Verification
 
 ### 14.1 The working directory, by `dir-check`
 
@@ -811,15 +774,7 @@ worked. `pwd` and `export` print, which a person reads; the status is what is
 asserted, and it is the same device `startup-check` and `arg-check` use: a
 number the kernel checks independently of anything printed.
 
-### 14.4 The negative tests
-
-Three defects inserted, each caught, each reverted. `chdir` made to accept a
-file: caught by `dir-check` twice, and by the session — which ended with 213
-because `cd /bin/echo && G=2` had set `G`. `fork` made to copy only the first
-character of the working directory: caught by `dir-check` twice. A `$` made to
-expand within single quotes: caught by the expansion's assertion.
-
-## 15. Limitations of sub-task 8.3
+## 15. Limitations
 
 1. **The working directory is a path**, reduced lexically: a symbolic link in
    it is not followed, and a directory removed beneath a process leaves it
@@ -843,7 +798,7 @@ expand within single quotes: caught by the expansion's assertion.
    `&` is still recorded and not honoured, and a pipeline of two built-ins is
    refused rather than run in a subshell.
 
-## 16. Sub-task 8.4: external program execution
+## 16. External program execution
 
 **Implementation**: [`../../userland/sh/run.c`](../../userland/sh/run.c),
 called from `ShellRunCommand` in [`../../userland/sh/main.c`](../../userland/sh/main.c);
@@ -885,7 +840,7 @@ not exported does not reach the program, which is what `export` was for.
 The bound is the kernel's: sixteen strings to a vector and two kibibytes for
 both, so a shell that exported more than sixteen variables would be refused
 by `execve` with `EINVAL` and the program reported as not runnable.
-[`LIBC.md`](LIBC.md), Section 12.7, limitation 9, records what enlarging it
+[`LIBC.md`](LIBC.md) records what enlarging it
 costs; Section 18 counts it here.
 
 ### 16.3 The defect this sub-task found in the system-call entry path
@@ -906,7 +861,7 @@ cloned stack had the same pointer as its parent — which is why five sub-tasks
 of `fork` and `wait` never saw it — and the first child to become another
 program, whose stack is new, did. The stack pointer is now restored from the
 frame, by `POP RSP`, and the block's copy is used only for the push at entry.
-[`PRIVILEGE.md`](PRIVILEGE.md), Section 6, records the correction beside the
+[`PRIVILEGE.md`](PRIVILEGE.md) records the correction beside the
 path it corrects.
 
 ## 17. What a program is given
@@ -919,7 +874,7 @@ path it corrects.
 | Descriptors 0, 1 and 2 | The kernel's own, the terminal and the diagnostic path | 8.1 |
 | An open file of the shell's | Nothing: a child inherits no descriptor | — until 8.5 |
 
-## 18. Verification of sub-task 8.4, and its limitations
+## 18. Verification, and its limitations
 
 `env-check` is written by the self-test to `/verify/env-check` — a check
 program is not shipped in `/bin`, and a program written onto the root at run
@@ -948,11 +903,11 @@ of two commands is refused** (8.6); **`&` is recorded and not honoured** and
 **nothing interrupts a program** (8.7); **the environment is bounded at
 sixteen variables** by the kernel's vector bound; **a program is run upon the
 shell's own flow of control** — `wait` runs the child synchronously, as
-[`PROCESS.md`](PROCESS.md), Section 13.2, records — so nothing runs beside
+[`PROCESS.md`](PROCESS.md) records — so nothing runs beside
 the shell until the scheduler carries a user thread of its own — which it does
 since 8.6, Section 22.3.
 
-## 19. Sub-task 8.5: input and output redirection
+## 19. Input and output redirection
 
 **Implementation**: `ShellApplyRedirections` in
 [`../../userland/sh/run.c`](../../userland/sh/run.c); in the kernel, the
@@ -988,7 +943,7 @@ The expansion of the target word is the shell's ordinary one — `>$F` works
 
 ### 19.2 What the kernel had to grow
 
-[`LIBC.md`](LIBC.md), Section 12.7, held two limitations for this sub-task
+[`LIBC.md`](LIBC.md) held two limitations for this sub-task
 since 7.6, and it closes both.
 
 **A call that creates or writes a file.** `open` accepts WRITE, CREATE,
@@ -1006,7 +961,7 @@ numbers, or two processes, holding one open file and one position. So a child
 of `fork` inherits every descriptor, as POSIX has it, and `execve` keeps them
 — it closed them from 7.6 to 8.4, the safe half of the rule while nothing
 could mean to keep one; the redirection is what means to, and the table is
-the same process's. [`PROCESS.md`](PROCESS.md), Section 14, and
+the same process's. [`PROCESS.md`](PROCESS.md) and
 [`../storage/VFS.md`](../storage/VFS.md), limitation 2.
 
 **`dup2`, with one rule of this kernel's own.** A number below
@@ -1032,7 +987,7 @@ the end because no line discipline is there to do it for every program.
 The shell prints no greeting: the prompt is the whole of what a person sees,
 and `help` is for the rest.
 
-## 20. Verification of sub-task 8.5
+## 20. Verification
 
 ### 20.1 `file-check`, extended
 
@@ -1060,7 +1015,7 @@ at the first close regardless of holders, caught by `file-check` six times
 and by the redirection session; and the redirections applied in reverse order,
 caught by `/verify/both` holding nothing.
 
-## 21. Limitations of sub-task 8.5
+## 21. Limitations
 
 1. **A redirection upon a built-in is named and not performed.** Applying one
    in the shell and restoring it needs the terminal to be duplicable above the
@@ -1072,10 +1027,10 @@ caught by `/verify/both` holding nothing.
 4. **`cat` upon the terminal ends at a control-D by its own reading**, there
    being no line discipline; every other program reading the terminal reads
    keystrokes without end until 8.7.
-5. ~~**Pipelines and `&`** are 8.6's and 8.7's, as before.~~ Pipelines arrived
+5. Pipelines arrived
    at 8.6, Section 22; `&` at 8.7, Section 28.
 
-## 22. Sub-task 8.6: pipelines
+## 22. Pipelines
 
 **Implementation**: `ShellRunPipeline` and `ShellExecuteProgram` in
 [`../../userland/sh/run.c`](../../userland/sh/run.c), `ShellRunStage` and the
@@ -1086,8 +1041,8 @@ of [`../../kernel/fs/vfs/pipe.c`](../../kernel/fs/vfs/pipe.c) behind
 the `pipe` call in
 [`../../kernel/arch/x86_64/syscall/syscall.c`](../../kernel/arch/x86_64/syscall/syscall.c),
 and — the larger half — a child of `fork` that runs beside its parent,
-[`PROCESS.md`](PROCESS.md), Section 17, upon the wait channel of
-[`SCHEDULER.md`](SCHEDULER.md), Section 9. `OxysPipe` in
+[`PROCESS.md`](PROCESS.md) upon the wait channel of
+[`SCHEDULER.md`](SCHEDULER.md). `OxysPipe` in
 [`../../libc/syscall/calls.c`](../../libc/syscall/calls.c) and `EPIPE` in
 [`../../libc/include/errno.h`](../../libc/include/errno.h); `wc` in
 [`../../userland/wc/main.c`](../../userland/wc/main.c). Asserted by
@@ -1140,8 +1095,8 @@ all: it runs in the shell itself, where a built-in must run to have any effect.
 A bounded queue of bytes between two open files, one that reads it and one
 that writes it, upon which a reader sleeps while it is empty and a writer
 sleeps while it is full. It is an open file of the filesystem layer with no
-node beneath it, for the reason [`../storage/VFS.md`](../storage/VFS.md),
-Section 11.3, gives: everything a descriptor does was built at 8.5 upon the
+node beneath it, for the reason [`../storage/VFS.md`](../storage/VFS.md)
+gives: everything a descriptor does was built at 8.5 upon the
 open file, and a pipe end that was not one would have needed all of it twice.
 
 | Rule | What it prevents |
@@ -1165,8 +1120,8 @@ thread to return to is a field of the started thread rather than one pointer
 per processor, which a sleeping shell made wrong; and the counted
 interrupt-disable travels with the thread across a switch, which the first
 sleeper resumed from the idle thread made necessary.
-[`PROCESS.md`](PROCESS.md), Section 17; [`SCHEDULER.md`](SCHEDULER.md),
-Section 9; [`CONCURRENCY.md`](CONCURRENCY.md), Section 4.1.
+[`PROCESS.md`](PROCESS.md); [`SCHEDULER.md`](SCHEDULER.md);
+[`CONCURRENCY.md`](CONCURRENCY.md).
 
 **A user thread is pre-empted at privilege level 3 and nowhere else.** The
 kernel beneath a system call is not written to be entered by two threads, and
@@ -1201,7 +1156,7 @@ the operators was removed. The first session of the self-test, which the shell
 had answered by refusing its pipelines, now runs them, and was amended so that
 it names no file: a session run at every boot must leave nothing upon the root.
 
-## 23. Verification of sub-task 8.6
+## 23. Verification
 
 ### 23.1 `file-check`, extended
 
@@ -1219,7 +1174,7 @@ it names no file: a session run at every boot must leave nothing upon the root.
 cannot sleep: the table accounting, the ordered bytes, each end's one direction,
 the refusal of a seek, the busy refusal of a read that would block, the second
 holder that keeps the pipe open through the first close, and the broken pipe.
-[`../storage/VFS.md`](../storage/VFS.md), Section 11.3, has the table.
+[`../storage/VFS.md`](../storage/VFS.md) has the table.
 
 ### 23.3 The shell, upon a session the files and the status answer for
 
@@ -1243,13 +1198,13 @@ pipeline of the first session never ended, and the verification timed out with
 the prompt still waiting for `wc`.
 
 **One defect this sub-task met in its own change**, recorded in
-[`PROCESS.md`](PROCESS.md), Section 17.2: a child admitted at the fork without
+[`PROCESS.md`](PROCESS.md): a child admitted at the fork without
 its kernel stack prepared, which faulted in the switch at a stack pointer with
 no stack beneath it. The first program to fork after the change found it.
 
-## 24. Limitations of sub-task 8.6
+## 24. Limitations
 
-1. ~~**No `SIGPIPE`.**~~ **Closed at sub-task 8.7**: a write to a pipe with no
+1. **Closed at sub-task 8.7**: a write to a pipe with no
    reader sends SIGPIPE beside `EPIPE`, Section 28. Until then a writer was
    told `EPIPE` and nothing more, and one that ignored the result ran on.
 2. ~~**`&` is still recorded and not honoured**, and nothing interrupts a
@@ -1259,7 +1214,7 @@ no stack beneath it. The first program to fork after the change found it.
    as `EMFILE`. A pipeline of nine commands is therefore refused at its eighth
    pipe, which is one more than `SHELL_COMMAND_MAXIMUM` allows anyway.
 4. **A wake walks the thread table**, and the terminal's reader polls rather
-   than sleeps; [`SCHEDULER.md`](SCHEDULER.md), Section 10, limitations 8 and 9.
+   than sleeps; [`SCHEDULER.md`](SCHEDULER.md).
 5. **A built-in in a pipeline affects the child alone**, which is the
    standard's subshell and a surprise all the same; and a redirection upon a
    built-in outside a pipeline is still named and not performed, Section 21,
@@ -1367,10 +1322,10 @@ for a continuation. [`../../userland/sh/main.c`](../../userland/sh/main.c),
 `ShellPrompt`.
 
 Anything that waits for the prompt — the driver of
-[`../project/TESTING.md`](../project/TESTING.md), Section 2.1, was one — now
+[`../project/TESTING.md`](../project/TESTING.md) was one — now
 waits for `> ` at the end of the output rather than for `oxys$ `.
 
-## 28. Sub-task 8.7: job control, process groups and the terminal's signals
+## 28. Job control, process groups and the terminal's signals
 
 **Implementation**: [`../../userland/sh/jobs.c`](../../userland/sh/jobs.c) —
 the job table, `jobs`, `fg`, `bg` and `kill` — and the job every pipeline and
@@ -1380,8 +1335,8 @@ the service from the tick in
 [`../../kernel/terminal/terminal.c`](../../kernel/terminal/terminal.c), the
 SIGTTIN stop in the `read` of
 [`../../kernel/arch/x86_64/syscall/syscall.c`](../../kernel/arch/x86_64/syscall/syscall.c),
-and the signals themselves, [`PROCESS.md`](PROCESS.md), Section 18. `<signal.h>`
-in the C library, [`LIBC.md`](LIBC.md), Section 13. Asserted by
+and the signals themselves, [`PROCESS.md`](PROCESS.md). `<signal.h>`
+in the C library, [`LIBC.md`](LIBC.md). Asserted by
 `signal-check` and the sixth session of
 [`../../kernel/test/shell/parser.c`](../../kernel/test/shell/parser.c).
 
@@ -1453,50 +1408,7 @@ stops again, and a signal sent to it while stopped — `kill %1` — is acted up
 before the read is tried again. A process that ignores or catches SIGTTIN is
 refused with `EIO` instead.
 
-### 28.4 What was found
-
-**A background pipeline that finished only when a person typed.** `cat /bin/sh
-| wc -c &` was announced and then did nothing until the next command: `cat`
-had ended, but a process's descriptors were released when its parent collected
-it and not when it ended — one moment until this sub-task, the collecting
-`wait` being the only thing that ever ran after a child — so the pipe's write
-end stayed open in a process that had ended, `wc` waited for an end of file
-only that close could give, and the shell collected nothing until its next
-prompt. The descriptors are released at the ending now,
-[`PROCESS.md`](PROCESS.md), Section 18.4.
-
-**A stopped job that `kill` could not end.** A `kill %1` of a job stopped by
-SIGTTIN left it stopped: the signal waited, as it should, for a continue, and
-the continued read stopped the job again before the way out delivered it. The
-read now reports `EINTR` after a stop where a signal is pending, and the
-shell continues a stopped job it has signalled.
-
-**A `%n` in `help`.** The line for `fg [%n]` was a `printf` format, and `%n`
-is the conversion that writes a count; the self-test's count of `help`'s lines
-caught it, the file `help | wc -l` wrote holding something other than the
-number.
-
-**A `fg` that continued nothing** — found on 2026-09-22, under Bochs, five
-sub-tasks after the job control it belongs to. `fg` and `bg` sent SIGCONT only
-where `job->state` said the job was stopped, and that field is what the shell
-last *observed* rather than what the job is: a job stopped by SIGTTIN a moment
-earlier is stopped in the kernel and running as far as this table knows, until
-a wait reports it. `fg` upon such a job continued nothing, and the wait beneath
-collected the stop at once and printed `[1]+ Stopped` for the job the person
-had just asked to bring forward. **A person reaches it by typing `fg` quickly
-after a control-Z.**
-
-The continue is sent unconditionally now, which is what IEEE Std 1003.1-2017
-says `fg` does — SIGCONT to a process that is not stopped does nothing, so
-there is no case to distinguish and no reason to ask first.
-
-It was invisible under QEMU and reproducible under Bochs, and what exposed it
-was **the size of an unrelated program**: `/bin/terminal` grew, the images
-shifted, and the background `cat` reached its read before `fg` instead of after
-it. The session was passing by timing, which is not the same as passing.
-
-
-### 28.5 A shell with no terminal, of sub-task 9.6
+### 28.5 A shell with no terminal
 
 Everything above requires a terminal, and since sub-task 9.6 the shell may not
 have one: `/bin/terminal` gives it a pair of pipes, which is what lets an
@@ -1526,9 +1438,9 @@ the same condition had stopped it from making.
 The two dispositions stay ignored whether or not there is a terminal. In a
 window control-C arrives because the emulator sends it to the group the shell
 leads, and a shell that took the default action would end at the first one typed
-at its prompt. [`TERMINAL.md`](TERMINAL.md), Section 5.
+at its prompt. [`TERMINAL.md`](TERMINAL.md).
 
-## 29. Verification of sub-task 8.7, and its limitations
+## 29. Verification, and its limitations
 
 `signal-check` and `KernelVerifySignals`, [`PROCESS.md`](PROCESS.md), Section
 18.5, assert the signals from the kernel and from a program. The shell's sixth
@@ -1546,7 +1458,7 @@ the head of the queue — and so a signal — only once `cat` holds the terminal
 a control-Z immediately after `cat\n` would be the head while the shell was
 still forking, and the tick would deliver it to the shell's group, which
 ignores it. Section 28.4 records what the sub-task found; the two races in
-`signal-check`'s first run are in `PROCESS.md`, Section 18.5.
+`signal-check`'s first run are in `PROCESS.md`.
 
 Observed on 2026-09-16 under QEMU over the serial line and under VirtualBox at
 the PS/2 keyboard: control-C ending `cat` with 130, control-Z stopping it,
@@ -1571,7 +1483,7 @@ Limitations:
    control-D among them, and discards what follows the control-D — there
    being no line discipline to deliver a line at a time. The session ends
    `cat` by a control-C for that reason, Section 29.
-5. **An orphan is nobody's**, [`PROCESS.md`](PROCESS.md), Section 19,
+5. **An orphan is nobody's**, [`PROCESS.md`](PROCESS.md)
    limitation 15: a job left running at `exit` is collected by nobody until
    Phase 9's `init`.
 6. **The alpha is not yet cut.** [`../project/PLAN.md`](../project/PLAN.md)

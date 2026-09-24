@@ -11,7 +11,7 @@
  *          BufferFlush, BufferSync, BufferInvalidateDevice, BufferReport.
  * References:
  *   - docs/storage/BUFFER.md: the design, the policies and what each self-test asserts.
- *   - docs/storage/BLOCK.md, Section 4: the order — flush, invalidate, withdraw — that a
+ *   - docs/storage/BLOCK.md: the order — flush, invalidate, withdraw — that a
  *     device's removal requires, and why this cache must be told of it.
  *   - ISO/IEC 9899:2011, Section 6.3.2.3: the conversion of a pointer to an
  *     integer type, used to derive a hash from a device's address.
@@ -36,7 +36,7 @@
  *   lookup rather than the list operation within it.
  *
  *   It is also the structure that will first want a lock it may sleep upon,
- *   because a miss waits for a device; docs/design/CONCURRENCY.md, Section 10,
+ *   because a miss waits for a device; docs/design/CONCURRENCY.md
  *   limitation 4, records why there is no such lock yet.
  */
 

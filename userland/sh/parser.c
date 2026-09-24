@@ -20,7 +20,7 @@
  *     order, the first being the command name; and Section 2.7, the default
  *     descriptor of each redirection operator.
  *   - userland/sh/shell.h: the structure built here and the bounds upon it.
- *   - docs/design/SHELL.md, Section 8.
+ *   - docs/design/SHELL.md.
  *
  * What of the grammar is refused, and why by name.
  *

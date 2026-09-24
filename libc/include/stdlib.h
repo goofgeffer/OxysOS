@@ -16,7 +16,7 @@
  *     is sixteen. That is the alignment every pointer returned here satisfies.
  *   - ISO/IEC 9899:2011, Section 7.5: the errno these functions set upon
  *     failure, which the standard permits and does not require.
- *   - docs/design/LIBC.md, Section 9: the design of the allocator beneath these
+ *   - docs/design/LIBC.md: the design of the allocator beneath these
  *     four names, what is asserted of it and what is not.
  *
  * What of <stdlib.h> is here, and what is not.
@@ -53,7 +53,7 @@
  * block header — which is the invariant `free` finds a block by, and the one
  * thing in this allocator that everything else depends upon. It arrives when
  * something asks for it, and what it will cost is recorded in
- * docs/design/LIBC.md, Section 9.6, rather than discovered then.
+ * docs/design/LIBC.md rather than discovered then.
  *
  * Why these four keep their standard names, when every other global function in
  * this repository is PascalCase.
