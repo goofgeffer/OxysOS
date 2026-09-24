@@ -83,7 +83,7 @@ nothing afterwards uncovers it, a row redrawn writing its own cells whole.
 
 [`../../libc/include/term.h`](../../libc/include/term.h) is a fixed array of
 cells, a cursor, and a mark against each row saying whether it has been written
-to since it was last drawn. It acts upon **four** control characters and drops
+to since it was last drawn. It acts upon **five** control characters and drops
 every other:
 
 | Byte | What it does | Why that and not something else |
@@ -92,6 +92,7 @@ every other:
 | `\n` | Down **and** to the left margin | What the kernel's console does, and therefore what every program in this system has been written against. A line feed that moved down alone would put the second line of every message under the end of the first |
 | `\b` | One position left, **crossing to the end of the row above** at the left margin | The line editor of sub-task 8.1 erases by writing a space and backspacing, and a line it has wrapped could not otherwise be erased. [`CONSOLE.md`](CONSOLE.md), Section 7, is where the same crossing was got wrong once and corrected |
 | `\t` | To the next multiple of eight | Nothing here writes one; a tab left to fall through would be drawn as a hole |
+| `\f` | Every row blanked, the cursor to the top left, every row owed a drawing | What the kernel's console and its VGA text driver do with a form feed, and what the shell's `clear` writes. **Added on 2026-09-24**: until then the grid dropped it with every other control byte, and `clear` in a terminal window did nothing and said nothing — the one place in the system a person would type it |
 
 **There are no escape sequences.** An `ESC` is dropped and the bytes after it
 are drawn, so `\x1B[31m` appears as `[31m`. That is the honest behaviour of a
@@ -219,6 +220,7 @@ itself is judged by operating it, which is
 | A line exactly as wide as the grid leaves the cursor upon its own last column | A wrap at the moment of reaching the edge rather than of writing past it: a backspace would then land in the line beneath |
 | A line feed is down **and** to the left margin | The second line of every message printed under the end of the first |
 | A carriage return erases nothing | A prompt redrawn over its own line would blank what it meant to replace |
+| A form feed blanks every row, puts the cursor at the top left, marks every row owed a drawing, and what follows it is written from the top left | `clear` in a terminal window doing nothing — **observed**, and the reason the byte is acted upon since 2026-09-24; and a grid that blanked its rows without marking them, which would leave the window showing the page it had cleared |
 | A backspace moves and does not erase; a space written over a character does | The line editor's erasure, which is a space and a backspace, would delete two characters or none |
 | A backspace at the left margin **crosses** to the end of the row above, and stops at the top left | A wrapped line that can never be erased — and, without the stop, a cursor off the grid. **The same defect the console had**, [`CONSOLE.md`](CONSOLE.md), Section 7 |
 | A line feed upon the last row scrolls, carries the rows up, and leaves the cursor upon the last | A terminal that stopped at the foot of its window |

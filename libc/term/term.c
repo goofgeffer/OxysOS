@@ -10,7 +10,7 @@
  * References:
  *   - libc/include/term.h: what this is, and why it is here rather than in
  *     /bin/terminal.
- *   - docs/design/TERMINAL.md, Section 3: the four control characters acted
+ *   - docs/design/TERMINAL.md, Section 3: the five control characters acted
  *     upon, and what is deliberately not.
  *   - docs/design/CONSOLE.md, Section 7: the kernel console's backspace, which
  *     crosses to the row above; this does the same, because the line editor of
@@ -203,6 +203,25 @@ void TermWriteByte(TermScreen *screen, char byte)
         }
 
         TermTouch(screen, screen->cursor_row);
+
+        return;
+
+    case '\f':
+        /*
+         * A new page: every row blanked and the cursor to the top left — what
+         * the kernel's console and its VGA text driver do with a form feed,
+         * and what the shell's `clear` writes. Until 2026-09-24 the grid
+         * dropped it with every other control byte, so `clear` in a terminal
+         * window did nothing and said nothing. Every row is marked changed by
+         * the clearing, which is what makes the emulator draw the empty page.
+         */
+        for (uint32_t row = 0U; row < screen->rows; ++row)
+        {
+            TermClearRow(screen, row);
+        }
+
+        screen->cursor_column = 0U;
+        screen->cursor_row = 0U;
 
         return;
 

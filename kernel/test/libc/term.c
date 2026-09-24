@@ -252,6 +252,38 @@ static void VerifyTermGrid(void)
     VerifyTermRequire(VerifyTermRowIs(0U, "ab      c"), "a tab did not leave spaces behind it");
 
     /*
+     * --- The form feed, which the shell's `clear` writes. ---
+     *
+     * Two rows of text with every row said to be drawn, then a form feed:
+     * every row is blank, the cursor is at the top left, and every row is owed
+     * a drawing again — a grid that blanked its rows without marking them
+     * would leave the window showing the page it had just cleared. Until
+     * 2026-09-24 the byte was dropped, and `clear` in a terminal window did
+     * nothing.
+     */
+    VerifyTermRequire(TermInitialise(&VerifyTermScreen, 8U, 3U), "the grid could not be reset");
+    VerifyTermPut("one\r\ntwo");
+
+    for (uint32_t row = 0U; row < 3U; ++row)
+    {
+        TermRowDrawn(&VerifyTermScreen, row);
+    }
+
+    VerifyTermPut("\f");
+    VerifyTermRequire(VerifyTermRowIs(0U, "") && VerifyTermRowIs(1U, "") &&
+                          (TermCursorRow(&VerifyTermScreen) == 0U) &&
+                          (TermCursorColumn(&VerifyTermScreen) == 0U),
+                      "a form feed did not blank the grid and put the cursor at the top left");
+    VerifyTermRequire(TermRowChanged(&VerifyTermScreen, 0U) &&
+                          TermRowChanged(&VerifyTermScreen, 1U) &&
+                          TermRowChanged(&VerifyTermScreen, 2U),
+                      "a form feed blanked rows without marking them to be drawn again");
+
+    /* And what follows it is written from the top left. */
+    VerifyTermPut("x");
+    VerifyTermRequire(VerifyTermRowIs(0U, "x"), "text after a form feed was not at the top left");
+
+    /*
      * --- The resize of 2026-09-23, which a window made full asks for. ---
      *
      * Three rows of text with the cursor upon the third, cut to two rows: the
