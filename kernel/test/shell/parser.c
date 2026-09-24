@@ -682,6 +682,40 @@ static void VerifyShellRedirections(void)
 }
 
 /*
+ * A session of 2026-09-24, whose evidence is the file `micro` saved: a line
+ * appended after a blank one, and saved with `wq`. The blank line is a write
+ * of nothing, which the kernel once refused, so that the save failed part way
+ * and — the file having been truncated when it was opened — left it cut at the
+ * blank line; that is what the first line's surviving asserts. And the save is
+ * written beside the file and takes its name only when whole, so nothing of
+ * the file beside must be left once it has.
+ */
+static const char VerifyShellMicroSession[] =
+    "echo first >/verify/m\n"
+    "micro /verify/m\n"
+    "a\n"
+    "\n"
+    "last\n"
+    ".\n"
+    "wq\n"
+    "exit 5\n";
+
+#define VERIFY_SHELL_MICRO_STATUS 5
+
+static void VerifyShellMicro(void)
+{
+    static const VerifyShellFile saved = { "/verify/m", "first\n\nlast\n" };
+    VfsAttributes attributes;
+
+    VerifyShellProgram(VerifyShellMicroSession, sizeof VerifyShellMicroSession - 1U,
+                       VERIFY_SHELL_MICRO_STATUS, "upon the session that saves in micro");
+
+    VerifyShellRequire(!VfsStat("/verify/m.micro-save", &attributes),
+                       "micro left the file it saved into beside the one it saved");
+    VerifyShellFileHolds(&saved);
+}
+
+/*
  * A fifth session, of sub-task 8.6, whose evidence is what the files hold and
  * the status: pipelines of two and three commands, a built-in run in a
  * pipeline's child, a diagnostic sent down a pipe by `2>&1`, the whole of
@@ -1035,6 +1069,7 @@ void KernelVerifyShell(void)
         VerifyShellProgram(VerifyShellProgramSession, sizeof VerifyShellProgramSession - 1U,
                            VERIFY_SHELL_PROGRAM_STATUS, "upon the programs' session");
         VerifyShellRedirections();
+        VerifyShellMicro();
         VerifyShellPipelines();
         VerifyShellJobs();
         VerifyShellRemoveProgram();

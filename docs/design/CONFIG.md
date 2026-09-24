@@ -291,7 +291,9 @@ identical from the outside.
    than by reading, it costs a rebuild to change where a file costs a restart,
    and it leaves the kernel depending upon no text a person may edit.
 2. **There is no include, no override and no per-user file.** One file per
-   subject, read once at start. A program that wants its configuration again
+   subject, read once at start — save `/etc/session.conf`, which the session
+   reads again at every opening of its launcher since 2026-09-24,
+   [`SESSION.md`](SESSION.md), Section 3.3. A program that wants its configuration again
    must be started again, nothing yet asking to be told that a file changed.
 3. ~~**Nothing survives a reboot.**~~ **Closed on 2026-09-23** where the machine
    carries a disk labelled `oxys-etc`: it is mounted over `/etc`, seeded from the

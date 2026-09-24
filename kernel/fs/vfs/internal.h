@@ -99,6 +99,18 @@ extern VfsFile VfsFiles[VFS_FILE_CAPACITY];
 /* The mount at the root of the tree, through which every absolute path begins. */
 extern VfsMount *VfsRootMount;
 
+/*
+ * Whether a mount's volume outlives the machine and may be written: any writable
+ * mount but the root, the root being the ramdisk. A change to such a volume is
+ * written back when it completes, since 2026-09-23 for a file closed and since
+ * 2026-09-24 for a name made or removed — an emulator stopped by closing its
+ * window would otherwise lose it. docs/storage/PERSIST.md, Section 5.
+ */
+static inline bool VfsMountIsDurable(const VfsMount *mount)
+{
+    return (mount != NULL) && (mount != VfsRootMount) && !mount->read_only;
+}
+
 /* The most recent refusal, and the accounting. */
 extern VfsError VfsRefusalCode;
 extern const char *VfsRefusalReason;

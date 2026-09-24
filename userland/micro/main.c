@@ -33,9 +33,10 @@
  *
  * The file is held whole and written whole. There is no `lseek` a program can
  * reach, so a change in the middle of a file is the file rewritten from its
- * start — `open` with TRUNCATE and every line written again — which is what
- * `w` does, and why nothing touches the file between the load and the write:
- * a person who quits with `q!` has a file exactly as it was.
+ * start — every line written again — which is what `w` does, and why nothing
+ * touches the file between the load and the write: a person who quits with
+ * `q!` has a file exactly as it was. Since 2026-09-24 the lines are written
+ * into a file beside it, which takes its name only once whole, MicroWrite.
  */
 
 #include <errno.h>
@@ -54,6 +55,10 @@
 
 #define MICRO_PROMPT "micro> "
 #define MICRO_END    "."
+
+/* What is added to a file's name for the file a save is written into before it
+ * takes the name: MicroWrite. */
+#define MICRO_SAVE_SUFFIX ".micro-save"
 
 static char *MicroLines[MICRO_LINE_MAXIMUM];
 static size_t MicroLineCount;
@@ -218,17 +223,44 @@ static bool MicroLoad(void)
     return true;
 }
 
-/* Writes every line, each followed by a newline, over whatever the file held. */
+/*
+ * Writes every line, each followed by a newline — into a file beside the one
+ * edited, and only once the whole of it is written does that file take the
+ * edited one's name. Since 2026-09-24.
+ *
+ * Written in place, as it was until then, the file was truncated at the open
+ * and rewritten line by line, so a write that failed part way left it cut at
+ * that line: a write of nothing, for a blank line, was once refused by the
+ * kernel, and saving `/etc/session.conf` left it cut at its first blank line
+ * with every entry of the launcher gone. Written beside, a failure leaves the
+ * edited file exactly as it was and the partial one is removed.
+ *
+ * There is no rename, so the name is moved as `mv` moves one: the edited file
+ * is unlinked and the written one linked in its place. Between the two the
+ * name is missing for the length of a call; should the link fail there, the
+ * edit is kept under the file beside and `micro` says where.
+ */
 static bool MicroWrite(void)
 {
-    const int64_t descriptor =
-        OxysOpen(MicroPath, SYSCALL_OPEN_WRITE | SYSCALL_OPEN_CREATE | SYSCALL_OPEN_TRUNCATE,
-                 0644U);
+    char beside[SYSCALL_PATH_MAXIMUM + 1U];
+    const int composed = snprintf(beside, sizeof beside, "%s%s", MicroPath, MICRO_SAVE_SUFFIX);
+    int64_t descriptor;
     uint64_t bytes = 0U;
+
+    if ((composed < 0) || ((size_t)composed >= sizeof beside))
+    {
+        (void)fprintf(stderr, "micro: %s: the path is too long to save beside; nothing was "
+                              "changed.\n", MicroPath);
+
+        return false;
+    }
+
+    descriptor = OxysOpen(beside, SYSCALL_OPEN_WRITE | SYSCALL_OPEN_CREATE | SYSCALL_OPEN_TRUNCATE,
+                          0644U);
 
     if (descriptor < 0)
     {
-        (void)fprintf(stderr, "micro: %s: %s\n", MicroPath, strerror(errno));
+        (void)fprintf(stderr, "micro: %s: %s; nothing was changed.\n", beside, strerror(errno));
 
         return false;
     }
@@ -240,8 +272,10 @@ static bool MicroWrite(void)
         if ((OxysWrite((int)descriptor, MicroLines[index], length) != (int64_t)length) ||
             (OxysWrite((int)descriptor, "\n", 1U) != 1))
         {
-            (void)fprintf(stderr, "micro: %s: %s\n", MicroPath, strerror(errno));
+            (void)fprintf(stderr, "micro: %s: %s; %s was not changed.\n", beside,
+                          strerror(errno), MicroPath);
             (void)OxysClose((int)descriptor);
+            (void)OxysUnlink(beside);
 
             return false;
         }
@@ -249,7 +283,33 @@ static bool MicroWrite(void)
         bytes += length + 1U;
     }
 
-    (void)OxysClose((int)descriptor);
+    if (OxysClose((int)descriptor) < 0)
+    {
+        (void)fprintf(stderr, "micro: %s: %s; %s was not changed.\n", beside, strerror(errno),
+                      MicroPath);
+        (void)OxysUnlink(beside);
+
+        return false;
+    }
+
+    /* A file being made for the first time has no name to remove. */
+    if ((OxysUnlink(MicroPath) < 0) && (errno != ENOENT))
+    {
+        (void)fprintf(stderr, "micro: %s: %s; it was not changed.\n", MicroPath, strerror(errno));
+        (void)OxysUnlink(beside);
+
+        return false;
+    }
+
+    if (OxysLink(beside, MicroPath) < 0)
+    {
+        (void)fprintf(stderr, "micro: %s: %s; the edit is kept in %s.\n", MicroPath,
+                      strerror(errno), beside);
+
+        return false;
+    }
+
+    (void)OxysUnlink(beside);
     (void)printf("micro: %s written, %u line(s), %llu byte(s).\n", MicroPath,
                  (unsigned)MicroLineCount, (unsigned long long)bytes);
     MicroModified = false;

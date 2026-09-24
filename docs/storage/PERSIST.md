@@ -81,6 +81,16 @@ which is the one thing the volume exists to prevent. A new file a later build
 ships therefore appears upon the volume at the next start; a changed one does
 not, Section 8.
 
+**The shipped copies stay reachable**, since 2026-09-24. Each file of the
+ramdisk's `/etc` is also staged read-only at `/share/defaults/etc`, which the
+volume does not cover: before, the volume hid the only shipped copy, and
+deleting a file and restarting was the only way to have it back — which a
+person would not know to do. Now `cp` restores one at once, and the session
+falls back to the shipped `session.conf` where the person's offers nothing to
+launch, [`../design/SESSION.md`](../design/SESSION.md), Section 3.3.
+`config-check` asserts that the copies are there, read without fault, and offer
+a launcher.
+
 ## 4. A volume left open
 
 A writable mount marks the volume as not cleanly unmounted for as long as it is
@@ -118,6 +128,14 @@ memory and lasts no longer than the cache, so it is not synced for nothing.
 **Observed**: a line appended to `/etc/desktop.conf`, the emulator then killed,
 and the line there at the next start, `e2fsck` finding the volume consistent.
 
+**A name made or removed is written back when the call returns**, since
+2026-09-24: `link`, `unlink`, `mkdir` and `rmdir` upon any writable mount but
+the root sync as a close does. It was needed by `micro`, which since the same
+day saves a file whole into a file beside it and moves the name across with
+`unlink` and `link` — so that a save which fails part way leaves the edited
+file as it was — and a move left in the buffer cache would be lost with the
+emulator's window, the edit with it.
+
 **At the power call** the volume is synced and unmounted before the machine
 stops, so that it is marked clean. **Observed**: after `shutdown` the build
 host's `debugfs` read `Filesystem state: clean`. Where something still holds a
@@ -140,6 +158,7 @@ three files upon the disk were byte for byte what they had been.
 | A volume left open, with no error recorded, is marked clean before it is mounted, and is mounted writable | A configuration read-only for ever after the first time the machine was stopped by closing its window. **Observed** while it was written, Section 4 |
 | One file the volume lacked is seeded and one it had is kept; the seeded file reads as the covered directory's, and the kept one does not | The shipped configuration written over the edited one at every start. **Observed** as a damage |
 | A file written upon the volume is upon the medium — the store behind the device, which the buffer cache does not reach — once it is closed | An edit lost when the emulator is closed. **Observed** as a damage |
+| A directory made and removed, and a file unlinked, upon the volume leave no dirty buffer once the call returns, the cache having been emptied before | A save by `micro`, which moves a name, lost with a closed window after it was reported written. **Observed** as a damage |
 | Released, the volume is clean upon the medium, and the covered directory shows again | A volume demanding a check at every start; a mount that would not come away |
 
 ### 6.1 The damage applied, and what the test said
@@ -190,7 +209,11 @@ existing `run-qemu`.
 2. **A changed shipped file does not reach an existing volume**, Section 3. A
    person who has not edited `session.conf` and updates the system keeps the
    old one until they delete it. Telling an unedited file from an edited one
-   would need a record of what was shipped, which nothing keeps yet.
+   would need a record of what was shipped, which nothing keeps yet. **Since
+   2026-09-24 the shipped copy is reachable without a restart**: every file is
+   also at `/share/defaults/etc`, which the volume does not cover, so
+   `cp /share/defaults/etc/session.conf /etc/session.conf` takes it back at once,
+   Section 3.
 3. **A volume left open is marked clean without a check**, Section 4, upon the
    judgement that three configuration files not checked are better than three
    that can never be edited. A file being written as the machine stopped may be
@@ -199,5 +222,7 @@ existing `run-qemu`.
    are none.
 5. **`lost+found` stands in `/etc`**, `mke2fs` having made it; `e2fsck` puts
    what it recovers there.
-6. **Written back upon a close only.** A file held open and written for minutes
-   is upon the medium when it is closed, or when the machine is shut down.
+6. **Written back upon a close, or a change of name.** A file held open and
+   written for minutes is upon the medium when it is closed, or when the
+   machine is shut down. A name made or removed is upon it when the call
+   returns, since 2026-09-24, Section 5.

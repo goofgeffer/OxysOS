@@ -125,12 +125,21 @@ bool VfsCreateDirectory(const char *path, uint16_t permissions)
         return VfsRefuse(VFS_ERROR_UNSUPPORTED, "the filesystem does not create directories");
     }
 
+    const bool durable = VfsMountIsDurable(parent->mount);
+
     outcome = parent->mount->operations->create_directory(parent, name, length, permissions,
                                                           &number);
     VfsNodeRelease(parent);
 
     if (outcome)
     {
+        /* Written back at once upon a volume that outlives the machine:
+         * VfsMountIsDurable. */
+        if (durable)
+        {
+            (void)VfsSync();
+        }
+
         VfsSucceed();
     }
 
@@ -239,11 +248,20 @@ bool VfsUnlink(const char *path)
      */
     VfsNodeRelease(child);
 
+    const bool durable = VfsMountIsDurable(parent->mount);
+
     outcome = parent->mount->operations->unlink(parent, name, length);
     VfsNodeRelease(parent);
 
     if (outcome)
     {
+        /* Written back at once upon a volume that outlives the machine:
+         * VfsMountIsDurable. */
+        if (durable)
+        {
+            (void)VfsSync();
+        }
+
         VfsSucceed();
     }
 
@@ -280,11 +298,20 @@ bool VfsRemoveDirectory(const char *path)
 
     VfsNodeRelease(child);
 
+    const bool durable = VfsMountIsDurable(parent->mount);
+
     outcome = parent->mount->operations->remove_directory(parent, name, length);
     VfsNodeRelease(parent);
 
     if (outcome)
     {
+        /* Written back at once upon a volume that outlives the machine:
+         * VfsMountIsDurable. */
+        if (durable)
+        {
+            (void)VfsSync();
+        }
+
         VfsSucceed();
     }
 
@@ -350,12 +377,21 @@ bool VfsLink(const char *existing, const char *name)
         return VfsRefuse(VFS_ERROR_UNSUPPORTED, "the filesystem does not give further names");
     }
 
+    const bool durable = VfsMountIsDurable(parent->mount);
+
     outcome = parent->mount->operations->link(parent, component, length, target);
     VfsNodeRelease(parent);
     VfsNodeRelease(target);
 
     if (outcome)
     {
+        /* Written back at once upon a volume that outlives the machine:
+         * VfsMountIsDurable. */
+        if (durable)
+        {
+            (void)VfsSync();
+        }
+
         VfsSucceed();
     }
 

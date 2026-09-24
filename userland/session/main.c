@@ -59,6 +59,10 @@
 #define SESSION_FALLBACK_RUN  "/bin/terminal"
 #define SESSION_FALLBACK_ICON "/share/icons/terminal.oxi"
 
+/* The shipped copy of the configuration, which a persistent `/etc` does not
+ * cover, read where the person's offers nothing: SessionReadConfiguration. */
+#define SESSION_DEFAULTS "/share/defaults/etc/session.conf"
+
 /*
  * The panel's height, and the launcher's, in units of the scale.
  *
@@ -163,6 +167,13 @@ static size_t SessionTaskCount;
 static uint8_t SessionBackgroundBytes[SESSION_BACKGROUND_BYTES];
 static OxysImage SessionBackground;
 static bool SessionHasBackground;
+
+/* The background's path as last read, empty for none, so that the launcher's
+ * reading at every opening reads the image only when the path has changed. */
+static char SessionBackgroundPath[CONFIG_VALUE_MAXIMUM + 1U];
+
+/* Whether the shipped configuration stands in for the person's. */
+static bool SessionUsingDefaults;
 static OxysImageScaler SessionScaler;
 static uint32_t SessionBand[SESSION_BAND];
 
@@ -410,6 +421,16 @@ static int32_t SessionClockWidth(void)
     return (5 * 8 * SessionScale) + (2 * 3 * SessionScale * 2);
 }
 
+/* The notice's width, where it is shown, and nothing where it is not. */
+#define SESSION_NOTICE "using defaults"
+
+static int32_t SessionNoticeWidth(void)
+{
+    return SessionUsingDefaults
+               ? (((int32_t)(sizeof SESSION_NOTICE - 1U) * 8 * SessionScale) + (4 * 3 * SessionScale))
+               : 0;
+}
+
 /*
  * The clock, at the right of the panel: the hours and minutes of the machine's
  * clock, as it holds them — there is no time zone here, SYSCALL_TIME — and
@@ -450,6 +471,7 @@ static void SessionDrawClock(bool open)
     (void)OxysAlarm((uint64_t)(60 - (now % 60)) * 1000U);
 }
 static void SessionDrawTasks(void);
+static bool SessionReadConfiguration(bool starting);
 
 static void SessionDrawPanel(bool open)
 {
@@ -468,6 +490,17 @@ static void SessionDrawPanel(bool open)
 
     SessionDrawTasks();
     SessionDrawClock(open);
+
+    /* The notice that the shipped configuration stands in for the person's,
+     * left of the clock: upon a desktop it is the one place a person sees it,
+     * the standard error going to the serial line. */
+    if (SessionUsingDefaults)
+    {
+        SessionText(SessionPanel,
+                    SessionScreen.width - SessionClockWidth() - SessionNoticeWidth() +
+                        (2 * 3 * SessionScale),
+                    3 * SessionScale, SESSION_NOTICE, SESSION_DIM, SESSION_PANEL, SessionScale);
+    }
 }
 
 /* Where the list of windows begins upon the panel, and how wide one of its
@@ -486,7 +519,8 @@ static int32_t SessionTaskStride(void)
  * at its edge rather than drawn over it. */
 static size_t SessionTasksShown(void)
 {
-    const int32_t room = SessionScreen.width - SessionTaskLeft() - SessionClockWidth();
+    const int32_t room =
+        SessionScreen.width - SessionTaskLeft() - SessionClockWidth() - SessionNoticeWidth();
     const int32_t fit = (room > 0) ? ((room + (SESSION_TASK_GAP * SessionScale)) /
                                       SessionTaskStride())
                                    : 0;
@@ -635,9 +669,22 @@ static void SessionOpenMenu(void)
 {
     SyscallWindowRectangle geometry;
 
-    if ((SessionMenu >= 0) || (SessionEntryCount == 0U))
+    if (SessionMenu >= 0)
     {
         return;
+    }
+
+    /*
+     * The configuration is read again at every opening, since 2026-09-24, so
+     * that an entry added or removed by an edit is offered at the next press,
+     * and a background named by an edit is drawn then — without the session
+     * being started again, which was the only way before and which nothing
+     * upon the desktop does. SessionReadConfiguration never leaves the
+     * launcher empty.
+     */
+    if (SessionReadConfiguration(false))
+    {
+        SessionDrawRoot();
     }
 
     geometry.x = 0;
@@ -715,55 +762,84 @@ static void SessionCopy(char *destination, size_t capacity, const char *source)
     destination[index] = '\0';
 }
 
-static void SessionReadConfiguration(void)
+/*
+ * Reads one configuration file into SessionConfig, saying each fault upon the
+ * standard error, and returns how many `[launch]` blocks of it name something
+ * to run — the measure of whether the file offers a launcher at all.
+ */
+static size_t SessionReadFile(const char *path)
 {
-    size_t blocks;
+    size_t usable = 0U;
 
-    if (!OxysConfigRead(&SessionConfig, SESSION_CONFIGURATION))
+    if (!OxysConfigRead(&SessionConfig, path))
     {
         for (size_t index = 0U; index < OxysConfigFaultCount(&SessionConfig); ++index)
         {
-            (void)fprintf(stderr, "session: %s, line %lu: %s.\n", SESSION_CONFIGURATION,
+            (void)fprintf(stderr, "session: %s, line %lu: %s.\n", path,
                           (unsigned long)OxysConfigFaultLine(&SessionConfig, index),
                           OxysConfigFaultReason(&SessionConfig, index));
         }
     }
 
+    for (size_t index = 0U; index < OxysConfigCount(&SessionConfig, "launch"); ++index)
     {
-        const long scale = OxysConfigNumber(&SessionConfig, "session", 0U, "scale", 0);
-
-        SessionScale = ((scale >= 1) && (scale <= 4))
-                           ? (int32_t)scale
-                           : ((SessionScreen.width >= 1024) ? 2 : 1);
-    }
-
-    /*
-     * The background, named by a path as an icon is. One that cannot be read
-     * costs the background and not the desktop: the fault is said upon the
-     * standard error and the root is the ground and the mark, which is what a
-     * session that named none draws.
-     */
-    {
-        const char *const background =
-            OxysConfigValue(&SessionConfig, "session", 0U, "background");
-
-        SessionHasBackground = false;
-
-        if (background != NULL)
+        if (OxysConfigValue(&SessionConfig, "launch", index, "run") != NULL)
         {
-            SessionHasBackground = OxysImageRead(&SessionBackground, background,
-                                                 SessionBackgroundBytes,
-                                                 sizeof SessionBackgroundBytes);
-
-            if (!SessionHasBackground)
-            {
-                (void)fprintf(stderr, "session: %s: the background could not be read; the "
-                                      "desktop is drawn without it.\n", background);
-            }
+            ++usable;
         }
     }
 
-    blocks = OxysConfigCount(&SessionConfig, "launch");
+    return usable;
+}
+
+/*
+ * The background, named by a path as an icon is, read only where the path is
+ * not the one already read — a background is seventy kilobytes to read and a
+ * screen to draw, and the launcher asks for the configuration every time it
+ * opens. Returns whether the root must be drawn again.
+ *
+ * One that cannot be read costs the background and not the desktop: the fault
+ * is said upon the standard error and the root is the ground and the mark,
+ * which is what a session that named none draws. One that could not be read is
+ * tried again at the next opening, the file perhaps having been put there
+ * since.
+ */
+static bool SessionLoadBackground(void)
+{
+    const char *const background = OxysConfigValue(&SessionConfig, "session", 0U, "background");
+    const char *const wanted = (background != NULL) ? background : "";
+    const bool had = SessionHasBackground;
+
+    if ((strcmp(wanted, SessionBackgroundPath) == 0) &&
+        ((wanted[0] == '\0') || SessionHasBackground))
+    {
+        return false;
+    }
+
+    SessionCopy(SessionBackgroundPath, sizeof SessionBackgroundPath, wanted);
+    SessionHasBackground = false;
+
+    if (wanted[0] != '\0')
+    {
+        SessionHasBackground = OxysImageRead(&SessionBackground, wanted, SessionBackgroundBytes,
+                                             sizeof SessionBackgroundBytes);
+
+        if (!SessionHasBackground)
+        {
+            (void)fprintf(stderr, "session: %s: the background could not be read; the "
+                                  "desktop is drawn without it.\n", wanted);
+        }
+    }
+
+    return had || SessionHasBackground;
+}
+
+/* The launcher's entries, from whatever SessionConfig now holds. */
+static void SessionLoadEntries(void)
+{
+    const size_t blocks = OxysConfigCount(&SessionConfig, "launch");
+
+    SessionEntryCount = 0U;
 
     for (size_t index = 0U; (index < blocks) && (SessionEntryCount < SESSION_ENTRIES_MAXIMUM);
          ++index)
@@ -783,16 +859,14 @@ static void SessionReadConfiguration(void)
         SessionCopy(entry->name, CONFIG_VALUE_MAXIMUM, (name != NULL) ? name : run);
 
         /*
-         * The picture, of sub-task 9.6, read here rather than where it is drawn
-         * — the launcher is drawn every time it opens and a file read at each
-         * opening is a file read for nothing.
-         *
          * **An icon that cannot be read costs the icon and not the entry.** A
          * launcher that refused to offer a program because its picture was
          * missing would be a desktop a person cannot use for a reason that has
          * nothing to do with the program; the fault is said plainly upon the
          * standard error and the entry is offered with no picture, which is
-         * what an entry that named none gets.
+         * what an entry that named none gets. It is read with the entries, at
+         * every opening since 2026-09-24, so that an icon named by an edit is
+         * drawn at the next.
          */
         entry->has_picture = false;
 
@@ -809,32 +883,76 @@ static void SessionReadConfiguration(void)
 
         ++SessionEntryCount;
     }
+}
 
-    /*
-     * **A launcher with nothing in it offers the terminal**, since 2026-09-24.
-     * With no entry the launcher would not open at all, and the terminal is the
-     * only way to mend `/etc/session.conf` from the desktop — so a file cut
-     * short, emptied, or missing would lock a person out of the one tool that
-     * repairs it, and say nothing. It happened: a save by `micro` cut the
-     * owner's file at its first blank line, every `[launch]` block went with the
-     * rest, and pressing the launcher did nothing. The fall-back is the terminal
-     * and nothing more, because it is the repair and not a guess at what the
-     * file meant to offer; and it is said upon the standard error, which the
-     * serial line carries, so that a person knows the file is what to mend.
-     */
+/*
+ * Reads the configuration: at start, and since 2026-09-24 every time the
+ * launcher opens, so that an edit to `/etc/session.conf` is seen at the next
+ * press rather than at the next start of the session. The file is a few
+ * kilobytes and a press is a person's, so the reading costs nothing anybody
+ * will notice. The scale is taken at start alone: the panel and every window
+ * of the session are sized by it, and a scale changed under them would be a
+ * panel of one size holding a launcher of another. Returns whether the root
+ * must be drawn again.
+ *
+ * **A file that offers nothing falls back to the shipped one.** A save cut
+ * short, a file emptied, a file removed: each leaves a launcher with nothing in
+ * it, and a person at a desktop with an empty launcher has no way to reach the
+ * terminal that would mend it. The shipped copy at SESSION_DEFAULTS is read
+ * instead — the whole of it, the background with the entries — the panel says
+ * `using defaults` while it is, and the standard error says which file to
+ * mend. Where even that offers nothing, the terminal alone, which is the
+ * repair.
+ */
+static bool SessionReadConfiguration(bool starting)
+{
+    bool defaults = false;
+    bool redraw;
+
+    if (SessionReadFile(SESSION_CONFIGURATION) == 0U)
+    {
+        defaults = true;
+
+        if (!SessionUsingDefaults)
+        {
+            (void)fprintf(stderr, "session: %s offers nothing to launch; the shipped %s is "
+                                  "used until it is mended. `cp %s %s` restores it.\n",
+                          SESSION_CONFIGURATION, SESSION_DEFAULTS, SESSION_DEFAULTS,
+                          SESSION_CONFIGURATION);
+        }
+
+        (void)SessionReadFile(SESSION_DEFAULTS);
+    }
+
+    if (starting)
+    {
+        const long scale = OxysConfigNumber(&SessionConfig, "session", 0U, "scale", 0);
+
+        SessionScale = ((scale >= 1) && (scale <= 4))
+                           ? (int32_t)scale
+                           : ((SessionScreen.width >= 1024) ? 2 : 1);
+    }
+
+    redraw = SessionLoadBackground();
+    SessionLoadEntries();
+
     if (SessionEntryCount == 0U)
     {
         SessionEntry *const entry = &SessionEntries[0];
 
-        (void)fprintf(stderr, "session: %s offers nothing to launch; the launcher offers the "
-                              "terminal, with which the file may be mended.\n",
-                      SESSION_CONFIGURATION);
+        (void)fprintf(stderr, "session: neither %s nor %s offers anything to launch; the "
+                              "launcher offers the terminal, with which they may be mended.\n",
+                      SESSION_CONFIGURATION, SESSION_DEFAULTS);
 
         SessionCopy(entry->name, CONFIG_VALUE_MAXIMUM, SESSION_FALLBACK_NAME);
         SessionCopy(entry->run, CONFIG_VALUE_MAXIMUM, SESSION_FALLBACK_RUN);
         entry->has_picture = OxysIconRead(&entry->picture, SESSION_FALLBACK_ICON);
         SessionEntryCount = 1U;
     }
+
+    SessionUsingDefaults = defaults;
+
+    return redraw;
 }
 
 /* ------------------------------------------------------------ the loop */
@@ -933,7 +1051,7 @@ int main(void)
     (void)signal(SIGCHLD, SessionChildHandler);
     (void)signal(SIGALRM, SessionAlarmHandler);
 
-    SessionReadConfiguration();
+    (void)SessionReadConfiguration(true);
 
     {
         SyscallWindowRectangle geometry;

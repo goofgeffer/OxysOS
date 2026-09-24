@@ -31,8 +31,11 @@ is the ramdisk's and an edit made upon the running machine is gone at the next
 boot. Upon one carrying a disk labelled `oxys-etc` — `tools/etc-disk.sh create`
 makes one — `/etc` is that disk, seeded from these files the first time, and an
 edit survives a restart. A change to a file here then reaches only a disk that
-does not yet have that file; delete it upon the disk to take the shipped one
-again. [`../docs/storage/PERSIST.md`](../docs/storage/PERSIST.md).
+does not yet have that file; copy the shipped one over it, below, to take it
+again. The shipped copies are also at `/share/defaults/etc`, read-only and never
+covered: `cp /share/defaults/etc/session.conf /etc/session.conf` takes one back
+at once, and the session falls back to that file when `/etc/session.conf`
+offers nothing to launch. [`../docs/storage/PERSIST.md`](../docs/storage/PERSIST.md).
 
 ## The format, in one paragraph
 

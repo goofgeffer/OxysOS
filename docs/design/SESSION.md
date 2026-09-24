@@ -194,19 +194,36 @@ rather than hidden, there being no hide.
 Its entries are `[launch]` blocks of `/etc/session.conf`, read once at start —
 the format of sub-task 9.4, and the second thing to use it after `init`.
 
-**A file that offers nothing still gives the terminal**, since 2026-09-24. With
-no entry the launcher did not open at all, and the terminal is the only way to
-mend `/etc/session.conf` from the desktop, so a file cut short, emptied or
+**A file that offers nothing falls back to the shipped one**, since 2026-09-24.
+With no entry the launcher did not open at all, and the terminal is the only way
+to mend `/etc/session.conf` from the desktop, so a file cut short, emptied or
 missing locked a person out of the one tool that repairs it — and said nothing.
 It happened: a save by `micro` cut the owner's file at its first blank line,
 [`LIBC.md`](LIBC.md), Section 8.3, every `[launch]` block went with the rest, and
-pressing the launcher did nothing. The session now offers the terminal alone in
-that case, and says upon its standard error — which the serial line carries —
-that the file offers nothing. The terminal and not a guess at what the file meant
-to offer, because it is the repair. **Observed** under QEMU with the owner's
-truncated file: the launcher opened with `Terminal`, the terminal opened, and the
-line was upon the serial log. It is not asserted by a self-test, the session not
-running during them.
+pressing the launcher did nothing. The session now reads the shipped copy at
+`/share/defaults/etc/session.conf` instead — the whole of it, the background
+with the entries, so the desktop is the desktop that shipped — draws `using
+defaults` upon the panel left of the clock for as long as it does, and says
+upon its standard error which file to mend and the `cp` that restores it. The
+shipped copy is upon the ramdisk where a persistent `/etc` does not cover it,
+[`../storage/PERSIST.md`](../storage/PERSIST.md), Section 3. Where even that
+offers nothing, the launcher offers the terminal alone, which is the repair.
+The fall-back was first the terminal alone; the owner asked whether a person
+would know what to do with it, and they would not.
+
+**The file is read again at every opening of the launcher**, since 2026-09-24,
+so that an edit is seen at the next press rather than at the next start of the
+session: an entry added or removed, an icon named, a background named or
+removed — the root drawn again where the background's path changed, and only
+then, the image being seventy kilobytes to read and a screen to draw. The scale
+is taken at start alone, the panel and every window of the session being sized
+by it. **Observed** under QEMU upon a disk holding the truncated file: the full
+launcher, the background and `using defaults`; `cp` of the shipped file at the
+shell and a press of the launcher, and the notice was gone; the `background`
+line removed with `micro` and a press, and the root was the ground and the mark.
+Neither the fall-back nor the re-reading is asserted by a self-test, the session
+not running during them; `config-check` asserts that the shipped copies are
+there and offer a launcher.
 
 **What it starts, it does not wait for.** A program that took a moment to draw
 would otherwise stop the panel. The session reaps with `waitpid` and `WNOHANG`
@@ -350,8 +367,10 @@ sliding **under** the panel rather than over it.
    arrived on 2026-09-23, [`WINDOWS.md`](WINDOWS.md), Section 13; a frame edge
    a person drags is still [`WINDOWS.md`](WINDOWS.md), Section 13.7,
    limitation 1.
-3. **The launcher is read once, at start.** A `/etc/session.conf` edited upon
-   the running machine takes effect when the session is started again, which
+3. ~~**The launcher is read once, at start.**~~ **Closed on 2026-09-24**: it is
+   read at every opening, Section 3.3; the scale alone waits for the session to
+   start again. Before, a `/etc/session.conf` edited upon
+   the running machine took effect when the session is started again, which
    `init` does when it ends. Nothing yet asks to be told that a file changed —
    [`CONFIG.md`](CONFIG.md), Section 7, limitation 2.
 4. **The session draws its rectangles by blitting a tile.** There is no fill

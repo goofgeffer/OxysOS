@@ -221,6 +221,24 @@ void KernelVerifyPersist(BlockDevice *device, uint8_t *store, size_t size)
                              VerifyPersistUponMedium(store, size, "edited upon it"),
                          "a file closed upon the volume was not written back to the medium");
 
+
+    /*
+     * **A name made or removed upon it is upon the medium when the call
+     * returns**, since 2026-09-24, as a file closed upon it is: `micro` saves
+     * by writing a file beside and moving the name across with `unlink` and
+     * `link`, and a move left in the buffer cache would be lost with the
+     * emulator's window, the edit with it. The cache is emptied first, so that
+     * a dirty buffer afterwards can only be what the call left.
+     */
+    (void)BufferSync();
+    VerifyPersistRequire(VfsCreateDirectory(VERIFY_PERSIST_POINT "/made", 0755U) &&
+                             (BufferDirtyCount() == 0U) &&
+                             VfsRemoveDirectory(VERIFY_PERSIST_POINT "/made") &&
+                             (BufferDirtyCount() == 0U) &&
+                             VfsUnlink(VERIFY_PERSIST_POINT "/fresh") &&
+                             (BufferDirtyCount() == 0U),
+                         "a name made or removed upon the volume was left in the buffer cache");
+
     /* **Released, it is clean**, and the directory beneath shows again. */
     VerifyPersistRequire(PersistRelease(VERIFY_PERSIST_POINT) &&
                              ((VerifyPersistState(store) & EXT2_VALID_FS) != 0U),
@@ -244,6 +262,6 @@ void KernelVerifyPersist(BlockDevice *device, uint8_t *store, size_t size)
     KernelWriteString(VerifyPersistSucceeded
                           ? "Persistent /etc self-test passed: found by its whole label, marked "
                             "clean when left open, seeded without overwriting, written back upon "
-                            "a close, and released clean.\n"
+                            "a close and upon a name made or removed, and released clean.\n"
                           : "Persistent /etc self-test FAILED.\n");
 }

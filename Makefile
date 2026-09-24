@@ -728,6 +728,12 @@ INITRD_SOURCES   := $(foreach utility,$(INITRD_UTILITIES),$(USER_DIR)/$(utility)
 # thing they edit in the source are the same file, and so that a change to one
 # is a change git can show.
 INITRD_CONFIGURATION := etc/system.conf etc/desktop.conf etc/session.conf
+#
+# Each is staged twice: at `/etc`, where it is read and edited, and at
+# `/share/defaults/etc`, read-only, where it stays reachable when a persistent
+# `/etc` covers the first — so that a person can take the shipped file back
+# with `cp` and the session can fall back to it when theirs offers nothing.
+# One source, two places; docs/storage/PERSIST.md, Section 3.
 
 # The `/share/icons` hierarchy of sub-task 9.6: the pictures the launcher draws
 # beside its entries. They are files upon the ramdisk and not a header compiled
@@ -763,9 +769,12 @@ $(INITRD_IMAGE): $(INITRD_SOURCES) $(INITRD_CONFIGURATION) $(INITRD_ICONS) $(INI
 	@mkdir -p $(INITRD_STAGING)/etc
 	@mkdir -p $(INITRD_STAGING)/share/icons
 	@mkdir -p $(INITRD_STAGING)/share/backgrounds
+	@mkdir -p $(INITRD_STAGING)/share/defaults/etc
 	@for file in $(INITRD_CONFIGURATION); do \
 		cp $$file $(INITRD_STAGING)/etc/; \
 		chmod 644 $(INITRD_STAGING)/etc/$$(basename $$file); \
+		cp $$file $(INITRD_STAGING)/share/defaults/etc/; \
+		chmod 444 $(INITRD_STAGING)/share/defaults/etc/$$(basename $$file); \
 	done
 	@for file in $(INITRD_ICONS); do \
 		cp $$file $(INITRD_STAGING)/share/icons/; \
@@ -784,7 +793,7 @@ $(INITRD_IMAGE): $(INITRD_SOURCES) $(INITRD_CONFIGURATION) $(INITRD_ICONS) $(INI
 	@SOURCE_DATE_EPOCH=1789257600 mke2fs -q -F -t ext2 -b 1024 -r 1 \
 		-U $(INITRD_UUID) -E hash_seed=$(INITRD_UUID) \
 		-L oxys-initrd -d $(INITRD_STAGING) $@ $(INITRD_BLOCKS)
-	@echo "The initial ramdisk has been written to $@ ($(words $(INITRD_UTILITIES)) utilities in /bin, $(words $(INITRD_CONFIGURATION)) files in /etc, $(words $(INITRD_ICONS)) in /share/icons, $(words $(INITRD_BACKGROUNDS)) in /share/backgrounds)."
+	@echo "The initial ramdisk has been written to $@ ($(words $(INITRD_UTILITIES)) utilities in /bin, $(words $(INITRD_CONFIGURATION)) files in /etc and in /share/defaults/etc, $(words $(INITRD_ICONS)) in /share/icons, $(words $(INITRD_BACKGROUNDS)) in /share/backgrounds)."
 
 iso: $(ISO_IMAGE)
 

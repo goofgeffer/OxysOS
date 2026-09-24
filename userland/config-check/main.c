@@ -203,6 +203,21 @@ int main(void)
         }
     }
 
+    /*
+     * The shipped copies at /share/defaults/etc, of 2026-09-24: each is there,
+     * reads without fault, and the session's offers something to launch. They
+     * are what the session falls back to when the file at /etc/session.conf
+     * offers nothing, and what a person copies back to undo an edit; a
+     * fall-back that was itself missing or empty would be a desktop with an
+     * empty launcher again, which is the failure it exists to prevent.
+     */
+    ConfigRequire(OxysConfigRead(&Config, "/share/defaults/etc/system.conf") &&
+                      OxysConfigRead(&Config, "/share/defaults/etc/desktop.conf"),
+                  "a shipped copy at /share/defaults/etc could not be read without fault");
+    ConfigRequire(OxysConfigRead(&Config, "/share/defaults/etc/session.conf") &&
+                      (OxysConfigCount(&Config, "launch") >= 1U),
+                  "the shipped /share/defaults/etc/session.conf offers the launcher nothing");
+
     (void)printf("config-check: %d assertion(s) failed.\n", ConfigFailures);
 
     return ConfigFailures;

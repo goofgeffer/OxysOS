@@ -295,8 +295,7 @@ bool VfsClose(int descriptor)
          * and lasts no longer than the cache, so it is not synced for nothing.
          */
         const bool durable = ((file->flags & VFS_OPEN_WRITE) != 0U) &&
-                             (file->node->mount != VfsRootMount) &&
-                             !file->node->mount->read_only;
+                             VfsMountIsDurable(file->node->mount);
 
         VfsNodeRelease(file->node);
 
