@@ -352,21 +352,19 @@ regenerates it and fails if what is here differs.*
 
 | | |
 | --- | --- |
-| Builds recorded | 23 |
-| Verified | 17 passed, 6 not |
+| Builds recorded | 25 |
+| Verified | 18 passed, 7 not |
 | Compilers | gcc |
 | Environments | QEMU, VirtualBox |
 | First | 2026-09-17T01:34Z |
-| Latest | 2026-09-24T01:55Z |
+| Latest | 2026-09-24T02:27Z |
 
 ## The last 20 builds
 
-The remaining 3 are in [`builds.tsv`](builds.tsv), which is the record.
+The remaining 5 are in [`builds.tsv`](builds.tsv), which is the record.
 
 | # | Date (UTC) | Commit | Compiler | Kernel | ISO | Result | Environments | Note |
 | - | ---------- | ------ | -------- | ------ | --- | ------ | ------------ | ---- |
-| 4 | 2026-09-21T23:00Z | `3a98088` | gcc 13.2.0 | 3354208 | 10582016 | passed (71 assertions) |  | The shell taken out of the launcher; the first image whose launcher offers only what has a window |
-| 5 | 2026-09-21T23:15Z | `3a1d910` | gcc 13.2.0 | 3354208 | 10582016 | passed (71 assertions) |  | The desktop drawing its accent from art/palette.h, named from /etc/desktop.conf by the word system |
 | 6 | 2026-09-21T23:26Z | `b1f1f65` | gcc 13.2.0 | 3354208 | 10582016 | passed (71 assertions) |  | The demonstration's window drawing the mark of art/logo.h, and the archive check reporting rather than failing where the archive is not |
 | 7 | 2026-09-21T23:57Z | `bb2e6de` | gcc 13.2.0 | 3354936 | 10584064 | passed (71 assertions) |  | The screen handed back to the console before the reason is written, and cleared when it is |
 | 8 | 2026-09-22T22:17Z | `182a724` | gcc 13.2.0 | 3438440 | 10665984 | passed (72 assertions) |  | Sub-task 9.6: the terminal emulator, the poll it waits in, and the tcgroup refusal |
@@ -385,5 +383,7 @@ The remaining 3 are in [`builds.tsv`](builds.tsv), which is the record.
 | 21 | 2026-09-24T01:38Z | `393b437` | gcc 13.2.0 | 3715080 | 10944512 | passed (78 assertions) |  | A write of nothing returns zero, and micro saves files with blank lines |
 | 22 | 2026-09-24T01:38Z | `393b437` *(modified)* | gcc 13.2.0 | 3714776 | 10942464 | failed |  | Negative test: meant to refuse a write of nothing again, the sed disabled all four length-zero tests of syscall.c (write, read, version, path canonicalisation); caught, reverted |
 | 23 | 2026-09-24T01:55Z | `e381ca2` | gcc 13.2.0 | 3715328 | 10944512 | passed (78 assertions) |  | The launcher offers the terminal when the file offers nothing; window create and destroy wake the session |
+| 24 | 2026-09-24T02:27Z | `9382d5e` | gcc 13.2.0 | 3718160 | 10946560 | passed (78 assertions) |  | Settings recoverable without knowing how, and seen without a restart |
+| 25 | 2026-09-24T02:27Z | `9382d5e` *(modified)* | gcc 13.2.0 | 3717944 | 10946560 | failed |  | Negative test: defaults unstaged, micro's file beside left, no write-back after unlink; all caught, reverted |
 
 <!-- END GENERATED -->

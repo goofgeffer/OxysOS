@@ -41,3 +41,5 @@ number	date	commit	dirty	compiler	cc_version	kernel	iso	result	assertions	enviro
 21	2026-09-24T01:38Z	393b437	no	gcc	13.2.0	3715080	10944512	passed	78		-	A write of nothing returns zero, and micro saves files with blank lines
 22	2026-09-24T01:38Z	393b437	yes	gcc	13.2.0	3714776	10942464	failed	-		-	Negative test: meant to refuse a write of nothing again, the sed disabled all four length-zero tests of syscall.c (write, read, version, path canonicalisation); caught, reverted
 23	2026-09-24T01:55Z	e381ca2	no	gcc	13.2.0	3715328	10944512	passed	78		-	The launcher offers the terminal when the file offers nothing; window create and destroy wake the session
+24	2026-09-24T02:27Z	9382d5e	no	gcc	13.2.0	3718160	10946560	passed	78		b113bd493de24e0f08c9a1ff409ef497a4fed47879c77dfc565fe01f7784267e	Settings recoverable without knowing how, and seen without a restart
+25	2026-09-24T02:27Z	9382d5e	yes	gcc	13.2.0	3717944	10946560	failed	-		-	Negative test: defaults unstaged, micro's file beside left, no write-back after unlink; all caught, reverted
