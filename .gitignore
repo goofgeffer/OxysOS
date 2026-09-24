@@ -131,3 +131,5 @@ userland/sbin/
 # Build errors and crash dumps
 *.stackdump
 build_err.txt
+# Windows download markers (Zone.Identifier streams copied into WSL).
+*:Zone.Identifier
