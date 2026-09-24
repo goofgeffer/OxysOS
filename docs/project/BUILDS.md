@@ -352,12 +352,12 @@ regenerates it and fails if what is here differs.*
 
 | | |
 | --- | --- |
-| Builds recorded | 16 |
-| Verified | 13 passed, 3 not |
+| Builds recorded | 18 |
+| Verified | 14 passed, 4 not |
 | Compilers | gcc |
 | Environments | QEMU, VirtualBox |
 | First | 2026-09-17T01:34Z |
-| Latest | 2026-09-23T21:36Z |
+| Latest | 2026-09-24T01:10Z |
 
 ## The builds
 
@@ -379,5 +379,7 @@ regenerates it and fails if what is here differs.*
 | 14 | 2026-09-23T20:48Z | `27cf149` *(modified)* | gcc 13.2.0 | 3631016 | 10858496 | failed |  | Negative test of the background and window states: the run-crossing check removed, the root notice not coalesced, a minimised window focusable; all caught, reverted |
 | 15 | 2026-09-23T21:36Z | `4cab1ea` | gcc 13.2.0 | 3677712 | 10905600 | passed (77 assertions) |  | Sub-task 9.7: the file manager, the text viewer and the clock |
 | 16 | 2026-09-23T21:36Z | `4cab1ea` *(modified)* | gcc 13.2.0 | 3677456 | 10905600 | failed |  | Negative test of 9.7: the 12-hour reduction removed, gmtime's weekday from Wednesday, fork copying the alarm; all caught, reverted |
+| 17 | 2026-09-24T01:09Z | `ccdd12e` | gcc 13.2.0 | 3706552 | 10934272 | passed (78 assertions) |  | The persistent /etc: a labelled volume mounted over the ramdisk's |
+| 18 | 2026-09-24T01:10Z | `ccdd12e` *(modified)* | gcc 13.2.0 | 3706448 | 10934272 | failed |  | Negative test of the persistent /etc: label prefix accepted, seeding truncating, no write-back on close; all caught, reverted |
 
 <!-- END GENERATED -->
