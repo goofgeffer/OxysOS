@@ -52,6 +52,13 @@
 
 #define SESSION_CONFIGURATION "/etc/session.conf"
 
+/* What the launcher offers where the configuration offers nothing: the
+ * terminal, from which the configuration can be mended. SessionReadConfiguration
+ * says why it is the terminal alone. */
+#define SESSION_FALLBACK_NAME "Terminal"
+#define SESSION_FALLBACK_RUN  "/bin/terminal"
+#define SESSION_FALLBACK_ICON "/share/icons/terminal.oxi"
+
 /*
  * The panel's height, and the launcher's, in units of the scale.
  *
@@ -801,6 +808,32 @@ static void SessionReadConfiguration(void)
         }
 
         ++SessionEntryCount;
+    }
+
+    /*
+     * **A launcher with nothing in it offers the terminal**, since 2026-09-24.
+     * With no entry the launcher would not open at all, and the terminal is the
+     * only way to mend `/etc/session.conf` from the desktop — so a file cut
+     * short, emptied, or missing would lock a person out of the one tool that
+     * repairs it, and say nothing. It happened: a save by `micro` cut the
+     * owner's file at its first blank line, every `[launch]` block went with the
+     * rest, and pressing the launcher did nothing. The fall-back is the terminal
+     * and nothing more, because it is the repair and not a guess at what the
+     * file meant to offer; and it is said upon the standard error, which the
+     * serial line carries, so that a person knows the file is what to mend.
+     */
+    if (SessionEntryCount == 0U)
+    {
+        SessionEntry *const entry = &SessionEntries[0];
+
+        (void)fprintf(stderr, "session: %s offers nothing to launch; the launcher offers the "
+                              "terminal, with which the file may be mended.\n",
+                      SESSION_CONFIGURATION);
+
+        SessionCopy(entry->name, CONFIG_VALUE_MAXIMUM, SESSION_FALLBACK_NAME);
+        SessionCopy(entry->run, CONFIG_VALUE_MAXIMUM, SESSION_FALLBACK_RUN);
+        entry->has_picture = OxysIconRead(&entry->picture, SESSION_FALLBACK_ICON);
+        SessionEntryCount = 1U;
     }
 }
 

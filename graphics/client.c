@@ -176,6 +176,16 @@ int64_t WindowClientCreate(uint64_t geometry_address, uint64_t title_address, ui
 
     WindowSetOwner(window, caller);
 
+    /*
+     * A creation takes the focus from another window and tells the roots, and
+     * a program asleep waits for exactly those: the session learns here that
+     * it has a window to list. Without this wake, since 2026-09-24, the
+     * session slept on with the notice in its queue and the list showed the
+     * window only at the next movement of the mouse or turn of the minute —
+     * observed with a terminal opened from the launcher.
+     */
+    WindowClientWakeAll();
+
     return (int64_t)window;
 }
 
@@ -191,6 +201,11 @@ int64_t WindowClientDestroy(uint64_t window)
     }
 
     WindowDestroy(owned);
+
+    /* A destruction passes the focus and tells the roots, and either may be
+     * what a sleeping program waits for: the session's list of windows, since
+     * 2026-09-24, went stale until the next event of any kind. */
+    WindowClientWakeAll();
 
     return SYSCALL_OK;
 }

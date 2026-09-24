@@ -194,6 +194,20 @@ rather than hidden, there being no hide.
 Its entries are `[launch]` blocks of `/etc/session.conf`, read once at start —
 the format of sub-task 9.4, and the second thing to use it after `init`.
 
+**A file that offers nothing still gives the terminal**, since 2026-09-24. With
+no entry the launcher did not open at all, and the terminal is the only way to
+mend `/etc/session.conf` from the desktop, so a file cut short, emptied or
+missing locked a person out of the one tool that repairs it — and said nothing.
+It happened: a save by `micro` cut the owner's file at its first blank line,
+[`LIBC.md`](LIBC.md), Section 8.3, every `[launch]` block went with the rest, and
+pressing the launcher did nothing. The session now offers the terminal alone in
+that case, and says upon its standard error — which the serial line carries —
+that the file offers nothing. The terminal and not a guess at what the file meant
+to offer, because it is the repair. **Observed** under QEMU with the owner's
+truncated file: the launcher opened with `Terminal`, the terminal opened, and the
+line was upon the serial log. It is not asserted by a self-test, the session not
+running during them.
+
 **What it starts, it does not wait for.** A program that took a moment to draw
 would otherwise stop the panel. The session reaps with `waitpid` and `WNOHANG`
 when a `SIGCHLD` has woken it, because a session that never reaped would fill
@@ -608,6 +622,15 @@ the button. A list longer than the panel is cut at the screen's edge.
 or the focus among them change; the session then asks with `window_list`, which
 is its alone, and draws the panel. There is no polling: a desktop that asked
 every second would redraw the panel every second for a list that seldom changes.
+
+**The notice wakes the session**, since 2026-09-24, and did not before. A window
+made or destroyed by a program told the roots but woke nobody, the only wakes
+being a routed input event and the calls of Section 10's own; so a terminal opened
+from the launcher stood unlisted until the pointer moved or the minute turned,
+which is how it was found, and a mouse movement made the button appear.
+`window_create` and `window_destroy` now wake every sleeper, as a process's ending
+always had. Observed fixed under QEMU; not asserted by a self-test, which runs
+with no session to be asleep.
 
 **This needed the panel to stop taking the focus**, [`WINDOWS.md`](WINDOWS.md),
 Section 13.3: a press upon the list that took the focus would lose, before the
