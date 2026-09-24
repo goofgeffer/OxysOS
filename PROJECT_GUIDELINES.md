@@ -2,109 +2,153 @@
 <!-- SPDX-License-Identifier: CC0-1.0 -->
 # Oxys-OS Project Guidelines
 
-This document sets out the conventions binding upon all work in the Oxys-OS
-repository. It governs project identity, research protocol, technical stack,
-coding and documentation standards, the phase roadmap in outline, and the
-practices that are prohibited.
+The rules binding upon all work in this repository, by any contributor, human
+or automated. Where a document elsewhere disagrees with this one, this one
+governs and the other is wrong.
 
-## 1. Project Identity
+## 1. Project identity
+
 - **Name**: Oxys-OS (Oxys).
-- **Purpose**: A monolithic, Unix-based x86_64 operating system whose kernel and userland are written from scratch in ISO C11 and assembly, and which may run and depend upon ported third-party tools.
-- **Root Directory**: `~/oxys-os` (within WSL2 on Windows 10).
-- **Primary Language**: C11 for kernel and userland; NASM assembly for boot and architecture-specific routines.
+- **Purpose**: a monolithic, Unix-like x86_64 operating system whose kernel and
+  userland are written from scratch in ISO C11 and assembly, and which may run
+  and depend upon ported third-party tools.
+- **Root directory**: `~/oxys-os`, within WSL2 on Windows.
+- **Languages**: C11 for the kernel and userland; NASM for boot and
+  architecture-specific routines.
 
-## 2. Absolute Rules of Engagement
-- **Formality**: All communication, documentation, code comments, and commit messages must adopt a strictly formal, technical, and objective tone. The use of emojis, slang, humour, or any informal expression is strictly prohibited. This rule governs the register of the **work**. The standard of conduct between persons is governed by `CODE_OF_CONDUCT.md`, whose Section 2 records where the line between the two falls; neither document relaxes the other, and the formality required here is not a licence to be disagreeable nor the conduct standard a bar to plain technical judgement.
-- **Specification-Driven Development**: Before implementing any subsystem, the contributor must retrieve and cite the official authoritative specifications (e.g., Intel manuals, Multiboot2, EXT2, System V ABI, UEFI Specification, relevant RFCs). No implementation shall proceed without referenced specification.
-- **Synchronous Documentation**: Every single code change must be immediately reflected in:
-  - Updated inline comments and file-header blocks.
-  - Corresponding design notes within the `docs/` folder, in the group its subject belongs to: `project/`, `design/`, `devices/` or `storage/`, as `docs/README.md` sets out.
-  - The living roadmap `docs/project/PLAN.md` (marking completed tasks and adjusting subsequent steps).
-- **Original Kernel and Userland**: All source code under `kernel/`, `boot/`, `drivers/`, `graphics/`, `libc/`, `net/`, `crypto/`, `uefi/` and `userland/` must be original. Reference implementations may be studied for understanding but must not be transcribed. The only permitted inclusions there are standard public domain headers or minimal stub code explicitly required by the toolchain (e.g., linker scripts).
-- **Ported Third-Party Tools Are Permitted**: External tools, toolchains, plugins and their supporting libraries may be ported to run upon Oxys-OS, and Oxys-OS may depend upon them. This is how the system becomes self-hosting: the C compiler, assembler and linker it will eventually build itself with are ports and not original work. A port is held apart from original source, in a directory of its own, and carries the upstream project's name, version and the licence it arrived under, and that licence must be recorded in `LICENSING.md` before the port is committed. A port must not be modified beyond what the port requires, so that it can be updated from upstream rather than diverging into a fork nobody maintains.
-- **Testing Mandate**: Every milestone must be bootable and testable in both QEMU (with `-machine q35 -cpu qemu64 -smp cores=2` for SMP testing) and VirtualBox. UEFI testing requires QEMU with OVMF firmware (`-bios /usr/share/ovmf/OVMF.fd`). Real hardware compatibility must be considered from the first ISO build.
+## 2. Rules of engagement
 
+- **Formality.** Documentation, comments and commit messages are formal,
+  technical and objective: no emoji, slang or humour. This governs the register
+  of the work; conduct between people is governed by `CODE_OF_CONDUCT.md`.
+- **Specification first.** Before a subsystem is implemented, the authoritative
+  specification is retrieved and cited (Intel SDM, Multiboot2, EXT2, System V
+  ABI, UEFI, the relevant RFCs and data sheets). A value recalled rather than
+  looked up is not a citation.
+- **Documentation in the same change.** A change is complete only when every
+  document it makes untrue has been corrected in the same commit, under the
+  rules of Sections 7 and 11.
+- **Original kernel and userland.** Everything under `kernel/`, `boot/`,
+  `drivers/`, `graphics/`, `libc/`, `net/`, `crypto/`, `uefi/` and `userland/`
+  is original. Reference implementations may be studied, never transcribed. The
+  only exceptions are public-domain headers and stubs the toolchain requires.
+- **Ported tools are permitted.** Third-party tools, toolchains and their
+  libraries may be ported to run upon Oxys-OS and depended upon. A port lives in
+  a directory of its own, carries its upstream name, version and licence, is
+  recorded in `LICENSING.md` before it is committed, and is modified no further
+  than porting requires.
+- **Testing mandate.** Every milestone boots and is tested under QEMU
+  (`-machine q35 -cpu qemu64 -smp cores=2`), VirtualBox and Bochs; UEFI under
+  QEMU with OVMF. Real hardware is considered from the first image.
 
-## 3. Technical Stack and Constraints
-- **Toolchain**: `x86_64-elf-gcc`, `x86_64-elf-ld`, `nasm`, `grub-mkrescue`, `make`. All must be installed and functional in the WSL2 environment. This is the cross-build host; the long-term objective is that a native toolchain, ported under Section 2, supersedes it.
-- **Boot Protocol**: Multiboot2 (GRUB as the bootloader) for legacy BIOS; UEFI boot path (PE32+ image) added later.
-- **Kernel Image**: ELF64, linked according to `linker.ld`. Higher-half kernel layout is recommended.
-- **Build System**: GNU Make with explicit targets, in four groups. **Building**: `all`, `clean`, `iso`. **Running**: `run-qemu`, `run-vbox`, `run-uefi` (for OVMF testing). **Checking**: `verify` (the automated regression run required by the Testing Mandate of Section 2), `clang-check` (every translation unit compiled by a second compiler for its diagnostics), `docs-check` and `spdx-check` (the corpus and the licence tags, neither of which builds anything), `lint` (both of those together, and what CI runs), `spdx-apply` (which writes, and is the only one in that group that does) and `toolcheck`. **Recording**: `build-record`, which appends one numbered row to `docs/project/BUILDS.md` describing the image presently in `build/`, so that an observation made about an image can name its subject. **Recording is suspended**, by decision of the project owner on 2026-09-13: the register was emptied and every archived image removed, and no build is recorded again until `Oxys 1 Alpha`, which `docs/project/PLAN.md` fixes at sub-task 8.7 — **and which was cut on 2026-09-16, upon which recording resumed with build 1**. **Numbering restarted at 1**, by the same decision — so a build number is unique within a register and not across the project's life, and what identifies an image across the clearing is the date and commit in its row rather than its number. The target, the register and `tools/builds.sh` are otherwise unchanged and remain the way an image is recorded; `docs/project/BUILDS.md` holds the reasoning. **Since 2026-09-16, by decision of the project owner on the day the alpha was cut, every build is recorded — mid-development or not**: one row per image `make verify` boots, in the commit that records the change's hash, whether or not the image is archived. This list is checked against the `Makefile` by `tools/check-docs.sh`, so a target added without being named here fails `make lint`.
-- **Debugging**: Serial output over COM1 shall be implemented in the earliest device-driver stage to enable remote debugging.
+## 3. Technical stack and build
 
-## 4. Code and Documentation Standards
-- **File Headers**: Each source file must commence with a block comment containing:
-  - The file name and path.
-  - A one-sentence summary of its purpose.
-  - A list of key functions or data structures.
-  - References to the specifications it implements.
-- **Identifier Conventions**:
-  - Types and global functions: `PascalCase` (e.g., `MemoryAllocator`, `ParseELFSegment`).
-  - Macros and constants: `UPPER_SNAKE_CASE` (e.g., `VGA_WIDTH`, `PAGE_SIZE`).
-  - Local variables: `snake_case`.
-- **Comment Language**: Complete, grammatically correct English sentences. Abbreviations are permitted only if they are universally recognised (e.g., `PIC`, `IDT`, `ATA`).
-- **Compiler Flags**: `-Wall -Wextra -Werror` shall be enabled at the earliest stable stage, with exceptions explicitly documented in the Makefile.
+- **Toolchain**: `x86_64-elf-gcc`, `x86_64-elf-ld`, `nasm`, `grub-mkrescue`,
+  `make`, installed in WSL2. A native, ported toolchain is the long-term
+  successor.
+- **Boot**: Multiboot2 through GRUB for BIOS; a UEFI PE32+ path in Phase 12.
+- **Kernel image**: ELF64, higher-half, linked by `linker.ld`.
+- **Build System**: GNU Make. The targets are, by group — building: `all`, `clean`, `iso`; running: `run-qemu`, `run-vbox`, `run-uefi`; checking: `verify` (boots the image headless under QEMU and fails on a missing banner or any `FAILED`), `clang-check`, `docs-check`, `spdx-check`, `lint` (both of the previous two), `spdx-apply` (the one checking target that writes) and `toolcheck`; recording: `build-record`. `tools/check-docs.sh` holds this list to the Makefile, so a target is added here in the same change that adds it there.
+- **Every build is recorded.** Each image `make verify` boots gets one row in
+  `docs/project/builds.tsv` through `make build-record`, including negative-test
+  images (recorded dirty). Archiving an image with `ARCHIVE=1` is a judgement
+  made for any build of consequence. `docs/project/BUILDS.md` is the procedure.
+- **Debugging**: COM1 serial output from the earliest stage.
 
-## 5. Project Milestones (13 Formal Phases)
-The roadmap is enumerated in full in `docs/project/PLAN.md`, which is the single source
-of truth for progress. It comprises 13 major phases, ordered by dependency:
+## 4. Code standards
 
-1. **Bootstrapping & Early Output** — Cross-compiler, Multiboot2, long-mode, VGA text output, ISO generation.
-2. **Memory Management (including Copy-on-Write)** — Physical frame allocator, paging, higher-half kernel, virtual allocator, COW page fault handler with reference counting.
-3. **Interrupts, Exceptions & Keyboard Input** — IDT, PIC/APIC, interrupt dispatcher, PS/2 keyboard driver.
-4. **Basic Device Drivers** — Serial (COM1), VGA text mode, ATA PIO, PCI enumeration.
-5. **EXT2 Filesystem** — Superblock, group descriptors, inodes, directories, read/write support, mounting.
-6. **Graphics, System Calls, Process Management & SMP** — Linear framebuffer, 2D primitives, bitmap font and graphical console, PS/2 mouse, compositing surface; syscall interface, ELF loader, PCBs, scheduler (MP-aware), context switching, APIC initialisation, spinlocks and IPIs, CPU bring-up.
-7. **Userland & Minimal C Library** — Libc core functions, `malloc`/`free`, syscall wrappers, basic utilities (`ls`, `cat`, `echo`), initial ramdisk.
-8. **Shell** — Command interpreter, built-ins, external program execution, job control.
-9. **The Desktop, its System Services & its Configuration** — Stacking window manager, the client protocol serving user processes, `init` and service supervision, the system configuration format and the `/etc` hierarchy, the session and its panel, terminal emulator, the utilities a desktop requires, and the settings application.
-10. **Cryptography** — PRNG (RDRAND/timing), SHA-256, AES-128/256, user-space API.
-11. **Networking** — Ethernet driver (RTL8139/E1000), ARP, IP, ICMP, UDP, minimal TCP, socket API, utility (`ping`).
-12. **UEFI Transition** — UEFI application entry point, System Table parsing, Boot Services, runtime services, GOP integration, dual-boot (BIOS + UEFI) capability.
-13. **Polish, Optimisation & Final Hardening** — Performance optimisation, security hardening (SMEP, SMAP, KASLR), comprehensive documentation, real-hardware testing, final image.
+- **File header.** Every source file opens with a block giving its path, a
+  one-sentence purpose, its key functions or definitions, and the
+  specifications it implements. `docs-check` verifies the path.
+- **Names.** Types and global functions `PascalCase`; macros and constants
+  `UPPER_SNAKE_CASE`; locals `snake_case`.
+- **Comments.** Complete English sentences that explain *why*, above all the
+  silent failure a decision prevents. A comment that restates the code is
+  removed.
+- **Diagnostics.** `-Wall -Wextra -Werror`; any exception is documented in the
+  Makefile.
+- The full standard is `docs/project/CODING-STANDARDS.md`.
 
-Each phase shall be broken into atomic, testable sub-tasks.
+## 5. Roadmap
 
-The graphical work is divided between Phases 6 and 9, by dependency. What requires no process to exist — the framebuffer the boot loader describes, the 2D primitives, the bitmap font and the console above it, the pointer, the compositing surface — belongs to Phase 6, and supplies the diagnostic console every later phase reports through. What cannot be built without processes — the window manager, the client protocol, the system services and the desktop they maintain — belongs to Phase 9, after the shell.
+Thirteen phases, ordered by dependency; `docs/project/PLAN.md` enumerates their
+sub-tasks and is the single source of truth for progress.
 
-UEFI is a dedicated phase before final polish.
+1. Bootstrapping and early output. 2. Memory management with copy-on-write.
+3. Interrupts, exceptions and the keyboard. 4. Basic device drivers.
+5. EXT2. 6. Graphics, system calls, processes and SMP. 7. Userland and a
+minimal C library. 8. The shell. 9. The desktop, its services and its
+configuration. 10. Cryptography. 11. Networking. 12. UEFI. 13. Polish,
+optimisation and hardening.
 
-Beyond the thirteen phases, the long-term objective is that Oxys-OS builds Oxys-OS. The compiler, assembler and linker that requires are ports, by the rule in Section 2; `docs/project/PLAN.md` sets out what else it depends upon.
+Graphics that need no process (framebuffer, primitives, font, console,
+pointer, compositor) belong to Phase 6; everything that needs processes
+(window manager, client protocol, desktop) to Phase 9. Beyond Phase 13 the
+objective is self-hosting: Oxys-OS building Oxys-OS with ported compiler,
+assembler and linker.
 
-## 6. Research and Reference Protocol
-- **Permitted Sources**:
-  - Intel 64 and IA-32 Architectures Software Developer Manuals (Volumes 1–4).
-  - Multiboot2 Specification.
-  - EXT2 Filesystem Specification (Linux kernel documentation).
-  - System V ABI for x86_64 (including ELF and calling convention).
-  - ATA-8/ATAPI command set.
-  - IEEE 802.3 and relevant IETF RFCs (for networking).
-  - UEFI Specification (latest version).
-  - VESA BIOS Extensions (VBE) and UEFI GOP documentation.
-- **Citing**: Every design document and relevant code comment must include a formal citation (e.g., "Refer to Intel Vol. 3A, Section 4.1 for paging structure details").
+## 6. Research and references
 
-## 7. Update Discipline
-- `docs/project/PLAN.md` is the single source of truth for task tracking. It shall be updated in every session after any functional change.
-- This document is amended only by explicit decision of the project owner. Any such amendment must be acknowledged, and the reason for it recorded, in the commit that makes it.
+- Permitted sources: the Intel SDM, Multiboot2, the EXT2 specification, the
+  System V AMD64 ABI, ATA-8/ATAPI, IEEE 802.3 and the IETF RFCs, the UEFI
+  specification, VBE and GOP documentation, and manufacturers' data sheets.
+- Every specification relied upon is registered in
+  `docs/project/REFERENCES.md`, with the sections relied upon, and cited by
+  section where it is applied.
 
-## 8. Prohibited Practices
-- Use of non-standard or GCC-specific extensions without first documenting the rationale.
-- Use of floating-point operations in the kernel unless explicitly required for a specific algorithm (and even then, with clear justification).
-- Reliance on undefined behaviour. All pointer arithmetic, type punning, and bitwise operations must be explicitly defined in the C11 standard.
-- Use of any third-party library or external code **inside the kernel proper**. The kernel's only external dependencies are the bootloader (GRUB) and the toolchain that builds it. This prohibition stops at the kernel: ported third-party tools run upon the system and are permitted by Section 2.
+## 7. Update discipline
 
-## 9. Initialisation Checklist
-At the start of each working session, the contributor shall verify:
-- The working directory is `~/oxys-os`.
-- The cross-compiler is available in `$PATH`.
-- `docs/project/PLAN.md` exists and reflects the current state of progress.
-- The latest code compiles without fatal errors (if applicable).
+- A change touches, in the same commit: the design document of the subsystem;
+  the directory `README.md` if a file was added, removed or repurposed;
+  `PLAN.md` if a sub-task changed state; `STATUS.md` if a capability, an
+  environment result or a known gap changed; and one line of `HISTORY.md`.
+  Documentation-only corrections need no `HISTORY.md` line.
+- Before a commit, `make verify` and `make lint` pass. Commits go to `main`; a
+  second commit records the first's hash in `HISTORY.md` together with the
+  build-register rows.
+- This document is amended only by explicit decision of the project owner, and
+  the commit that amends it records the reason.
 
-## 10. Directory-Level Documentation
-- Every high-level folder containing useful material (like `crypto/`, `drivers/`, `boot/`, or `kernel/`) should have ATLEAST a `README.md` for documentation.
-- Such a `README.md` shall state the purpose of the directory, enumerate its contents, cite the specifications its material implements, and identify the phase of `docs/project/PLAN.md` to which that material belongs.
-- A directory that is presently empty, having been created in anticipation of a later phase, acquires its `README.md` at the moment material is first placed within it.
-- This requirement is subordinate to the Synchronous Documentation rule of Section 2: a directory `README.md` must be updated in the same change that alters the contents it describes.
+## 8. Prohibited practices
 
-These guidelines are binding upon every contributor operating within the Oxys-OS
-repository, whether human or automated.
+- A non-standard or compiler-specific extension without the rationale recorded
+  in `docs/project/CODING-STANDARDS.md`.
+- Floating point in the kernel without a documented, specific justification.
+- Reliance on undefined behaviour; pointer arithmetic, type punning and bitwise
+  operations must be defined by C11.
+- Third-party code inside the kernel proper. The kernel depends on GRUB and the
+  toolchain only; ported tools run upon the system, not within the kernel.
+
+## 9. Session checklist
+
+At the start of a working session: the working directory is `~/oxys-os`; the
+cross-compiler is on `PATH`; `docs/project/PLAN.md` reflects the state of the
+work; the tree builds.
+
+## 10. Directory-level documentation
+
+Every source directory has a `README.md` stating its purpose, its files (one
+line each), the specifications applied and the phase it belongs to, and it is
+updated in the same change as the directory. A directory created ahead of its
+phase receives its `README.md` with its first file.
+
+## 11. Documentation
+
+The documentation is part of the codebase and is held to the same standard:
+accurate, current and without duplication. `docs/README.md` is the full
+standard; its rules are binding and summarised here.
+
+- **One home per fact.** Each fact is written in exactly one place; every other
+  place links to it. A statement repeated is a statement that will drift.
+- **Documents describe the present.** A design, device or storage document
+  says how the system works now, in the present tense. It holds no dated
+  amendments, no struck-through text and no account of how it came to be. When
+  behaviour changes, the text is rewritten to the new behaviour; the old text
+  is deleted, and git keeps it.
+- **History lives in commits.** The narrative of a change — what was found,
+  what was tried, the negative tests — is the commit message.
+  `docs/project/HISTORY.md` is a one-line index of changes pointing at commits;
+  `docs/project/TESTING-RECORD.md` is a one-line record of each test run.
+- **Fixed forms.** Each kind of document has a fixed structure, given in
+  `docs/README.md`: a design document ends with its verification table and its
+  current limitations; a directory `README.md` is an index of its files.

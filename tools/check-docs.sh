@@ -9,9 +9,6 @@
 #   — the ones that are mechanically checkable and were, until this script,
 #   checked by hand or not at all.
 #
-    # The trailing class is a number boundary: without it "sub-task 6.1"
-    # matches "sub-task 6.15", and every early sub-task reports every later
-    # one's sentences as its own.
 # Usage:
 #   tools/check-docs.sh
 #
@@ -86,48 +83,24 @@ done < /tmp/oxys-links.$$
 rm -f /tmp/oxys-links.$$
 
 # ---------------------------------------------------------------------------
-# 2. Every design document is indexed, and the count that describes them is
-#    the number of them.
+# 2. Every document is indexed in the README.md of its group.
 #
 # The defect this catches: a document added without an index entry is a document
-# nobody finds, and the two indexes drift apart silently.
+# nobody finds. docs/README.md indexes the groups; each group's README.md
+# indexes its documents, so a document is listed in exactly one index.
 # ---------------------------------------------------------------------------
 section 'Indexes'
 
-design_count=0
-for path in docs/design/*.md; do
-    name="$(basename "$path")"
-    [ "$name" = 'README.md' ] && continue
-    design_count=$((design_count + 1))
-
-    grep -q "\[\`$name\`\]" docs/design/README.md \
-        || fail "docs/design/$name is not indexed in docs/design/README.md."
-    grep -q "design/$name" docs/README.md \
-        || fail "docs/design/$name is not indexed in docs/README.md."
+for group in docs/project docs/design docs/devices docs/storage; do
+    for path in "$group"/*.md; do
+        name="$(basename "$path")"
+        [ "$name" = 'README.md' ] && continue
+        grep -q "]($name)" "$group/README.md" \
+            || fail "$path is not indexed in $group/README.md."
+    done
+    grep -q "](${group#docs/}/README.md)" docs/README.md \
+        || fail "$group/README.md is not indexed in docs/README.md."
 done
-
-# The prose says "These <word> documents". The word must be the count.
-number_word() {
-    local n="$1"
-    local ones=(zero one two three four five six seven eight nine ten eleven \
-                twelve thirteen fourteen fifteen sixteen seventeen eighteen \
-                nineteen)
-    local tens=('' '' twenty thirty forty fifty sixty seventy eighty ninety)
-
-    if [ "$n" -lt 20 ]; then
-        echo "${ones[$n]}"
-    elif [ $((n % 10)) -eq 0 ]; then
-        echo "${tens[$((n / 10))]}"
-    else
-        echo "${tens[$((n / 10))]}-${ones[$((n % 10))]}"
-    fi
-}
-
-expected_word="$(number_word "$design_count")"
-if ! grep -qi "These $expected_word" docs/design/README.md; then
-    actual="$(grep -o 'These [a-z-]*' docs/design/README.md | head -1)"
-    fail "docs/design/README.md says '$actual' but indexes $design_count documents (expected 'These $expected_word')."
-fi
 
 # ---------------------------------------------------------------------------
 # 3. A source file's header names its own path.
@@ -205,14 +178,13 @@ section 'Assertion count'
 if [ -f build/serial.log ]; then
     counted=$(( $(grep -o 'passed' build/serial.log | wc -l) \
               + $(grep -o 'sound' build/serial.log | wc -l) ))
-    counted_word="$(number_word "$counted")"
+    claimed="$(grep -oE '^\| Self-test assertions \| [0-9]+ \|' docs/project/STATUS.md \
+               | grep -oE '[0-9]+' | head -1)"
 
-    if grep -qiE '[A-Za-z-]+ assertions presently report' docs/project/STATUS.md; then
-        claimed="$(grep -oiE '[A-Za-z-]+ assertions presently report' docs/project/STATUS.md \
-                   | head -1 | awk '{print tolower($1)}')"
-        if [ "$claimed" != "$counted_word" ]; then
-            fail "STATUS.md claims '$claimed' assertions; build/serial.log holds $counted ('$counted_word')."
-        fi
+    if [ -z "$claimed" ]; then
+        fail "STATUS.md has no '| Self-test assertions | <n> |' row."
+    elif [ "$claimed" != "$counted" ]; then
+        fail "STATUS.md claims $claimed assertions; build/serial.log holds $counted."
     fi
 else
     printf 'SKIPPED  no build/serial.log; run `make verify` for the assertion count check.\n'
