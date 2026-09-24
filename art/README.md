@@ -201,21 +201,22 @@ the `awk` writes blue, green, red and then the transparency.
 
 | File | What it is |
 | ---- | ---------- |
-| [`backgrounds/background.png`](backgrounds/background.png) | The background as the project owner drew it, 2048 by 1448. It is the source and nothing reads it at build time. |
-| [`backgrounds/background.oxim`](backgrounds/background.oxim) | The same, at the same resolution, in the run-length format [`../libc/include/image.h`](../libc/include/image.h) sets out: seventy kilobytes. This is what the ramdisk carries at `/share/backgrounds/background.oxim`, what `/etc/session.conf` names, and what the session reads. |
+| [`backgrounds/background.png`](backgrounds/background.png) | The background, a photograph of a yellow rose, as the project owner supplied it, 2048 by 1448. It is the source and nothing reads it at build time. |
+| [`backgrounds/background.oxim`](backgrounds/background.oxim) | The same, reduced and softened as below, in the run-length format [`../libc/include/image.h`](../libc/include/image.h) sets out: seventy kilobytes. This is what the ramdisk carries at `/share/backgrounds/background.oxim`, what `/etc/session.conf` names, and what the session reads. |
 
 **A file, for the icons' reason and one more.** The session reads it once at
 start and a person changes it by editing one line of `/etc/session.conf`; and a
 background compiled in would be the size of the drawing in the session's own
 image, where a file costs the ramdisk and nothing else.
 
-**At the resolution it was drawn at, and scaled by the session.** The picture
-is not reduced to a screen size here, because there is no one screen size —
-1280 by 800 under QEMU, 1024 by 768 under Bochs, 640 by 480 under VirtualBox —
-and a picture reduced for one is enlarged for the others. The session's scaler
-covers whatever screen it has, averaging as it reduces. What that costs is
-nothing, for a drawing of flat colour: its three million pixels are twelve
-thousand runs.
+**Reduced to 1280 by 905, softened, and limited to 128 colours.** The
+background is a photograph, and a photograph's grain leaves almost no two
+neighbouring pixels alike: at full size it is some three million runs,
+eighteen megabytes, nine times the ramdisk as it was. A blur of two pixels
+removes the grain without losing the petals, and 128 colours without dithering
+turn the smooth gradients into runs, with a little banding. The result is some
+130,000 runs, 760 KiB. 1280 is the widest screen here, so no screen enlarges
+it; the session's scaler reduces it for the smaller ones.
 
 **Covering, not stretching.** The drawing is wider than 4 by 3 and narrower than
 16 by 10, so upon every screen above it is cut at two edges — the sides at 4 by
@@ -226,11 +227,11 @@ The conversion is one command, for the reason every conversion here is:
 
 ```sh
 in=art/backgrounds/background.png; out=art/backgrounds/background.oxim
-W=$(identify -format '%w' "$in"); H=$(identify -format '%h' "$in")
+W=1280; H=905
 { printf 'OXIM\001\000\000\000'
   printf "\\$(printf %03o $((W & 255)))\\$(printf %03o $((W >> 8)))"
   printf "\\$(printf %03o $((H & 255)))\\$(printf %03o $((H >> 8)))"; } > "$out"
-convert "$in" -background white -alpha remove -depth 8 rgb:- | xxd -p -c 3 |
+convert "$in" -resize ${W}x${H}! -blur 0x2 +dither -colors 128 -background white -alpha remove -depth 8 rgb:- | xxd -p -c 3 |
   awk -v W=$W '
     function flush() { printf "%02x%02x%s%s%s00", n % 256, int(n / 256),
                          substr(p,5,2), substr(p,3,2), substr(p,1,2); }

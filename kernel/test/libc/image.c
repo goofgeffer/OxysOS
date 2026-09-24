@@ -30,12 +30,12 @@
 
 /* The file `/etc/session.conf` names, and the extent of the drawing in it. */
 #define VERIFY_IMAGE_PATH   "/share/backgrounds/background.oxim"
-#define VERIFY_IMAGE_WIDTH  2048U
-#define VERIFY_IMAGE_HEIGHT 1448U
+#define VERIFY_IMAGE_WIDTH  1280U
+#define VERIFY_IMAGE_HEIGHT 905U
 
 /* Room for the shipped file, and one byte more to tell a file that fills the
  * buffer from one cut off at it. */
-#define VERIFY_IMAGE_CAPACITY (256U * 1024U)
+#define VERIFY_IMAGE_CAPACITY (1024U * 1024U)
 
 static bool VerifyImageSucceeded;
 

@@ -711,7 +711,7 @@ $(BUILD_DIR)/kernel/arch/x86_64/smp/smp_trampoline.asm.o: $(TRAMPOLINE_BINARY)
 
 INITRD_IMAGE   := $(BUILD_DIR)/initrd.img
 INITRD_STAGING := $(BUILD_DIR)/initrd
-INITRD_BLOCKS  := 2048
+INITRD_BLOCKS  := 4096
 INITRD_UUID    := 0c5f7a10-7b41-4d2e-9a3c-6f0c5f7a1000
 
 # The programs the ramdisk carries, which are the five utilities of sub-task 7.6

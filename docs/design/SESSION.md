@@ -96,8 +96,8 @@ may ([`../../art/README.md`](../../art/README.md)).
 [`../../art/`](../../art/) by the command in its README.
 
 - **A file**, so a person changes it by editing a line.
-- **Run-length encoded**, its own format: the 2048 × 1448 drawing is flat colour,
-  about 12,000 runs, 70 KiB, where raw pixels would be 12 MiB. **A run never
+- **Run-length encoded**, its own format. The shipped photograph is stored at
+  1280 × 905, softened and reduced to 128 colours: about 130,000 runs, 760 KiB. **A run never
   crosses a row's end**, so each row is checked alone; a crossing run miscounted
   would shear every later row.
 - **Kept at its drawn size and scaled by the session** (screens are 1280 × 800,
@@ -220,7 +220,8 @@ dragged up sliding **under** the panel; minimised windows restored from the list
 6. Nothing is shown while a started program is starting.
 7. One icon per program at one size, repeated when enlarged; the mark is
    interpolated but icons are not.
-8. The background has no transparency or palette; a photograph would barely
-   compress; its edges are cut with no choice of where.
+8. The background has no transparency or palette. A photograph compresses only
+   once softened and reduced in colour, which bands a little; its edges are cut
+   with no choice of where.
 9. The window list holds 16 entries, as many as the panel's width allows, with no
    icons (it does not know a window's program) and titles simply cut.

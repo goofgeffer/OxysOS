@@ -35,7 +35,7 @@ are a self-test's apparatus, embedded in the kernel image beside the test that
 runs each. Shipping them in `/bin` would ship the test harness to someone who
 asked for a shell.
 
-The image is 2,048 blocks of 1 KiB. Slack costs a little ISO space; running short
+The image is 4,096 blocks of 1 KiB, most of it the background photograph. Slack costs a little ISO space; running short
 fails the build the day a program grows.
 
 ## 2. Why EXT2, made by `mke2fs`
@@ -58,7 +58,7 @@ fails the build the day a program grows.
 
 ```sh
 SOURCE_DATE_EPOCH=1789257600 mke2fs -q -F -t ext2 -b 1024 -r 1 \
-    -U <fixed> -E hash_seed=<fixed> -L oxys-initrd -d build/initrd build/initrd.img 2048
+    -U <fixed> -E hash_seed=<fixed> -L oxys-initrd -d build/initrd build/initrd.img 4096
 ```
 
 | Option | Reason |
@@ -178,8 +178,8 @@ A person sees, in the boot log:
 
 ```
 Boot modules: 1.
-  0x3E7000 - 0x5E7000  2048 KiB  initrd
-Ramdisk: ram0 is the module initrd at 0x3E7000, 2048 KiB in 4096 blocks of 512 bytes, writable.
+  0x6F7000 - 0xAF7000  4096 KiB  initrd
+Ramdisk: ram0 is the module initrd at 0x6F7000, 4096 KiB in 8192 blocks of 512 bytes, writable.
 EXT2 volume upon ram0: revision 1.0, labelled oxys-initrd, writable.
 VFS: the initial ramdisk is mounted at the root.
 ```

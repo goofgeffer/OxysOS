@@ -112,9 +112,10 @@
 /*
  * The background, of 2026-09-23: the file `/etc/session.conf` names, read once
  * at start into this buffer, which the parsed image points into for as long as
- * the session runs. Half a megabyte is seven times the drawing that ships.
+ * the session runs. A mebibyte holds the photograph that ships, some 760 KiB,
+ * with room for one a little larger.
  */
-#define SESSION_BACKGROUND_BYTES (512U * 1024U)
+#define SESSION_BACKGROUND_BYTES (1024U * 1024U)
 
 /* The band the root is composed in when a background covers it: many rows at
  * a time, so that a screen of 800 rows is a few dozen blits and not hundreds. */
