@@ -15,7 +15,9 @@ of them is a style rule, and none enforces a preference.
 [`builds.sh`](builds.sh) is the one that is more than a check — it keeps a record
 as well as validating it — and is described beneath the table, and
 [`bochsrc.cfg`](bochsrc.cfg) is neither a check nor a record but a machine
-description, described beneath that.
+description, described beneath that. [`etc-disk.sh`](etc-disk.sh), of 2026-09-23,
+makes and checks the disk of the persistent `/etc`, and is described beneath
+both.
 
 | Script | What it checks | The defect that motivated it |
 | ------ | -------------- | ---------------------------- |
@@ -109,6 +111,23 @@ to the repository root. What it still depends upon is a Bochs built with
 `make` target for it: a target would run whatever `bochs` is upon the `PATH`,
 which upon this machine has three times been a build that cannot execute long
 mode. Section 4A records the options and the symptom.
+
+## `etc-disk.sh` — the disk of the persistent `/etc`
+
+Makes, checks, repairs and lists the EXT2 volume labelled `oxys-etc` that the
+kernel mounts over `/etc`, [`../docs/storage/PERSIST.md`](../docs/storage/PERSIST.md).
+`create` makes a four-megabyte volume with the options the initial ramdisk is
+made with, so that it is the format the kernel's driver is asserted against;
+`check` runs `e2fsck -f -n` and alters nothing; `repair` runs `e2fsck -f -p`;
+`list` runs `debugfs`. The image is `OXYS_ETC_DISK`, or `~/oxys-disks/oxys-etc.img`.
+
+**It keeps the image out of the repository and refuses to overwrite one.** The
+image holds what a person edited upon the running machine: under `build/`
+`make clean` would remove it, inside the tree `git add -A` would commit it, and a
+`create` that overwrote it would discard every setting at once. It is a script
+and not a make target because every target is listed in
+`PROJECT_GUIDELINES.md`, Section 3, and adding one is the owner's amendment to
+make.
 
 ## Running them
 

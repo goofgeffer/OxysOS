@@ -97,6 +97,7 @@ complementary, and neither replaces the other.
 | [`EXT2-FILES.md`](storage/EXT2-FILES.md) | What is done with those structures: the directories, the resolution of a path, the reading and writing of a file, and the creation and destruction of names. |
 | [`EXT2-VERIFICATION.md`](storage/EXT2-VERIFICATION.md) | The eleven self-tests of the EXT2 implementation, six of them against a volume this kernel did not compose. | `kernel/fs/ext2/` |
 | [`VFS.md`](storage/VFS.md) | The virtual filesystem layer: the mount, the node, the open file, and the one tree that several volumes are joined into. | `kernel/fs/vfs/`, `kernel/fs/ext2_vfs.c` |
+| [`PERSIST.md`](storage/PERSIST.md) | The persistent `/etc`: a labelled volume mounted over it, so that a configuration survives a restart. | `kernel/fs/persist.c` |
 
 ## The form of a document
 

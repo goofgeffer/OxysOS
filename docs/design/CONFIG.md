@@ -293,11 +293,12 @@ identical from the outside.
 2. **There is no include, no override and no per-user file.** One file per
    subject, read once at start. A program that wants its configuration again
    must be started again, nothing yet asking to be told that a file changed.
-3. **Nothing survives a reboot.** `/etc` is upon the initial ramdisk, which is
-   memory: a file edited upon the running machine is gone at the next boot. What
-   would keep it is a writable volume mounted at boot, which is
-   [`../storage/VFS.md`](../storage/VFS.md)'s to arrange and which nothing yet
-   asks for.
+3. ~~**Nothing survives a reboot.**~~ **Closed on 2026-09-23** where the machine
+   carries a disk labelled `oxys-etc`: it is mounted over `/etc`, seeded from the
+   ramdisk's, and an edit upon it survives a restart,
+   [`../storage/PERSIST.md`](../storage/PERSIST.md). Without one, `/etc` is the
+   ramdisk's and an edit is gone at the next boot, as before. A changed shipped
+   file does not reach a volume that already has one, PERSIST.md, Section 8.
 4. **The values are strings, numbers and truths.** There is no list within a
    value — the desktop's accent is three numbers parsed by the desktop itself,
    not by the parser — and no duration, no size with a suffix, and no path type.

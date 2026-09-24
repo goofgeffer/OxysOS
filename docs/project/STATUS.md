@@ -817,6 +817,14 @@ and hour modes; `alarm` sends SIGALRM at a time and is served from the tick.
 Observed under QEMU, VirtualBox and Bochs. [`../design/UTILITIES.md`](../design/UTILITIES.md);
 [`../devices/TIME.md`](../devices/TIME.md), Section 10.
 
+**`/etc` survives a restart**, since 2026-09-23, upon a machine carrying a disk
+labelled `oxys-etc`: it is mounted over the ramdisk's `/etc` at start, seeded
+with the files it lacks, written back when a file upon it is closed, and
+released clean at `shutdown`; a volume left open by a machine stopped without
+one is marked clean and mounted writable. Without such a disk `/etc` is the
+ramdisk's, as before. Observed under QEMU, VirtualBox and Bochs.
+[`../storage/PERSIST.md`](../storage/PERSIST.md).
+
 **The same day found and fixed a defect a person could reach from the
 launcher.** Two processes reading the terminal at once stopped the machine:
 each kept the other runnable, neither reached the halt that lets the timer tick
@@ -1072,7 +1080,7 @@ functional. [`TESTING.md`](TESTING.md), Section 3.
 There is no test harness and there will be none before Phase 7, there being no
 userland to run one in. The kernel therefore asserts its own properties at boot,
 in the order the subsystems are initialised, and `make verify` fails if any of
-them reports a failure. Seventy-seven assertions presently report passed or sound.
+them reports a failure. Seventy-eight assertions presently report passed or sound.
 
 Those tests are in [`../../kernel/test/`](../../kernel/test/), one file per
 subsystem. Each subsystem's design document carries a table pairing every

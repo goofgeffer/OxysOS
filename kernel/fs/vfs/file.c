@@ -285,7 +285,25 @@ bool VfsClose(int descriptor)
     }
     else
     {
+        /*
+         * A file written upon a volume that outlives the machine is written back
+         * when it is closed, since 2026-09-23: the buffer cache holds a write
+         * until something syncs it, and a machine switched off by closing its
+         * window — which is how an emulator is most often stopped — would lose
+         * an edit a person had saved and been told was saved.
+         * docs/storage/PERSIST.md, Section 5. The ramdisk at the root is memory
+         * and lasts no longer than the cache, so it is not synced for nothing.
+         */
+        const bool durable = ((file->flags & VFS_OPEN_WRITE) != 0U) &&
+                             (file->node->mount != VfsRootMount) &&
+                             !file->node->mount->read_only;
+
         VfsNodeRelease(file->node);
+
+        if (durable)
+        {
+            (void)VfsSync();
+        }
     }
 
     *file = (VfsFile){ 0 };

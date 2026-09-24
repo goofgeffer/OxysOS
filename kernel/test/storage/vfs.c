@@ -977,6 +977,10 @@ void KernelVerifyVfs(void)
     KernelVerifyVfsMounts();
     KernelVerifyVfsPipes();
 
+    /* The persistent `/etc` of 2026-09-23, upon this root and the second
+     * device, which it puts back as it found them. */
+    KernelVerifyPersist(second, KernelMemoryDeviceSecondStore, sizeof KernelMemoryDeviceSecondStore);
+
     /* The root is not withdrawn while a file upon it is open. */
     descriptor = VfsOpen("/file", VFS_OPEN_READ, 0U);
     KernelVfsRequire(descriptor != VFS_NO_DESCRIPTOR, "a file could not be opened");

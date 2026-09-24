@@ -26,6 +26,14 @@ source are the same file, and a change to one is a change git can show.
 | [`desktop.conf`](desktop.conf) | `/bin/windows` | The scale the desktop draws its windows at, and the accent it draws their contents with — `system` means the one `art/palette.h` carries. |
 | [`session.conf`](session.conf) | `/bin/session` | How large the desktop is drawn, the picture that covers it, and a `[launch]` block for each program the launcher offers. |
 
+**These are the shipped copies.** Upon a machine with no persistent disk, `/etc`
+is the ramdisk's and an edit made upon the running machine is gone at the next
+boot. Upon one carrying a disk labelled `oxys-etc` — `tools/etc-disk.sh create`
+makes one — `/etc` is that disk, seeded from these files the first time, and an
+edit survives a restart. A change to a file here then reaches only a disk that
+does not yet have that file; delete it upon the disk to take the shipped one
+again. [`../docs/storage/PERSIST.md`](../docs/storage/PERSIST.md).
+
 ## The format, in one paragraph
 
 A line at a time. `#` begins a comment, `[name]` opens a section, `key = value`

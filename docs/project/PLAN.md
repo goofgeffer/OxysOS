@@ -396,6 +396,17 @@ which is what wakes the clock at each minute. Two calls, 42 and 43, and
 `<time.h>`. [`../design/UTILITIES.md`](../design/UTILITIES.md);
 [`../devices/TIME.md`](../devices/TIME.md), Section 10.
 
+**`/etc` persists, since 2026-09-23**, at the project owner's direction and
+before 9.8 and the beta: a disk carrying an EXT2 volume labelled `oxys-etc` is
+mounted over the ramdisk's `/etc` at start, seeded with the files it lacks and
+never overwritten, so that a configuration edited upon the running machine
+survives a restart — which is what makes 9.8's settings application worth
+having. `/etc` and not only `/home` or `/var`, because `/etc` is what a person
+changes and restarts to see. A volume of its own and not a directory of a
+larger one, because this VFS cannot bind a directory without walking paths by
+mount as well as by node. [`../storage/PERSIST.md`](../storage/PERSIST.md).
+A persistent `/home` needs partitions, which the block layer does not yet read.
+
 **`Oxys 1 Beta` is fixed at this sub-task**, [`VERSIONING.md`](VERSIONING.md),
 Section 11.1, and is cut at the project owner's direction, as the alpha was.
 

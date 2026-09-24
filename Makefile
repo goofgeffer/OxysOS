@@ -239,6 +239,7 @@ C_SOURCES := kernel/kernel.c \
              kernel/test/storage/ext2/write.c \
              kernel/test/storage/ext2/probe.c \
              kernel/test/storage/vfs.c \
+             kernel/test/storage/persist.c \
              kernel/test/storage/initrd.c \
              kernel/test/libc/string.c \
              kernel/test/libc/wrappers.c \
@@ -290,6 +291,7 @@ C_SOURCES := kernel/kernel.c \
              kernel/fs/ext2/path.c \
              kernel/fs/ext2/name.c \
              kernel/fs/ext2_vfs.c \
+             kernel/fs/persist.c \
              kernel/fs/vfs/vfs.c \
              kernel/fs/vfs/node.c \
              kernel/fs/vfs/path.c \
@@ -801,8 +803,14 @@ clean:
 # Execution targets.
 # ------------------------------------------------------------------------------
 
+# ETC_DISK names the disk of the persistent `/etc`, tools/etc-disk.sh, where one
+# is wanted: `make run-qemu ETC_DISK=~/oxys-disks/oxys-etc.img`. Attached as an
+# IDE disk, which upon q35 is the AHCI controller; docs/storage/PERSIST.md.
+ETC_DISK_FLAGS = $(if $(ETC_DISK),-drive file=$(ETC_DISK)$(comma)format=raw$(comma)if=ide)
+comma := ,
+
 run-qemu: $(ISO_IMAGE)
-	$(QEMU) $(QEMU_FLAGS) -cdrom $(ISO_IMAGE) -serial stdio
+	$(QEMU) $(QEMU_FLAGS) $(ETC_DISK_FLAGS) -cdrom $(ISO_IMAGE) -serial stdio
 
 run-uefi: $(ISO_IMAGE)
 	@test -f $(OVMF_FIRMWARE) \

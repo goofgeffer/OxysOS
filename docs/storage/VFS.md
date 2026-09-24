@@ -383,6 +383,13 @@ from the root, and a root it no longer reaches would have turned it into a
 diagnostic that prints "not present" for ever —
 [`INITRD.md`](INITRD.md), Section 6.3.
 
+**Since 2026-09-23 one disk is not a stranger's**: a volume whose label is
+exactly `oxys-etc` is this system's own, made by `tools/etc-disk.sh`, and is
+mounted over `/etc` for writing before `/mnt` is considered, so that it is not
+taken for the machine's volume. Section 8.1 is not relaxed for anything else;
+the label is how this layer knows the disk is not somebody else's.
+[`PERSIST.md`](PERSIST.md).
+
 A kernel booted without a ramdisk falls back to `VfsMountRoot` exactly as this
 function behaved before 7.7.
 
@@ -697,3 +704,9 @@ reader also sends SIGPIPE, since 8.7.
     privilege level 3 alone — and it joins the list
     [`../design/CONCURRENCY.md`](../design/CONCURRENCY.md), Section 10,
     limitation 1, keeps.
+13. **No bind mount, and none can be added without changing how a path is
+    walked.** The walker holds a node and not a node and the mount it was
+    reached through, so a directory made reachable by a second path would not
+    know, at `..`, which path it had come by. The persistent `/etc` of
+    2026-09-23 is a volume of its own for this reason,
+    [`PERSIST.md`](PERSIST.md), Section 2.

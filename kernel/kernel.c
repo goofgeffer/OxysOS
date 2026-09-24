@@ -82,6 +82,7 @@
 #include <oxys/dev/ioapic.h>
 #include <oxys/dev/pit.h>
 #include <oxys/dev/rtc.h>
+#include <oxys/fs/persist.h>
 #include <oxys/dev/ps2.h>
 #include <oxys/dev/keyboard.h>
 #include <oxys/dev/mouse.h>
@@ -296,6 +297,14 @@ int64_t KernelPower(uint64_t action)
     /* The other processors are stopped first, as a panic stops them, so that
      * none goes on drawing over the page or writing to a device mid-reset. */
     IpiHaltOtherProcessors();
+
+    /*
+     * The persistent `/etc` is written back and released before the machine
+     * stops, so that the volume is marked cleanly unmounted and every edit is
+     * upon the medium: docs/storage/PERSIST.md, Section 5. Where nothing is
+     * mounted over `/etc` the unmount is refused and nothing has changed.
+     */
+    (void)PersistRelease(PERSIST_ETC_POINT);
 
     CompositorSuspend();
 
@@ -922,6 +931,11 @@ static void KernelMountRootVolume(void)
         if (VfsMountVolume(RAMDISK_DEVICE_NAME, "/", "ext2", false))
         {
             KernelWriteString("VFS: the initial ramdisk is mounted at the root.\n");
+
+            /* The persistent `/etc` before the machine's volume, so that the
+             * disk labelled for it is taken for `/etc` and not mounted at `/mnt`
+             * as a stranger's: docs/storage/PERSIST.md, Section 3. */
+            (void)PersistEtc();
             KernelMountMachineVolume();
             VfsReport();
             VfsReportDirectory("/");
