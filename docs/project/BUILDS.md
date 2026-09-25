@@ -352,20 +352,19 @@ regenerates it and fails if what is here differs.*
 
 | | |
 | --- | --- |
-| Builds recorded | 33 |
-| Verified | 26 passed, 7 not |
+| Builds recorded | 34 |
+| Verified | 27 passed, 7 not |
 | Compilers | gcc |
-| Environments | Bochs, QEMU, VirtualBox |
+| Environments | Bochs, QEMU, QEMU q35,  VirtualBox,  Bochs, VirtualBox |
 | First | 2026-09-17T01:34Z |
-| Latest | 2026-09-25T02:14Z |
+| Latest | 2026-09-25T21:03Z |
 
 ## The last 20 builds
 
-The remaining 13 are in [`builds.tsv`](builds.tsv), which is the record.
+The remaining 14 are in [`builds.tsv`](builds.tsv), which is the record.
 
 | # | Date (UTC) | Commit | Compiler | Kernel | ISO | Result | Environments | Note |
 | - | ---------- | ------ | -------- | ------ | --- | ------ | ------------ | ---- |
-| 14 | 2026-09-23T20:48Z | `27cf149` *(modified)* | gcc 13.2.0 | 3631016 | 10858496 | failed |  | Negative test of the background and window states: the run-crossing check removed, the root notice not coalesced, a minimised window focusable; all caught, reverted |
 | 15 | 2026-09-23T21:36Z | `4cab1ea` | gcc 13.2.0 | 3677712 | 10905600 | passed (77 assertions) |  | Sub-task 9.7: the file manager, the text viewer and the clock |
 | 16 | 2026-09-23T21:36Z | `4cab1ea` *(modified)* | gcc 13.2.0 | 3677456 | 10905600 | failed |  | Negative test of 9.7: the 12-hour reduction removed, gmtime's weekday from Wednesday, fork copying the alarm; all caught, reverted |
 | 17 | 2026-09-24T01:09Z | `ccdd12e` | gcc 13.2.0 | 3706552 | 10934272 | passed (78 assertions) |  | The persistent /etc: a labelled volume mounted over the ramdisk's |
@@ -385,5 +384,6 @@ The remaining 13 are in [`builds.tsv`](builds.tsv), which is the record.
 | 31 | 2026-09-25T01:45Z | `e53fd5f` | gcc 13.2.0 | 3719144 | 13043712 | passed (78 assertions) |  | Panel at the foot, pinned programs, clock box at top right |
 | 32 | 2026-09-25T01:53Z | `141ac8b` | gcc 13.2.0 | 3719144 | 13043712 | passed (78 assertions) |  | Pinned icons evenly spaced |
 | 33 | 2026-09-25T02:14Z | `f224263` | gcc 13.2.0 | 3719144 | 13043712 | passed (78 assertions) | QEMU;VirtualBox;Bochs | Oxys 1 Beta: the release image, cut after sub-task 9.7; booted to the desktop under QEMU, VirtualBox and Bochs |
+| 34 | 2026-09-25T21:03Z | `ce354fa` | gcc 13.2.0 | 3768960 | 13094912 | passed (79 assertions) | QEMU q35, VirtualBox, Bochs | Growing process, thread, node, open-file and pipe tables |
 
 <!-- END GENERATED -->

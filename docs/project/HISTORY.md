@@ -11,7 +11,7 @@ row.
 
 | Date | Phase | Change | Commit |
 | ---- | ----- | ------ | ------ |
-| 2026-09-25 | Phase 9 | The process, thread, filesystem node, open-file and pipe tables grow from the heap in chunks that never move, the first static; `procinfo` is walked until `EINVAL` and `SYSCALL_PROCESS_CAPACITY` is withdrawn | `pending` |
+| 2026-09-25 | Phase 9 | The process, thread, filesystem node, open-file and pipe tables grow from the heap in chunks that never move, the first static; `procinfo` is walked until `EINVAL` and `SYSCALL_PROCESS_CAPACITY` is withdrawn | `ce354fa` |
 | 2026-09-24 | Phase 9 | `Oxys 1 Beta` cut: the version string `1-beta`, the release notes, the release record | `f224263` |
 | 2026-09-24 | Phase 9 | The pinned icons evenly spaced: one visible gap after the launcher's name, between icons and before the window list | `141ac8b` |
 | 2026-09-24 | Phase 9 | The panel moves to the foot of the screen with Terminal and Files pinned beside the launcher; the clock in a box at the top right | `e53fd5f` |
