@@ -40,11 +40,11 @@
 /* What that file is, and what the launcher was sized for. A conversion that
  * produced some other extent would draw a picture in the wrong place, at the
  * wrong size, or not at all. */
-#define VERIFY_ICON_EXTENT 48U
+#define VERIFY_ICON_EXTENT 96U
 
 static bool VerifyIconSucceeded;
 
-/* One icon and one buffer, reused: the icon is sixteen kilobytes and a second of
+/* One icon and one buffer, reused: the icon is thirty-six kilobytes and a second of
  * either would be a second thing to keep in step for no assertion's sake. */
 static OxysIcon VerifyIconStore;
 static uint8_t VerifyIconBytes[ICON_BYTES_MAXIMUM + 1U];

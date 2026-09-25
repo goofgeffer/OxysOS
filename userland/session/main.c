@@ -222,6 +222,21 @@ static char SessionIconFault[CONFIG_VALUE_MAXIMUM + 1U];
 /* The launcher's icon, and whether it could be read. */
 static OxysIcon SessionStartIcon;
 static bool SessionHasStartIcon;
+
+/*
+ * The notifications' symbols, drawn by the project owner, since 2026-09-25:
+ * information (which warnings use as well, at the owner's request), success
+ * and error. Read once at start; a symbol that cannot be read is drawn by
+ * SessionDrawSymbol instead, so that the notice saying an icon is missing
+ * never goes without its own.
+ */
+#define SESSION_SYMBOLS 3U
+static const char *const SessionSymbolPaths[SESSION_SYMBOLS] = {
+    "/share/icons/notify-information.oxi", "/share/icons/notify-success.oxi",
+    "/share/icons/notify-error.oxi"
+};
+static OxysIcon SessionSymbolIcons[SESSION_SYMBOLS];
+static bool SessionHasSymbolIcon[SESSION_SYMBOLS];
 static OxysImageScaler SessionScaler;
 static uint32_t SessionBand[SESSION_BAND];
 
@@ -582,6 +597,9 @@ static void SessionDrawClock(void)
     SessionClockRemaining = (int64_t)(60 - (now % 60)) * 1000;
 }
 
+static void SessionDrawIcon(int64_t window, int32_t x, int32_t y, int32_t slot,
+                            const OxysIcon *icon, uint32_t paper);
+
 /* ------------------------------------------------------- notifications */
 
 /*
@@ -616,7 +634,6 @@ static void SessionDrawClock(void)
 /* The discs' colours, one per kind, and the glyph's. */
 #define SESSION_NOTIFY_BLUE  OXYS_RGB(58U, 116U, 196U)
 #define SESSION_NOTIFY_GREEN OXYS_RGB(46U, 150U, 88U)
-#define SESSION_NOTIFY_AMBER OXYS_RGB(214U, 150U, 30U)
 #define SESSION_NOTIFY_RED   OXYS_RGB(200U, 64U, 56U)
 #define SESSION_NOTIFY_GLYPH OXYS_RGB(255U, 255U, 255U)
 
@@ -760,11 +777,8 @@ static const SessionStroke SessionGlyphInformation[] = {
 static const SessionStroke SessionGlyphSuccess[] = {
     { 290, 520, 440, 670 }, { 440, 670, 715, 345 }
 };
-static const SessionStroke SessionGlyphWarning[] = {
-    { 500, 260, 500, 580 }, { 500, 735, 500, 735 }
-};
 static const SessionStroke SessionGlyphError[] = {
-    { 330, 330, 670, 670 }, { 670, 330, 330, 670 }
+    { 500, 260, 500, 580 }, { 500, 735, 500, 735 }
 };
 
 /* One channel of `from` moved toward `to` by `share` of four. */
@@ -811,11 +825,6 @@ static void SessionDrawSymbol(int64_t window, int32_t x, int32_t y, int32_t exte
     {
         strokes = SessionGlyphSuccess;
         disc = SESSION_NOTIFY_GREEN;
-    }
-    else if (kind == SYSCALL_NOTIFY_WARNING)
-    {
-        strokes = SessionGlyphWarning;
-        disc = SESSION_NOTIFY_AMBER;
     }
     else if (kind == SYSCALL_NOTIFY_ERROR)
     {
@@ -913,8 +922,26 @@ static void SessionDrawNotification(const SessionNotification *notice)
     SessionFill(notice->window, 0, 0, 1, notice->height, SESSION_GROUND);
     SessionFill(notice->window, width - 1, 0, 1, notice->height, SESSION_GROUND);
 
-    SessionDrawSymbol(notice->window, pad, (notice->height - symbol) / 2, symbol, notice->kind,
-                      SESSION_PANEL);
+    {
+        /* Warnings take the information symbol, at the owner's request. */
+        const size_t which = (notice->kind == SYSCALL_NOTIFY_SUCCESS) ? 1U
+                             : (notice->kind == SYSCALL_NOTIFY_ERROR) ? 2U
+                                                                     : 0U;
+        const uint32_t drawn = (which == 1U) ? SYSCALL_NOTIFY_SUCCESS
+                               : (which == 2U) ? SYSCALL_NOTIFY_ERROR
+                                               : SYSCALL_NOTIFY_INFORMATION;
+
+        if (SessionHasSymbolIcon[which])
+        {
+            SessionDrawIcon(notice->window, pad, (notice->height - symbol) / 2, symbol,
+                            &SessionSymbolIcons[which], SESSION_PANEL);
+        }
+        else
+        {
+            SessionDrawSymbol(notice->window, pad, (notice->height - symbol) / 2, symbol, drawn,
+                              SESSION_PANEL);
+        }
+    }
 
     for (size_t line = 0U; line < notice->lines; ++line)
     {
@@ -1096,8 +1123,6 @@ static void SessionKeepTime(void)
 
 static void SessionDrawTasks(void);
 
-static void SessionDrawIcon(int64_t window, int32_t x, int32_t y, int32_t slot,
-                            const OxysIcon *icon, uint32_t paper);
 
 /*
  * Where the pinned programs begin upon the panel, and how far apart they
@@ -1857,6 +1882,19 @@ int main(void)
         (void)fprintf(stderr, "session: %s could not be read; the launcher shows three bars.\n",
                       SESSION_START_ICON);
         SessionSay(SYSCALL_NOTIFY_WARNING, "The start icon could not be read.");
+    }
+
+    for (size_t index = 0U; index < SESSION_SYMBOLS; ++index)
+    {
+        SessionHasSymbolIcon[index] =
+            OxysIconRead(&SessionSymbolIcons[index], SessionSymbolPaths[index]);
+
+        if (!SessionHasSymbolIcon[index])
+        {
+            (void)fprintf(stderr, "session: %s could not be read; its notifications have a "
+                                  "drawn symbol instead.\n",
+                          SessionSymbolPaths[index]);
+        }
     }
 
     {

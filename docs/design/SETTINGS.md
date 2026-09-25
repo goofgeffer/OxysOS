@@ -66,8 +66,8 @@ right. Each stays for five seconds, or until pressed.
 | ---- | ------ | ------ | --- |
 | `SYSCALL_NOTIFY_INFORMATION` | `i` | blue | Something worth knowing. |
 | `SYSCALL_NOTIFY_SUCCESS` | a tick | green | Something asked for was done. |
-| `SYSCALL_NOTIFY_WARNING` | `!` | amber | Something missing was stood in for. |
-| `SYSCALL_NOTIFY_ERROR` | a cross | red | Something failed. |
+| `SYSCALL_NOTIFY_WARNING` | `i`, the information symbol | blue | Something missing was stood in for. |
+| `SYSCALL_NOTIFY_ERROR` | `!` | red | Something failed. |
 
 ### 2.1 The path
 
@@ -111,10 +111,13 @@ early to make room: a column up the screen would cover the windows a person is
 working in. Each is a panel-layer window, so nothing a program does covers it,
 and it touches neither edge the window manager reserves rows for.
 
-**The symbol is drawn by the session**, not taken from a file: a disc of the
-kind's colour and a white glyph made of strokes, each pixel sampled four times
-so that the edges are softened. No icon file can go missing and take the
-symbol of "an icon could not be read" with it.
+**The symbols are the project owner's**, since 2026-09-25: `notify-information`,
+`notify-success` and `notify-error` of `/share/icons`, read once as the session
+starts and averaged down to the symbol's square. Warnings take the information
+symbol, at the owner's request; the kind still decides nothing else. **Where a
+symbol cannot be read, the session draws one**: a disc of the kind's colour and a
+white glyph of strokes, each pixel sampled four times to soften its edges. So the
+notice saying an icon is missing never goes without its own symbol.
 
 **The timing shares the one alarm a process has with the clock.** At each pass
 of its loop the session cancels the alarm, which returns what remained of it;
@@ -157,4 +160,3 @@ beside them.
 3. **The settings window is drawn at a fixed size.** It is not laid out again
    when made full.
 4. **Notices are not kept.** One missed is gone; there is no list of past ones.
-5. **Settings has no icon**, so pinned it shows its initial.

@@ -175,7 +175,7 @@ redrawn when the root receives `WINDOW_EVENT_WINDOWS`; `window_create` and
 polling.
 
 **Notifications** stand above the bar at the right, since 2026-09-25: small
-panel-layer windows, each a symbol in a coloured disc and a line or three of text,
+panel-layer windows, each the owner's symbol for its kind and a line or three of text,
 for five seconds or until pressed, at most three at once. The session takes them
 from the kernel when its root is sent `WINDOW_EVENT_NOTIFY`, posts its own the same
 way when a background or an icon cannot be read, and reads its configuration again
@@ -193,8 +193,9 @@ with the launcher's entries, so they are files.
 version 2): magic, version, width, height, a reserved byte, then one 32-bit
 little-endian pixel per position, `0xTTRRGGBB`, where `TT` is transparency (0
 opaque, 0xFF fully transparent: `ICON_NOTHING` is `0xFF000000`). Uncompressed and
-readable with `xxd`. Up to `ICON_EXTENT_MAXIMUM` (64) square; the terminal's is 48,
-the slot's own size at scale two, drawn one to one. Version 1 (transparency only
+readable with `xxd`. Up to `ICON_EXTENT_MAXIMUM` (96) square; the shipped ones are
+96, twice the slot at scale two since 2026-09-25, and averaged down to it,
+so drawn one to one only at scale four. Version 1 (transparency only
 0 or 0xFF) is still read; a version-1 reader would take partial transparency for
 colour, hence the new number.
 
@@ -232,7 +233,7 @@ it. **An unreadable icon costs the icon**, not the entry.
 | Two white and two transparent reduce to white on white; white and black to the grey between. | A dark fringe; sampling instead of averaging. |
 | Enlargement repeats; outside the square is paper; a 3 × 1 icon is centred in a 3-square. | Reading beyond the icon; stretching. |
 | Version 1 is read, version 0 refused; the parser's malformed-file refusals hold. | Old icons vanishing; files drawn from garbage. |
-| The shipped icon is 48 square with transparent, opaque and partly transparent pixels. | An icon converted the old way, which parses and draws a staircase. |
+| The shipped icon is 96 square with transparent, opaque and partly transparent pixels. | An icon converted the old way, which parses and draws a staircase. |
 | No mark pixel has more ink than coverage; the mark has disc, figure, edge and uncovered corners. | Specks on the edge; a square mark; a lost figure. |
 | One to one the mark is its table; halved, the average of four; the mix is exactly ground, disc or ink at the extremes. | A reduction that picks one pixel; a faint box around the mark. |
 | An image composed to the format reads with its extent; short, long, unknown version, reserved byte set, empty run, transparent pixel and zero extent are refused, emptying the image. | A picture drawn from whatever followed the file, or from the last one read. |

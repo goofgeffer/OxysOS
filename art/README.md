@@ -134,10 +134,12 @@ thing has to agree with it about either colour.
 | File | What it is |
 | ---- | ---------- |
 | [`icons/terminal.png`](icons/terminal.png) | The terminal's icon as the project owner drew it. It is the source and nothing reads it at build time. |
-| [`icons/terminal.oxi`](icons/terminal.oxi) | The same, upon nothing rather than white, reduced to forty-eight pixels square with the transparency of every pixel kept, and written in version 2 of the format [`../libc/include/icon.h`](../libc/include/icon.h) sets out. This is what the ramdisk carries and what the session reads. |
+| [`icons/terminal.oxi`](icons/terminal.oxi) | The same, upon nothing rather than white, reduced to ninety-six pixels square with the transparency of every pixel kept, and written in version 2 of the format [`../libc/include/icon.h`](../libc/include/icon.h) sets out. This is what the ramdisk carries and what the session reads. |
 | [`icons/files.png`](icons/files.png), [`icons/files.oxi`](icons/files.oxi) | The file manager's icon, a folder, as the project owner drew it, and the same converted by the command below. |
 | [`icons/windows.png`](icons/windows.png), [`icons/windows.oxi`](icons/windows.oxi) | The window demonstration's icon, a window around the mark, as the project owner drew it, and the same converted by the command below. |
 | [`icons/start.png`](icons/start.png), [`icons/start.oxi`](icons/start.oxi) | The launcher's button, three dots and lines, as the project owner drew it, and the same converted by the command below. |
+| [`icons/settings.png`](icons/settings.png), [`icons/settings.oxi`](icons/settings.oxi) | The settings application's icon, a gear, as the project owner drew it, and the same converted by the command below. |
+| [`icons/notify-information.png`](icons/notify-information.png), [`icons/notify-success.png`](icons/notify-success.png), [`icons/notify-error.png`](icons/notify-error.png), and the three `.oxi` files | The notifications' symbols as the project owner drew them: an `i` in blue, which warnings use as well; a tick in green; an `!` in red. Converted by the command below. |
 
 **They are files and not a header**, which is the whole difference between an
 icon and the mark above. There is one mark and it is drawn before there is a
@@ -151,11 +153,14 @@ time without the two disagreeing the first time somebody edits it.
 The conversion is one command, recorded here rather than made a rule of the
 `Makefile` — for the reason `logo.h`'s is: a build rule would put ImageMagick in
 the path of every build, and an icon changes when somebody draws one, not when
-somebody builds. `E` is the extent; forty-eight is the launcher's slot of
-twenty-four units at the scale of two.
+somebody builds. `E` is the extent; ninety-six, since 2026-09-25 at the project
+owner's request, is twice the launcher's slot of
+twenty-four units at the scale of two, so every place an icon is drawn is an
+average of several of its pixels. It was forty-eight.
 
 ```sh
-E=48; N=terminal          # or files, windows, or start
+E=96; N=terminal   # or files, windows, start, settings, notify-information,
+                   # notify-success or notify-error
 convert art/icons/$N.png -background white -alpha remove -alpha set -fuzz 10% -fill none \
         -draw 'color 0,0 floodfill' -trim +repage cut.png
 S=$(convert cut.png -format '%[fx:max(w,h)]' info:)
@@ -194,8 +199,8 @@ wholly opaque has a top byte of zero and is the `0x00RRGGBB` the window protocol
 carries, and a pixel wholly transparent is `ICON_NOTHING`, as each was in
 version 1.
 
-The header's five significant bytes are `OXIC`, the version 2, the width 0x30,
-the height 0x30 and a reserved zero; the pixels are little-endian, which is why
+The header's five significant bytes are `OXIC`, the version 2, the width 0x60,
+the height 0x60 and a reserved zero; the pixels are little-endian, which is why
 the `awk` writes blue, green, red and then the transparency.
 
 ## `backgrounds/` — the picture the desktop is covered with, which is a file

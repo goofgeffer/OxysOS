@@ -67,15 +67,17 @@
  * The launcher's slot is twenty-four units, forty-eight pixels at the scale of
  * two every screen of 1024 or wider is drawn at, and a picture drawn at the
  * extent it is shown at is drawn one to one where one that must be enlarged
- * shows the steps of the enlargement. Sixty-four leaves room above that for a
- * slot or a scale that grows. It was thirty-two, which held a picture of
- * twenty-four enlarged twice and nothing drawn at the slot's own extent. A
- * larger one is refused rather than truncated, a picture silently missing its
- * right-hand half being worse than a picture that did not appear. The
- * structure is the bound made of memory: sixteen kilobytes of pixels, which a
- * program may hold several of.
+ * shows the steps of the enlargement. Ninety-six, since 2026-09-25, is the
+ * shipped icons' own extent: twice the slot, at the project owner's request,
+ * so that a scale of four is drawn one to one and every smaller place an icon
+ * stands (the panel's squares, a notification's symbol) is an average of
+ * several pixels rather than a stretch of one. It was thirty-two, then
+ * sixty-four. A larger one is refused rather than truncated, a picture
+ * silently missing its right-hand half being worse than a picture that did not
+ * appear. The structure is the bound made of memory: thirty-six kilobytes of
+ * pixels, which a program may hold several of — the session holds a dozen.
  */
-#define ICON_EXTENT_MAXIMUM 64U
+#define ICON_EXTENT_MAXIMUM 96U
 
 /* The header, and the largest file that can be an icon of that extent. */
 #define ICON_HEADER_BYTES 8U
