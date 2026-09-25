@@ -172,7 +172,19 @@ xxd -p -c 4 raw | awk '{ printf "%s%s%s%02x", substr($0,5,2), substr($0,3,2),
 cat head pixels > art/icons/$N.oxi
 ```
 
-Four things in that are the whole of the judgement.
+**The settings icon has a hole**, and the flood from a corner cannot reach it:
+the gear encloses it. For that icon alone, a second flood from the hole's
+centre follows the first, after `-trim` (the cut picture is 1425 by 1433 and
+the hole's centre is 712, 716), before the square is padded:
+
+```sh
+convert cut.png -fuzz 10% -fill none -draw "color 712,716 floodfill" cut.png
+```
+
+A white hole left in would be a white disc upon the panel, the fault the corner
+of the Files icon once had.
+
+Four things in the first command are the whole of the judgement.
 
 **The ground is made transparent at the artwork's full resolution**, by a flood
 from a corner, because a drawing may arrive upon white rather than upon nothing.
