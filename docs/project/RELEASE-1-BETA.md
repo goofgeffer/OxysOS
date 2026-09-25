@@ -96,13 +96,14 @@ None. There is one image.
 
 ## 7. The image
 
-Built by `make iso` from the commit `Cut Oxys 1 Beta`, recorded as a build of
+Built by `make iso` from commit `f224263`, `Cut Oxys 1 Beta`, recorded as **build 33** of
 [`BUILDS.md`](BUILDS.md), archived under `~/oxys-builds/` with a copy named
 `oxys-1-beta.iso` ([`VERSIONING.md`](VERSIONING.md), Section 9.2).
 
 | Image | SHA-256 |
 | ----- | ------- |
-| `oxys-1-beta.iso` | Recorded in the commit that follows the cut. |
+| `oxys-1-beta.iso` | `2fc78818b9191f6bda2cc3ab535cc093455d038d7b6aa056f4e3eab3355442e6` |
 
-An image rebuilt from the same commit holds the same kernel and programs but not
+The image is 13,043,712 bytes. An image rebuilt from the same commit holds the
+same kernel and programs but not
 the same bytes: the ISO and the ramdisk carry the timestamps of their making.
