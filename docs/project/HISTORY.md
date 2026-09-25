@@ -11,7 +11,7 @@ row.
 
 | Date | Phase | Change | Commit |
 | ---- | ----- | ------ | ------ |
-| 2026-09-25 | Phase 9 | The launcher's button shows the project owner's start icon, in a square like the pinned programs, where it showed `OXYS`; three bars where the icon cannot be read | `pending` |
+| 2026-09-25 | Phase 9 | The launcher's button shows the project owner's start icon, in a square like the pinned programs, where it showed `OXYS`; three bars where the icon cannot be read | `0fc868b` |
 | 2026-09-25 | Phase 9 | The close control drawn as a cross, the size of the minimise and full-screen glyphs, where it was a disc | `d19a474` |
 | 2026-09-25 | All | Reference tables: every system call with its wrapper and every error code in `PRIVILEGE.md`, the capacity limits in `ARCHITECTURE.md`; no prose changed | `33a4d6c` |
 | 2026-09-25 | Phase 9 | `KernelMain` reduced to a driver of ten boot phases, one file each in `kernel/init/`, moved without reordering; `kernel.c` from 2,638 lines to 798 | `06bf6b2` |
