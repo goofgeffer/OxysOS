@@ -47,3 +47,4 @@ number	date	commit	dirty	compiler	cc_version	kernel	iso	result	assertions	enviro
 27	2026-09-24T22:06Z	51e019e	no	gcc	13.2.0	3718160	10946560	passed	78		-	Launcher icons for Files and Windows
 28	2026-09-24T22:37Z	4bd8769	no	gcc	13.2.0	3718160	13043712	passed	78		-	New Files icon; rose photograph background; ramdisk 4 MiB
 29	2026-09-24T22:42Z	1df1a73	no	gcc	13.2.0	3718160	13043712	passed	78		-	Files icon corner fixed; rose and cliff backgrounds
+30	2026-09-25T01:32Z	1b977fd	no	gcc	13.2.0	3718160	13043712	passed	78		-	Background fallback to the shipped one; config-check reads the shipped copies

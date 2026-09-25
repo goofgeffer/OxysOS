@@ -352,20 +352,19 @@ regenerates it and fails if what is here differs.*
 
 | | |
 | --- | --- |
-| Builds recorded | 29 |
-| Verified | 22 passed, 7 not |
+| Builds recorded | 30 |
+| Verified | 23 passed, 7 not |
 | Compilers | gcc |
 | Environments | QEMU, VirtualBox |
 | First | 2026-09-17T01:34Z |
-| Latest | 2026-09-24T22:42Z |
+| Latest | 2026-09-25T01:32Z |
 
 ## The last 20 builds
 
-The remaining 9 are in [`builds.tsv`](builds.tsv), which is the record.
+The remaining 10 are in [`builds.tsv`](builds.tsv), which is the record.
 
 | # | Date (UTC) | Commit | Compiler | Kernel | ISO | Result | Environments | Note |
 | - | ---------- | ------ | -------- | ------ | --- | ------ | ------------ | ---- |
-| 10 | 2026-09-23T02:06Z | `74b8443` | gcc 13.2.0 | 3459392 | 10688512 | passed (73 assertions) |  | Icons for the launcher, read from files rather than compiled in |
 | 11 | 2026-09-23T19:57Z | `1c31a78` *(modified)* | gcc 13.2.0 | 3552808 | 10780672 | failed |  | Negative test of the smooth mark and icons: the version-1 icon shipped and a logo byte with ink beyond coverage; both self-tests failed as intended, reverted |
 | 12 | 2026-09-23T20:06Z | `7f1c530` *(modified)* | gcc 13.2.0 | 3552616 | 10780672 | passed (74 assertions) |  | The mark and the icons at the resolution they are shown at: logo coverage table of 192, icon format version 2 at 48. Dirty only by the register's own uncommitted row 11; the source is exactly 7f1c530 |
 | 13 | 2026-09-23T20:47Z | `27cf149` | gcc 13.2.0 | 3631256 | 10860544 | passed (75 assertions) |  | A background upon the system's own filesystem, and windows that minimise and fill the screen |
@@ -385,5 +384,6 @@ The remaining 9 are in [`builds.tsv`](builds.tsv), which is the record.
 | 27 | 2026-09-24T22:06Z | `51e019e` | gcc 13.2.0 | 3718160 | 10946560 | passed (78 assertions) |  | Launcher icons for Files and Windows |
 | 28 | 2026-09-24T22:37Z | `4bd8769` | gcc 13.2.0 | 3718160 | 13043712 | passed (78 assertions) |  | New Files icon; rose photograph background; ramdisk 4 MiB |
 | 29 | 2026-09-24T22:42Z | `1df1a73` | gcc 13.2.0 | 3718160 | 13043712 | passed (78 assertions) |  | Files icon corner fixed; rose and cliff backgrounds |
+| 30 | 2026-09-25T01:32Z | `1b977fd` | gcc 13.2.0 | 3718160 | 13043712 | passed (78 assertions) |  | Background fallback to the shipped one; config-check reads the shipped copies |
 
 <!-- END GENERATED -->
