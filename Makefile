@@ -205,6 +205,16 @@ SHELL_SOURCES := userland/sh/lexer.c \
                  userland/sh/parser.c
 
 C_SOURCES := kernel/kernel.c \
+             kernel/init/early.c \
+             kernel/init/memory.c \
+             kernel/init/display.c \
+             kernel/init/interrupts.c \
+             kernel/init/devices.c \
+             kernel/init/processes.c \
+             kernel/init/processors.c \
+             kernel/init/storage.c \
+             kernel/init/userland.c \
+             kernel/init/session.c \
              kernel/handoff/multiboot2.c \
              kernel/test/volume.c \
              kernel/test/program.c \

@@ -15,9 +15,9 @@ fixture they are conducted upon.
 
 **There is no test harness, and there will be none until Phase 7 has produced a
 userland to run one in.** So the tests are not a separate program: they are part
-of the kernel image, executed by `KernelMain` in the order the subsystems are
-initialised, because a test cannot run before the thing it asserts exists. That
-sequence in `KernelMain` is the subsystem dependency ordering of
+of the kernel image, executed by the phases of the boot in `../init/` in the
+order the subsystems are initialised, because a test cannot run before the
+thing it asserts exists. That sequence is the subsystem dependency ordering of
 `docs/design/ARCHITECTURE.md` made executable.
 
 **Sub-task 7.1 is the first sign that the arrangement is temporary**, and the

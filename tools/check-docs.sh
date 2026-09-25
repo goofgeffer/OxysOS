@@ -252,11 +252,11 @@ fi
 # stale allowlist entry is an exemption nobody needs, which is how an allowlist
 # becomes a place to hide things.
 #
-# The scope is the portable core alone. `kernel/kernel.c` is exempt because it
-# initialises every subsystem in dependency order and must therefore name every
-# subsystem; `kernel/test/` is exempt because a test of an architecture subsystem
-# is an architecture test; `drivers/` and `graphics/` are exempt because neither
-# claims to be portable.
+# The scope is the portable core alone. `kernel/kernel.c` and `kernel/init/` are
+# exempt because they initialise every subsystem in dependency order and must
+# therefore name every subsystem; `kernel/test/` is exempt because a test of an
+# architecture subsystem is an architecture test; `drivers/` and `graphics/` are
+# exempt because neither claims to be portable.
 # ---------------------------------------------------------------------------
 section 'Architecture boundary'
 

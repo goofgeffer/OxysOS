@@ -92,9 +92,9 @@ GRUB. Their exact values are not part of the assertion.
 The self-tests are part of the kernel image, there being no harness to run them
 in before Phase 7 and no userland to host one. They are implemented in
 `kernel/test/`, one file per subsystem, and declared by
-`kernel/include/oxys/test/verify.h`; `KernelMain` calls them in the order the
-subsystems are initialised, because a test cannot run before the thing it
-asserts exists.
+`kernel/include/oxys/test/verify.h`; the phases of the boot in `kernel/init/`
+call them in the order the subsystems are initialised, because a test cannot
+run before the thing it asserts exists.
 
 `kernel/test/README.md` records the arrangement, the distinction between a
 self-test and a diagnostic probe, and the limitations of both.
