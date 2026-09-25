@@ -66,15 +66,31 @@
 /*
  * The panel's height, and the launcher's, in units of the scale.
  *
- * A launcher row is twenty-eight units where it was sixteen, because since
- * sub-task 9.6 an entry may carry a picture: twenty-four for the icon and four
- * for the space about it. A row the height of the icon would leave the icons
- * touching one another, which reads as one column of noise rather than as
- * three things.
+ * The panel is a bar across the foot of the screen, eighteen units high so
+ * that the pinned programs' icons beside the launcher are large enough to
+ * recognise. A launcher row is twenty-eight units: twenty-four for the icon
+ * and four for the space about it. A row the height of the icon would leave
+ * the icons touching one another, which reads as one column of noise rather
+ * than as three things.
  */
-#define SESSION_PANEL_UNITS  14
+#define SESSION_PANEL_UNITS  18
 #define SESSION_ENTRY_UNITS  28
 #define SESSION_LAUNCH_WIDTH 56
+
+/*
+ * The pinned programs: a square button the panel's height for each launcher
+ * entry marked `pin = yes`, right of the launcher, with its icon inset by
+ * SESSION_PIN_INSET units. The list of windows begins after them.
+ */
+#define SESSION_PIN_INSET 2
+
+/*
+ * The clock stands apart from the panel, in a box of its own at the top right
+ * of the screen, a fifth of the screen's width and the panel's height. The
+ * window manager keeps the rows beside it free of windows made full, so it
+ * covers no window's controls.
+ */
+#define SESSION_CLOCK_SHARE 5
 
 /* The icon slot within a row: its extent in units, and the margin before it.
  * An icon of any extent is fitted to the slot, SessionDrawIcon; one drawn at
@@ -148,6 +164,10 @@ typedef struct SessionEntry
      */
     OxysIcon picture;
     bool has_picture;
+
+    /* Whether the entry also stands upon the panel beside the launcher,
+     * `pin = yes` in its block. */
+    bool pinned;
 } SessionEntry;
 
 static SessionEntry SessionEntries[SESSION_ENTRIES_MAXIMUM];
@@ -161,6 +181,7 @@ static int32_t SessionScale = 2;
 static int64_t SessionRoot = -1;
 static int64_t SessionPanel = -1;
 static int64_t SessionMenu = -1;
+static int64_t SessionClock = -1;
 
 static SyscallWindowEntry SessionTasks[SESSION_TASKS_MAXIMUM];
 static size_t SessionTaskCount;
@@ -403,7 +424,8 @@ static void SessionDrawRoot(void)
 }
 
 /*
- * The panel: a bar across the top, with the launcher's name at its left. It is
+ * The panel: a bar across the foot of the screen, with the launcher's name at
+ * its left, the pinned programs beside it, then the list of windows. It is
  * drawn whole each time, there being one of it and it being a few thousand
  * pixels.
  */
@@ -415,15 +437,36 @@ static int32_t SessionPanelHeight(void)
     return (height < SESSION_EXTENT_MINIMUM) ? SESSION_EXTENT_MINIMUM : height;
 }
 
+/* Where the panel stands: against the foot of the screen. */
+static int32_t SessionPanelTop(void)
+{
+    return SessionScreen.height - SessionPanelHeight();
+}
 
-/*
- * The clock's width upon the panel: five characters, `HH:MM`, with an inset
- * either side. The list of windows stops short of it, so that a long list is
- * cut before the time rather than drawn under it.
- */
+/* Where a line of text stands within the panel or the clock's box: centred
+ * upon their height, the face being eight pixels high at each scale. */
+static int32_t SessionPanelTextTop(void)
+{
+    return (SessionPanelHeight() - (8 * SessionScale)) / 2;
+}
+
+/* The clock's box: a fifth of the screen's width, at its top right. */
 static int32_t SessionClockWidth(void)
 {
-    return (5 * 8 * SessionScale) + (2 * 3 * SessionScale * 2);
+    return SessionScreen.width / SESSION_CLOCK_SHARE;
+}
+
+/* How many launcher entries are pinned to the panel. */
+static size_t SessionPinnedCount(void)
+{
+    size_t count = 0U;
+
+    for (size_t index = 0U; index < SessionEntryCount; ++index)
+    {
+        count += SessionEntries[index].pinned ? 1U : 0U;
+    }
+
+    return count;
 }
 
 /*
@@ -455,25 +498,34 @@ static int32_t SessionNoticeWidth(void)
 }
 
 /*
- * The clock, at the right of the panel: the hours and minutes of the machine's
- * clock, as it holds them — there is no time zone here, SYSCALL_TIME — and
- * nothing where the machine gave no time. Seconds are not shown: a panel
- * redrawn every second is a blit every second for a digit nobody reads.
+ * The clock, in its box at the top right: the hours and minutes of the
+ * machine's clock, as it holds them — there is no time zone here, SYSCALL_TIME
+ * — centred in the box, and nothing where the machine gave no time. Seconds are
+ * not shown: a box redrawn every second is a blit every second for a digit
+ * nobody reads.
  *
  * It asks for SIGALRM at the start of the next minute, from the seconds the
- * kernel counts; so the minute changes upon the panel within a second of the
- * clock's, the kernel having read the clock at a whole second at start.
+ * kernel counts; so the minute changes within a second of the clock's, the
+ * kernel having read the clock at a whole second at start.
  */
-static void SessionDrawClock(bool open)
+static void SessionDrawClock(void)
 {
-    const int32_t inset = 3 * SessionScale;
     const int32_t width = SessionClockWidth();
-    const int32_t x = SessionScreen.width - width;
+    const int32_t height = SessionPanelHeight();
     const time_t now = time(NULL);
     struct tm broken;
     char text[6];
 
-    (void)open;
+    if (SessionClock < 0)
+    {
+        return;
+    }
+
+    /* The box's ground, with an edge in the ground's colour along its foot
+     * and its left, which is what separates it from a window beneath. */
+    SessionFill(SessionClock, 0, 0, width, height, SESSION_PANEL);
+    SessionFill(SessionClock, 0, height - 1, width, 1, SESSION_GROUND);
+    SessionFill(SessionClock, 0, 0, 1, height, SESSION_GROUND);
 
     if ((now < 0) || (gmtime_r(&now, &broken) == NULL))
     {
@@ -487,50 +539,35 @@ static void SessionDrawClock(bool open)
     text[4] = (char)('0' + (broken.tm_min % 10));
     text[5] = '\0';
 
-    SessionFill(SessionPanel, x, 0, width, SessionPanelHeight() - 1, SESSION_PANEL);
-    SessionText(SessionPanel, x + (inset * 2), inset, text, SESSION_INK, SESSION_PANEL,
-                SessionScale);
+    SessionText(SessionClock, (width - (5 * 8 * SessionScale)) / 2, SessionPanelTextTop(), text,
+                SESSION_INK, SESSION_PANEL, SessionScale);
 
     (void)OxysAlarm((uint64_t)(60 - (now % 60)) * 1000U);
 }
 static void SessionDrawTasks(void);
 static bool SessionReadConfiguration(bool starting);
 
-static void SessionDrawPanel(bool open)
-{
-    const int32_t height = SessionPanelHeight();
-    const int32_t inset = 3 * SessionScale;
+static void SessionDrawIcon(int64_t window, int32_t x, int32_t y, int32_t slot,
+                            const OxysIcon *icon, uint32_t paper);
 
-    SessionFill(SessionPanel, 0, 0, SessionScreen.width, height, SESSION_PANEL);
-    SessionFill(SessionPanel, 0, 0, SESSION_LAUNCH_WIDTH * SessionScale, height,
-                open ? SESSION_QUIET : SESSION_PANEL);
-    SessionText(SessionPanel, inset * 2, inset, "OXYS", SESSION_INK,
-                open ? SESSION_QUIET : SESSION_PANEL, SessionScale);
-
-    /* The line beneath, which is what separates the panel from a window that
-     * happens to be the same colour standing under it. */
-    SessionFill(SessionPanel, 0, height - 1, SessionScreen.width, 1, SESSION_GROUND);
-
-    SessionDrawTasks();
-    SessionDrawClock(open);
-
-    /* The notice that the shipped configuration stands in for the person's,
-     * left of the clock: upon a desktop it is the one place a person sees it,
-     * the standard error going to the serial line. */
-    if (SessionNotice() != NULL)
-    {
-        SessionText(SessionPanel,
-                    SessionScreen.width - SessionClockWidth() - SessionNoticeWidth() +
-                        (2 * 3 * SessionScale),
-                    3 * SessionScale, SessionNotice(), SESSION_DIM, SESSION_PANEL, SessionScale);
-    }
-}
-
-/* Where the list of windows begins upon the panel, and how wide one of its
- * buttons is with the gap after it. */
-static int32_t SessionTaskLeft(void)
+/* Where the pinned programs begin upon the panel, and how far apart they
+ * stand: a square the panel's height each, with the gap after it. */
+static int32_t SessionPinLeft(void)
 {
     return (SESSION_LAUNCH_WIDTH + SESSION_TASK_GAP) * SessionScale;
+}
+
+static int32_t SessionPinStride(void)
+{
+    return SessionPanelHeight() + (SESSION_TASK_GAP * SessionScale);
+}
+
+/* Where the list of windows begins upon the panel, after the pinned programs,
+ * and how wide one of its buttons is with the gap after it. */
+static int32_t SessionTaskLeft(void)
+{
+    return SessionPinLeft() + ((int32_t)SessionPinnedCount() * SessionPinStride()) +
+           (SESSION_TASK_GAP * SessionScale);
 }
 
 static int32_t SessionTaskStride(void)
@@ -539,11 +576,10 @@ static int32_t SessionTaskStride(void)
 }
 
 /* How many buttons fit upon the panel: a list longer than the screen is cut
- * at its edge rather than drawn over it. */
+ * at its edge, before the notice, rather than drawn over it. */
 static size_t SessionTasksShown(void)
 {
-    const int32_t room =
-        SessionScreen.width - SessionTaskLeft() - SessionClockWidth() - SessionNoticeWidth();
+    const int32_t room = SessionScreen.width - SessionTaskLeft() - SessionNoticeWidth();
     const int32_t fit = (room > 0) ? ((room + (SESSION_TASK_GAP * SessionScale)) /
                                       SessionTaskStride())
                                    : 0;
@@ -583,11 +619,74 @@ static void SessionDrawTasks(void)
 
         title[length] = '\0';
 
-        SessionFill(SessionPanel, x, 0, width, height - 1, paper);
-        SessionFill(SessionPanel, x - SessionScale, inset, 1,
-                    height - (2 * inset), SESSION_GROUND);
-        SessionText(SessionPanel, x + inset, inset, title, minimised ? SESSION_DIM : SESSION_INK,
-                    paper, SessionScale);
+        SessionFill(SessionPanel, x, 1, width, height - 1, paper);
+        SessionFill(SessionPanel, x - SessionScale, inset, 1, height - (2 * inset),
+                    SESSION_GROUND);
+        SessionText(SessionPanel, x + inset, SessionPanelTextTop(), title,
+                    minimised ? SESSION_DIM : SESSION_INK, paper, SessionScale);
+    }
+}
+
+/* The pinned programs: each entry marked `pin = yes`, its icon in a square
+ * the panel's height, or its name's first letter where it has no icon. */
+static void SessionDrawPins(void)
+{
+    const int32_t height = SessionPanelHeight();
+    const int32_t inset = SESSION_PIN_INSET * SessionScale;
+    int32_t x = SessionPinLeft();
+
+    for (size_t index = 0U; index < SessionEntryCount; ++index)
+    {
+        const SessionEntry *const entry = &SessionEntries[index];
+
+        if (!entry->pinned)
+        {
+            continue;
+        }
+
+        if (entry->has_picture)
+        {
+            SessionDrawIcon(SessionPanel, x + inset, inset, height - (2 * inset), &entry->picture,
+                            SESSION_PANEL);
+        }
+        else
+        {
+            const char letter[2] = { entry->name[0], '\0' };
+
+            SessionText(SessionPanel, x + ((height - (8 * SessionScale)) / 2),
+                        SessionPanelTextTop(), letter, SESSION_INK, SESSION_PANEL, SessionScale);
+        }
+
+        x += SessionPinStride();
+    }
+}
+
+static void SessionDrawPanel(bool open)
+{
+    const int32_t height = SessionPanelHeight();
+    const int32_t inset = 3 * SessionScale;
+
+    SessionFill(SessionPanel, 0, 0, SessionScreen.width, height, SESSION_PANEL);
+    SessionFill(SessionPanel, 0, 1, SESSION_LAUNCH_WIDTH * SessionScale, height - 1,
+                open ? SESSION_QUIET : SESSION_PANEL);
+    SessionText(SessionPanel, inset * 2, SessionPanelTextTop(), "OXYS", SESSION_INK,
+                open ? SESSION_QUIET : SESSION_PANEL, SessionScale);
+
+    /* The line above, which is what separates the panel from a window that
+     * happens to be the same colour standing over it. */
+    SessionFill(SessionPanel, 0, 0, SessionScreen.width, 1, SESSION_GROUND);
+
+    SessionDrawPins();
+    SessionDrawTasks();
+
+    /* The notice that something shipped stands in for what the person's file
+     * names, at the panel's right: upon a desktop it is the one place a person
+     * sees it, the standard error going to the serial line. */
+    if (SessionNotice() != NULL)
+    {
+        SessionText(SessionPanel, SessionScreen.width - SessionNoticeWidth() + (2 * inset),
+                    SessionPanelTextTop(), SessionNotice(), SESSION_DIM, SESSION_PANEL,
+                    SessionScale);
     }
 }
 
@@ -613,18 +712,18 @@ static void SessionRefreshTasks(void)
  * does the mixing, a pixel partly transparent becoming partly the paper, which
  * is what lets the edge of a picture be smooth.
  *
- * The icon is fitted to the slot whatever its extent — averaged down when it
+ * The slot is a square `slot` pixels across: a launcher row's, or a pinned
+ * button's upon the panel. The icon is fitted to it whatever its extent — averaged down when it
  * is larger, repeated when it is smaller — so that a picture drawn at the
  * slot's own extent is drawn one to one, and a picture drawn at any other is
  * still the whole picture in the place the row was sized for.
  */
-static void SessionDrawIcon(int64_t window, int32_t x, int32_t y, const OxysIcon *icon,
-                            uint32_t paper)
+static void SessionDrawIcon(int64_t window, int32_t x, int32_t y, int32_t slot,
+                            const OxysIcon *icon, uint32_t paper)
 {
-    const int32_t slot = SESSION_ICON_UNITS * SessionScale;
     SyscallWindowRectangle area;
 
-    if ((window < 0) || (icon == NULL) || ((uint32_t)(slot * slot) > SESSION_TILE))
+    if ((window < 0) || (icon == NULL) || (slot <= 0) || ((uint32_t)(slot * slot) > SESSION_TILE))
     {
         return;
     }
@@ -666,7 +765,7 @@ static void SessionDrawMenu(void)
 
         if (SessionEntries[index].has_picture)
         {
-            SessionDrawIcon(SessionMenu, margin, top + ((row - slot) / 2),
+            SessionDrawIcon(SessionMenu, margin, top + ((row - slot) / 2), slot,
                             &SessionEntries[index].picture, SESSION_PANEL);
         }
 
@@ -710,8 +809,10 @@ static void SessionOpenMenu(void)
         SessionDrawRoot();
     }
 
+    /* Above the panel at the left, opening upward from the launcher's name:
+     * it touches neither edge of the screen, so the window manager keeps no
+     * rows for it from a window made full. */
     geometry.x = 0;
-    geometry.y = SessionPanelHeight();
     geometry.width = SESSION_LAUNCH_WIDTH * 3 * SessionScale;
     geometry.height = SESSION_ENTRY_UNITS * SessionScale * (int32_t)SessionEntryCount;
 
@@ -719,6 +820,8 @@ static void SessionOpenMenu(void)
     {
         geometry.height = SESSION_EXTENT_MINIMUM;
     }
+
+    geometry.y = SessionPanelTop() - geometry.height;
 
     SessionMenu = OxysWindowCreate(&geometry, "launcher", SYSCALL_WINDOW_LAYER_PANEL);
 
@@ -913,6 +1016,7 @@ static void SessionLoadEntries(void)
 
         SessionCopy(entry->run, CONFIG_VALUE_MAXIMUM, run);
         SessionCopy(entry->name, CONFIG_VALUE_MAXIMUM, (name != NULL) ? name : run);
+        entry->pinned = OxysConfigBoolean(&SessionConfig, "launch", index, "pin", false);
 
         /*
          * **An icon that cannot be read costs the icon and not the entry.** A
@@ -1002,6 +1106,7 @@ static bool SessionReadConfiguration(bool starting)
         SessionCopy(entry->name, CONFIG_VALUE_MAXIMUM, SESSION_FALLBACK_NAME);
         SessionCopy(entry->run, CONFIG_VALUE_MAXIMUM, SESSION_FALLBACK_RUN);
         entry->has_picture = OxysIconRead(&entry->picture, SESSION_FALLBACK_ICON);
+        entry->pinned = false;
         SessionEntryCount = 1U;
     }
 
@@ -1028,6 +1133,28 @@ static void SessionHandlePress(const SyscallWindowEvent *event)
             else
             {
                 SessionOpenMenu();
+            }
+        }
+        else if ((event->x >= SessionPinLeft()) && (event->x < SessionTaskLeft()))
+        {
+            /* A pinned program: the press starts it, as the launcher's row
+             * for it would. */
+            const int32_t offset = event->x - SessionPinLeft();
+            const size_t chosen = (size_t)(offset / SessionPinStride());
+            size_t seen = 0U;
+
+            SessionCloseMenu();
+
+            if ((offset % SessionPinStride()) < SessionPanelHeight())
+            {
+                for (size_t index = 0U; index < SessionEntryCount; ++index)
+                {
+                    if (SessionEntries[index].pinned && (seen++ == chosen))
+                    {
+                        SessionLaunch(SessionEntries[index].run);
+                        break;
+                    }
+                }
             }
         }
         else
@@ -1078,7 +1205,7 @@ static void SessionHandlePress(const SyscallWindowEvent *event)
 
     /* A press upon the root closes the launcher, which is what a person means
      * by clicking away from an open menu. */
-    if (event->window == (uint32_t)SessionRoot)
+    if ((event->window == (uint32_t)SessionRoot) || (event->window == (uint32_t)SessionClock))
     {
         SessionCloseMenu();
     }
@@ -1120,8 +1247,14 @@ int main(void)
         geometry.height = SessionScreen.height;
         SessionRoot = OxysWindowCreate(&geometry, "root", SYSCALL_WINDOW_LAYER_ROOT);
 
+        geometry.y = SessionPanelTop();
         geometry.height = SessionPanelHeight();
         SessionPanel = OxysWindowCreate(&geometry, "panel", SYSCALL_WINDOW_LAYER_PANEL);
+
+        geometry.x = SessionScreen.width - SessionClockWidth();
+        geometry.y = 0;
+        geometry.width = SessionClockWidth();
+        SessionClock = OxysWindowCreate(&geometry, "clock", SYSCALL_WINDOW_LAYER_PANEL);
     }
 
     if ((SessionRoot < 0) || (SessionPanel < 0))
@@ -1131,8 +1264,15 @@ int main(void)
         return EXIT_FAILURE;
     }
 
+    /* A clock that could not be made costs the clock and not the desktop. */
+    if (SessionClock < 0)
+    {
+        (void)fprintf(stderr, "session: the clock's box could not be made.\n");
+    }
+
     SessionDrawRoot();
     SessionRefreshTasks();
+    SessionDrawClock();
 
     for (;;)
     {
@@ -1150,7 +1290,7 @@ int main(void)
         if (SessionClockDue != 0)
         {
             SessionClockDue = 0;
-            SessionDrawClock(SessionMenu >= 0);
+            SessionDrawClock();
         }
 
         result = OxysWindowEvent((int64_t)SYSCALL_WINDOW_ANY, &event, SYSCALL_WINDOW_WAIT);

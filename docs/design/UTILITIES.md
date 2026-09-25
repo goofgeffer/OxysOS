@@ -59,7 +59,8 @@ manager or at the shell. It views; `micro` edits.
 
 ## 3. The clock
 
-**On the panel**, at the right, as `HH:MM`. Seconds are not shown: a panel
+**In a box of its own at the top right** of the screen, a fifth of its width, as
+`HH:MM`. Seconds are not shown: a clock
 redrawn every second is a blit every second for a digit nobody reads.
 
 **Woken by an alarm.** The session asks for `SIGALRM` at the start of the next

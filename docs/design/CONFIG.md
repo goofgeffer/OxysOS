@@ -109,7 +109,8 @@ missing or faulty file leaves the desktop as it was, with faults printed to
 standard error (the serial line).
 
 **`[session]` and `[launch]`** are [`SESSION.md`](SESSION.md): the scale, the
-background picture, and each launcher entry's `run`, `name` and `icon`.
+background picture, and each launcher entry's `run`, `name`, `icon` and `pin` (whether it
+also stands upon the bar beside the launcher).
 
 ## Verification
 

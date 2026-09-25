@@ -128,9 +128,11 @@ anything.
 - **Minimise** hides the window: not composed, not hit, cannot hold the focus, and
   releases a binding. It keeps its content, queue and owner. The owner is not told.
 - **Restore** shows it if hidden, then raises and focuses it.
-- **Full** gives the window the **work area**: the screen less any panel-layer
-  window spanning the full width at the top (recognised by where it stands, so an
-  open launcher does not leave a hole). The band stays, so the control to undo it
+- **Full** gives the window the **work area**: the screen less the rows of every
+  panel-layer window standing against the top edge (the clock's box) or the
+  bottom edge (the bar), however wide. Panels are recognised by where they stand;
+  the launcher opens above the bar and touches neither edge, so it leaves no
+  hole. The band stays, so the control to undo it
   is there. The old position and extent are kept for undoing. A full window cannot
   be dragged. **The content becomes a new surface**: the old pixels copied where
   they fit, the rest paper, so the window is never blank while its owner redraws;
@@ -218,6 +220,7 @@ wrong.
 | The root is told once, however many changes happened. | Notices filling the root's queue and dropping a press. |
 | The panel takes the focus neither when made nor when pressed, and still receives the press. | Typing into nowhere after the launcher closes. |
 | Full gives the frame the work area and the content the frame less band and border; the owner is told; the old content is kept; a full window is not dragged; pressed again, it is restored exactly. | A full window under or over the panel; blank until redrawn; not restorable. |
+| The work area keeps the rows of a panel-layer bar at the foot and a box at the top right, and none for a launcher touching neither edge. | A window made full under the bar or the clock, its controls covered. |
 | A minimised window is not hit or drawn and gives up the focus to the topmost remaining; the root is told. A restored one is shown, raised and focused. | Hidden windows taking keys; a chosen window left behind another. |
 | A root and a panel are refused minimise and full; a frame under 120 pixels has only the close control. | A desktop minimised with nothing to restore it. |
 | **Nothing wrote into the padding.** | Composition escaping the surface. |
@@ -259,7 +262,8 @@ damages the first masks the second), the program's window survives it.
 7. Every pixel a program draws is copied and converted one at a time; no shared
    mapping.
 8. "Full" keeps the title band and the panel; there is no true full-screen mode.
-9. The panel is recognised by being a full-width panel-layer window at the top.
+9. Panels are recognised by touching the top or bottom edge; a panel-layer window
+   against a side edge keeps no columns.
 10. The resize event is advisory: into a smaller content, an old-size blit is
     refused.
 11. A minimised window's owner is not told.

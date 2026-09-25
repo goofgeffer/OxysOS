@@ -618,6 +618,30 @@ void KernelVerifyWindows(void)
                             "or did not say so");
 
         /*
+         * The work area keeps the rows of every panel-layer window against the
+         * top edge and against the bottom one, however wide: a bar at the foot,
+         * and a box at the top right narrower than the screen and taller than
+         * the panel. A panel-layer window touching neither edge — a launcher
+         * opened above the bar — keeps nothing.
+         */
+        {
+            const size_t foot = WindowCreate(0, 104, 160, 16, "foot", WINDOW_LAYER_PANEL);
+            const size_t box = WindowCreate(128, 0, 32, 24, "box", WINDOW_LAYER_PANEL);
+            const size_t menu = WindowCreate(0, 60, 40, 44, "menu", WINDOW_LAYER_PANEL);
+            const GraphicsRectangle area = WindowManagerWorkArea();
+
+            KernelWindowRequire((foot != WINDOW_NONE) && (box != WINDOW_NONE) &&
+                                    (menu != WINDOW_NONE) && (area.x == 0) && (area.y == 24) &&
+                                    (area.width == 160) && (area.height == 80),
+                                "the work area did not keep the rows of a bar at the foot and "
+                                "a box at the top, or kept a launcher's");
+
+            WindowDestroy(menu);
+            WindowDestroy(box);
+            WindowDestroy(foot);
+        }
+
+        /*
          * The minimise control: the window is not drawn, not hit, and gives up
          * the focus; the root is told. Where it stood, the root shows through.
          */

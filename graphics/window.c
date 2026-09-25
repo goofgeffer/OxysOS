@@ -1095,6 +1095,7 @@ GraphicsRectangle WindowManagerWorkArea(void)
 {
     GraphicsRectangle area;
     int32_t top = 0;
+    int32_t bottom;
 
     if (!WindowActive)
     {
@@ -1102,33 +1103,47 @@ GraphicsRectangle WindowManagerWorkArea(void)
     }
 
     area = GraphicsSurfaceBounds(WindowScreen);
+    bottom = area.height;
 
     /*
      * A panel is recognised by where it stands and not by a declaration: a
-     * window of the panel layer across the whole width at the top edge. The
-     * launcher the panel opens is of the same layer and is not across the
-     * whole width, so a window made full while the launcher was open does not
-     * leave a hole the height of the launcher above it.
+     * window of the panel layer standing against the top edge of the screen
+     * keeps the rows above its foot, and one standing against the bottom edge
+     * keeps the rows below its head, however wide either is — a bar across the
+     * foot, a box holding the clock at the top right. A window made full is
+     * given what lies between, so that neither covers its title band or its
+     * controls. The launcher is of the same layer and touches neither edge,
+     * opening above the bar, so a window made full while it was open does not
+     * leave a hole the height of the launcher.
      */
     for (size_t identifier = 0U; identifier < WINDOW_CAPACITY; ++identifier)
     {
         const Window *const window = WindowAt(identifier);
 
-        if ((window != NULL) && (window->layer == WINDOW_LAYER_PANEL) && (window->x <= 0) &&
-            (window->y <= 0) && ((window->x + window->width) >= area.width) &&
-            ((window->y + window->height) > top))
+        if ((window == NULL) || (window->layer != WINDOW_LAYER_PANEL) || window->minimised)
+        {
+            continue;
+        }
+
+        if ((window->y <= 0) && ((window->y + window->height) > top))
         {
             top = window->y + window->height;
         }
+
+        if (((window->y + window->height) >= area.height) && (window->y < bottom))
+        {
+            bottom = window->y;
+        }
     }
 
-    if (top >= area.height)
+    if ((top >= bottom) || (top >= area.height) || (bottom <= 0))
     {
         top = 0;
+        bottom = area.height;
     }
 
     area.y = top;
-    area.height -= top;
+    area.height = bottom - top;
 
     return area;
 }

@@ -120,16 +120,29 @@ may ([`../../art/README.md`](../../art/README.md)).
 
 ## 5. The panel
 
-A bar across the top with a line beneath it (separating it from a window of the
-same colour under it), holding, left to right: the launcher's name, the window
-list, the `using defaults` or `default background` notice when one applies, and the clock
-([`UTILITIES.md`](UTILITIES.md)). The session has no fill across the protocol, so
+A bar across the foot of the screen, with a line above it (separating it from a
+window of the same colour over it), holding, left to right: the launcher's name
+`OXYS`, the **pinned programs**, the window list, and the `using defaults` or
+`default background` notice when one applies. The bar is 18 units high, so the
+pinned icons are recognisable. The session has no fill across the protocol, so
 the bar is a tile blitted in bands.
 
+**The clock** stands apart, in a panel-layer box of its own at the top right: a
+fifth of the screen's width and the bar's height, `HH:MM` centred
+([`UTILITIES.md`](UTILITIES.md)). The window manager keeps the rows of a panel
+against the top or bottom edge free of windows made full, so neither the box nor
+the bar covers a full window's controls ([`WINDOWS.md`](WINDOWS.md)).
+
+**The pinned programs** are the launcher entries marked `pin = yes`: a square
+button the bar's height each, right of the launcher's name, showing the entry's
+icon (or its name's first letter where it has none). One press starts it, as its
+launcher row would. The shipped file pins Terminal and Files.
+
 **The launcher** is a second window **in the panel layer**, so nothing a program
-does can cover it. It is created when opened and destroyed when closed. Its entries
-are the `[launch]` blocks of `/etc/session.conf` (`run`, `name`, optional `icon`;
-[`CONFIG.md`](CONFIG.md)).
+does can cover it. It opens upward from the launcher's name, above the bar, and
+touches neither edge of the screen. It is created when opened and destroyed when
+closed. Its entries are the `[launch]` blocks of `/etc/session.conf` (`run`,
+`name`, optional `icon` and `pin`; [`CONFIG.md`](CONFIG.md)).
 
 - **Reread at every opening**, so an edit shows at the next press: entries, icons,
   and the background (redrawn only when its path changed). The scale is read at
@@ -215,7 +228,7 @@ the shipped defaults offer a launcher ([`CONFIG.md`](CONFIG.md)). The fallback, 
 rereading and the list are observed by operating the desktop
 ([`../project/TESTING-GRAPHICS.md`](../project/TESTING-GRAPHICS.md)): the desktop
 with nothing running; the launcher opening, closing and starting a program; a window
-dragged up sliding **under** the panel; minimised windows restored from the list.
+dragged down sliding **under** the bar; a pinned icon starting its program; a window made full between the clock's box and the bar; minimised windows restored from the list.
 
 ## Limitations
 
