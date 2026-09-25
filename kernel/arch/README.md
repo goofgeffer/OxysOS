@@ -57,8 +57,9 @@ Applied to the two subsystems that are now split across both trees:
 When this directory was created the row above said `proc/process.c` and
 `proc/sched.c` were "policy, and portable". **That was not true when it was
 written**, and nothing checked it. `process.c` includes six architecture headers
-and `sched.c` three; the whole portable core crosses the boundary sixteen times,
-the fifteenth being the pipe of sub-task 8.6 and the sixteenth the signals of 8.7:
+and `sched.c` three; the whole portable core crosses the boundary seventeen times,
+the fifteenth being the pipe of sub-task 8.6, the sixteenth the signals of 8.7,
+and the seventeenth the growing table of 2026-09-25:
 
 | File | Reaches for |
 | ---- | ----------- |
@@ -69,6 +70,7 @@ the fifteenth being the pipe of sub-task 8.6 and the sixteenth the signals of 8.
 | `acpi/acpi.c` | `paging.h` |
 | `fs/vfs/pipe.c` | `percpu.h`, for the masked section a sleep upon the wait channel is made within |
 | `proc/signal.c` | `percpu.h`, for the masked section the pending set is kept within, against the tick handler |
+| `mm/table.c` | `percpu.h`, to refuse growth off the bootstrap processor, the heap being unsynchronised |
 
 Some of those are shallow and some are not. `sched.c` taking a spinlock is a
 dependency on a *facility* every processor has in some form; `process.c` writing
@@ -81,7 +83,7 @@ what a defect in it is answerable to, and it does not yet isolate the portable
 part.** Section 2.4 of `ARCHITECTURE.md` gives the reason the grouping is worth
 having on that weaker ground alone.
 
-**The sixteen crossings are now a list rather than an impression.**
+**The seventeen crossings are now a list rather than an impression.**
 `tools/check-docs.sh`, Section 8, records each with its reason and fails
 `make lint` in both directions — when a file not on the list crosses the
 boundary, and when a file on it stops crossing and the entry is left behind. The

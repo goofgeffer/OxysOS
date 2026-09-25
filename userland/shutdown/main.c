@@ -29,7 +29,7 @@
 /* The process named `init`, or -1 where none was found. */
 static int64_t ShutdownFindInit(void)
 {
-    for (uint64_t index = 0U; index < SYSCALL_PROCESS_CAPACITY; ++index)
+    for (uint64_t index = 0U;; ++index)
     {
         SyscallProcessInformation information;
         const int64_t result = OxysProcessInformation(index, &information);

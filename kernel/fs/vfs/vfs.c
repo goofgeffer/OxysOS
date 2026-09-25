@@ -55,19 +55,25 @@
 /* ---------------------------------------------------------------------------
  * The tables.
  *
- * Every one is a fixed array. A filesystem layer that drew its own structures
- * from the heap could exhaust it, and it would do so at exactly the moment
- * something needed to write a diagnostic to a file. Only the filesystems'
- * private descriptions — a superblock, an inode — are allocated, and those are
- * bounded by these arrays.
+ * The filesystems and mounts are fixed arrays. The nodes and the open files
+ * are growing tables whose first chunk is static: a filesystem layer that
+ * depended upon the heap to open anything would fail at exactly the moment
+ * something needed to write a diagnostic to a file, so the heap is asked only
+ * for load beyond the first chunk, and its refusal is a full table as before.
+ * Only the filesystems' private descriptions — a superblock, an inode — are
+ * otherwise allocated.
  * ------------------------------------------------------------------------- */
 
 VfsFilesystem VfsFilesystems[VFS_FILESYSTEM_CAPACITY];
 VfsMount VfsMounts[VFS_MOUNT_CAPACITY];
-VfsNode VfsNodes[VFS_NODE_CAPACITY];
 
+static VfsNode VfsNodeFirstChunk[VFS_NODE_CHUNK];
+static VfsFile VfsFileFirstChunk[VFS_FILE_CHUNK];
 
-VfsFile VfsFiles[VFS_FILE_CAPACITY];
+GrowingTable VfsNodeSlots =
+    GROWING_TABLE_INITIALISER("vfs node table", VfsNode, VfsNodeFirstChunk, VFS_NODE_CHUNK);
+GrowingTable VfsFileSlots =
+    GROWING_TABLE_INITIALISER("vfs open-file table", VfsFile, VfsFileFirstChunk, VFS_FILE_CHUNK);
 
 /* The mount at the root of the tree, through which every absolute path begins. */
 VfsMount *VfsRootMount;
@@ -329,11 +335,11 @@ void VfsReport(void)
     KernelWriteString("VFS: nodes held ");
     KernelWriteDecimal(VfsNodesHeld());
     KernelWriteString(" of ");
-    KernelWriteDecimal(VFS_NODE_CAPACITY);
+    KernelWriteDecimal(GrowingTableCapacity(&VfsNodeSlots));
     KernelWriteString(", files open ");
     KernelWriteDecimal(VfsOpenFileCount());
     KernelWriteString(" of ");
-    KernelWriteDecimal(VFS_FILE_CAPACITY);
+    KernelWriteDecimal(GrowingTableCapacity(&VfsFileSlots));
     KernelWriteString(".\n");
 
     KernelWriteString("VFS: paths resolved ");

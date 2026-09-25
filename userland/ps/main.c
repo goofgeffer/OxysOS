@@ -43,10 +43,17 @@ int main(void)
 {
     (void)printf("%5s %5s %5s %-9s %6s %s\n", "PID", "PPID", "PGID", "STATE", "PAGES", "NAME");
 
-    for (uint64_t index = 0U; index < SYSCALL_PROCESS_CAPACITY; ++index)
+    for (uint64_t index = 0U;; ++index)
     {
         SyscallProcessInformation information;
         const int64_t result = OxysProcessInformation(index, &information);
+
+        /* EINVAL is the end of the table, which grows and so has no fixed
+         * bound to walk to. */
+        if ((result < 0) && (errno == EINVAL))
+        {
+            break;
+        }
 
         if (result < 0)
         {

@@ -327,7 +327,7 @@ size_t SignalSendGroup(uint64_t group, uint32_t signal)
         return 0U;
     }
 
-    for (size_t index = 0U; index < PROCESS_CAPACITY; ++index)
+    for (size_t index = 0U; index < ProcessSlotCount(); ++index)
     {
         Process *const process = ProcessAt(index);
 

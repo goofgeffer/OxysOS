@@ -64,9 +64,14 @@
 #include <oxys/exec/elf.h>
 #include <oxys/arch/syscall/syscall.h>
 
-/* How many processes and threads may exist at once. */
-#define PROCESS_CAPACITY 64U
-#define THREAD_CAPACITY  128U
+/*
+ * How many processes and threads a chunk of their tables holds. The tables
+ * grow by a chunk at a time as they fill, from the heap, so these are not
+ * limits: memory is (docs/design/MEMORY-LAYOUT.md). The first chunk of each is
+ * static, which is what the boot path uses.
+ */
+#define PROCESS_CHUNK 64U
+#define THREAD_CHUNK  128U
 
 /* How many threads one process may hold. */
 #define PROCESS_THREAD_MAXIMUM 8U
@@ -194,10 +199,10 @@ typedef struct ProcessArguments
  * The first three are the standard ones of <oxys/syscall_abi.h> and are never
  * given out by `open`; they name the diagnostic path and are not entries in the
  * filesystem layer's own table. So a process may hold this many less three open
- * files, and the bound is small on purpose: the filesystem layer has
- * VFS_FILE_CAPACITY descriptors for the whole machine, and a process permitted
- * to take more than a share of them could starve every other process of the
- * ability to open anything at all.
+ * files, and the bound is small on purpose: the filesystem layer's open-file
+ * table is the whole machine's and grows from the one heap, and a process
+ * permitted to take without bound could exhaust that heap and starve every
+ * other process of the ability to open anything at all.
  */
 #define PROCESS_DESCRIPTOR_CAPACITY 16U
 
@@ -667,6 +672,11 @@ Process *ProcessById(uint64_t id);
 Thread *ThreadById(uint64_t id);
 Process *ProcessAt(size_t index);
 Thread *ThreadAt(size_t index);
+
+/* How many slots each table has now: the bound of an index walk over it, which
+ * grows as the table does. ProcessAt and ThreadAt return NULL beyond it. */
+size_t ProcessSlotCount(void);
+size_t ThreadSlotCount(void);
 size_t ProcessCount(void);
 size_t ThreadCount(void);
 

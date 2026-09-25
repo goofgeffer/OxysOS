@@ -122,7 +122,8 @@ entered by `PerCpuPushInterruptState`.
 **A channel is an address**: that of the thing waited on (a parent's process for
 `wait`, a pipe for its reader and writer). `SchedulerSleep(channel)` records it,
 marks the thread blocked, and reschedules; `SchedulerWake(channel)` walks the
-thread table (128 slots) and admits every thread sleeping on it. Every sleeper
+thread table (128 slots a chunk, and more chunks under load) and admits every
+thread sleeping on it. Every sleeper
 re-tests its condition and sleeps again if the wake was not for it. This is the
 first Unix kernels' sleep and wakeup; a sleeper list per channel is worth its
 pointers only when the walk is measured to matter.
@@ -190,6 +191,6 @@ and quanta expired.
    threads are confined to the bootstrap processor (all writers write the same
    value); it must become per processor when they are not.
 7. No lock a thread can sleep on ([`CONCURRENCY.md`](CONCURRENCY.md)).
-8. A wake walks all 128 thread slots.
+8. A wake walks every thread slot: 128, and more once the table has grown.
 9. A user thread is never pre-empted inside the kernel; a long system call would
    hold the bootstrap processor.

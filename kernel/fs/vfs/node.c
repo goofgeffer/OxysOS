@@ -63,9 +63,13 @@ VfsNode *VfsNodeAcquire(VfsMount *mount, uint64_t number)
 {
     VfsNode *available = NULL;
 
-    for (size_t index = 0U; index < VFS_NODE_CAPACITY; ++index)
+    /* Every slot is searched for the node before the table is grown; a grown
+     * chunk is zeroed, so its first slot is the one taken. */
+    for (size_t index = 0U; (index < GrowingTableCapacity(&VfsNodeSlots)) ||
+                            ((available == NULL) && GrowingTableGrow(&VfsNodeSlots));
+         ++index)
     {
-        VfsNode *const node = &VfsNodes[index];
+        VfsNode *const node = VfsNodeSlot(index);
 
         if (node->in_use)
         {
@@ -152,9 +156,9 @@ size_t VfsNodesHeld(void)
 {
     size_t held = 0U;
 
-    for (size_t index = 0U; index < VFS_NODE_CAPACITY; ++index)
+    for (size_t index = 0U; index < GrowingTableCapacity(&VfsNodeSlots); ++index)
     {
-        if (VfsNodes[index].in_use)
+        if (VfsNodeSlot(index)->in_use)
         {
             ++held;
         }

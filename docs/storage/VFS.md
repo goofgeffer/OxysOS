@@ -27,8 +27,9 @@ above it.
       VfsOpen, VfsRead, VfsResolve, VfsMountVolume, VfsPipeCreate, ...
    +------------------------ kernel/fs/vfs/ ---------------------------+
    |  mount table      node table       open file table     pipes      |
-   |  4 mounts         64 nodes         32 files            8 pipes    |
+   |  4 mounts         64 a chunk       32 a chunk          8 a chunk  |
    |  one tree         one identity     one position each   one page   |
+   |                   grown from the heap, first chunk static          |
    +------------------------------+------------------------------------+
                                   |  VfsFilesystemOperations
    +---------------- kernel/fs/ext2_vfs.c -----------------------------+
@@ -207,9 +208,9 @@ it twice. `VfsRead`, `VfsWrite`, `VfsClose`, `VfsSeek`, `VfsTell`,
 and the busy scan of an unmount skips files with no node.
 
 `VfsPipeCreate` finds both file slots before claiming either, so a table with one
-slot left refuses rather than making a read end with no write end. A pipe's
-buffer is one page, from a fixed array of `VFS_PIPE_CAPACITY` (8). Who sleeps and
-who wakes whom is in the header of
+slot left that cannot grow refuses rather than making a read end with no write
+end. A pipe's buffer is one page, from a table grown in chunks of
+`VFS_PIPE_CHUNK` (8). Who sleeps and who wakes whom is in the header of
 [`../../kernel/fs/vfs/pipe.c`](../../kernel/fs/vfs/pipe.c). A write with no
 reader is refused as `VFS_ERROR_BROKEN_PIPE` (`EPIPE`) and sends `SIGPIPE`; a
 sleep ended by a signal is `VFS_ERROR_INTERRUPTED` (`EINTR`).
@@ -244,7 +245,8 @@ volume a path reached.
 | `..` from the mounted root leaves it, and returning crosses again. | The prefix-matching failure. |
 | A read-only mount refuses writes and creation; the root cannot be withdrawn while a mount or open file stands on it; the covered directory reappears intact. | A stranger's volume altered; descriptors to a vanished volume. |
 | After a writable mount, the state **read from the medium** has the clean bit clear, the error bit clear and the mount count raised; after unmount, clean again. | A mark that never reached the disk; a volume falsely marked faulty. |
-| Afterwards no node is held and no file open, and the re-read volume's descriptors verify. | A leak that exhausts a fixed table; accounting drift. |
+| Afterwards no node is held and no file open, and the re-read volume's descriptors verify. | A leak that exhausts a table; accounting drift. |
+| Eight files more than the open-file table's first chunk open, the last reads its file, and all close; two pipes more than the pipe table's first chunk carry bytes and close. | A grown table handing out an entry beyond it, or one in use. |
 | A pipe is two files and one pipe, released at the last close; bytes cross in order; each end does one thing and cannot seek. | A leaked slot; skipped bytes; a write end read as a file. |
 | An empty pipe read by a caller that cannot sleep is refused as busy; a second holder keeps it open; a write with no reader is refused. | A wait for a writer that is the same flow; a child's close ending the parent's pipe; a writer told its bytes went somewhere. |
 
@@ -268,9 +270,12 @@ as the root at every boot ([`INITRD.md`](INITRD.md)), and
    withdrawn by naming `/sub/`.
 8. Nothing is mounted from the command line; the placement of Section 4.2 is
    fixed.
-9. Fixed tables: 4 filesystem types, 4 mounts, 64 nodes, 32 open files, 8 pipes.
-   A layer drawing on the heap could exhaust it just when a diagnostic needs
-   writing.
+9. ~~Fixed tables: 4 filesystem types, 4 mounts, 64 nodes, 32 open files, 8
+   pipes.~~ **Closed on 2026-09-25**: the node, open-file and pipe tables grow
+   from the heap in chunks, the first static so that a diagnostic can still be
+   written with the heap exhausted
+   ([`../design/MEMORY-LAYOUT.md`](../design/MEMORY-LAYOUT.md), Section 16). The
+   4 filesystem types and 4 mounts stay fixed: nothing adds either at run time.
 10. No lock. The mount, node and file tables need one, and node references must
     be atomic, before user threads leave the bootstrap processor
     ([`../design/CONCURRENCY.md`](../design/CONCURRENCY.md)).

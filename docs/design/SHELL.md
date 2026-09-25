@@ -1210,9 +1210,10 @@ no stack beneath it. The first program to fork after the change found it.
 2. ~~**`&` is still recorded and not honoured**, and nothing interrupts a
    program.~~ **Closed at sub-task 8.7**, Section 28: `&` is a background job,
    and control-C interrupts the foreground one.
-3. **Eight pipes**, each of a page, drawn from a fixed table; a ninth is refused
-   as `EMFILE`. A pipeline of nine commands is therefore refused at its eighth
-   pipe, which is one more than `SHELL_COMMAND_MAXIMUM` allows anyway.
+3. ~~**Eight pipes**, each of a page, drawn from a fixed table; a ninth is refused
+   as `EMFILE`.~~ **Closed on 2026-09-25**: the pipe table grows
+   ([`../storage/VFS.md`](../storage/VFS.md)), and a pipeline is bounded by
+   `SHELL_COMMAND_MAXIMUM` alone.
 4. **A wake walks the thread table**, and the terminal's reader polls rather
    than sleeps; [`SCHEDULER.md`](SCHEDULER.md).
 5. **A built-in in a pipeline affects the child alone**, which is the

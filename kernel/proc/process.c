@@ -87,9 +87,32 @@
 #include <oxys/terminal/terminal.h>
 #include <oxys/arch/cpu/spinlock.h>
 #include <oxys/fs/vfs.h>
+#include <oxys/mm/table.h>
 
-static Process ProcessTable[PROCESS_CAPACITY];
-static Thread ThreadTable[THREAD_CAPACITY];
+/*
+ * The process and thread tables grow: a static first chunk each, and further
+ * chunks from the heap as they fill (docs/design/MEMORY-LAYOUT.md). A slot is
+ * reached by index through ProcessSlot and ThreadSlot, and never moves once
+ * its chunk exists, so a pointer to a process or a thread stays good for as
+ * long as the slot is occupied.
+ */
+static Process ProcessFirstChunk[PROCESS_CHUNK];
+static Thread ThreadFirstChunk[THREAD_CHUNK];
+
+static GrowingTable ProcessSlots =
+    GROWING_TABLE_INITIALISER("process table", Process, ProcessFirstChunk, PROCESS_CHUNK);
+static GrowingTable ThreadSlots =
+    GROWING_TABLE_INITIALISER("thread table", Thread, ThreadFirstChunk, THREAD_CHUNK);
+
+static Process *ProcessSlot(size_t index)
+{
+    return (Process *)GrowingTableAt(&ProcessSlots, index);
+}
+
+static Thread *ThreadSlot(size_t index)
+{
+    return (Thread *)GrowingTableAt(&ThreadSlots, index);
+}
 
 static uint64_t ProcessNextId = 1U;
 static uint64_t ThreadNextId = 1U;
@@ -267,17 +290,17 @@ const char *ThreadStateName(ThreadState state)
 
 void ProcessInitialise(void)
 {
-    for (size_t index = 0U; index < PROCESS_CAPACITY; ++index)
+    for (size_t index = 0U; index < GrowingTableCapacity(&ProcessSlots); ++index)
     {
-        ProcessTable[index].used = false;
-        ProcessTable[index].state = PROCESS_UNUSED;
-        ProcessTable[index].thread_count = 0U;
+        ProcessSlot(index)->used = false;
+        ProcessSlot(index)->state = PROCESS_UNUSED;
+        ProcessSlot(index)->thread_count = 0U;
     }
 
-    for (size_t index = 0U; index < THREAD_CAPACITY; ++index)
+    for (size_t index = 0U; index < GrowingTableCapacity(&ThreadSlots); ++index)
     {
-        ThreadTable[index].used = false;
-        ThreadTable[index].state = THREAD_UNUSED;
+        ThreadSlot(index)->used = false;
+        ThreadSlot(index)->state = THREAD_UNUSED;
     }
 
     ProcessCurrentThreads[ProcessProcessorIndex()] = NULL;
@@ -298,9 +321,10 @@ void ProcessInitialise(void)
 static Process *ProcessAllocate(const char *name, const Process *parent,
                                 const AddressSpace *clone_of)
 {
-    for (size_t index = 0U; index < PROCESS_CAPACITY; ++index)
+    for (size_t index = 0U;
+         (index < GrowingTableCapacity(&ProcessSlots)) || GrowingTableGrow(&ProcessSlots); ++index)
     {
-        Process *const process = &ProcessTable[index];
+        Process *const process = ProcessSlot(index);
 
         if (process->used)
         {
@@ -427,9 +451,9 @@ void ProcessDestroy(Process *process)
     /*
      * The descriptors go with it, of sub-task 7.6. A process that ends while
      * holding one leaves an entry in the filesystem layer's table that nothing
-     * will ever close, and that table is the machine's and holds
-     * VFS_FILE_CAPACITY entries — so a program that ended with a file open would
-     * cost the machine a descriptor permanently.
+     * will ever close, and that table is the machine's — so a program that ended
+     * with a file open would hold an entry, and the memory of its node, for the
+     * life of the machine.
      */
     ProcessCloseDescriptors(process);
     WindowClientReleaseProcess(process->id);
@@ -448,11 +472,11 @@ Process *ProcessById(uint64_t id)
         return NULL;
     }
 
-    for (size_t index = 0U; index < PROCESS_CAPACITY; ++index)
+    for (size_t index = 0U; index < GrowingTableCapacity(&ProcessSlots); ++index)
     {
-        if (ProcessTable[index].used && (ProcessTable[index].id == id))
+        if (ProcessSlot(index)->used && (ProcessSlot(index)->id == id))
         {
-            return &ProcessTable[index];
+            return ProcessSlot(index);
         }
     }
 
@@ -461,16 +485,16 @@ Process *ProcessById(uint64_t id)
 
 Process *ProcessAt(size_t index)
 {
-    return (index < PROCESS_CAPACITY) ? &ProcessTable[index] : NULL;
+    return (index < GrowingTableCapacity(&ProcessSlots)) ? ProcessSlot(index) : NULL;
 }
 
 size_t ProcessCount(void)
 {
     size_t count = 0U;
 
-    for (size_t index = 0U; index < PROCESS_CAPACITY; ++index)
+    for (size_t index = 0U; index < GrowingTableCapacity(&ProcessSlots); ++index)
     {
-        if (ProcessTable[index].used)
+        if (ProcessSlot(index)->used)
         {
             ++count;
         }
@@ -554,9 +578,10 @@ Thread *ThreadCreate(Process *owner, uint64_t entry, uint64_t user_stack)
         return NULL;
     }
 
-    for (size_t index = 0U; index < THREAD_CAPACITY; ++index)
+    for (size_t index = 0U;
+         (index < GrowingTableCapacity(&ThreadSlots)) || GrowingTableGrow(&ThreadSlots); ++index)
     {
-        Thread *const thread = &ThreadTable[index];
+        Thread *const thread = ThreadSlot(index);
         uint64_t top = 0U;
         void *stack;
 
@@ -668,11 +693,11 @@ void ThreadDestroy(Thread *thread)
      * indication that anything happened. The pointer is per thread since
      * sub-task 8.6, so every thread that named this one is walked.
      */
-    for (size_t index = 0U; index < THREAD_CAPACITY; ++index)
+    for (size_t index = 0U; index < GrowingTableCapacity(&ThreadSlots); ++index)
     {
-        if (ThreadTable[index].used && (ThreadTable[index].return_to == thread))
+        if (ThreadSlot(index)->used && (ThreadSlot(index)->return_to == thread))
         {
-            ThreadTable[index].return_to = NULL;
+            ThreadSlot(index)->return_to = NULL;
         }
     }
 
@@ -716,29 +741,39 @@ Thread *ThreadById(uint64_t id)
         return NULL;
     }
 
-    for (size_t index = 0U; index < THREAD_CAPACITY; ++index)
+    for (size_t index = 0U; index < GrowingTableCapacity(&ThreadSlots); ++index)
     {
-        if (ThreadTable[index].used && (ThreadTable[index].id == id))
+        if (ThreadSlot(index)->used && (ThreadSlot(index)->id == id))
         {
-            return &ThreadTable[index];
+            return ThreadSlot(index);
         }
     }
 
     return NULL;
 }
 
+size_t ProcessSlotCount(void)
+{
+    return GrowingTableCapacity(&ProcessSlots);
+}
+
+size_t ThreadSlotCount(void)
+{
+    return GrowingTableCapacity(&ThreadSlots);
+}
+
 Thread *ThreadAt(size_t index)
 {
-    return (index < THREAD_CAPACITY) ? &ThreadTable[index] : NULL;
+    return (index < GrowingTableCapacity(&ThreadSlots)) ? ThreadSlot(index) : NULL;
 }
 
 size_t ThreadCount(void)
 {
     size_t count = 0U;
 
-    for (size_t index = 0U; index < THREAD_CAPACITY; ++index)
+    for (size_t index = 0U; index < GrowingTableCapacity(&ThreadSlots); ++index)
     {
-        if (ThreadTable[index].used)
+        if (ThreadSlot(index)->used)
         {
             ++count;
         }
@@ -919,9 +954,10 @@ Thread *ThreadCreateKernel(void (*entry)(void))
         return NULL;
     }
 
-    for (size_t index = 0U; index < THREAD_CAPACITY; ++index)
+    for (size_t index = 0U;
+         (index < GrowingTableCapacity(&ThreadSlots)) || GrowingTableGrow(&ThreadSlots); ++index)
     {
-        Thread *const thread = &ThreadTable[index];
+        Thread *const thread = ThreadSlot(index);
         uint64_t top = 0U;
         void *stack;
 
@@ -1041,11 +1077,11 @@ Thread *ThreadAdoptCurrent(const char *name)
      */
     SpinlockAcquire(&ProcessTableLock);
 
-    for (size_t index = 0U; index < THREAD_CAPACITY; ++index)
+    for (size_t index = 0U; index < GrowingTableCapacity(&ThreadSlots); ++index)
     {
-        if (!ThreadTable[index].used)
+        if (!ThreadSlot(index)->used)
         {
-            thread = &ThreadTable[index];
+            thread = ThreadSlot(index);
             thread->used = true;
             thread->id = ThreadNextId;
             ++ThreadNextId;
@@ -1281,9 +1317,9 @@ bool ThreadLaunch(Thread *thread)
 /* Whether no live process but `except` belongs to a group, of sub-task 8.7. */
 static bool ProcessGroupIsEmptyBut(uint64_t group, const Process *except)
 {
-    for (size_t index = 0U; index < PROCESS_CAPACITY; ++index)
+    for (size_t index = 0U; index < GrowingTableCapacity(&ProcessSlots); ++index)
     {
-        const Process *const candidate = &ProcessTable[index];
+        const Process *const candidate = ProcessSlot(index);
 
         if (candidate->used && (candidate != except) && (candidate->group == group) &&
             (candidate->state != PROCESS_EXITED))
@@ -1496,9 +1532,9 @@ size_t ProcessAdoptOrphansOf(uint64_t parent_id)
         return 0U;
     }
 
-    for (size_t index = 0U; index < PROCESS_CAPACITY; ++index)
+    for (size_t index = 0U; index < GrowingTableCapacity(&ProcessSlots); ++index)
     {
-        Process *const candidate = &ProcessTable[index];
+        Process *const candidate = ProcessSlot(index);
 
         if (candidate->used && (candidate->parent_id == parent_id) && (candidate != init))
         {
@@ -2342,9 +2378,9 @@ uint64_t ProcessWaitFor(Process *parent, int64_t pid, uint64_t options, int64_t 
          */
         PerCpuPushInterruptState();
 
-        for (size_t index = 0U; index < PROCESS_CAPACITY; ++index)
+        for (size_t index = 0U; index < GrowingTableCapacity(&ProcessSlots); ++index)
         {
-            Process *const candidate = &ProcessTable[index];
+            Process *const candidate = ProcessSlot(index);
 
             if (!candidate->used || (candidate->parent_id != parent->id))
             {
@@ -2758,16 +2794,18 @@ void ProcessReport(void)
     KernelWriteString("Processes: ");
     KernelWriteDecimal((uint64_t)processes);
     KernelWriteString(" of ");
-    KernelWriteDecimal((uint64_t)PROCESS_CAPACITY);
+    KernelWriteDecimal((uint64_t)GrowingTableCapacity(&ProcessSlots));
     KernelWriteString(", threads ");
     KernelWriteDecimal((uint64_t)ThreadCount());
     KernelWriteString(" of ");
-    KernelWriteDecimal((uint64_t)THREAD_CAPACITY);
+    KernelWriteDecimal((uint64_t)GrowingTableCapacity(&ThreadSlots));
     KernelWriteString("; created ");
     KernelWriteDecimal(ProcessCreations);
     KernelWriteString(" and ");
     KernelWriteDecimal(ThreadCreations);
     KernelWriteString(" since the start.\n");
+    GrowingTableReport(&ProcessSlots);
+    GrowingTableReport(&ThreadSlots);
 
     /* `init`, since sub-task 9.3, and the orphans it was given. */
     KernelWriteString("Processes: init is ");
@@ -2812,9 +2850,9 @@ void ProcessReport(void)
     KernelWriteDecimal(ProcessBreakPages);
     KernelWriteString(" heap page(s) presently mapped by them.\n");
 
-    for (size_t index = 0U; index < PROCESS_CAPACITY; ++index)
+    for (size_t index = 0U; index < GrowingTableCapacity(&ProcessSlots); ++index)
     {
-        const Process *const process = &ProcessTable[index];
+        const Process *const process = ProcessSlot(index);
 
         if (!process->used)
         {
@@ -2912,9 +2950,9 @@ size_t ProcessServiceAlarms(uint64_t now)
      * deadline is cleared before the signal is sent, so that an alarm is one
      * signal and not one per tick until the process runs.
      */
-    for (size_t index = 0U; index < PROCESS_CAPACITY; ++index)
+    for (size_t index = 0U; index < GrowingTableCapacity(&ProcessSlots); ++index)
     {
-        Process *const process = &ProcessTable[index];
+        Process *const process = ProcessSlot(index);
 
         if (!process->used || (process->alarm_deadline == 0U) ||
             (process->alarm_deadline > now))

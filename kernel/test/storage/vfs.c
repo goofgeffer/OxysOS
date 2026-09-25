@@ -790,6 +790,92 @@ static bool KernelVfsBytesAre(const char *buffer, const char *expected, size_t c
 }
 
 /*
+ * The open-file and pipe tables grow past their first chunks. Before
+ * 2026-09-25 they were fixed arrays of 32 and 8, and a desktop with a few
+ * terminals open — each two pipes and a handful of descriptors — could be
+ * refused a file for no reason but the size of an array. More open files and
+ * pipes than a first chunk holds are made here, the last of each is used, and
+ * all are closed, so that a growth which handed out an entry beyond the table,
+ * or one already in use, fails here and not upon a person's desktop.
+ */
+#define KERNEL_VFS_GROWTH_FILES (VFS_FILE_CHUNK + 8U)
+#define KERNEL_VFS_GROWTH_PIPES (VFS_PIPE_CHUNK + 2U)
+
+static void KernelVerifyVfsGrowth(void)
+{
+    int files[KERNEL_VFS_GROWTH_FILES];
+    int pipes[KERNEL_VFS_GROWTH_PIPES][2];
+    const size_t open_before = VfsOpenFileCount();
+    uint64_t count = 0U;
+    char buffer[4];
+    bool all_opened = true;
+    bool beyond_first_chunk = false;
+
+    for (size_t index = 0U; index < KERNEL_VFS_GROWTH_FILES; ++index)
+    {
+        files[index] = VfsOpen("/sub/inner", VFS_OPEN_READ, 0U);
+        all_opened = all_opened && (files[index] != VFS_NO_DESCRIPTOR);
+        beyond_first_chunk = beyond_first_chunk || (files[index] >= (int)VFS_FILE_CHUNK);
+    }
+
+    KernelVfsRequire(all_opened, "more files than the first chunk holds could not be opened");
+    KernelVfsRequire(beyond_first_chunk, "no descriptor was given from a grown chunk");
+
+    if (all_opened)
+    {
+        const int last = files[KERNEL_VFS_GROWTH_FILES - 1U];
+
+        KernelVfsRequire(VfsRead(last, KernelFileBuffer, KERNEL_VOLUME_INNER_SIZE, &count) &&
+                             (count == KERNEL_VOLUME_INNER_SIZE) &&
+                             KernelFileBufferMatches(0U, KERNEL_VOLUME_INNER_SIZE),
+                         "a descriptor from a grown chunk did not read its file");
+    }
+
+    for (size_t index = 0U; index < KERNEL_VFS_GROWTH_FILES; ++index)
+    {
+        if (files[index] != VFS_NO_DESCRIPTOR)
+        {
+            KernelVfsRequire(VfsClose(files[index]), "a descriptor from a grown chunk would not close");
+        }
+    }
+
+    all_opened = true;
+
+    for (size_t index = 0U; index < KERNEL_VFS_GROWTH_PIPES; ++index)
+    {
+        pipes[index][0] = VFS_NO_DESCRIPTOR;
+        pipes[index][1] = VFS_NO_DESCRIPTOR;
+        all_opened = VfsPipeCreate(&pipes[index][0], &pipes[index][1]) && all_opened;
+    }
+
+    KernelVfsRequire(all_opened, "more pipes than the first chunk holds could not be made");
+
+    if (all_opened)
+    {
+        const size_t last = KERNEL_VFS_GROWTH_PIPES - 1U;
+
+        KernelVfsRequire(VfsWrite(pipes[last][1], "oxy", 3U, &count) && (count == 3U) &&
+                             VfsRead(pipes[last][0], buffer, sizeof buffer, &count) &&
+                             (count == 3U) && KernelVfsBytesAre(buffer, "oxy", 3U),
+                         "a pipe from a grown chunk did not carry its bytes");
+    }
+
+    for (size_t index = 0U; index < KERNEL_VFS_GROWTH_PIPES; ++index)
+    {
+        for (size_t end = 0U; end < 2U; ++end)
+        {
+            if (pipes[index][end] != VFS_NO_DESCRIPTOR)
+            {
+                KernelVfsRequire(VfsClose(pipes[index][end]), "a pipe end would not close");
+            }
+        }
+    }
+
+    KernelVfsRequire(VfsOpenFileCount() == open_before,
+                     "the open files made to grow the table were not all closed");
+}
+
+/*
  * The pipe of sub-task 8.6, from the kernel's own flow of control — which
  * cannot sleep, so what is asserted here is everything but the sleeping: the
  * bytes cross in order, each end does one thing, the end of the file is the
@@ -976,6 +1062,7 @@ void KernelVerifyVfs(void)
     KernelVerifyVfsWrites();
     KernelVerifyVfsMounts();
     KernelVerifyVfsPipes();
+    KernelVerifyVfsGrowth();
 
     /* The persistent `/etc` of 2026-09-23, upon this root and the second
      * device, which it puts back as it found them. */

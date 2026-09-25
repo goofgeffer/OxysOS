@@ -268,6 +268,7 @@ kernel/exec/elf.c	arch/mm/paging.h	Reaches a target space's pages through the di
 kernel/exec/elf.c	arch/syscall/syscall.h	Validates a caller-supplied path against the user limit.
 kernel/fs/vfs/pipe.c	arch/cpu/percpu.h	The masked section a reader or writer tests its condition and sleeps within, as the wait channel requires.
 kernel/mm/vmm.c	arch/mm/paging.h	Asks whether a range it is about to hand out is already mapped.
+kernel/mm/table.c	arch/cpu/percpu.h	Refuses growth off the bootstrap processor, the heap being unsynchronised.
 kernel/proc/process.c	arch/cpu/gdt.h	The selectors a thread descends to privilege level 3 with.
 kernel/proc/process.c	arch/cpu/percpu.h	Records the current thread in the executing processor's area.
 kernel/proc/process.c	arch/cpu/spinlock.h	Guards the process and thread tables.

@@ -60,6 +60,7 @@
 #include <oxys/proc/sched.h>
 #include <oxys/proc/signal.h>
 #include <oxys/arch/cpu/percpu.h>
+#include <oxys/mm/table.h>
 
 _Static_assert((VFS_PIPE_BUFFER_SIZE & (VFS_PIPE_BUFFER_SIZE - 1U)) == 0U,
                "The buffer is a power of two so that the indices reduce by a mask.");
@@ -83,7 +84,16 @@ typedef struct VfsPipe
     bool in_use;
 } VfsPipe;
 
-static VfsPipe VfsPipes[VFS_PIPE_CAPACITY];
+/* The first chunk of the pipe table, static so that a pipe can be made while
+ * the heap is exhausted; the heap is asked only for load beyond it. */
+static VfsPipe VfsPipeFirstChunk[VFS_PIPE_CHUNK];
+static GrowingTable VfsPipeSlots =
+    GROWING_TABLE_INITIALISER("pipe table", VfsPipe, VfsPipeFirstChunk, VFS_PIPE_CHUNK);
+
+static VfsPipe *VfsPipeSlot(size_t index)
+{
+    return (VfsPipe *)GrowingTableAt(&VfsPipeSlots, index);
+}
 
 /* Accounting. */
 static uint64_t VfsPipesCreated;
@@ -103,16 +113,20 @@ static uint64_t VfsPipeRoom(const VfsPipe *pipe)
     return VFS_PIPE_BUFFER_SIZE - VfsPipeHeld(pipe);
 }
 
-/* The open file slot the layer will give to a pipe end, or null. It is the
- * search VfsOpen makes, repeated here rather than shared because VfsOpen's
- * search is followed by a node the pipe end does not have. */
-static VfsFile *VfsPipeFreeFile(void)
+/* The open file slot the layer will give to a pipe end, and its descriptor, or
+ * null. It is the search VfsOpen makes, repeated here rather than shared
+ * because VfsOpen's search is followed by a node the pipe end does not have. */
+static VfsFile *VfsPipeFreeFile(int *descriptor)
 {
-    for (size_t index = 0U; index < VFS_FILE_CAPACITY; ++index)
+    for (size_t index = 0U;
+         (index < GrowingTableCapacity(&VfsFileSlots)) || GrowingTableGrow(&VfsFileSlots); ++index)
     {
-        if (!VfsFiles[index].open)
+        VfsFile *const file = VfsFileSlot(index);
+
+        if (!file->open)
         {
-            return &VfsFiles[index];
+            *descriptor = (int)index;
+            return file;
         }
     }
 
@@ -126,17 +140,20 @@ bool VfsPipeCreate(int *read_end, int *write_end)
     VfsPipe *pipe = NULL;
     VfsFile *reader;
     VfsFile *writer;
+    int reader_descriptor = VFS_NO_DESCRIPTOR;
+    int writer_descriptor = VFS_NO_DESCRIPTOR;
 
     if ((read_end == NULL) || (write_end == NULL))
     {
         return VfsRefuse(VFS_ERROR_INVALID, "nowhere to report the pipe's descriptors");
     }
 
-    for (size_t index = 0U; index < VFS_PIPE_CAPACITY; ++index)
+    for (size_t index = 0U;
+         (index < GrowingTableCapacity(&VfsPipeSlots)) || GrowingTableGrow(&VfsPipeSlots); ++index)
     {
-        if (!VfsPipes[index].in_use)
+        if (!VfsPipeSlot(index)->in_use)
         {
-            pipe = &VfsPipes[index];
+            pipe = VfsPipeSlot(index);
             break;
         }
     }
@@ -152,7 +169,7 @@ bool VfsPipeCreate(int *read_end, int *write_end)
      * read end with no write end would be a pipe at its end before anything
      * was written, and the reader would end at once with nothing said.
      */
-    reader = VfsPipeFreeFile();
+    reader = VfsPipeFreeFile(&reader_descriptor);
 
     if (reader == NULL)
     {
@@ -160,7 +177,7 @@ bool VfsPipeCreate(int *read_end, int *write_end)
     }
 
     reader->open = true;
-    writer = VfsPipeFreeFile();
+    writer = VfsPipeFreeFile(&writer_descriptor);
     reader->open = false;
 
     if (writer == NULL)
@@ -185,8 +202,8 @@ bool VfsPipeCreate(int *read_end, int *write_end)
     writer->pipe = pipe;
     writer->open = true;
 
-    *read_end = (int)(reader - VfsFiles);
-    *write_end = (int)(writer - VfsFiles);
+    *read_end = reader_descriptor;
+    *write_end = writer_descriptor;
 
     ++VfsPipesCreated;
     ++VfsFilesOpenedCount;
@@ -453,9 +470,9 @@ size_t VfsPipeCount(void)
 {
     size_t count = 0U;
 
-    for (size_t index = 0U; index < VFS_PIPE_CAPACITY; ++index)
+    for (size_t index = 0U; index < GrowingTableCapacity(&VfsPipeSlots); ++index)
     {
-        if (VfsPipes[index].in_use)
+        if (VfsPipeSlot(index)->in_use)
         {
             ++count;
         }
@@ -474,7 +491,7 @@ void VfsPipeReport(void)
     KernelWriteString("Pipes: ");
     KernelWriteDecimal((uint64_t)VfsPipeCount());
     KernelWriteString(" of ");
-    KernelWriteDecimal((uint64_t)VFS_PIPE_CAPACITY);
+    KernelWriteDecimal((uint64_t)GrowingTableCapacity(&VfsPipeSlots));
     KernelWriteString(" in use; ");
     KernelWriteDecimal(VfsPipesCreated);
     KernelWriteString(" made, ");

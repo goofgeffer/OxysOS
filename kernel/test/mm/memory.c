@@ -6,12 +6,13 @@
  *          allocator, the permanent paging hierarchy, the virtual address
  *          allocator and the heap above it, per-frame reference counting, the
  *          resolution of a copy-on-write fault, and the cloning of an address
- *          space.
+ *          space; and the growing table of the kernel's tables.
  * Key functions: KernelVerifyFrameAllocator, KernelVerifyPaging,
  *          KernelVerifyAllocators, KernelVerifyReferenceCounting,
- *          KernelVerifyCopyOnWrite, KernelVerifyAddressSpaces.
+ *          KernelVerifyCopyOnWrite, KernelVerifyAddressSpaces,
+ *          KernelVerifyGrowingTable.
  * References:
-   - docs/design/MEMORY-LAYOUT.md: the properties each
+ *   - docs/design/MEMORY-LAYOUT.md: the properties each
  *     assertion below establishes, and the silent failure each would catch.
  *   - Intel 64 and IA-32 Architectures Software Developer's Manual, Volume 3A,
  *     Table 4-15: the paging-structure entry flags the assertions read.
@@ -31,6 +32,7 @@
 #include <oxys/arch/mm/addrspace.h>
 #include <oxys/mm/vmm.h>
 #include <oxys/mm/heap.h>
+#include <oxys/mm/table.h>
 #include <oxys/arch/cpu/cpu.h>
 #include <oxys/arch/interrupt/interrupts.h>
 #include <oxys/dev/vga.h>
@@ -526,6 +528,80 @@ void KernelVerifyAllocators(void)
     KernelWriteString(succeeded
                           ? "Allocator self-test passed.\n"
                           : "Allocator self-test FAILED.\n");
+}
+
+/*
+ * Exercises the growing table of kernel/mm/table.c and reports the outcome.
+ *
+ * The properties asserted are the three the process, thread, node, open-file
+ * and pipe tables rely upon, each of whose failure would be silent: that an
+ * entry does not move when the table grows (every holder of a pointer to a
+ * process would otherwise name freed memory); that a grown chunk is zeroed (a
+ * zeroed entry is an unused one, so a chunk of garbage would be read as
+ * processes and open files that nobody made); and that an index beyond the
+ * table is refused rather than read. The table here is the test's own, so the
+ * one chunk it grows is the only memory the test keeps: chunks are never
+ * returned, by design.
+ */
+static uint64_t KernelGrowingTableFirstChunk[4];
+
+void KernelVerifyGrowingTable(void)
+{
+    GrowingTable table = GROWING_TABLE_INITIALISER("self-test table", uint64_t,
+                                                   KernelGrowingTableFirstChunk, 4U);
+    uint64_t *const first = (uint64_t *)GrowingTableAt(&table, 0U);
+    bool succeeded = true;
+
+    if ((GrowingTableCapacity(&table) != 4U) || (first != &KernelGrowingTableFirstChunk[0]) ||
+        (GrowingTableAt(&table, 4U) != NULL))
+    {
+        KernelWriteString("  A new table did not hold exactly its first chunk.\n");
+        succeeded = false;
+    }
+
+    *first = 0x4F58595355U;
+
+    if (!GrowingTableGrow(&table))
+    {
+        KernelWriteString("  A table could not grow upon the bootstrap processor.\n");
+        succeeded = false;
+    }
+    else
+    {
+        if ((GrowingTableCapacity(&table) != 8U) || (GrowingTableAt(&table, 8U) != NULL))
+        {
+            KernelWriteString("  A grown table did not hold exactly two chunks.\n");
+            succeeded = false;
+        }
+
+        if ((GrowingTableAt(&table, 0U) != first) || (*first != 0x4F58595355U))
+        {
+            KernelWriteString("  An entry moved or changed when its table grew.\n");
+            succeeded = false;
+        }
+
+        for (size_t index = 4U; index < 8U; ++index)
+        {
+            const uint64_t *const entry = (const uint64_t *)GrowingTableAt(&table, index);
+
+            if ((entry == NULL) || (*entry != 0U))
+            {
+                KernelWriteString("  A grown chunk was not zeroed.\n");
+                succeeded = false;
+                break;
+            }
+        }
+
+        if ((table.growths != 1U) || (table.refusals != 0U))
+        {
+            KernelWriteString("  A table's growth was not counted.\n");
+            succeeded = false;
+        }
+    }
+
+    KernelWriteString(succeeded
+                          ? "Growing table self-test passed.\n"
+                          : "Growing table self-test FAILED.\n");
 }
 
 /*

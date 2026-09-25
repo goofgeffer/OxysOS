@@ -43,14 +43,14 @@ void VfsInitialise(void)
         VfsMounts[index] = (VfsMount){ 0 };
     }
 
-    for (size_t index = 0U; index < VFS_NODE_CAPACITY; ++index)
+    for (size_t index = 0U; index < GrowingTableCapacity(&VfsNodeSlots); ++index)
     {
-        VfsNodes[index] = (VfsNode){ 0 };
+        *VfsNodeSlot(index) = (VfsNode){ 0 };
     }
 
-    for (size_t index = 0U; index < VFS_FILE_CAPACITY; ++index)
+    for (size_t index = 0U; index < GrowingTableCapacity(&VfsFileSlots); ++index)
     {
-        VfsFiles[index] = (VfsFile){ 0 };
+        *VfsFileSlot(index) = (VfsFile){ 0 };
     }
 
     VfsRootMount = NULL;
@@ -333,18 +333,19 @@ bool VfsMountVolume(const char *device_name, const char *point, const char *type
 /* Whether any node of a mount is held by anything but the mount itself. */
 bool VfsMountIsBusy(const VfsMount *mount)
 {
-    for (size_t index = 0U; index < VFS_FILE_CAPACITY; ++index)
+    for (size_t index = 0U; index < GrowingTableCapacity(&VfsFileSlots); ++index)
     {
-        if (VfsFiles[index].open && (VfsFiles[index].node != NULL) &&
-            (VfsFiles[index].node->mount == mount))
+        const VfsFile *const file = VfsFileSlot(index);
+
+        if (file->open && (file->node != NULL) && (file->node->mount == mount))
         {
             return true;
         }
     }
 
-    for (size_t index = 0U; index < VFS_NODE_CAPACITY; ++index)
+    for (size_t index = 0U; index < GrowingTableCapacity(&VfsNodeSlots); ++index)
     {
-        const VfsNode *const node = &VfsNodes[index];
+        const VfsNode *const node = VfsNodeSlot(index);
 
         if ((!node->in_use) || (node->mount != mount))
         {

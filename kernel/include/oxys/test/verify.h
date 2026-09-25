@@ -6,7 +6,8 @@
  *          KernelMain runs in dependency order after the subsystem each asserts
  *          has been initialised.
  * Key definitions: KernelVerifyFrameAllocator, KernelVerifyPaging,
- *          KernelVerifyAllocators, KernelVerifyReferenceCounting,
+ *          KernelVerifyAllocators, KernelVerifyGrowingTable,
+ *          KernelVerifyReferenceCounting,
  *          KernelVerifyCopyOnWrite, KernelVerifyAddressSpaces, KernelVerifyIdt,
  *          KernelVerifyInterruptStubs, KernelVerifyDispatcher,
  *          KernelVerifyExceptions, KernelVerifyPrivilege, KernelVerifySyscall,
@@ -85,6 +86,7 @@ bool KernelCommandLineHasOption(const char *option);
 void KernelVerifyFrameAllocator(void);
 void KernelVerifyPaging(void);
 void KernelVerifyAllocators(void);
+void KernelVerifyGrowingTable(void);
 void KernelVerifyReferenceCounting(void);
 
 /* Phase 2, deferred until Phase 3 supplied the fault handler they depend upon:

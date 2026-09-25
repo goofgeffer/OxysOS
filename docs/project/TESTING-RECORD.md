@@ -15,6 +15,7 @@ that was cleared that day and renumbered from 1; the date identifies the image.
 
 | Date | Where | What | Result |
 | ---- | ----- | ---- | ------ |
+| 2026-09-25 | QEMU q35, VirtualBox and Bochs | The growing tables: a table of the test's own grown and forty open files and ten pipes made through the filesystem layer | Passed; 79 assertions under QEMU, the open-file table grown to 64 and the pipe table to 16; every self-test passed under VirtualBox and Bochs, after one VirtualBox run failed the known flaky serial loopback and was rerun |
 | 2026-09-24 | QEMU q35, VirtualBox and Bochs | The `Oxys 1 Beta` image: `make verify`, `make clang-check`, and a boot to the desktop in each | Passed; 78 assertions, none failing; the banner and `version` report `1-beta` in all three |
 | 2026-09-24 | QEMU q35, VirtualBox and Bochs | The spacing of the pinned icons | Passed; under QEMU each of the three gaps measured 20 pixels; every self-test passed on all three |
 | 2026-09-24 | QEMU q35, VirtualBox and Bochs | The bar at the foot, the pinned programs, the clock's box, and a full window between them | Passed; under QEMU the Terminal pin started a terminal and a full window stood between the box and the bar; VirtualBox at 640 by 480 drew the layout; every self-test passed on all three |

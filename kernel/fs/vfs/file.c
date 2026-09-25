@@ -32,28 +32,28 @@
 /* The open file a descriptor names, or null where the descriptor names none. */
 VfsFile *VfsFileOf(int descriptor)
 {
-    if ((descriptor < 0) || ((size_t)descriptor >= VFS_FILE_CAPACITY))
+    if ((descriptor < 0) || ((size_t)descriptor >= GrowingTableCapacity(&VfsFileSlots)))
     {
         (void)VfsRefuse(VFS_ERROR_INVALID, "the descriptor is outside the table");
         return NULL;
     }
 
-    if (!VfsFiles[descriptor].open)
+    if (!VfsFileSlot((size_t)descriptor)->open)
     {
         (void)VfsRefuse(VFS_ERROR_INVALID, "the descriptor names no open file");
         return NULL;
     }
 
-    return &VfsFiles[descriptor];
+    return VfsFileSlot((size_t)descriptor);
 }
 
 size_t VfsOpenFileCount(void)
 {
     size_t count = 0U;
 
-    for (size_t index = 0U; index < VFS_FILE_CAPACITY; ++index)
+    for (size_t index = 0U; index < GrowingTableCapacity(&VfsFileSlots); ++index)
     {
-        if (VfsFiles[index].open)
+        if (VfsFileSlot(index)->open)
         {
             ++count;
         }
@@ -143,11 +143,12 @@ int VfsOpen(const char *path, uint32_t flags, uint16_t permissions)
      * then discovering that the table is full would leave a file upon the volume
      * that the caller was told it had failed to make.
      */
-    for (size_t index = 0U; index < VFS_FILE_CAPACITY; ++index)
+    for (size_t index = 0U;
+         (index < GrowingTableCapacity(&VfsFileSlots)) || GrowingTableGrow(&VfsFileSlots); ++index)
     {
-        if (!VfsFiles[index].open)
+        if (!VfsFileSlot(index)->open)
         {
-            file = &VfsFiles[index];
+            file = VfsFileSlot(index);
             descriptor = (int)index;
             break;
         }

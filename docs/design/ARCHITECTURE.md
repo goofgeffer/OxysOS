@@ -247,11 +247,13 @@ pressing against.
 **And the boundary is crossed more widely than that, which this section first
 understated.** It said the line was drawn at the file and three files sat
 slightly on the wrong side. Measured rather than asserted, the portable core
-includes `<oxys/arch/...>` headers **sixteen times**, across seven files:
+includes `<oxys/arch/...>` headers **seventeen times**, across eight files:
 `proc/process.c` six, `proc/sched.c` three, `exec/elf.c` three, and `mm/vmm.c`
 and `acpi/acpi.c` one each — and, since sub-task 8.6, `fs/vfs/pipe.c` one, for
 the masked section a sleep upon the wait channel requires, and since 8.7
-`proc/signal.c` one, for the same section against the tick handler.
+`proc/signal.c` one, for the same section against the tick handler, and since
+2026-09-25 `mm/table.c` one, which refuses to grow a table off the bootstrap
+processor.
 `kernel/arch/README.md` lists them and grades them,
 the shallow ones — a spinlock, which every processor has in some form — apart
 from the deep, such as `process.c` writing `rsp0` into a task state segment,
@@ -264,9 +266,9 @@ isolate the portable part.** The grouping is worth having on that ground alone �
 it is the ground Section 2.4 opens with — but the stronger claim is not yet
 earned and should not be made until the number above comes down.
 
-`tools/check-docs.sh`, Section 8, is what keeps it honest from here. The sixteen
-crossings are recorded with a reason apiece and checked in both directions, so a
-seventeenth fails `make lint` and so does an entry left behind when a crossing is
+`tools/check-docs.sh`, Section 8, is what keeps it honest from here. The seventeen
+crossings are recorded with a reason apiece and checked in both directions, so an
+eighteenth fails `make lint` and so does an entry left behind when a crossing is
 removed. The debt can now only change deliberately, which is the property the
 prose alone never had — and which `drivers/` lacking it for three phases, at
 Section 2.3, is the cautionary case for.
@@ -408,6 +410,7 @@ either.
 | `kernel/test/arch/apic.c` | The self-tests of the ACPI parse, the Local APIC, the I/O APIC, and the routing of the request lines through them once the 8259A pair has been retired. |
 | `kernel/test/arch/smp.c` | The self-tests of the per-processor area, the spinlock, the inter-processor interrupt and the shootdown — the first two asserting internal state, since upon one processor a lock that does not lock behaves like one that does, and the last two asserting behaviour by an interrupt the processor sends to itself. |
 | `kernel/mm/heap.c` | The kernel heap: a slab allocator of eight size classes over the kernel arena. |
+| `kernel/mm/table.c` | The growing table: chunks that never move, the first static, the rest from the heap; the process, thread, node, open-file and pipe tables ([`MEMORY-LAYOUT.md`](MEMORY-LAYOUT.md), Section 16). |
 | `kernel/mm/vmm.c` | The kernel virtual address allocator, issuing ranges of the kernel arena backed by frames. |
 | `kernel/arch/x86_64/mm/paging.c` | The permanent kernel paging hierarchy: its construction, activation, software translation and copy-on-write fault resolution. |
 | `kernel/arch/x86_64/mm/shootdown.c` | The translation-lookaside-buffer shootdown: the publication of the address whose translation has become stale, the interrupt that tells the other processors to discard it, the acknowledgement each makes, and the bounded wait for all of them. |
@@ -423,7 +426,7 @@ either.
 | `kernel/fs/ext2/directory.c` | The record a directory is made of: the file types, the decoding and validation of one entry, the traversal, and the search for a name. |
 | `kernel/fs/ext2/path.c` | The resolution of an absolute path to the inode it names, across symbolic links and with a bound upon how many may be followed. |
 | `kernel/fs/ext2/name.c` | The names themselves: the insertion and removal of a record, and the creation and destruction of files, directories and hard links. |
-| `kernel/fs/vfs/internal.h` | What the six units below share: the four fixed tables the layer's whole state lives in, the refusal record and the accounting, the open file, and the resolution and node-cache primitives. |
+| `kernel/fs/vfs/internal.h` | What the six units below share: the two fixed and two growing tables the layer's whole state lives in, the refusal record and the accounting, the open file, and the resolution and node-cache primitives. |
 | `kernel/fs/vfs/vfs.c` | The state itself, the refusals and the names of the error codes, the bounded string primitives, and the accounting and reports. |
 | `kernel/fs/vfs/node.c` | The node cache: the identity a file has within the kernel, and why one file must be one node however many callers reach it. |
 | `kernel/fs/vfs/path.c` | The resolution of a path: the walk through each component, the crossing of mount points in both directions, and the following of symbolic links. |

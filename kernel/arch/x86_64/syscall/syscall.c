@@ -1363,7 +1363,7 @@ static int64_t SyscallDoProcessInformation(uint64_t index, uint64_t address)
     const uint8_t *source = (const uint8_t *)&information;
     uint8_t *const destination = (uint8_t *)(uintptr_t)address;
 
-    if (index >= PROCESS_CAPACITY)
+    if (index >= ProcessSlotCount())
     {
         return SYSCALL_EINVAL;
     }

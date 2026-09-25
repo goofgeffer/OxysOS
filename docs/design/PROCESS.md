@@ -990,10 +990,11 @@ it is the same reason as for the descriptors and the windows.
    has not given it up — until sub-task 6.15, whose local timer does exactly that
    for any thread the scheduler has placed upon a run queue. A program still
    runs to completion, no program having yet been admitted to one.
-2. **The tables are fixed and are searched linearly.** Sixty-four processes and
-   a hundred and twenty-eight threads, found by walking. Nothing here is on a
-   path that runs often, and a hash of identifiers is worth writing when
-   something is.
+2. **The tables are searched linearly.** Sixty-four processes and a hundred and
+   twenty-eight threads a chunk, the tables growing a chunk at a time since
+   2026-09-25 ([`MEMORY-LAYOUT.md`](MEMORY-LAYOUT.md), Section 16), found by
+   walking. Nothing here is on a path that runs often, and a hash of
+   identifiers is worth writing when something is.
 3. **Closed at sub-task 8.6.** `ThreadStart`
    records the thread to return to upon the started thread rather than in a
    single variable, a child of `fork` is admitted to the scheduler at the fork,

@@ -1639,12 +1639,12 @@ in each file and a `_Static_assert` that fails if either is forgotten.
 A process holds `PROCESS_DESCRIPTOR_CAPACITY` entries, each naming a descriptor
 of the filesystem layer or `PROCESS_DESCRIPTOR_FREE`.
 
-**The indirection is not bookkeeping.** The filesystem layer has one table of
-`VFS_FILE_CAPACITY` entries for the whole machine; without this, descriptor 4
-would mean the same open file to every program in the system, and a program
-could reach another's file by naming a number. The table is also what bounds one
-program's share: sixteen entries against the layer's thirty-two, so a program
-that opens in a loop cannot leave the machine unable to open anything.
+**The indirection is not bookkeeping.** The filesystem layer has one open-file
+table for the whole machine; without this, descriptor 4 would mean the same open
+file to every program in the system, and a program could reach another's file by
+naming a number. The table is also what bounds one program's share: sixteen
+entries, so a program that opens in a loop cannot grow the layer's table (which
+draws on the heap every program needs) without end.
 
 **The free value is not zero**, and that is the one detail worth stating. Zero is
 a valid descriptor of the filesystem layer, so a table cleared with `memset`

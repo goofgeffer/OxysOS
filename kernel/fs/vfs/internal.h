@@ -44,6 +44,7 @@
 #include <oxys/fs/vfs.h>
 #include <oxys/block/block.h>
 #include <oxys/types.h>
+#include <oxys/mm/table.h>
 
 /*
  * One open file: the node it reached, the position that advances, and the flags
@@ -85,16 +86,30 @@ typedef struct VfsFile
 /*
  * The whole of the layer's state, defined in `vfs.c`.
  *
- * Four fixed tables and nothing allocated. The layer must be able to open a file
+ * Two fixed tables and two growing ones. The layer must be able to open a file
  * when the heap is exhausted, because the commonest reason to want one at that
- * moment is that something needed to write a diagnostic to a file. Only the
- * filesystems' private descriptions — a superblock, an inode — are allocated,
- * and those are bounded by these arrays.
+ * moment is that something needed to write a diagnostic to a file; so the node
+ * and open-file tables have a static first chunk and ask the heap only for the
+ * load beyond it. A descriptor is an index into the open-file table and a node
+ * is held by pointer; neither table's chunks move, so both stay good. Only the
+ * filesystems' private descriptions — a superblock, an inode — are otherwise
+ * allocated.
  */
 extern VfsFilesystem VfsFilesystems[VFS_FILESYSTEM_CAPACITY];
 extern VfsMount VfsMounts[VFS_MOUNT_CAPACITY];
-extern VfsNode VfsNodes[VFS_NODE_CAPACITY];
-extern VfsFile VfsFiles[VFS_FILE_CAPACITY];
+extern GrowingTable VfsNodeSlots;
+extern GrowingTable VfsFileSlots;
+
+/* The node or open file at an index, or null beyond the table. */
+static inline VfsNode *VfsNodeSlot(size_t index)
+{
+    return (VfsNode *)GrowingTableAt(&VfsNodeSlots, index);
+}
+
+static inline VfsFile *VfsFileSlot(size_t index)
+{
+    return (VfsFile *)GrowingTableAt(&VfsFileSlots, index);
+}
 
 /* The mount at the root of the tree, through which every absolute path begins. */
 extern VfsMount *VfsRootMount;

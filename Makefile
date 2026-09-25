@@ -261,6 +261,7 @@ C_SOURCES := kernel/kernel.c \
              kernel/mm/pmm.c \
              kernel/mm/vmm.c \
              kernel/mm/heap.c \
+             kernel/mm/table.c \
              kernel/arch/x86_64/mm/paging.c \
              kernel/arch/x86_64/mm/shootdown.c \
              kernel/arch/x86_64/mm/addrspace.c \

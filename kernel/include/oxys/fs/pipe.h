@@ -6,7 +6,7 @@
  *          open files of the filesystem layer, one that reads it and one that
  *          writes it, upon which a reader sleeps while it is empty and a writer
  *          sleeps while it is full.
- * Key definitions: VFS_PIPE_CAPACITY, VFS_PIPE_BUFFER_SIZE, VfsPipeCreate,
+ * Key definitions: VFS_PIPE_CHUNK, VFS_PIPE_BUFFER_SIZE, VfsPipeCreate,
  *          VfsPipeCount, VfsPipeBytesCarried, VfsPipeReport.
  * References:
  *   - IEEE Std 1003.1-2017, `pipe()`: "Data can be written to the file
@@ -53,10 +53,11 @@
 
 #include <oxys/types.h>
 
-/* How many pipes may exist at once, and how many bytes each holds. The size
- * is a power of two so that the two indices are reduced to subscripts by a
- * mask, and is exactly one page for the reason the header gives. */
-#define VFS_PIPE_CAPACITY    8U
+/* How many pipes a chunk of the growing pipe table holds (not a limit), and
+ * how many bytes each pipe holds. The size is a power of two so that the two
+ * indices are reduced to subscripts by a mask, and is exactly one page for the
+ * reason the header gives. */
+#define VFS_PIPE_CHUNK       8U
 #define VFS_PIPE_BUFFER_SIZE 4096U
 
 /*

@@ -180,6 +180,7 @@ and this table shrinks in the same change.
 | `kernel/mm/pmm.c` | The frame bitmap and search hint. |
 | `kernel/mm/vmm.c` | The kernel arena. |
 | `kernel/mm/heap.c` | The kernel heap. |
+| `kernel/mm/table.c` | A growing table's chunk directory; growth is refused off the bootstrap processor. |
 | `kernel/block/block.c` | The block device table. |
 | `kernel/block/buffer.c` | The buffer cache; the first structure that will want a lock it can sleep on. |
 | `kernel/fs/vfs/vfs.c` | The mount, node and open-file tables. |

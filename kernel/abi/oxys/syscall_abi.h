@@ -275,7 +275,8 @@
  * fills a SyscallProcessInformation for the process at a table index, so that
  * `ps` can walk the table: it returns 1 where the slot holds a process, 0
  * where it is empty, and EINVAL beyond the table — the index being a slot and
- * not an identifier, so that a walk from 0 upward sees every process once.
+ * not an identifier, so that a walk from 0 upward sees every process once. The
+ * table grows, so a walk runs until EINVAL rather than to a fixed bound.
  */
 #define SYSCALL_LINK      27U
 #define SYSCALL_PROCINFO  28U
@@ -600,7 +601,6 @@ typedef struct SyscallPollEntry
  * SYSCALL_PROCESS_STATE_*, and the name is what the process was created as —
  * the program's name where `execve` replaced it. */
 #define SYSCALL_PROCESS_NAME_MAXIMUM 31U
-#define SYSCALL_PROCESS_CAPACITY     64U
 
 #define SYSCALL_PROCESS_STATE_READY   1U
 #define SYSCALL_PROCESS_STATE_RUNNING 2U

@@ -822,7 +822,7 @@ size_t SchedulerWake(const void *channel)
      * sleepers are not linked; docs/design/SCHEDULER.md records
      * what a list would buy and when it is worth having.
      */
-    for (size_t index = 0U; index < THREAD_CAPACITY; ++index)
+    for (size_t index = 0U; index < ThreadSlotCount(); ++index)
     {
         Thread *const thread = ThreadAt(index);
 

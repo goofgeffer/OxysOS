@@ -1074,3 +1074,89 @@ again upon the next byte asked for. They are released with the address space, by
 `AddressSpaceDestroy`, which is the one moment nothing can ask for them back.
 That is a deliberate retention and not a leak: it is bounded by the extent of the
 address space and is reclaimed in full when the process ends.
+
+## 16. The growing table
+
+**Added 2026-09-25.** The process, thread, filesystem node, open-file and pipe
+tables were fixed arrays of 64, 128, 64, 32 and 8 until this date. A desktop with
+a few terminals open holds two pipes and a handful of open files per terminal,
+and would have been refused a ninth pipe or a thirty-third file with memory to
+spare. [`../../kernel/include/oxys/mm/table.h`](../../kernel/include/oxys/mm/table.h)
+and [`../../kernel/mm/table.c`](../../kernel/mm/table.c) replace each of them
+with a table that grows.
+
+### 16.1 Structure
+
+A table is a directory of up to 256 chunks, each an array of a fixed number of
+entries. The first chunk is a static array; each further chunk is one
+`KernelAllocateZeroed` of the chunk's size, taken when a claim finds every slot in
+use. An index is divided by the chunk size to find the chunk, and the remainder
+is the entry within it.
+
+| Table | Chunk constant | Entries per chunk |
+| ----- | -------------- | ----------------- |
+| Processes | `PROCESS_CHUNK` | 64 |
+| Threads | `THREAD_CHUNK` | 128 |
+| Filesystem nodes | `VFS_NODE_CHUNK` | 64 |
+| Open files | `VFS_FILE_CHUNK` | 32 |
+| Pipes | `VFS_PIPE_CHUNK` | 8 |
+
+**Chunks never move and are never freed.** A reallocated array would be the
+simpler structure, and it would leave every pointer to a process, a thread or a
+node naming freed memory. Run queues, wait channels, per-processor areas and
+open files all hold such pointers. A chunk stays where it is for the life of the
+machine, so a pointer to an entry is good for as long as the entry is. The cost
+is that memory taken at a peak is kept after it. That is bounded by the peak and
+is the same retention a fixed array of the peak size would have had from boot.
+
+**The first chunk is static.** Each table is needed before the heap exists, and
+the filesystem layer must still be able to open a file when the heap is
+exhausted, since writing a diagnostic is the commonest reason to want one then.
+The heap is asked only for load beyond the first chunk. When it refuses, the
+claim fails the way a full fixed table did.
+
+**A zeroed entry is an unused one** in every table: `PROCESS_UNUSED` and
+`THREAD_UNUSED` are zero, and a node's `in_use`, an open file's `open` and a
+pipe's `in_use` are false. A grown chunk is therefore empty without a pass over
+it. A table whose unused state was not zero would read a new chunk as entries
+that nobody made.
+
+**The directory's 256 chunks are not the limit in practice.** They allow 16,384
+processes and 32,768 threads, far beyond what their kernel stacks and address
+spaces would need in memory. What limits a table is memory, and exhaustion is
+reported as a lack of it: `ENOMEM` from `fork`, `EMFILE` from `open` and `pipe`.
+
+### 16.2 Growth and other processors
+
+The heap is unsynchronised ([`CONCURRENCY.md`](CONCURRENCY.md)), so
+`GrowingTableGrow` refuses on any processor but the bootstrap one and counts the
+refusal. On an application processor a full table is refused as a fixed one
+was. Nothing that runs there claims slots today except `ThreadAdoptCurrent`,
+which takes one thread per processor at start and does not grow.
+
+A chunk is published by writing its pointer into the directory, then a compiler
+barrier, then the count. x86_64 does not reorder a store with an earlier store,
+so a reader on another processor sees either the old capacity or the new one
+with its chunk in place. It never sees an index that leads to a null chunk.
+
+A walk of a table runs to its capacity at the time. `procinfo` refuses an index
+at or beyond the capacity with `EINVAL`, so `ps` and `shutdown` walk from 0 until
+they are refused, where they used to walk to a constant of the ABI.
+`SYSCALL_PROCESS_CAPACITY` was withdrawn from the ABI in the same change.
+
+### 16.3 Verification
+
+`KernelVerifyGrowingTable` grows a table of its own from a first chunk of four
+and asserts:
+
+- that the first entry keeps its address and value;
+- that the grown chunk is zeroed;
+- that an index at the new capacity is refused;
+- that the growth is counted.
+
+The filesystem self-test then opens eight files more than `VFS_FILE_CHUNK` and
+makes two pipes more than `VFS_PIPE_CHUNK`. It reads through the last descriptor,
+carries bytes through the last pipe, and closes them all. A growth that handed
+out an entry beyond the table, or one already in use, would fail there. The
+reports of `ProcessReport`, the filesystem layer and the pipes give each table's
+capacity, chunks, growths and refusals.

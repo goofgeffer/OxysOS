@@ -1636,6 +1636,7 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
     KernelVirtualInitialise();
     KernelHeapInitialise();
     KernelVerifyAllocators();
+    KernelVerifyGrowingTable();
     KernelVirtualReport();
     KernelHeapReport();
 

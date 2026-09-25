@@ -44,18 +44,20 @@
 #include <oxys/block/block.h>
 
 /*
- * The bounds of the layer.
+ * The bounds of the layer, and the chunk sizes of its two growing tables.
  *
  * Every one of these is a bound upon this kernel and not upon any format. They
  * are stated together so that the storage the layer occupies is legible in one
- * place: there is no dynamic table here, every structure being drawn from a
- * fixed array, because a filesystem layer that could exhaust the heap would fail
- * at exactly the moment something needed to write an error to a file.
+ * place. The filesystems and mounts are fixed arrays. The nodes and the open
+ * files are growing tables (kernel/include/oxys/mm/table.h) whose first chunk
+ * is static, so that a file can still be opened when the heap is exhausted —
+ * the moment something most needs to write an error to one — and the heap is
+ * asked only for the load beyond it. The two CHUNK values are not limits.
  */
 #define VFS_FILESYSTEM_CAPACITY 4U
 #define VFS_MOUNT_CAPACITY      4U
-#define VFS_NODE_CAPACITY       64U
-#define VFS_FILE_CAPACITY       32U
+#define VFS_NODE_CHUNK          64U
+#define VFS_FILE_CHUNK          32U
 
 /* The greatest length of a filesystem type's name, excluding its terminator. */
 #define VFS_TYPE_NAME_MAXIMUM 15U
