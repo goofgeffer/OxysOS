@@ -352,8 +352,8 @@ cannot be sorted or matched by a pattern.
 
 `OXYS_VERSION_STRING` in
 [`../../kernel/include/oxys/kernel.h`](../../kernel/include/oxys/kernel.h) holds
-the **ordinal form** of the release the image belongs to — `"1-alpha"` since the
-alpha was cut on 2026-09-16, and so upon every image built after it until the
+the **ordinal form** of the release the image belongs to — `"1-beta"` since the
+beta was cut on 2026-09-24, and so upon every image built after it until the
 next release — and `"unreleased"` where
 it belongs to none. It is what the boot banner prints and what the `version`
 system call copies into a caller's buffer, and both were reporting `0.1.0` — a
@@ -399,6 +399,7 @@ One row per release, newest first.
 
 | Ordinal | Full form | Editions | Date | Tag | Notes |
 | ------- | --------- | -------- | ---- | --- | ----- |
+| `1-beta` | Oxys 1 Beta | — | 2026-09-24 | `v1-beta` | [`RELEASE-1-BETA.md`](RELEASE-1-BETA.md) |
 | `1-alpha` | Oxys 1 Alpha | — | 2026-09-16 | `v1-alpha` | [`RELEASE-1-ALPHA.md`](RELEASE-1-ALPHA.md) |
 
 **It held no row until 2026-09-16**, and the emptiness was the state of the

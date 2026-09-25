@@ -14,7 +14,7 @@ works is its design document; when each change was made is
 | Boot | Multiboot2 through GRUB (BIOS); UEFI in Phase 12 |
 | Complete | Phases 1 to 8; Phase 9 to sub-task 9.7 |
 | Next | Sub-task 9.8, the settings application, which closes Phase 9 |
-| Releases | `Oxys 1 Alpha` at 8.7 (cut); `Oxys 1 Beta` at 9.7 (awaiting the owner's cut); `Oxys 1` at about 11.10 — [`VERSIONING.md`](VERSIONING.md) |
+| Releases | `Oxys 1 Alpha` at 8.7 (cut); `Oxys 1 Beta` at 9.7 (cut); `Oxys 1` at about 11.10 — [`VERSIONING.md`](VERSIONING.md) |
 
 **State** is one of `Planned`, `In progress` or `Implemented`. A sub-task is
 `Implemented` only when the self-test named in **Asserted by** passes under
@@ -144,7 +144,7 @@ self-test runs. A change of state is made in the commit that causes it.
 | 9.4 | Define the system configuration format, its parser, and the `/etc` hierarchy the services and the desktop read at start. | Implemented | `KernelVerifyConfig`, `config-check` |
 | 9.5 | Implement the session: the desktop root, the panel, the launcher, and the ownership of the display that decides who may draw upon it. | Implemented | `KernelVerifyWindows`, `window-check` |
 | 9.6 | Implement a terminal emulator window hosting the Phase 8 shell. | Implemented | `KernelVerifyTerm`, `poll-check` |
-| 9.7 | Implement the utilities the desktop is not usable without: a file manager, a text viewer and a clock. `Oxys 1 Beta` is fixed here. | Implemented | `KernelVerifyRtc`, `KernelVerifyTime`, `signal-check` |
+| 9.7 | Implement the utilities the desktop is not usable without: a file manager, a text viewer and a clock. `Oxys 1 Beta` was cut here: [`RELEASE-1-BETA.md`](RELEASE-1-BETA.md). | Implemented | `KernelVerifyRtc`, `KernelVerifyTime`, `signal-check` |
 | 9.8 | Implement the settings application, by which the configuration of 9.4 is edited rather than hand-written. | Planned | — |
 
 ## Phase 10 — Cryptography

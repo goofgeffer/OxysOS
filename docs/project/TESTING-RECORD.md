@@ -15,6 +15,7 @@ that was cleared that day and renumbered from 1; the date identifies the image.
 
 | Date | Where | What | Result |
 | ---- | ----- | ---- | ------ |
+| 2026-09-24 | QEMU q35, VirtualBox and Bochs | The `Oxys 1 Beta` image: `make verify`, `make clang-check`, and a boot to the desktop in each | Passed; 78 assertions, none failing; the banner and `version` report `1-beta` in all three |
 | 2026-09-24 | QEMU q35, VirtualBox and Bochs | The spacing of the pinned icons | Passed; under QEMU each of the three gaps measured 20 pixels; every self-test passed on all three |
 | 2026-09-24 | QEMU q35, VirtualBox and Bochs | The bar at the foot, the pinned programs, the clock's box, and a full window between them | Passed; under QEMU the Terminal pin started a terminal and a full window stood between the box and the bar; VirtualBox at 640 by 480 drew the layout; every self-test passed on all three |
 | 2026-09-24 | QEMU q35 with a persistent `/etc` naming a stale background; VirtualBox and Bochs | The background fallback | Passed; the rose drawn with `default background` on the panel and the line to mend on the serial line; every self-test passed on all three |

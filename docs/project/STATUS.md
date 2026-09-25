@@ -9,8 +9,8 @@ subsystem works is its design document.
 | | |
 | - | - |
 | Phases complete | 1 to 8; Phase 9 to sub-task 9.7 |
-| Latest release | `Oxys 1 Alpha`, 2026-09-16 — [`RELEASE-1-ALPHA.md`](RELEASE-1-ALPHA.md) |
-| Next release | `Oxys 1 Beta`, fixed at sub-task 9.7 and awaiting the owner's cut — [`VERSIONING.md`](VERSIONING.md) |
+| Latest release | `Oxys 1 Beta`, 2026-09-24 — [`RELEASE-1-BETA.md`](RELEASE-1-BETA.md) |
+| Next release | `Oxys 1`, at about sub-task 11.10 — [`VERSIONING.md`](VERSIONING.md) |
 | Self-test assertions | 78 |
 
 The kernel asserts its own properties at boot, and `make verify` fails if any

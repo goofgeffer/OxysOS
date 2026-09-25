@@ -18,6 +18,7 @@ and [`../storage/`](../storage/README.md). Where each kind of fact belongs is
 | [`TESTING-RECORD.md`](TESTING-RECORD.md) | Which tests were run, where, with what result: one line per run. |
 | [`BUILDS.md`](BUILDS.md) | Which image was that: the build register, generated from [`builds.tsv`](builds.tsv). |
 | [`VERSIONING.md`](VERSIONING.md) | What a release is called, and which releases are planned. |
+| [`RELEASE-1-BETA.md`](RELEASE-1-BETA.md) | The release notes of `Oxys 1 Beta`. Frozen when cut. |
 | [`RELEASE-1-ALPHA.md`](RELEASE-1-ALPHA.md) | The release notes of `Oxys 1 Alpha`. Frozen when cut. |
 | [`TOOLCHAIN.md`](TOOLCHAIN.md) | How the cross-toolchain is built, and how the build and the CI use it. |
 | [`CODING-STANDARDS.md`](CODING-STANDARDS.md) | How source is written: style, names, headers, diagnostics, extensions. |
