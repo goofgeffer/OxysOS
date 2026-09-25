@@ -255,3 +255,97 @@ runs ([`PROCESS.md`](PROCESS.md)).
    level 3 (two MSR writes each), because a switch cannot know how the kernel was
    entered ([`PROCESS.md`](PROCESS.md)).
 6. The `SWAPGS` window against NMI ([`CONCURRENCY.md`](CONCURRENCY.md)).
+
+## Appendix A. Reference: the calls
+
+Every call by number, with the C library's wrapper from
+[`../../libc/include/syscall.h`](../../libc/include/syscall.h). The numbers are
+`SYSCALL_*` of [`../../kernel/abi/oxys/syscall_abi.h`](../../kernel/abi/oxys/syscall_abi.h),
+which is authoritative where the two differ. Every wrapper returns the call's
+result, or −1 with `errno` set (Appendix B). What each call does is in the
+document Section 6 names for it.
+
+| No. | Call | Wrapper |
+| --: | ---- | ------- |
+| 0 | `write` | `int64_t OxysWrite(int descriptor, const void *buffer, size_t length)` |
+| 1 | `ticks` | `int64_t OxysTicks(void)` |
+| 2 | `version` | `int64_t OxysVersion(char *buffer, size_t capacity)` |
+| 3 | `fork` | `int64_t OxysFork(void)` |
+| 4 | `execve` | `int64_t OxysExecve(const char *path, char *const argument_vector[], char *const environment_vector[])` |
+| 5 | `exit` | `_Noreturn void OxysExit(int64_t status)` |
+| 6 | `wait` | `int64_t OxysWait(int64_t *status)` |
+| 7 | `brk` | `int64_t OxysBrk(void *address)` |
+| 8 | `open` | `int64_t OxysOpen(const char *path, uint64_t flags, uint16_t permissions)` |
+| 9 | `close` | `int64_t OxysClose(int descriptor)` |
+| 10 | `read` | `int64_t OxysRead(int descriptor, void *buffer, size_t length)` |
+| 11 | `readdir` | `int64_t OxysReadDirectory(int descriptor, SyscallDirectoryEntry *entry)` |
+| 12 | `mkdir` | `int64_t OxysMakeDirectory(const char *path, uint16_t permissions)` |
+| 13 | `unlink` | `int64_t OxysUnlink(const char *path)` |
+| 14 | `chdir` | `int64_t OxysChangeDirectory(const char *path)` |
+| 15 | `getcwd` | `int64_t OxysGetWorkingDirectory(char *buffer, size_t capacity)` |
+| 16 | `dup2` | `int64_t OxysDuplicate(int from, int to)` |
+| 17 | `rmdir` | `int64_t OxysRemoveDirectory(const char *path)` |
+| 18 | `pipe` | `int64_t OxysPipe(int descriptors[2])` |
+| 19 | `waitpid` | `int64_t OxysWaitFor(int64_t pid, int64_t *status, uint64_t options)` |
+| 20 | `kill` | `int64_t OxysKill(int64_t pid, int signal)` |
+| 21 | `sigaction` | `int64_t OxysSignalAction(int signal, uint64_t disposition, uint64_t restorer)` |
+| 22 | `sigreturn` | None: entered by `OxysSignalRestorer`, which a handler returns into |
+| 23 | `getpid` | `int64_t OxysGetProcessId(void)` |
+| 24 | `getpgid` | `int64_t OxysGetProcessGroup(int64_t pid)` |
+| 25 | `setpgid` | `int64_t OxysSetProcessGroup(int64_t pid, int64_t group)` |
+| 26 | `tcgroup` | `int64_t OxysTerminalGroup(int64_t group)` |
+| 27 | `link` | `int64_t OxysLink(const char *existing, const char *name)` |
+| 28 | `procinfo` | `int64_t OxysProcessInformation(uint64_t index, SyscallProcessInformation *information)` |
+| 29 | `window_create` | `int64_t OxysWindowCreate(const SyscallWindowRectangle *geometry, const char *title, uint64_t layer)` |
+| 30 | `window_destroy` | `int64_t OxysWindowDestroy(int64_t window)` |
+| 31 | `window_move` | `int64_t OxysWindowMove(int64_t window, int32_t x, int32_t y)` |
+| 32 | `window_blit` | `int64_t OxysWindowBlit(int64_t window, const SyscallWindowRectangle *area, const uint32_t *pixels)` |
+| 33 | `window_event` | `int64_t OxysWindowEvent(int64_t window, SyscallWindowEvent *event, uint64_t flags)` |
+| 34 | `window_screen` | `int64_t OxysWindowScreen(SyscallWindowRectangle *geometry)` |
+| 35 | `power` | `int64_t OxysPower(uint64_t action)` |
+| 36 | `pause` | `int64_t OxysPause(void)` |
+| 37 | `window_session` | `int64_t OxysWindowSession(void)` |
+| 38 | `window_text` | `int64_t OxysWindowText(int64_t window, const SyscallWindowText *placement, const char *text)` |
+| 39 | `poll` | `int64_t OxysPoll(SyscallPollEntry *entries, uint64_t count, uint64_t options)` |
+| 40 | `window_state` | `int64_t OxysWindowState(int64_t window, uint64_t action)` |
+| 41 | `window_list` | `int64_t OxysWindowList(SyscallWindowEntry *entries, uint64_t capacity)` |
+| 42 | `time` | `int64_t OxysTime(void)` |
+| 43 | `alarm` | `int64_t OxysAlarm(uint64_t milliseconds)` |
+
+## Appendix B. Reference: the error codes
+
+A call fails by returning the negative of a code; the C library's wrappers
+return −1 and set `errno` to the positive value
+([`../../libc/include/errno.h`](../../libc/include/errno.h)). The codes are this
+kernel's own and are not Linux's numbers.
+
+| Kernel result | `errno` | Name | Meaning |
+| ------------: | ------: | ---- | ------- |
+| −1 | 1 | `ENOSYS` | No such call. |
+| −2 | 2 | `EFAULT` | An address the caller may not use. |
+| −3 | 3 | `EINVAL` | An argument that cannot be right. |
+| −4 | 4 | `EBADF` | No such descriptor. |
+| −5 | 5 | `ECHILD` | The caller has no children to wait for. |
+| −6 | 6 | `ENOENT` | No such file, or one that will not load. |
+| −7 | 7 | `ENOMEM` | A frame, a table or a slot could not be had. |
+| −8 | 8 | `EEXIST` | A file of that name already. |
+| −9 | 9 | `ENOTDIR` | A component of the path is not a directory. |
+| −10 | 10 | `EISDIR` | A directory where a file was required. |
+| −11 | 11 | `ENOTEMPTY` | A directory holding more than `.` and `..`. |
+| −12 | 12 | `EROFS` | The mount, or the volume, may not be written. |
+| −13 | 13 | `ENAMETOOLONG` | A path or a component beyond the bounds. |
+| −14 | 14 | `ELOOP` | Symbolic links followed beyond the depth bound. |
+| −15 | 15 | `ENOSPC` | The volume has no room. |
+| −16 | 16 | `EMFILE` | Every descriptor is in use. |
+| −17 | 17 | `EBUSY` | Something held that the operation would destroy. |
+| −18 | 18 | `EXDEV` | An operation confined to one volume was not. |
+| −19 | 19 | `ENOTSUP` | The filesystem does not offer the operation. |
+| −20 | 20 | `EIO` | The volume or the device beneath it failed. |
+| −21 | 21 | `EPIPE` | The pipe is open for reading by nobody. |
+| −22 | 22 | `EINTR` | A signal arrived while the call slept. |
+| −23 | 23 | `ESRCH` | No such process or process group. |
+| −24 | 24 | `EPERM` | The caller is not permitted this. |
+| −25 | 25 | `ENOTTY` | The caller's standard input is not the terminal. |
+| — | 32 | `EDOM` | Required by the C standard; nothing sets it yet. |
+| — | 33 | `EILSEQ` | Required by the C standard; nothing sets it yet. |
+| — | 34 | `ERANGE` | Required by the C standard; nothing sets it yet. |

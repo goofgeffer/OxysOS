@@ -693,3 +693,45 @@ when it does. That is not a duplicate of the report: the report goes to every
 path and remains the record; the screen is a summary for a person standing at a
 machine that has stopped, who may have no other channel at all.
 `docs/design/FAULTSCREEN.md`.
+
+## Appendix A. Reference: capacity limits
+
+The bounds a person or a program can reach, with the constant that sets each.
+A **chunk** row is not a limit: the table grows by a chunk of that size at a time,
+up to 256 chunks, and memory is the practical limit
+([`MEMORY-LAYOUT.md`](MEMORY-LAYOUT.md), Section 16). A **fixed** row is a
+static bound; what happens at it, whether a refusal, a cut or a drop, is in the
+constant's header. The constants are the authority; this table is a summary of
+them as of 2026-09-25.
+
+| What | Kind | Value | Constant, header |
+| ---- | ---- | ----: | ---------------- |
+| Processes | chunk | 64 | `PROCESS_CHUNK`, `proc/process.h` |
+| Threads | chunk | 128 | `THREAD_CHUNK`, `proc/process.h` |
+| Filesystem nodes held | chunk | 64 | `VFS_NODE_CHUNK`, `fs/vfs.h` |
+| Open files, machine-wide | chunk | 32 | `VFS_FILE_CHUNK`, `fs/vfs.h` |
+| Pipes | chunk | 8 | `VFS_PIPE_CHUNK`, `fs/pipe.h` |
+| Threads in one process | fixed | 8 | `PROCESS_THREAD_MAXIMUM`, `proc/process.h` |
+| Descriptors in one process | fixed | 16 | `PROCESS_DESCRIPTOR_CAPACITY`, `proc/process.h` |
+| Filesystem types | fixed | 4 | `VFS_FILESYSTEM_CAPACITY`, `fs/vfs.h` |
+| Mounts | fixed | 4 | `VFS_MOUNT_CAPACITY`, `fs/vfs.h` |
+| Blocks in the buffer cache | fixed | 64 | `BUFFER_CAPACITY`, `block/buffer.h` |
+| Block devices | fixed | 8 | `BLOCK_DEVICE_CAPACITY`, `block/block.h` |
+| Windows | fixed | 16 | `WINDOW_CAPACITY`, `gfx/window.h` |
+| Events queued per window | fixed | 32 | `WINDOW_EVENT_CAPACITY`, `gfx/window.h` |
+| Window title, characters | fixed | 31 | `WINDOW_TITLE_CAPACITY`, `gfx/window.h` |
+| Compositor layers | fixed | 4 | `COMPOSITOR_LAYER_CAPACITY`, `gfx/compositor.h` |
+| Processors | fixed | 64 | `PER_CPU_MAXIMUM`, `arch/cpu/percpu.h` |
+| Terminal input queue, bytes | fixed | 1024 | `TERMINAL_QUEUE_CAPACITY`, `terminal/terminal.h` |
+| Keyboard buffer, keys | fixed | 128 | `KEYBOARD_BUFFER_CAPACITY`, `dev/keyboard.h` |
+| PCI functions | fixed | 64 | `PCI_FUNCTION_CAPACITY`, `drivers/pci/pci.c` |
+| Loadable segments in a program | fixed | 16 | `ELF_SEGMENT_MAXIMUM`, `exec/elf.h` |
+| Path, bytes | fixed | 1023 | `VFS_PATH_MAXIMUM`, `fs/vfs.h` |
+| Path through a system call, bytes | fixed | 255 | `SYSCALL_PATH_MAXIMUM`, `abi/oxys/syscall_abi.h` |
+| Name of one component, bytes | fixed | 255 | `VFS_NAME_MAXIMUM`, `fs/vfs.h` |
+| Symbolic links followed in one path | fixed | 8 | `VFS_SYMLINK_DEPTH_MAXIMUM`, `fs/vfs.h` |
+| Arguments to `execve`, and environment strings, each | fixed | 16 | `SYSCALL_ARGUMENT_COUNT_MAXIMUM`, `abi/oxys/syscall_abi.h` |
+| Bytes of both vectors to `execve` | fixed | 2048 | `SYSCALL_ARGUMENT_BYTES_MAXIMUM`, `abi/oxys/syscall_abi.h` |
+| Entries in one `poll` | fixed | 8 | `SYSCALL_POLL_MAXIMUM`, `abi/oxys/syscall_abi.h` |
+
+Headers are under `kernel/include/oxys/` unless the path says otherwise.
