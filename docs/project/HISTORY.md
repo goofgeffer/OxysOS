@@ -11,6 +11,7 @@ row.
 
 | Date | Phase | Change | Commit |
 | ---- | ----- | ------ | ------ |
+| 2026-09-25 | Phase 9 | The close control drawn as a cross, the size of the minimise and full-screen glyphs, where it was a disc | `pending` |
 | 2026-09-25 | All | Reference tables: every system call with its wrapper and every error code in `PRIVILEGE.md`, the capacity limits in `ARCHITECTURE.md`; no prose changed | `33a4d6c` |
 | 2026-09-25 | Phase 9 | `KernelMain` reduced to a driver of ten boot phases, one file each in `kernel/init/`, moved without reordering; `kernel.c` from 2,638 lines to 798 | `06bf6b2` |
 | 2026-09-25 | Phase 9 | The process, thread, filesystem node, open-file and pipe tables grow from the heap in chunks that never move, the first static; `procinfo` is walked until `EINVAL` and `SYSCALL_PROCESS_CAPACITY` is withdrawn | `ce354fa` |

@@ -6,7 +6,8 @@
  *          in memory — the stack, the focus, the routing of keys and movements,
  *          the binding of the pointer by a held button, the drag, the close
  *          control, the confinement of a move, the bounds of the table and of a
- *          queue — and the disc primitive the frame is drawn with. Until
+ *          queue — and the disc primitive the close control was drawn with
+ *          until 2026-09-25, when it became a cross. Until
  *          sub-task 9.2 it also held the demonstration the default boot entry
  *          presents; that is a program now, userland/windows/main.c, run at
  *          privilege level 3 through the client protocol.

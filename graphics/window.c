@@ -61,9 +61,8 @@
 #include <oxys/mm/heap.h>
 #include <oxys/kernel.h>
 
-/* The close control: a disc of this radius, centred this far in from the
+/* The close control: a cross of WINDOW_GLYPH_HALF, centred this far in from the
  * frame's right edge, and the square about it that counts as pressing it. */
-#define WINDOW_CLOSE_RADIUS 5
 #define WINDOW_CLOSE_INSET  14
 #define WINDOW_CLOSE_REACH  12
 
@@ -699,6 +698,26 @@ static void WindowDrawControls(const Window *window, uint32_t ink, uint32_t pape
     (void)GraphicsPopClip(WindowScreen);
 }
 
+/*
+ * The close control's glyph: a cross, since 2026-09-25 at the project owner's
+ * request, where it had been a disc. It is the size of the other two glyphs,
+ * and each stroke is two pixels wide, a one-pixel diagonal being fainter than
+ * the bar and the outline beside it.
+ */
+static void WindowDrawClose(GraphicsRectangle reach, uint32_t ink)
+{
+    const int32_t x = reach.x + WINDOW_CLOSE_REACH;
+    const int32_t y = reach.y + WINDOW_CLOSE_REACH;
+    const int32_t half = WINDOW_GLYPH_HALF;
+
+    /* Each stroke is an exact diagonal and its neighbour one pixel within the
+     * glyph's square, so the cross stays inside the square the other two fill. */
+    GraphicsDrawLine(WindowScreen, x - half, y - half, x + half, y + half, ink);
+    GraphicsDrawLine(WindowScreen, x - half + 1, y - half, x + half, y + half - 1, ink);
+    GraphicsDrawLine(WindowScreen, x + half, y - half, x - half, y + half, ink);
+    GraphicsDrawLine(WindowScreen, x + half - 1, y - half, x - half, y + half - 1, ink);
+}
+
 static void WindowDrawFrame(size_t identifier)
 {
     const Window *const window = &WindowTable[identifier];
@@ -724,8 +743,7 @@ static void WindowDrawFrame(size_t identifier)
     GraphicsFillRectangle(WindowScreen, band, band_colour);
     GraphicsDrawRectangle(WindowScreen, frame, WindowColours.border);
     WindowDrawTitle(window, band, ink, band_colour);
-    GraphicsFillCircle(WindowScreen, reach.x + WINDOW_CLOSE_REACH, reach.y + WINDOW_CLOSE_REACH,
-                       WINDOW_CLOSE_RADIUS, ink);
+    WindowDrawClose(reach, ink);
     WindowDrawControls(window, ink, band_colour);
     (void)GraphicsBlit(WindowScreen, content.x, content.y, &window->surface,
                        GraphicsSurfaceBounds(&window->surface));

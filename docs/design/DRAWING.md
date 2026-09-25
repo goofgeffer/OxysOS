@@ -66,7 +66,8 @@ two comparisons per step.
 
 ## 4. The disc
 
-`GraphicsFillCircle`, for a window's close control ([`WINDOWS.md`](WINDOWS.md)),
+`GraphicsFillCircle`, written for a window's close control, which has been a cross
+since 2026-09-25 ([`WINDOWS.md`](WINDOWS.md)),
 is a stack of spans, one per row, each a rectangle fill, so the clip is applied by
 the fill and no pixel is tested. Each half-width comes from Bresenham's 1977 circle
 algorithm, walking the arc from the top to the diagonal with an integer measure of

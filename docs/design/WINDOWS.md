@@ -72,8 +72,9 @@ the window follows the pointer, its owner told nothing.
 ## 3. Appearance
 
 **Flat.** A band, a one-pixel border, a title, controls; depth is the stacking
-order only, with no bevel or shadow. **The close control is a disc** 10 pixels
-across (the one curve in the frame, [`DRAWING.md`](DRAWING.md)); its reach is a
+order only, with no bevel or shadow. **The close control is a cross** 11 pixels
+square, two diagonals two pixels wide, the size of the minimise and full-screen
+glyphs beside it; it was a disc until 2026-09-25. Its reach is a
 25-pixel square. **The title** is the system face at twice its size, 16 pixels in a
 24-pixel band.
 
