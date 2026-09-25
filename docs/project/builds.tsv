@@ -52,3 +52,4 @@ number	date	commit	dirty	compiler	cc_version	kernel	iso	result	assertions	enviro
 32	2026-09-25T01:53Z	141ac8b	no	gcc	13.2.0	3719144	13043712	passed	78		-	Pinned icons evenly spaced
 33	2026-09-25T02:14Z	f224263	no	gcc	13.2.0	3719144	13043712	passed	78	QEMU;VirtualBox;Bochs	2fc78818b9191f6bda2cc3ab535cc093455d038d7b6aa056f4e3eab3355442e6	Oxys 1 Beta: the release image, cut after sub-task 9.7; booted to the desktop under QEMU, VirtualBox and Bochs
 34	2026-09-25T21:03Z	ce354fa	no	gcc	13.2.0	3768960	13094912	passed	79	QEMU q35, VirtualBox, Bochs	-	Growing process, thread, node, open-file and pipe tables
+35	2026-09-25T21:12Z	06bf6b2	no	gcc	13.2.0	3783712	13109248	passed	79	QEMU q35, VirtualBox, Bochs	-	The boot divided into phases in kernel/init/

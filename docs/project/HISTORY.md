@@ -11,7 +11,7 @@ row.
 
 | Date | Phase | Change | Commit |
 | ---- | ----- | ------ | ------ |
-| 2026-09-25 | Phase 9 | `KernelMain` reduced to a driver of ten boot phases, one file each in `kernel/init/`, moved without reordering; `kernel.c` from 2,638 lines to 798 | `pending` |
+| 2026-09-25 | Phase 9 | `KernelMain` reduced to a driver of ten boot phases, one file each in `kernel/init/`, moved without reordering; `kernel.c` from 2,638 lines to 798 | `06bf6b2` |
 | 2026-09-25 | Phase 9 | The process, thread, filesystem node, open-file and pipe tables grow from the heap in chunks that never move, the first static; `procinfo` is walked until `EINVAL` and `SYSCALL_PROCESS_CAPACITY` is withdrawn | `ce354fa` |
 | 2026-09-24 | Phase 9 | `Oxys 1 Beta` cut: the version string `1-beta`, the release notes, the release record | `f224263` |
 | 2026-09-24 | Phase 9 | The pinned icons evenly spaced: one visible gap after the launcher's name, between icons and before the window list | `141ac8b` |

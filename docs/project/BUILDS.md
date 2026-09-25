@@ -352,20 +352,19 @@ regenerates it and fails if what is here differs.*
 
 | | |
 | --- | --- |
-| Builds recorded | 34 |
-| Verified | 27 passed, 7 not |
+| Builds recorded | 35 |
+| Verified | 28 passed, 7 not |
 | Compilers | gcc |
 | Environments | Bochs, QEMU, QEMU q35,  VirtualBox,  Bochs, VirtualBox |
 | First | 2026-09-17T01:34Z |
-| Latest | 2026-09-25T21:03Z |
+| Latest | 2026-09-25T21:12Z |
 
 ## The last 20 builds
 
-The remaining 14 are in [`builds.tsv`](builds.tsv), which is the record.
+The remaining 15 are in [`builds.tsv`](builds.tsv), which is the record.
 
 | # | Date (UTC) | Commit | Compiler | Kernel | ISO | Result | Environments | Note |
 | - | ---------- | ------ | -------- | ------ | --- | ------ | ------------ | ---- |
-| 15 | 2026-09-23T21:36Z | `4cab1ea` | gcc 13.2.0 | 3677712 | 10905600 | passed (77 assertions) |  | Sub-task 9.7: the file manager, the text viewer and the clock |
 | 16 | 2026-09-23T21:36Z | `4cab1ea` *(modified)* | gcc 13.2.0 | 3677456 | 10905600 | failed |  | Negative test of 9.7: the 12-hour reduction removed, gmtime's weekday from Wednesday, fork copying the alarm; all caught, reverted |
 | 17 | 2026-09-24T01:09Z | `ccdd12e` | gcc 13.2.0 | 3706552 | 10934272 | passed (78 assertions) |  | The persistent /etc: a labelled volume mounted over the ramdisk's |
 | 18 | 2026-09-24T01:10Z | `ccdd12e` *(modified)* | gcc 13.2.0 | 3706448 | 10934272 | failed |  | Negative test of the persistent /etc: label prefix accepted, seeding truncating, no write-back on close; all caught, reverted |
@@ -385,5 +384,6 @@ The remaining 14 are in [`builds.tsv`](builds.tsv), which is the record.
 | 32 | 2026-09-25T01:53Z | `141ac8b` | gcc 13.2.0 | 3719144 | 13043712 | passed (78 assertions) |  | Pinned icons evenly spaced |
 | 33 | 2026-09-25T02:14Z | `f224263` | gcc 13.2.0 | 3719144 | 13043712 | passed (78 assertions) | QEMU;VirtualBox;Bochs | Oxys 1 Beta: the release image, cut after sub-task 9.7; booted to the desktop under QEMU, VirtualBox and Bochs |
 | 34 | 2026-09-25T21:03Z | `ce354fa` | gcc 13.2.0 | 3768960 | 13094912 | passed (79 assertions) | QEMU q35, VirtualBox, Bochs | Growing process, thread, node, open-file and pipe tables |
+| 35 | 2026-09-25T21:12Z | `06bf6b2` | gcc 13.2.0 | 3783712 | 13109248 | passed (79 assertions) | QEMU q35, VirtualBox, Bochs | The boot divided into phases in kernel/init/ |
 
 <!-- END GENERATED -->
