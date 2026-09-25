@@ -31,6 +31,7 @@ phases build them, which is the order to read them in.
 | [`SESSION.md`](SESSION.md) | The session: layers, root, panel, launcher, icons, background. | 9.5 |
 | [`TERMINAL.md`](TERMINAL.md) | The terminal emulator, `poll`, and the shell without a terminal. | 9.6 |
 | [`UTILITIES.md`](UTILITIES.md) | The file manager, the text viewer and the clock. | 9.7 |
+| [`SETTINGS.md`](SETTINGS.md) | The settings application, the editing of a configuration file in place, and the notifications. | 9.8 |
 
 `LIBC.md` and `SHELL.md` describe userland, not the kernel; they are here because
 each is the other side of an interface this group documents.

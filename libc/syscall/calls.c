@@ -16,7 +16,7 @@
  *          OxysWindowDestroy, OxysWindowMove, OxysWindowBlit, OxysWindowEvent,
  *          OxysWindowScreen, OxysPower, OxysPause, OxysWindowSession, OxysWindowText,
  *          OxysWindowState, OxysWindowList,
- *          OxysPoll,
+ *          OxysPoll, OxysNotify, OxysNotification,
  *          OxysExit, OxysWait, OxysBrk, OxysSbrk.
  * References:
  *   - kernel/abi/oxys/syscall_abi.h: the call numbers and what each call means.
@@ -462,4 +462,16 @@ int64_t OxysTime(void)
 int64_t OxysAlarm(uint64_t milliseconds)
 {
     return OxysSyscallResult(OxysSyscallInvoke1(SYSCALL_ALARM, milliseconds));
+}
+
+int64_t OxysNotify(uint64_t kind, uint64_t flags, const char *text)
+{
+    return OxysSyscallResult(OxysSyscallInvoke3(SYSCALL_NOTIFY, kind, flags,
+                                                (uint64_t)(uintptr_t)text));
+}
+
+int64_t OxysNotification(SyscallNotification *notification)
+{
+    return OxysSyscallResult(OxysSyscallInvoke1(SYSCALL_NOTIFICATION,
+                                                (uint64_t)(uintptr_t)notification));
 }

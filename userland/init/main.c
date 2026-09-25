@@ -156,6 +156,14 @@ static bool InitReadServices(void)
                       OxysConfigFaultReason(&InitConfig, index));
     }
 
+    /* Said once upon the desktop as well, since the standard error is the
+     * serial line and a person at the screen never reads it. */
+    if (OxysConfigFaultCount(&InitConfig) > 0U)
+    {
+        (void)OxysNotify(SYSCALL_NOTIFY_WARNING, 0U,
+                         "system.conf has lines that could not be read.");
+    }
+
     if (!read && (blocks == 0U))
     {
         (void)fprintf(stderr, "init: %s could not be read; starting %s alone.\n",
@@ -212,6 +220,17 @@ static int64_t InitSpawn(const char *path)
     return child;
 }
 
+/* Says upon the desktop what the standard error has just said: a service by
+ * name and what became of it, as a notification of 2026-09-25. It is posted
+ * whether or not a session is yet there to show it; the kernel keeps it. */
+static void InitSay(uint64_t kind, const char *name, const char *what)
+{
+    char text[SYSCALL_NOTIFICATION_TEXT_MAXIMUM + 1U];
+
+    (void)snprintf(text, sizeof text, "%s%s", name, what);
+    (void)OxysNotify(kind, 0U, text);
+}
+
 /* Starts one service, unless it needs a display there is not or it has been
  * given up on. */
 static void InitStartService(InitService *service, bool display)
@@ -226,6 +245,7 @@ static void InitStartService(InitService *service, bool display)
     if (service->pid < 0)
     {
         (void)fprintf(stderr, "init: %s could not be started.\n", service->name);
+        InitSay(SYSCALL_NOTIFY_ERROR, service->name, " could not be started.");
     }
 }
 
@@ -262,6 +282,7 @@ static void InitSupervise(InitService *service, int64_t status, bool display)
                       "init: %s ended %d times in a row, last with status 0x%lx; "
                       "it is not started again.\n",
                       service->name, service->failures, (unsigned long)status);
+        InitSay(SYSCALL_NOTIFY_ERROR, service->name, " keeps ending and was stopped.");
 
         return;
     }

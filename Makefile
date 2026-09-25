@@ -158,6 +158,7 @@ LIBC_SOURCES := libc/string/copying.c \
                 libc/line/line.c \
                 libc/line/system.c \
                 libc/config/config.c \
+                libc/config/edit.c \
                 libc/config/system.c \
                 libc/icon/icon.c \
                 libc/icon/system.c \
@@ -562,7 +563,7 @@ $(USER_CRT0): libc/crt/crt0.asm
 # Within the generated rule, the archive is named *after* the program's objects,
 # which is not a style choice: a linker resolves an archive's members against the
 # references it has already seen, so an archive named first contributes nothing.
-USER_PROGRAMS := date view files poll-check terminal startup-check arg-check exec-check file-check line-check dir-check env-check signal-check window-check init-check config-check echo cat ls mkdir rm touch cp rmdir wc micro head tail grep sort mv ps sh windows init shutdown session
+USER_PROGRAMS := date notify settings view files poll-check terminal startup-check arg-check exec-check file-check line-check dir-check env-check signal-check window-check init-check config-check echo cat ls mkdir rm touch cp rmdir wc micro head tail grep sort mv ps sh windows init shutdown session
 
 USER_PROGRAM_SOURCES := $(foreach program,$(USER_PROGRAMS),$(wildcard userland/$(program)/*.c))
 USER_PROGRAM_IMAGES  := $(foreach program,$(USER_PROGRAMS),$(USER_DIR)/$(program).elf)
@@ -730,7 +731,7 @@ INITRD_UUID    := 0c5f7a10-7b41-4d2e-9a3c-6f0c5f7a1000
 # check program is a test's apparatus: it is embedded in the kernel image, where
 # the self-test that runs it is, and a system that shipped it in /bin would be
 # shipping its own test harness to somebody who asked for a shell.
-INITRD_UTILITIES := date view files terminal echo cat ls mkdir rm touch cp rmdir wc micro head tail grep sort mv ps sh windows init shutdown session
+INITRD_UTILITIES := date notify settings view files terminal echo cat ls mkdir rm touch cp rmdir wc micro head tail grep sort mv ps sh windows init shutdown session
 INITRD_SOURCES   := $(foreach utility,$(INITRD_UTILITIES),$(USER_DIR)/$(utility).embed.elf)
 
 # The `/etc` hierarchy of sub-task 9.4: the configuration `init` and the desktop

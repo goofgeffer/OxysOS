@@ -470,6 +470,16 @@ int64_t OxysTime(void);
 int64_t OxysAlarm(uint64_t milliseconds);
 
 /*
+ * The notifications of 2026-09-25. OxysNotify posts one — a SYSCALL_NOTIFY_*
+ * kind, which chooses the symbol, and a line of text — for the session to show
+ * for a few seconds at the bottom right of the screen; any program may.
+ * OxysNotification takes the oldest waiting, 1 or 0, and is the session's
+ * alone.
+ */
+int64_t OxysNotify(uint64_t kind, uint64_t flags, const char *text);
+int64_t OxysNotification(SyscallNotification *notification);
+
+/*
  * OxysPoll waits until one of the things named can be read without sleeping and
  * reports how many can, writing each entry's `ready`. SYSCALL_POLL_WINDOWS in
  * place of a descriptor names the caller's window events;

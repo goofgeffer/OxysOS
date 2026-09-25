@@ -43,7 +43,8 @@
  *          SyscallDirectoryEntry, SYSCALL_DESCRIPTOR_INPUT,
  *          SYSCALL_DESCRIPTOR_OUTPUT, SYSCALL_DESCRIPTOR_ERROR,
  *          SYSCALL_DESCRIPTOR_FIRST, SYSCALL_ARGUMENT_COUNT_MAXIMUM,
- *          SYSCALL_ARGUMENT_BYTES_MAXIMUM.
+ *          SYSCALL_ARGUMENT_BYTES_MAXIMUM, SYSCALL_NOTIFY, SYSCALL_NOTIFICATION,
+ *          SYSCALL_NOTIFY_* kinds, SyscallNotification.
  * References:
  *   - Intel 64 and IA-32 Architectures Software Developer's Manual, Volume 2B,
  *     "SYSCALL" and "SYSRET": the instruction places the address of the
@@ -461,7 +462,36 @@
  */
 #define SYSCALL_TIME           42U
 #define SYSCALL_ALARM          43U
-#define SYSCALL_COUNT          44U
+
+/*
+ * The two calls of the notifications of 2026-09-25: a line of text and a
+ * symbol, shown by the session for a few seconds in a small window at the
+ * bottom right of the screen.
+ *
+ *   notify(kind, flags, text)          Posts one notification. Any process may.
+ *                                      `kind` is one of SYSCALL_NOTIFY_*, which
+ *                                      decides the symbol; `text` is at most
+ *                                      SYSCALL_NOTIFICATION_TEXT_MAXIMUM bytes.
+ *                                      SYSCALL_NOTIFY_RECONFIGURE in `flags`
+ *                                      asks the session to read its
+ *                                      configuration again. The kernel keeps
+ *                                      the last SYSCALL_NOTIFICATION_QUEUE of
+ *                                      them, the oldest dropped when a ninth
+ *                                      arrives, so that one posted before the
+ *                                      session starts is shown when it does.
+ *                                      EINVAL for a kind or flag it does not
+ *                                      know or a text too long; EFAULT for an
+ *                                      address that is not the caller's.
+ *   notification(buffer)               Takes the oldest into a
+ *                                      SyscallNotification: 1 where there was
+ *                                      one, 0 where none waits. The session's
+ *                                      alone, EPERM for any other process; a
+ *                                      root is sent SYSCALL_WINDOW_EVENT_NOTIFY
+ *                                      when one is posted.
+ */
+#define SYSCALL_NOTIFY         44U
+#define SYSCALL_NOTIFICATION   45U
+#define SYSCALL_COUNT          46U
 
 /* The layer a window stands in, given to window_create. A root and a panel may
  * be made by the session alone and carry no frame; every other program's
@@ -523,6 +553,7 @@ typedef struct SyscallWindowRectangle
 #define SYSCALL_WINDOW_EVENT_CLOSE          7U /* The close control was pressed; the program decides. */
 #define SYSCALL_WINDOW_EVENT_RESIZE         8U /* The content has a new extent, in x and y; draw it again. */
 #define SYSCALL_WINDOW_EVENT_WINDOWS        9U /* To a root: the list of windows changed. */
+#define SYSCALL_WINDOW_EVENT_NOTIFY        10U /* To a root: a notification waits; take it with notification. */
 
 /* The actions of window_state. */
 #define SYSCALL_WINDOW_STATE_MINIMISE  1U
@@ -596,6 +627,29 @@ typedef struct SyscallPollEntry
 
 /* The flag of window_event: sleep until an event arrives. */
 #define SYSCALL_WINDOW_WAIT UINT64_C(0x1)
+
+/* The kinds of notification, each drawn with its own symbol. */
+#define SYSCALL_NOTIFY_INFORMATION 1U /* An `i`, in blue: something worth knowing. */
+#define SYSCALL_NOTIFY_SUCCESS     2U /* A tick, in green: something asked for was done. */
+#define SYSCALL_NOTIFY_WARNING     3U /* An `!`, in amber: something missing was stood in for. */
+#define SYSCALL_NOTIFY_ERROR       4U /* A cross, in red: something failed. */
+
+/* The flag of notify: the session should read its configuration again. */
+#define SYSCALL_NOTIFY_RECONFIGURE UINT64_C(0x1)
+
+/* The longest text, the terminator not counted, and how many the kernel keeps. */
+#define SYSCALL_NOTIFICATION_TEXT_MAXIMUM 63U
+#define SYSCALL_NOTIFICATION_QUEUE        8U
+
+/* One notification, as notification delivers it. `sender` is the process that
+ * posted it. */
+typedef struct SyscallNotification
+{
+    uint32_t kind;
+    uint32_t flags;
+    uint64_t sender;
+    char text[SYSCALL_NOTIFICATION_TEXT_MAXIMUM + 1U];
+} SyscallNotification;
 
 /* What `procinfo` reports of one process. The state is one of
  * SYSCALL_PROCESS_STATE_*, and the name is what the process was created as —

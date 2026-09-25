@@ -2304,7 +2304,9 @@ static const SyscallEntryDescriptor SyscallTable[SYSCALL_COUNT] = {
     { "window_state", 2U },
     { "window_list", 2U },
     { "time", 0U },
-    { "alarm", 1U }
+    { "alarm", 1U },
+    { "notify", 3U },
+    { "notification", 1U }
 };
 
 bool SyscallNumberIsValid(uint64_t number)
@@ -2556,6 +2558,14 @@ void SyscallDispatch(SyscallFrame *frame)
 
     case SYSCALL_ALARM:
         frame->rax = (uint64_t)ProcessAlarm(PitMillisecondsElapsed(), frame->rdi);
+        break;
+
+    case SYSCALL_NOTIFY:
+        frame->rax = (uint64_t)WindowClientNotify(frame->rdi, frame->rsi, frame->rdx);
+        break;
+
+    case SYSCALL_NOTIFICATION:
+        frame->rax = (uint64_t)WindowClientNotification(frame->rdi);
         break;
 
     default:

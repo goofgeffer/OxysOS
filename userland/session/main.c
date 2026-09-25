@@ -215,6 +215,10 @@ static bool SessionUsingDefaults;
  * and that could not be read. */
 static bool SessionBackgroundIsDefault;
 
+/* The last launcher icon that could not be read, so that it is announced once
+ * and not at every opening of the launcher. */
+static char SessionIconFault[CONFIG_VALUE_MAXIMUM + 1U];
+
 /* The launcher's icon, and whether it could be read. */
 static OxysIcon SessionStartIcon;
 static bool SessionHasStartIcon;
@@ -241,6 +245,18 @@ static void SessionAlarmHandler(int signal)
     (void)signal;
     SessionClockDue = 1;
 }
+
+/*
+ * The one alarm a process has, shared since 2026-09-25 by the clock and the
+ * notifications, each of which has a time remaining. SessionKeepTime is called
+ * at every pass of the loop: it cancels the alarm, which returns what remained
+ * of it, so that what was asked for less what remained is exactly the time
+ * that passed; ages the clock and every notification by that; and asks for the
+ * alarm again at the soonest of them. The interval timer's ticks are not used:
+ * the ABI does not say how long one is, and the alarm counts milliseconds.
+ */
+static int64_t SessionAlarmAsked;
+static int64_t SessionClockRemaining = -1;
 
 /* ------------------------------------------------------------- drawing */
 
@@ -522,9 +538,10 @@ static int32_t SessionNoticeWidth(void)
  * not shown: a box redrawn every second is a blit every second for a digit
  * nobody reads.
  *
- * It asks for SIGALRM at the start of the next minute, from the seconds the
- * kernel counts; so the minute changes within a second of the clock's, the
- * kernel having read the clock at a whole second at start.
+ * It records how long remains until the start of the next minute, from the
+ * seconds the kernel counts, and SessionKeepTime asks for SIGALRM then; so the
+ * minute changes within a second of the clock's, the kernel having read the
+ * clock at a whole second at start.
  */
 static void SessionDrawClock(void)
 {
@@ -545,6 +562,8 @@ static void SessionDrawClock(void)
     SessionFill(SessionClock, 0, height - 1, width, 1, SESSION_GROUND);
     SessionFill(SessionClock, 0, 0, 1, height, SESSION_GROUND);
 
+    SessionClockRemaining = -1;
+
     if ((now < 0) || (gmtime_r(&now, &broken) == NULL))
     {
         return;
@@ -560,10 +579,522 @@ static void SessionDrawClock(void)
     SessionText(SessionClock, (width - (5 * 8 * SessionScale)) / 2, SessionPanelTextTop(), text,
                 SESSION_INK, SESSION_PANEL, SessionScale);
 
-    (void)OxysAlarm((uint64_t)(60 - (now % 60)) * 1000U);
+    SessionClockRemaining = (int64_t)(60 - (now % 60)) * 1000;
 }
-static void SessionDrawTasks(void);
+
+/* ------------------------------------------------------- notifications */
+
+/*
+ * The notifications of 2026-09-25: small windows at the bottom right of the
+ * screen, above the panel, each a symbol at the left — its kind, in a coloured
+ * disc — and a line or three of text at the right, shown for
+ * SESSION_NOTIFICATION_MILLISECONDS and then gone. A press upon one dismisses
+ * it at once.
+ *
+ * They are posted by any program with `notify` and taken from the kernel here,
+ * the session holding the display. The session posts its own the same way —
+ * a background or an icon that could not be read — rather than drawing them
+ * directly, so that there is one path and it is the one every program uses.
+ *
+ * **The newest stands lowest**, nearest the panel, and the others move up; at
+ * most SESSION_NOTIFICATIONS_SHOWN stand at once, the oldest dismissed early
+ * to make room, because a column of them up the screen would cover the windows
+ * a person is working in.
+ */
+#define SESSION_NOTIFICATIONS_SHOWN        3U
+#define SESSION_NOTIFICATION_MILLISECONDS  5000
+#define SESSION_NOTIFICATION_COLUMNS       28U
+#define SESSION_NOTIFICATION_LINES         3U
+#define SESSION_NOTIFICATION_SYMBOL_UNITS  16
+#define SESSION_NOTIFICATION_PAD_UNITS     5
+#define SESSION_NOTIFICATION_LEADING_UNITS 3
+#define SESSION_NOTIFICATION_GAP_UNITS     4
+
+/* The symbol's largest extent in pixels: its units at the largest scale. */
+#define SESSION_SYMBOL_MAXIMUM (SESSION_NOTIFICATION_SYMBOL_UNITS * 4)
+
+/* The discs' colours, one per kind, and the glyph's. */
+#define SESSION_NOTIFY_BLUE  OXYS_RGB(58U, 116U, 196U)
+#define SESSION_NOTIFY_GREEN OXYS_RGB(46U, 150U, 88U)
+#define SESSION_NOTIFY_AMBER OXYS_RGB(214U, 150U, 30U)
+#define SESSION_NOTIFY_RED   OXYS_RGB(200U, 64U, 56U)
+#define SESSION_NOTIFY_GLYPH OXYS_RGB(255U, 255U, 255U)
+
+typedef struct SessionNotification
+{
+    int64_t window;
+    int64_t remaining;
+    int32_t height;
+    size_t lines;
+    char text[SESSION_NOTIFICATION_LINES][SESSION_NOTIFICATION_COLUMNS + 1U];
+    uint32_t kind;
+} SessionNotification;
+
+/* Oldest first; the last is the newest, drawn lowest. */
+static SessionNotification SessionNotifications[SESSION_NOTIFICATIONS_SHOWN];
+static size_t SessionNotificationCount;
+
+static uint32_t SessionSymbolPixels[SESSION_SYMBOL_MAXIMUM * SESSION_SYMBOL_MAXIMUM];
+
+static void SessionCopy(char *destination, size_t capacity, const char *source);
+
+/* Posts a notification of the session's own. It is taken back from the kernel
+ * and drawn like any other, cut to the kernel's bound; a failure to post costs
+ * the notice and nothing else, the standard error having said the same thing. */
+static void SessionSay(uint32_t kind, const char *text)
+{
+    char bounded[SYSCALL_NOTIFICATION_TEXT_MAXIMUM + 1U];
+
+    /* Cut to the bound rather than refused at it: a notice too long to post
+     * would otherwise vanish, which is the one thing a notice must not do. */
+    SessionCopy(bounded, SYSCALL_NOTIFICATION_TEXT_MAXIMUM, text);
+    (void)OxysNotify(kind, 0U, bounded);
+}
+
+/*
+ * Breaks a text into at most SESSION_NOTIFICATION_LINES lines of
+ * SESSION_NOTIFICATION_COLUMNS characters, at spaces where there is one to
+ * break at and in the middle of a word where there is not. What does not fit
+ * ends in "..". Returns the lines used, never fewer than one.
+ */
+static size_t SessionWrap(const char *text, char lines[][SESSION_NOTIFICATION_COLUMNS + 1U])
+{
+    size_t line = 0U;
+    size_t at = 0U;
+    const size_t length = strlen(text);
+
+    while ((at < length) && (line < SESSION_NOTIFICATION_LINES))
+    {
+        size_t take = length - at;
+
+        if (take > SESSION_NOTIFICATION_COLUMNS)
+        {
+            take = SESSION_NOTIFICATION_COLUMNS;
+
+            for (size_t back = SESSION_NOTIFICATION_COLUMNS; back > 0U; --back)
+            {
+                if (text[at + back] == ' ')
+                {
+                    take = back;
+                    break;
+                }
+            }
+        }
+
+        (void)memcpy(lines[line], &text[at], take);
+        lines[line][take] = '\0';
+        at += take;
+
+        while (text[at] == ' ')
+        {
+            ++at;
+        }
+
+        ++line;
+    }
+
+    if (at < length)
+    {
+        char *const last = lines[SESSION_NOTIFICATION_LINES - 1U];
+        size_t end = strlen(last);
+
+        if (end > (SESSION_NOTIFICATION_COLUMNS - 2U))
+        {
+            end = SESSION_NOTIFICATION_COLUMNS - 2U;
+        }
+
+        last[end] = '.';
+        last[end + 1U] = '.';
+        last[end + 2U] = '\0';
+    }
+
+    if (line == 0U)
+    {
+        lines[0][0] = '\0';
+        line = 1U;
+    }
+
+    return line;
+}
+
+/* The square of the distance from a point to a segment, in the symbol's
+ * sub-pixel units; a segment of no length is its one point, which is how a
+ * dot is drawn. */
+static int64_t SessionSegmentDistance(int64_t x, int64_t y, int64_t ax, int64_t ay, int64_t bx,
+                                      int64_t by)
+{
+    const int64_t dx = bx - ax;
+    const int64_t dy = by - ay;
+    const int64_t length = (dx * dx) + (dy * dy);
+    const int64_t along = ((x - ax) * dx) + ((y - ay) * dy);
+    int64_t across;
+
+    if ((length == 0) || (along <= 0))
+    {
+        return ((x - ax) * (x - ax)) + ((y - ay) * (y - ay));
+    }
+
+    if (along >= length)
+    {
+        return ((x - bx) * (x - bx)) + ((y - by) * (y - by));
+    }
+
+    across = ((x - ax) * dy) - ((y - ay) * dx);
+
+    return (across * across) / length;
+}
+
+/* The glyphs, as strokes: each four numbers, the ends of a segment in
+ * thousandths of the symbol's square. A dot is a segment of no length. */
+typedef struct SessionStroke
+{
+    int16_t ax;
+    int16_t ay;
+    int16_t bx;
+    int16_t by;
+} SessionStroke;
+
+static const SessionStroke SessionGlyphInformation[] = {
+    { 500, 300, 500, 300 }, { 500, 450, 500, 720 }
+};
+static const SessionStroke SessionGlyphSuccess[] = {
+    { 290, 520, 440, 670 }, { 440, 670, 715, 345 }
+};
+static const SessionStroke SessionGlyphWarning[] = {
+    { 500, 260, 500, 580 }, { 500, 735, 500, 735 }
+};
+static const SessionStroke SessionGlyphError[] = {
+    { 330, 330, 670, 670 }, { 670, 330, 330, 670 }
+};
+
+/* One channel of `from` moved toward `to` by `share` of four. */
+static uint32_t SessionMix(uint32_t from, uint32_t to, uint32_t share)
+{
+    uint32_t mixed = 0U;
+
+    for (uint32_t shift = 0U; shift < 24U; shift += 8U)
+    {
+        const uint32_t a = (from >> shift) & 0xFFU;
+        const uint32_t b = (to >> shift) & 0xFFU;
+
+        mixed |= (((a * (4U - share)) + (b * share)) / 4U) << shift;
+    }
+
+    return mixed;
+}
+
+/*
+ * Draws a kind's symbol, `extent` pixels square, at (x, y) upon a window: a
+ * disc of the kind's colour and a white glyph within it, each pixel sampled
+ * four times so that the edges are softened into the paper rather than
+ * stepped. The glyph's strokes are an eighth of the square wide, and its dots
+ * a little wider, which is what reads at sixteen pixels as well as at sixty.
+ */
+static void SessionDrawSymbol(int64_t window, int32_t x, int32_t y, int32_t extent, uint32_t kind,
+                              uint32_t paper)
+{
+    const SessionStroke *strokes = SessionGlyphInformation;
+    uint32_t disc = SESSION_NOTIFY_BLUE;
+    SyscallWindowRectangle area;
+    const int64_t side = (int64_t)extent * 4;
+    const int64_t centre = side / 2;
+    const int64_t radius = centre - 1;
+    const int64_t stroke = (side * 62) / 1000;
+    const int64_t dot = (side * 80) / 1000;
+
+    if ((extent <= 0) || (extent > SESSION_SYMBOL_MAXIMUM))
+    {
+        return;
+    }
+
+    if (kind == SYSCALL_NOTIFY_SUCCESS)
+    {
+        strokes = SessionGlyphSuccess;
+        disc = SESSION_NOTIFY_GREEN;
+    }
+    else if (kind == SYSCALL_NOTIFY_WARNING)
+    {
+        strokes = SessionGlyphWarning;
+        disc = SESSION_NOTIFY_AMBER;
+    }
+    else if (kind == SYSCALL_NOTIFY_ERROR)
+    {
+        strokes = SessionGlyphError;
+        disc = SESSION_NOTIFY_RED;
+    }
+
+    for (int32_t row = 0; row < extent; ++row)
+    {
+        for (int32_t column = 0; column < extent; ++column)
+        {
+            uint32_t inside = 0U;
+            uint32_t inked = 0U;
+
+            for (int32_t sample = 0; sample < 4; ++sample)
+            {
+                const int64_t sx = ((int64_t)column * 4) + 1 + ((sample % 2) * 2);
+                const int64_t sy = ((int64_t)row * 4) + 1 + ((sample / 2) * 2);
+                bool ink = false;
+
+                if ((((sx - centre) * (sx - centre)) + ((sy - centre) * (sy - centre))) >
+                    (radius * radius))
+                {
+                    continue;
+                }
+
+                ++inside;
+
+                for (size_t index = 0U; index < 2U; ++index)
+                {
+                    const SessionStroke *const s = &strokes[index];
+                    const bool point = (s->ax == s->bx) && (s->ay == s->by);
+                    const int64_t reach = point ? dot : stroke;
+
+                    if (SessionSegmentDistance(sx, sy, (s->ax * side) / 1000, (s->ay * side) / 1000,
+                                               (s->bx * side) / 1000, (s->by * side) / 1000) <=
+                        (reach * reach))
+                    {
+                        ink = true;
+                    }
+                }
+
+                if (ink)
+                {
+                    ++inked;
+                }
+            }
+
+            SessionSymbolPixels[(row * extent) + column] =
+                SessionMix(SessionMix(paper, disc, inside), SESSION_NOTIFY_GLYPH, inked);
+        }
+    }
+
+    area.x = x;
+    area.y = y;
+    area.width = extent;
+    area.height = extent;
+    (void)OxysWindowBlit(window, &area, SessionSymbolPixels);
+}
+
+/* The width of every notification, and the height of one of so many lines. */
+static int32_t SessionNotificationWidth(void)
+{
+    return ((3 * SESSION_NOTIFICATION_PAD_UNITS) + SESSION_NOTIFICATION_SYMBOL_UNITS +
+            ((int32_t)SESSION_NOTIFICATION_COLUMNS * 8)) *
+           SessionScale;
+}
+
+static int32_t SessionNotificationHeight(size_t lines)
+{
+    const int32_t text = ((int32_t)lines * 8) +
+                         ((int32_t)(lines - 1U) * SESSION_NOTIFICATION_LEADING_UNITS);
+    const int32_t inner = (text > SESSION_NOTIFICATION_SYMBOL_UNITS)
+                              ? text
+                              : SESSION_NOTIFICATION_SYMBOL_UNITS;
+
+    return (inner + (2 * SESSION_NOTIFICATION_PAD_UNITS)) * SessionScale;
+}
+
+static void SessionDrawNotification(const SessionNotification *notice)
+{
+    const int32_t width = SessionNotificationWidth();
+    const int32_t pad = SESSION_NOTIFICATION_PAD_UNITS * SessionScale;
+    const int32_t symbol = SESSION_NOTIFICATION_SYMBOL_UNITS * SessionScale;
+    const int32_t leading = (8 + SESSION_NOTIFICATION_LEADING_UNITS) * SessionScale;
+    const int32_t text_height = ((int32_t)notice->lines * leading) -
+                                (SESSION_NOTIFICATION_LEADING_UNITS * SessionScale);
+    int32_t y = (notice->height - text_height) / 2;
+
+    /* The panel's ground, edged all round in the ground's colour, which is
+     * what separates it from a window or the background behind it. */
+    SessionFill(notice->window, 0, 0, width, notice->height, SESSION_PANEL);
+    SessionFill(notice->window, 0, 0, width, 1, SESSION_GROUND);
+    SessionFill(notice->window, 0, notice->height - 1, width, 1, SESSION_GROUND);
+    SessionFill(notice->window, 0, 0, 1, notice->height, SESSION_GROUND);
+    SessionFill(notice->window, width - 1, 0, 1, notice->height, SESSION_GROUND);
+
+    SessionDrawSymbol(notice->window, pad, (notice->height - symbol) / 2, symbol, notice->kind,
+                      SESSION_PANEL);
+
+    for (size_t line = 0U; line < notice->lines; ++line)
+    {
+        SessionText(notice->window, (2 * pad) + symbol, y, notice->text[line], SESSION_INK,
+                    SESSION_PANEL, SessionScale);
+        y += leading;
+    }
+}
+
+/* Moves every notification to its place: the newest just above the panel at
+ * the right, each older one above the one after it. */
+static void SessionStackNotifications(void)
+{
+    const int32_t gap = SESSION_NOTIFICATION_GAP_UNITS * SessionScale;
+    const int32_t x = SessionScreen.width - SessionNotificationWidth() - gap;
+    int32_t bottom = SessionPanelTop() - gap;
+
+    for (size_t index = SessionNotificationCount; index > 0U; --index)
+    {
+        const SessionNotification *const notice = &SessionNotifications[index - 1U];
+
+        bottom -= notice->height;
+        (void)OxysWindowMove(notice->window, x, bottom);
+        bottom -= gap;
+    }
+}
+
+static void SessionDismissNotification(size_t index)
+{
+    (void)OxysWindowDestroy(SessionNotifications[index].window);
+
+    for (size_t later = index + 1U; later < SessionNotificationCount; ++later)
+    {
+        SessionNotifications[later - 1U] = SessionNotifications[later];
+    }
+
+    --SessionNotificationCount;
+    SessionStackNotifications();
+}
+
 static bool SessionReadConfiguration(bool starting);
+static void SessionDrawPanel(bool open);
+static void SessionKeepTime(void);
+
+/* Shows one notification taken from the kernel, the oldest shown dismissed
+ * where the column is full. */
+static void SessionShowNotification(const SyscallNotification *taken)
+{
+    SessionNotification *notice;
+    SyscallWindowRectangle geometry;
+
+    /* The time that has passed is settled before this one joins, or it would
+     * be aged by time that passed before it existed, and a notification that
+     * arrived near the end of a long wait would vanish at once. */
+    SessionKeepTime();
+
+    if (SessionNotificationCount == SESSION_NOTIFICATIONS_SHOWN)
+    {
+        SessionDismissNotification(0U);
+    }
+
+    notice = &SessionNotifications[SessionNotificationCount];
+    notice->kind = taken->kind;
+    notice->lines = SessionWrap(taken->text, notice->text);
+    notice->height = SessionNotificationHeight(notice->lines);
+    notice->remaining = SESSION_NOTIFICATION_MILLISECONDS;
+
+    /* Made where it will stand, and moved there again with the others: a
+     * window made at the origin and then moved would be drawn there first. */
+    geometry.width = SessionNotificationWidth();
+    geometry.height = notice->height;
+    geometry.x = SessionScreen.width - geometry.width -
+                 (SESSION_NOTIFICATION_GAP_UNITS * SessionScale);
+    geometry.y = SessionPanelTop() - geometry.height -
+                 (SESSION_NOTIFICATION_GAP_UNITS * SessionScale);
+    notice->window = OxysWindowCreate(&geometry, "notification", SYSCALL_WINDOW_LAYER_PANEL);
+
+    if (notice->window < 0)
+    {
+        (void)fprintf(stderr, "session: a notification could not be shown: %s\n", taken->text);
+
+        return;
+    }
+
+    ++SessionNotificationCount;
+    SessionDrawNotification(notice);
+    SessionStackNotifications();
+}
+
+/* Takes every notification waiting in the kernel. One that asks for it has the
+ * configuration read again first, so that what it announces is already true
+ * upon the screen when it appears. */
+static void SessionTakeNotifications(void)
+{
+    SyscallNotification taken;
+
+    while (OxysNotification(&taken) == 1)
+    {
+        taken.text[SYSCALL_NOTIFICATION_TEXT_MAXIMUM] = '\0';
+
+        if ((taken.flags & SYSCALL_NOTIFY_RECONFIGURE) != 0U)
+        {
+            (void)SessionReadConfiguration(false);
+            SessionDrawRoot();
+            SessionDrawPanel(false);
+        }
+
+        SessionShowNotification(&taken);
+    }
+}
+
+/* The notification a press landed upon, dismissed; false where it was none. */
+static bool SessionPressNotification(uint32_t window)
+{
+    for (size_t index = 0U; index < SessionNotificationCount; ++index)
+    {
+        if (SessionNotifications[index].window == (int64_t)window)
+        {
+            SessionDismissNotification(index);
+
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/* See SessionAlarmAsked. */
+static void SessionKeepTime(void)
+{
+    const int64_t left = OxysAlarm(0U);
+    const int64_t elapsed = SessionAlarmAsked - ((left > 0) ? left : 0);
+    int64_t soonest;
+    size_t index = 0U;
+
+    SessionClockDue = 0;
+    SessionAlarmAsked = 0;
+
+    if (SessionClockRemaining >= 0)
+    {
+        SessionClockRemaining -= elapsed;
+
+        if (SessionClockRemaining <= 0)
+        {
+            SessionDrawClock();
+        }
+    }
+
+    while (index < SessionNotificationCount)
+    {
+        SessionNotifications[index].remaining -= elapsed;
+
+        if (SessionNotifications[index].remaining <= 0)
+        {
+            SessionDismissNotification(index);
+        }
+        else
+        {
+            ++index;
+        }
+    }
+
+    soonest = SessionClockRemaining;
+
+    for (index = 0U; index < SessionNotificationCount; ++index)
+    {
+        if ((soonest < 0) || (SessionNotifications[index].remaining < soonest))
+        {
+            soonest = SessionNotifications[index].remaining;
+        }
+    }
+
+    if (soonest > 0)
+    {
+        SessionAlarmAsked = soonest;
+        (void)OxysAlarm((uint64_t)soonest);
+    }
+}
+
+static void SessionDrawTasks(void);
 
 static void SessionDrawIcon(int64_t window, int32_t x, int32_t y, int32_t slot,
                             const OxysIcon *icon, uint32_t paper);
@@ -897,12 +1428,23 @@ static void SessionLaunch(const char *path)
         char *const argument_vector[] = { (char *)path, NULL };
 
         (void)OxysExecve(path, argument_vector, NULL);
+
+        /* Said by the child, which alone knows the start failed: the parent
+         * saw a fork succeed. */
+        {
+            char text[SYSCALL_NOTIFICATION_TEXT_MAXIMUM + 1U];
+
+            (void)snprintf(text, sizeof text, "%s could not be started.", path);
+            (void)OxysNotify(SYSCALL_NOTIFY_ERROR, 0U, text);
+        }
+
         OxysExit(127);
     }
 
     if (child < 0)
     {
         (void)fprintf(stderr, "session: %s could not be started.\n", path);
+        SessionSay(SYSCALL_NOTIFY_ERROR, "A program could not be started.");
     }
 }
 
@@ -1032,11 +1574,15 @@ static bool SessionLoadBackground(void)
                                   "shipped %s is drawn until the `background` line of %s "
                                   "is mended.\n",
                           SessionBackgroundPath, shipped, SESSION_CONFIGURATION);
+            SessionSay(SYSCALL_NOTIFY_WARNING,
+                       "The background could not be read. The shipped one is shown.");
         }
         else
         {
             (void)fprintf(stderr, "session: %s: the background could not be read; the "
                                   "desktop is drawn without it.\n", SessionBackgroundPath);
+            SessionSay(SYSCALL_NOTIFY_WARNING,
+                       "The background could not be read; none is drawn.");
         }
     }
 
@@ -1088,6 +1634,18 @@ static void SessionLoadEntries(void)
             {
                 (void)fprintf(stderr, "session: %s: the icon could not be read; the entry "
                                       "stands without one.\n", icon);
+
+                /* Said once for each icon that fails, and not at every
+                 * opening of the launcher, which reads the entries again. */
+                if (strcmp(icon, SessionIconFault) != 0)
+                {
+                    char text[SYSCALL_NOTIFICATION_TEXT_MAXIMUM + 1U];
+
+                    SessionCopy(SessionIconFault, CONFIG_VALUE_MAXIMUM, icon);
+                    (void)snprintf(text, sizeof text, "The icon of %s could not be read.",
+                                   entry->name);
+                    SessionSay(SYSCALL_NOTIFY_WARNING, text);
+                }
             }
         }
 
@@ -1129,6 +1687,8 @@ static bool SessionReadConfiguration(bool starting)
                                   "used until it is mended. `cp %s %s` restores it.\n",
                           SESSION_CONFIGURATION, SESSION_DEFAULTS, SESSION_DEFAULTS,
                           SESSION_CONFIGURATION);
+            SessionSay(SYSCALL_NOTIFY_WARNING,
+                       "session.conf offers nothing to launch. The shipped one is used.");
         }
 
         (void)SessionReadFile(SESSION_DEFAULTS);
@@ -1296,6 +1856,7 @@ int main(void)
     {
         (void)fprintf(stderr, "session: %s could not be read; the launcher shows three bars.\n",
                       SESSION_START_ICON);
+        SessionSay(SYSCALL_NOTIFY_WARNING, "The start icon could not be read.");
     }
 
     {
@@ -1334,6 +1895,10 @@ int main(void)
     SessionRefreshTasks();
     SessionDrawClock();
 
+    /* What was posted before the session could take it: an asset missing at
+     * the start, which the kernel kept until now. */
+    SessionTakeNotifications();
+
     for (;;)
     {
         SyscallWindowEvent event;
@@ -1344,21 +1909,17 @@ int main(void)
             SessionReapChildren();
         }
 
-        /* The minute turned: the clock is drawn again, which asks for the
-         * next. The alarm ends the wait below with EINTR, which is what brings
-         * the loop back here. */
-        if (SessionClockDue != 0)
-        {
-            SessionClockDue = 0;
-            SessionDrawClock();
-        }
+        /* The clock and the notifications are aged by the time that passed,
+         * and the alarm asked for at the soonest of them. The alarm ends the
+         * wait below with EINTR, which is what brings the loop back here. */
+        SessionKeepTime();
 
         result = OxysWindowEvent((int64_t)SYSCALL_WINDOW_ANY, &event, SYSCALL_WINDOW_WAIT);
 
         if (result < 0)
         {
-            /* EINTR is a child that ended, or the minute turning upon the
-             * clock, each of which the top of the loop acts upon.
+            /* EINTR is a child that ended, or the alarm, for the clock or a
+             * notification, each of which the top of the loop acts upon.
              * EBADF is a session with no windows left, which cannot happen
              * while the root stands and means something is badly wrong. */
             if (errno == EINTR)
@@ -1371,11 +1932,16 @@ int main(void)
 
         while (result == 1)
         {
-            if (event.kind == SYSCALL_WINDOW_EVENT_WINDOWS)
+            if (event.kind == SYSCALL_WINDOW_EVENT_NOTIFY)
+            {
+                SessionTakeNotifications();
+            }
+            else if (event.kind == SYSCALL_WINDOW_EVENT_WINDOWS)
             {
                 SessionRefreshTasks();
             }
-            else if (event.kind == SYSCALL_WINDOW_EVENT_BUTTON_PRESS)
+            else if ((event.kind == SYSCALL_WINDOW_EVENT_BUTTON_PRESS) &&
+                     !SessionPressNotification(event.window))
             {
                 SessionHandlePress(&event);
             }

@@ -8,7 +8,7 @@ subsystem works is its design document.
 
 | | |
 | - | - |
-| Phases complete | 1 to 8; Phase 9 to sub-task 9.7 |
+| Phases complete | 1 to 9 |
 | Latest release | `Oxys 1 Beta`, 2026-09-24 — [`RELEASE-1-BETA.md`](RELEASE-1-BETA.md) |
 | Next release | `Oxys 1`, at about sub-task 11.10 — [`VERSIONING.md`](VERSIONING.md) |
 | Self-test assertions | 79 |
@@ -32,8 +32,8 @@ assertions with the failures they catch.
 | C library | Strings, heap, buffered I/O, formatted output, `<time.h>`, the configuration parser, the line editor, the terminal grid, the icon and image formats. | [`LIBC.md`](../design/LIBC.md) |
 | Shell | Line editing with history, pipelines, redirection, built-ins, job control; utilities in `/bin`. | [`SHELL.md`](../design/SHELL.md) |
 | Graphics | A composited framebuffer, 2D primitives, the bitmap face and console, fault screens, the pointer. | [`FRAMEBUFFER.md`](../design/FRAMEBUFFER.md), [`DRAWING.md`](../design/DRAWING.md), [`CONSOLE.md`](../design/CONSOLE.md), [`FAULTSCREEN.md`](../design/FAULTSCREEN.md), [`COMPOSITOR.md`](../design/COMPOSITOR.md) |
-| Desktop | A stacking window manager with minimise and full screen; `init` supervising the session; a panel with a launcher, a list of windows and a clock; a background; a terminal, a file manager and a text viewer. | [`WINDOWS.md`](../design/WINDOWS.md), [`SESSION.md`](../design/SESSION.md), [`UTILITIES.md`](../design/UTILITIES.md) |
-| Configuration | `/etc/system.conf`, `/etc/desktop.conf`, `/etc/session.conf`; the shipped copies at `/share/defaults/etc`; the launcher reads its file again at every opening. | [`CONFIG.md`](../design/CONFIG.md), [`PERSIST.md`](../storage/PERSIST.md) |
+| Desktop | A stacking window manager with minimise and full screen; `init` supervising the session; a panel with a launcher, a list of windows and a clock; a background; a terminal, a file manager and a text viewer; notifications at the bottom right, posted by any program. | [`WINDOWS.md`](../design/WINDOWS.md), [`SESSION.md`](../design/SESSION.md), [`UTILITIES.md`](../design/UTILITIES.md), [`SETTINGS.md`](../design/SETTINGS.md) |
+| Configuration | `/etc/system.conf`, `/etc/desktop.conf`, `/etc/session.conf`; the shipped copies at `/share/defaults/etc`; the launcher reads its file again at every opening; the settings application edits the background, the size, the pins and the demonstration's colour, and the session takes the change at once. | [`CONFIG.md`](../design/CONFIG.md), [`PERSIST.md`](../storage/PERSIST.md), [`SETTINGS.md`](../design/SETTINGS.md) |
 
 ## 2. Where it has been observed
 
@@ -72,7 +72,6 @@ The gaps that cross subsystems. Each design document lists its own.
 | A persistent `/home`: needs partition tables, which the block layer does not read. [`PERSIST.md`](../storage/PERSIST.md) | Not scheduled |
 | USB of any kind, and so USB storage. | Not scheduled |
 | A time zone, and a way to set the clock. [`TIME.md`](../devices/TIME.md) | Not scheduled |
-| The settings application. | 9.8 |
 | `CR4.SMEP`, `CR4.SMAP` and `IA32_EFER.NXE`. | 13.3 |
 | A UEFI boot path. | Phase 12 |
 | Cryptography and networking. | Phases 10 and 11 |

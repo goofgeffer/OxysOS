@@ -733,5 +733,7 @@ them as of 2026-09-25.
 | Arguments to `execve`, and environment strings, each | fixed | 16 | `SYSCALL_ARGUMENT_COUNT_MAXIMUM`, `abi/oxys/syscall_abi.h` |
 | Bytes of both vectors to `execve` | fixed | 2048 | `SYSCALL_ARGUMENT_BYTES_MAXIMUM`, `abi/oxys/syscall_abi.h` |
 | Entries in one `poll` | fixed | 8 | `SYSCALL_POLL_MAXIMUM`, `abi/oxys/syscall_abi.h` |
+| Notifications waiting in the kernel; the oldest dropped | fixed | 8 | `SYSCALL_NOTIFICATION_QUEUE`, `abi/oxys/syscall_abi.h` |
+| Text of one notification, bytes | fixed | 63 | `SYSCALL_NOTIFICATION_TEXT_MAXIMUM`, `abi/oxys/syscall_abi.h` |
 
 Headers are under `kernel/include/oxys/` unless the path says otherwise.

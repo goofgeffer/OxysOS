@@ -10,7 +10,7 @@
  * Key definitions: WindowClientCreate, WindowClientDestroy, WindowClientMove,
  *          WindowClientBlit, WindowClientEvent, WindowClientScreen,
  *          WindowClientSession, WindowClientText, WindowClientState,
- *          WindowClientList,
+ *          WindowClientList, WindowClientNotify, WindowClientNotification,
  *          WindowClientReleaseProcess,
  *          WindowClientWakeAll, WindowClientHasEvent, WindowClientOwnsAny,
  *          WindowClientReport.
@@ -58,6 +58,11 @@ int64_t WindowClientText(uint64_t window, uint64_t placement_address, uint64_t t
  * them. */
 int64_t WindowClientState(uint64_t window, uint64_t action);
 int64_t WindowClientList(uint64_t entries_address, uint64_t capacity);
+
+/* The notification calls of 2026-09-25: notify posts one, from any process;
+ * notification takes the oldest, for the session alone. */
+int64_t WindowClientNotify(uint64_t kind, uint64_t flags, uint64_t text_address);
+int64_t WindowClientNotification(uint64_t notification_address);
 
 /*
  * Destroys every window a process owns, at its ending. Called by the process

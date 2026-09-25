@@ -210,10 +210,63 @@ int main(void)
                           "session");
         }
 
+        /* The notifications of 2026-09-25. Any program may post one; only the
+         * session may take one, so this program, not yet holding it, is
+         * refused the taking and not the posting. A kind or a flag the kernel
+         * does not know, and a text beyond the bound, are EINVAL. */
+        {
+            SyscallNotification taken;
+            char long_text[SYSCALL_NOTIFICATION_TEXT_MAXIMUM + 2U];
+
+            (void)memset(long_text, 'x', sizeof long_text - 1U);
+            long_text[sizeof long_text - 1U] = '\0';
+
+            WindowRequire(OxysNotify(SYSCALL_NOTIFY_SUCCESS, 0U, "window-check notice") == 0,
+                          "a notification could not be posted");
+            errno = 0;
+            WindowRequire((OxysNotification(&taken) == -1) && (errno == EPERM),
+                          "a notification was taken by a program that does not hold the "
+                          "session");
+            errno = 0;
+            WindowRequire((OxysNotify(9U, 0U, "odd") == -1) && (errno == EINVAL),
+                          "a notification of a kind that does not exist was not EINVAL");
+            errno = 0;
+            WindowRequire((OxysNotify(SYSCALL_NOTIFY_ERROR, 0x80U, "odd") == -1) &&
+                              (errno == EINVAL),
+                          "a notification with a flag that does not exist was not EINVAL");
+            errno = 0;
+            WindowRequire((OxysNotify(SYSCALL_NOTIFY_ERROR, 0U, long_text) == -1) &&
+                              (errno == EINVAL),
+                          "a notification beyond the bound was not EINVAL");
+        }
+
         /* Claiming it is permitted — nothing holds it during this test — and
          * claiming it twice is not an error. */
         WindowRequire(OxysWindowSession() == 0, "the session could not be claimed");
         WindowRequire(OxysWindowSession() == 0, "claiming the session twice was refused");
+
+        /* Holding the session, this program takes what it posted: the kind,
+         * the text and the sender as posted, and nothing after the ring is
+         * drained. Nothing else posts during the self-tests, but what was
+         * posted before them is skipped rather than assumed absent. */
+        {
+            SyscallNotification taken;
+            bool found = false;
+            int64_t result;
+
+            while ((result = OxysNotification(&taken)) == 1)
+            {
+                if ((strcmp(taken.text, "window-check notice") == 0) &&
+                    (taken.kind == SYSCALL_NOTIFY_SUCCESS) && (taken.flags == 0U) &&
+                    (taken.sender == (uint64_t)OxysGetProcessId()))
+                {
+                    found = true;
+                }
+            }
+
+            WindowRequire(found, "the session did not take the notification as posted");
+            WindowRequire(result == 0, "an empty ring of notifications was not 0");
+        }
 
         /* And then the two layers are permitted. */
         {

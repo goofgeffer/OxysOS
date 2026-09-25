@@ -36,6 +36,12 @@ screen for ever. Two bounds:
   `init: desktop ended 5 times in a row, last with status 0x7f; it is not started again.`
   The count is cleared only when `init` itself stops the service.
 
+Since 2026-09-25, `init` also posts a notification for a service that could not
+be started or was given up on, and for a `system.conf` with lines it could not
+read: its standard error is the serial line, which a person at the screen never
+sees. The kernel keeps them until the session is there to show them
+([`SETTINGS.md`](SETTINGS.md), Section 2).
+
 **The loop.**
 
 ```

@@ -161,7 +161,9 @@ A process owns windows through system calls (numbers in
 | `window_state` | Minimise, restore, full, not full. |
 | `window_list` | Lists ordinary windows (the session only). |
 
-`window_session` and `window_text` are [`SESSION.md`](SESSION.md).
+`window_session` and `window_text` are [`SESSION.md`](SESSION.md); `notify` and
+`notification`, and the `WINDOW_EVENT_NOTIFY` a root is sent when one is posted
+(one waiting at a time, as above), are [`SETTINGS.md`](SETTINGS.md).
 
 **What crosses.** A surface does not: it describes kernel memory, and a shared
 mapping would give the program memory whose lifetime is the window's. Instead a

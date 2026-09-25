@@ -11,6 +11,7 @@ row.
 
 | Date | Phase | Change | Commit |
 | ---- | ----- | ------ | ------ |
+| 2026-09-25 | Phase 9 | Sub-task 9.8, which closes Phase 9: the settings application, editing `/etc` in place with `OxysConfigEdit`; and notifications at the bottom right, posted by any program through `notify` and shown by the session, with `init` and the session posting their own and a `notify` command | `pending` |
 | 2026-09-25 | Phase 9 | The launcher's button shows the project owner's start icon, in a square like the pinned programs, where it showed `OXYS`; three bars where the icon cannot be read | `0fc868b` |
 | 2026-09-25 | Phase 9 | The close control drawn as a cross, the size of the minimise and full-screen glyphs, where it was a disc | `d19a474` |
 | 2026-09-25 | All | Reference tables: every system call with its wrapper and every error code in `PRIVILEGE.md`, the capacity limits in `ARCHITECTURE.md`; no prose changed | `33a4d6c` |

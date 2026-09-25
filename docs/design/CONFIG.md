@@ -45,8 +45,8 @@ element.
   silently ignored costs someone an evening.
 - **Sections, not dotted keys.** A list of services with dotted keys needs
   `service.1.run`: a person numbering what a machine can count. A repeated section
-  can also be appended to without rewriting the rest, which a settings application
-  will want.
+  can also be appended to without rewriting the rest, which the settings application
+  does.
 
 | Rule | The failure it prevents |
 | ---- | ----------------------- |
@@ -69,6 +69,16 @@ the same seam throughout).
 kilobytes. A parser that called `malloc` could fail for a second reason at the
 moment the machine can least report it. The bounds are 64 settings, 8 recorded
 faults (more are counted) and 4 KiB of text.
+
+**Editing, since 2026-09-25**, is `edit.c`'s `OxysConfigEdit`, for the settings
+application: one key of one block set or removed within the text of a file, every
+other line left as written. It edits the text and not the parsed settings because
+the shipped files are mostly comments, which a file written back from its settings
+would lose. A changed line keeps its indentation; a new key goes after its block's
+last setting, so a trailing comment stays with what it describes; a block is made
+only as the next of its kind. A value that would not read back as itself (a
+newline, a `#`, space at an end) is refused, and a refused edit changes nothing.
+[`SETTINGS.md`](SETTINGS.md).
 
 ## 3. The files
 

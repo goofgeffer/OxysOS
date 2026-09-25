@@ -9,7 +9,8 @@
  *          program waits in until an event arrives.
  * Key functions: WindowClientCreate, WindowClientDestroy, WindowClientMove,
  *          WindowClientBlit, WindowClientEvent, WindowClientScreen,
- *          WindowClientSession, WindowClientText,
+ *          WindowClientSession, WindowClientText, WindowClientNotify,
+ *          WindowClientNotification,
  *          WindowClientReleaseProcess,
  *          WindowClientWakeAll, WindowClientReport.
  * References:
@@ -311,6 +312,9 @@ static void WindowClientConvert(const WindowEvent *from, SyscallWindowEvent *to)
         break;
     case WINDOW_EVENT_RESIZE:
         to->kind = SYSCALL_WINDOW_EVENT_RESIZE;
+        break;
+    case WINDOW_EVENT_NOTIFY:
+        to->kind = SYSCALL_WINDOW_EVENT_NOTIFY;
         break;
     case WINDOW_EVENT_WINDOWS:
         to->kind = SYSCALL_WINDOW_EVENT_WINDOWS;
@@ -741,6 +745,112 @@ int64_t WindowClientList(uint64_t entries_address, uint64_t capacity)
     return count;
 }
 
+/* ------------------------------------------------------- notifications */
+
+/*
+ * The notifications of 2026-09-25: a ring of the last few posted, taken one
+ * at a time by the session, which draws each at the bottom right of the screen.
+ *
+ * **The kernel holds them, and not the session**, because the notifications
+ * worth having are mostly posted when something is missing, and the commonest
+ * moment for that is the start, before the session exists to receive one: a
+ * ring here keeps them until it does.
+ *
+ * **The oldest is dropped when the ring is full**, where the window queue drops
+ * the newest. A notification is shown for a few seconds and then gone; eight
+ * waiting means the session is not reading, and when it does read, what
+ * happened last is what a person wants to see.
+ */
+static SyscallNotification WindowNotifications[SYSCALL_NOTIFICATION_QUEUE];
+static size_t WindowNotificationHead;
+static size_t WindowNotificationCount;
+static uint64_t WindowNotificationsPosted;
+static uint64_t WindowNotificationsDropped;
+
+int64_t WindowClientNotify(uint64_t kind, uint64_t flags, uint64_t text_address)
+{
+    char text[SYSCALL_NOTIFICATION_TEXT_MAXIMUM + 1U];
+    SyscallNotification *slot;
+
+    ++WindowClientCalls;
+
+    if ((kind < SYSCALL_NOTIFY_INFORMATION) || (kind > SYSCALL_NOTIFY_ERROR) ||
+        ((flags & ~SYSCALL_NOTIFY_RECONFIGURE) != 0U))
+    {
+        ++WindowClientRefusals;
+
+        return SYSCALL_EINVAL;
+    }
+
+    /* A text with no terminator within the bound is refused as too long where
+     * its first byte can be read at all, and as a bad address where not. */
+    if (!SyscallCopyUserString(text_address, text, sizeof text))
+    {
+        ++WindowClientRefusals;
+
+        return SyscallUserRangeIsReadable(text_address, 1U) ? SYSCALL_EINVAL : SYSCALL_EFAULT;
+    }
+
+    if (WindowNotificationCount == SYSCALL_NOTIFICATION_QUEUE)
+    {
+        WindowNotificationHead = (WindowNotificationHead + 1U) % SYSCALL_NOTIFICATION_QUEUE;
+        --WindowNotificationCount;
+        ++WindowNotificationsDropped;
+    }
+
+    slot = &WindowNotifications[(WindowNotificationHead + WindowNotificationCount) %
+                                SYSCALL_NOTIFICATION_QUEUE];
+    slot->kind = (uint32_t)kind;
+    slot->flags = (uint32_t)flags;
+    slot->sender = WindowClientCaller();
+
+    for (size_t index = 0U; index < sizeof slot->text; ++index)
+    {
+        slot->text[index] = text[index];
+    }
+
+    ++WindowNotificationCount;
+    ++WindowNotificationsPosted;
+
+    WindowAnnounceNotification();
+    WindowClientWakeAll();
+
+    return SYSCALL_OK;
+}
+
+int64_t WindowClientNotification(uint64_t notification_address)
+{
+    SyscallNotification *destination;
+
+    ++WindowClientCalls;
+
+    if ((WindowClientCaller() == 0U) || (WindowClientCaller() != WindowSession()))
+    {
+        ++WindowClientRefusals;
+
+        return SYSCALL_EPERM;
+    }
+
+    if (!SyscallUserRangeIsWritable(notification_address, (uint64_t)sizeof *destination))
+    {
+        ++WindowClientRefusals;
+
+        return SYSCALL_EFAULT;
+    }
+
+    if (WindowNotificationCount == 0U)
+    {
+        return 0;
+    }
+
+    destination = (SyscallNotification *)(uintptr_t)notification_address;
+    *destination = WindowNotifications[WindowNotificationHead];
+    WindowNotificationHead = (WindowNotificationHead + 1U) % SYSCALL_NOTIFICATION_QUEUE;
+    --WindowNotificationCount;
+
+    return 1;
+}
+
 void WindowClientReleaseProcess(uint64_t process_id)
 {
     if (process_id == 0U)
@@ -844,5 +954,11 @@ void WindowClientReport(void)
     KernelWriteDecimal(WindowClientRefusals);
     KernelWriteString(" refused, ");
     KernelWriteDecimal(WindowClientSleeps);
-    KernelWriteString(" sleep(s) for an event.\n");
+    KernelWriteString(" sleep(s) for an event; ");
+    KernelWriteDecimal(WindowNotificationsPosted);
+    KernelWriteString(" notification(s) posted, ");
+    KernelWriteDecimal(WindowNotificationsDropped);
+    KernelWriteString(" dropped, ");
+    KernelWriteDecimal((uint64_t)WindowNotificationCount);
+    KernelWriteString(" waiting.\n");
 }

@@ -12,7 +12,7 @@
  *          CONFIG_FAULTS_MAXIMUM, OxysConfigParse, OxysConfigRead,
  *          OxysConfigCount, OxysConfigValue, OxysConfigNumber,
  *          OxysConfigBoolean, OxysConfigFaultCount, OxysConfigFaultLine,
- *          OxysConfigFaultReason.
+ *          OxysConfigFaultReason, OxysConfigEdit, CONFIG_EDIT_FAILED.
  * References:
  *   - docs/design/CONFIG.md: the format, every decision in it, and the
  *     assertions made upon this parser.
@@ -175,5 +175,28 @@ bool OxysConfigBoolean(const OxysConfig *config, const char *section, size_t occ
 size_t OxysConfigFaultCount(const OxysConfig *config);
 size_t OxysConfigFaultLine(const OxysConfig *config, size_t index);
 const char *OxysConfigFaultReason(const OxysConfig *config, size_t index);
+
+/*
+ * Changes one setting within the text of a file, of 2026-09-25, for the
+ * settings application: `key` in the `occurrence`-th block of `section` (from
+ * zero) is set to `value`, or its line removed where `value` is NULL. The
+ * text is `length` bytes of a buffer of `capacity`, and is edited in place.
+ *
+ * Every other line stays exactly as written. A line changed keeps its
+ * indentation and its alignment up to the equals sign, and loses whatever
+ * comment followed its old value. A key the block lacks is written after the
+ * block's last setting; a block that does not exist is written at the end, but
+ * only as the next of its kind, so that an edit never makes a list with a gap.
+ *
+ * Returns the new length, or CONFIG_EDIT_FAILED with the text unchanged: where
+ * the result would not fit, where the block cannot be found or made, or where
+ * the value would not read back as itself — a newline, a `#`, space at either
+ * end, or beyond CONFIG_VALUE_MAXIMUM. Removing a key the block lacks is
+ * success, and changes nothing.
+ */
+#define CONFIG_EDIT_FAILED ((size_t)-1)
+
+size_t OxysConfigEdit(char *text, size_t length, size_t capacity, const char *section,
+                      size_t occurrence, const char *key, const char *value);
 
 #endif /* OXYS_LIBC_CONFIG_H */

@@ -195,7 +195,7 @@ Every range a caller names:
 Numbers never change once given to a program; new calls are appended. The numbers
 and the error values are this kernel's own, defined once in
 [`../../kernel/abi/oxys/syscall_abi.h`](../../kernel/abi/oxys/syscall_abi.h)
-(`SYSCALL_COUNT` is 44). A number beyond the table returns `ENOSYS`; the number is
+(`SYSCALL_COUNT` is 46). A number beyond the table returns `ENOSYS`; the number is
 unsigned, so one comparison covers negatives.
 
 | Numbers | Calls | Documented in |
@@ -210,6 +210,7 @@ unsigned, so one comparison covers negatives.
 | 35, 36 | `power`, `pause` | [`INIT.md`](INIT.md) |
 | 39 | `poll` | [`TERMINAL.md`](TERMINAL.md) |
 | 42, 43 | `time`, `alarm` | [`../devices/TIME.md`](../devices/TIME.md) |
+| 44, 45 | `notify`, `notification` | [`SETTINGS.md`](SETTINGS.md) |
 
 ## Verification
 
@@ -311,6 +312,8 @@ document Section 6 names for it.
 | 41 | `window_list` | `int64_t OxysWindowList(SyscallWindowEntry *entries, uint64_t capacity)` |
 | 42 | `time` | `int64_t OxysTime(void)` |
 | 43 | `alarm` | `int64_t OxysAlarm(uint64_t milliseconds)` |
+| 44 | `notify` | `int64_t OxysNotify(uint64_t kind, uint64_t flags, const char *text)` |
+| 45 | `notification` | `int64_t OxysNotification(SyscallNotification *notification)` |
 
 ## Appendix B. Reference: the error codes
 

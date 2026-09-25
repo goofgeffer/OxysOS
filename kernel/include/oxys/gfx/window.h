@@ -192,7 +192,11 @@ typedef enum WindowEventKind
 
     /* Sent to a root: the set of ordinary windows, their states or the focus
      * among them changed, and a session listing them should look again. */
-    WINDOW_EVENT_WINDOWS
+    WINDOW_EVENT_WINDOWS,
+
+    /* Sent to a root: a notification waits to be taken, window_notification,
+     * since 2026-09-25. It carries nothing; the notification is taken by call. */
+    WINDOW_EVENT_NOTIFY
 } WindowEventKind;
 
 /*
@@ -297,6 +301,10 @@ WindowLayer WindowLayerOf(size_t window);
  * what it is before a session has claimed it and after the claimant has ended.
  */
 void WindowSetSession(uint64_t owner);
+
+/* Tells every root that a notification waits: WINDOW_EVENT_NOTIFY, one at a
+ * time however many are posted before the root reads its queue. */
+void WindowAnnounceNotification(void);
 uint64_t WindowSession(void);
 
 /*

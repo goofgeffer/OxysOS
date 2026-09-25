@@ -174,6 +174,14 @@ redrawn when the root receives `WINDOW_EVENT_WINDOWS`; `window_create` and
 `window_destroy` wake sleepers, so a new window is listed at once. There is no
 polling.
 
+**Notifications** stand above the bar at the right, since 2026-09-25: small
+panel-layer windows, each a symbol in a coloured disc and a line or three of text,
+for five seconds or until pressed, at most three at once. The session takes them
+from the kernel when its root is sent `WINDOW_EVENT_NOTIFY`, posts its own the same
+way when a background or an icon cannot be read, and reads its configuration again
+when one asks it to. The clock and the notices share the one alarm.
+[`SETTINGS.md`](SETTINGS.md), Section 2.
+
 ## 6. Icons
 
 An `icon` in a `[launch]` block is **a path to a file** read when the entries are

@@ -139,6 +139,120 @@ static void VerifyConfigFormat(void)
                         "a value that is not a truth did not give the fallback");
 }
 
+
+/*
+ * The editing of 2026-09-25, upon a text shaped like the shipped session file:
+ * a comment, a block, two list blocks and a trailing comment. Each edit is
+ * compared with the whole text it should give, byte for byte, because the
+ * property that matters is what did not change — a comment lost, or a line of
+ * another block touched, would still parse and still hold the new value.
+ */
+static char VerifyConfigEditText[512];
+
+static bool VerifyConfigEditGives(size_t result, const char *expected)
+{
+    const size_t length = strlen(expected);
+
+    return (result == length) && (memcmp(VerifyConfigEditText, expected, length) == 0);
+}
+
+static size_t VerifyConfigEditStart(const char *text)
+{
+    const size_t length = strlen(text);
+
+    (void)memcpy(VerifyConfigEditText, text, length);
+
+    return length;
+}
+
+static void VerifyConfigEdit(void)
+{
+    static const char original[] = "# the session\n"
+                                   "[session]\n"
+                                   "scale = 0\n"
+                                   "  background = /a.oxim  # a picture\n"
+                                   "\n"
+                                   "[launch]\n"
+                                   "name = One\n"
+                                   "[launch]\n"
+                                   "name = Two\n"
+                                   "pin  = yes\n"
+                                   "# about what follows\n";
+    size_t length;
+
+    length = VerifyConfigEditStart(original);
+    VerifyConfigRequire(
+        VerifyConfigEditGives(OxysConfigEdit(VerifyConfigEditText, length,
+                                             sizeof VerifyConfigEditText, "session", 0U,
+                                             "background", "/b.oxim"),
+                              "# the session\n[session]\nscale = 0\n  background = /b.oxim\n\n"
+                              "[launch]\nname = One\n[launch]\nname = Two\npin  = yes\n"
+                              "# about what follows\n"),
+        "an edited value did not keep its line's indentation, or touched another line");
+
+    length = VerifyConfigEditStart(original);
+    VerifyConfigRequire(
+        VerifyConfigEditGives(OxysConfigEdit(VerifyConfigEditText, length,
+                                             sizeof VerifyConfigEditText, "LAUNCH", 1U, "Pin",
+                                             "no"),
+                              "# the session\n[session]\nscale = 0\n  background = /a.oxim  # a "
+                              "picture\n\n[launch]\nname = One\n[launch]\nname = Two\npin  = no\n"
+                              "# about what follows\n"),
+        "the second block of a list was not the one edited, or case mattered");
+
+    length = VerifyConfigEditStart(original);
+    VerifyConfigRequire(
+        VerifyConfigEditGives(OxysConfigEdit(VerifyConfigEditText, length,
+                                             sizeof VerifyConfigEditText, "launch", 0U, "pin",
+                                             "yes"),
+                              "# the session\n[session]\nscale = 0\n  background = /a.oxim  # a "
+                              "picture\n\n[launch]\nname = One\npin = yes\n[launch]\nname = Two\n"
+                              "pin  = yes\n# about what follows\n"),
+        "a key new to its block was not written after the block's last setting");
+
+    length = VerifyConfigEditStart(original);
+    VerifyConfigRequire(
+        VerifyConfigEditGives(OxysConfigEdit(VerifyConfigEditText, length,
+                                             sizeof VerifyConfigEditText, "session", 0U,
+                                             "background", NULL),
+                              "# the session\n[session]\nscale = 0\n\n[launch]\nname = One\n"
+                              "[launch]\nname = Two\npin  = yes\n# about what follows\n"),
+        "a removed key did not take its whole line with it");
+
+    length = VerifyConfigEditStart(original);
+    VerifyConfigRequire(
+        VerifyConfigEditGives(OxysConfigEdit(VerifyConfigEditText, length,
+                                             sizeof VerifyConfigEditText, "desktop", 0U, "scale",
+                                             "2"),
+                              "# the session\n[session]\nscale = 0\n  background = /a.oxim  # a "
+                              "picture\n\n[launch]\nname = One\n[launch]\nname = Two\npin  = yes\n"
+                              "# about what follows\n[desktop]\nscale = 2\n"),
+        "a block that did not exist was not made at the end");
+
+    /* The refusals, each leaving the text as it was. */
+    length = VerifyConfigEditStart(original);
+    VerifyConfigRequire(
+        (OxysConfigEdit(VerifyConfigEditText, length, sizeof VerifyConfigEditText, "launch", 5U,
+                        "pin", "yes") == CONFIG_EDIT_FAILED) &&
+            (OxysConfigEdit(VerifyConfigEditText, length, sizeof VerifyConfigEditText, "session",
+                            0U, "scale", "1 # two") == CONFIG_EDIT_FAILED) &&
+            (OxysConfigEdit(VerifyConfigEditText, length, sizeof VerifyConfigEditText, "session",
+                            0U, "scale", "1\nx = 2") == CONFIG_EDIT_FAILED) &&
+            (OxysConfigEdit(VerifyConfigEditText, length, length, "session", 0U,
+                            "background", "/a/much/longer/path/to/the/picture.oxim") ==
+             CONFIG_EDIT_FAILED) &&
+            (memcmp(VerifyConfigEditText, original, length) == 0),
+        "an edit that could not be made was not refused, or changed the text");
+
+    /* And what an edit writes, the parser reads. */
+    length = OxysConfigEdit(VerifyConfigEditText, VerifyConfigEditStart(original),
+                            sizeof VerifyConfigEditText, "launch", 0U, "pin", "yes");
+    VerifyConfigRequire((length != CONFIG_EDIT_FAILED) &&
+                            OxysConfigParse(&VerifyConfigStore, VerifyConfigEditText, length) &&
+                            VerifyConfigHolds("launch", 0U, "pin", "yes") &&
+                            VerifyConfigHolds("session", 0U, "background", "/a.oxim"),
+                        "an edited text did not parse to the settings edited");
+}
 /* Each fault, one at a time, with its line number. */
 static void VerifyConfigFaults(void)
 {
@@ -323,6 +437,7 @@ void KernelVerifyConfig(void)
 
     VerifyConfigFormat();
     VerifyConfigFaults();
+    VerifyConfigEdit();
 
     VerifyConfigBoot = ThreadAdoptCurrent("boot");
 

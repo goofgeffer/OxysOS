@@ -414,7 +414,7 @@ static void WindowEnqueueKind(size_t window, WindowEventKind kind)
  * queue would otherwise fill the root's queue, and the next press upon the
  * desktop would be the event dropped.
  */
-static void WindowNotifyRoots(void)
+static void WindowNotifyRootsOf(WindowEventKind kind)
 {
     for (size_t identifier = 0U; identifier < WINDOW_CAPACITY; ++identifier)
     {
@@ -429,7 +429,7 @@ static void WindowNotifyRoots(void)
         for (size_t index = 0U; index < root->count; ++index)
         {
             if (root->events[(root->head + index) % WINDOW_EVENT_CAPACITY].kind ==
-                WINDOW_EVENT_WINDOWS)
+                kind)
             {
                 waiting = true;
             }
@@ -437,9 +437,21 @@ static void WindowNotifyRoots(void)
 
         if (!waiting)
         {
-            WindowEnqueueKind(identifier, WINDOW_EVENT_WINDOWS);
+            WindowEnqueueKind(identifier, kind);
         }
     }
+}
+
+static void WindowNotifyRoots(void)
+{
+    WindowNotifyRootsOf(WINDOW_EVENT_WINDOWS);
+}
+
+/* Tells every root that a notification waits (graphics/client.c); one notice
+ * waiting is enough, for the reason above. */
+void WindowAnnounceNotification(void)
+{
+    WindowNotifyRootsOf(WINDOW_EVENT_NOTIFY);
 }
 
 /* A pointer event, with the position made relative to the window's content. */
