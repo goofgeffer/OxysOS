@@ -108,14 +108,21 @@ may ([`../../art/README.md`](../../art/README.md)).
   never stretched (circles would become ellipses) or letterboxed (bars of a colour
   the drawing never had).
 - Composed in bands of up to 65,536 pixels (16 blits at 1280 × 800).
-- **An unreadable background costs the background**: the fault goes to standard
-  error and the root is the ground and the mark.
+- **An unreadable background falls back to the shipped one**, the background
+  `/share/defaults/etc/session.conf` names, and the panel says
+  `default background` while it does; standard error names the line to mend.
+  A path left stale by a renamed background, or mistyped, would otherwise leave
+  the desktop bare with the reason only on the serial line. The failed path is
+  not retried while the fallback stands (a failed read empties the one image
+  buffer); mending the line changes the path, which is read at the next
+  opening. If the shipped background cannot be read either, the root is the
+  ground and the mark. A file naming no background gets the mark, by choice.
 
 ## 5. The panel
 
 A bar across the top with a line beneath it (separating it from a window of the
 same colour under it), holding, left to right: the launcher's name, the window
-list, the `using defaults` notice when it applies, and the clock
+list, the `using defaults` or `default background` notice when one applies, and the clock
 ([`UTILITIES.md`](UTILITIES.md)). The session has no fill across the protocol, so
 the bar is a tile blitted in bands.
 
@@ -212,7 +219,7 @@ dragged up sliding **under** the panel; minimised windows restored from the list
 
 ## Limitations
 
-1. The panel has no indicators beyond the clock and the `using defaults` notice.
+1. The panel has no indicators beyond the clock and the two notices.
 2. No resize by hand ([`WINDOWS.md`](WINDOWS.md)).
 3. The scale is read only at start; nothing is told when a file changes.
 4. Rectangles are drawn by blitting a tile; there is no fill across the protocol.

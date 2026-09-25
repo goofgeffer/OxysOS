@@ -129,7 +129,7 @@ privilege level 3 for the file half.
 | **The parse continues past a fault**, reading what follows. | One bad line costing the file. |
 | An over-long value is refused, not cut; the store refuses beyond its capacity; faults beyond those kept are counted. | A different path; a store overrun; a file that looks nearly right. |
 | A file the program wrote reads back as written; a missing file leaves the configuration empty. | Success reported on nothing; a previous file's settings left standing. |
-| **The shipped files carry the keys the programs read**: a service running `/bin/session` with `needs = display`; `desktop.conf`'s `scale` and `accent`; `session.conf`'s `scale`, at least one `[launch]` with `run`, and a readable background; the shipped copies at `/share/defaults/etc`, readable and offering a launcher. | A key renamed in a program and not its file: a bare screen with every other test passing. |
+| **The shipped files carry the keys the programs read**, read from `/share/defaults/etc` so that a person's own `/etc` cannot fail the test: a service running `/bin/session` with `needs = display`; `desktop.conf`'s `scale` and `accent`; `session.conf`'s `scale`, at least one `[launch]` with `run`, and a readable background; the shipped copies at `/share/defaults/etc`, readable and offering a launcher. | A key renamed in a program and not its file: a bare screen with every other test passing. |
 
 That settings are **obeyed** is checked by eye: changing `accent` to three numbers
 changes the colour of the desktop's discs and not the frames; `accent = system`

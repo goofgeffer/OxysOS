@@ -11,6 +11,7 @@ row.
 
 | Date | Phase | Change | Commit |
 | ---- | ----- | ------ | ------ |
+| 2026-09-24 | Phase 9 | A background that cannot be read falls back to the shipped one, noted on the panel; config-check tests the shipped copies, not a person's `/etc` | — |
 | 2026-09-24 | Phase 9 | The Files icon without its white corner; both backgrounds shipped, the rose the default and the cliff restored | `1df1a73` |
 | 2026-09-24 | Phase 9 | A new Files icon and a photograph for the background, softened to fit; the ramdisk grows to 4 MiB | `4bd8769` |
 | 2026-09-24 | Phase 9 | Launcher icons for Files and Windows, drawn by the project owner, shipped on the ramdisk and named in `/etc/session.conf` | `51e019e` |

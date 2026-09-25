@@ -129,12 +129,18 @@ int main(void)
 
     (void)OxysUnlink(CONFIG_SCRATCH);
 
-    /* --- The files the system ships say what its programs read. --- */
+    /*
+     * --- The files the system ships say what its programs read. ---
+     *
+     * Read from /share/defaults/etc, the copies of etc/ the build stages, and
+     * not from /etc: with a persistent /etc attached, /etc holds the person's
+     * own files, and a test of those would fail a boot for a person's edit.
+     */
 
-    ConfigRequire(OxysConfigRead(&Config, "/etc/system.conf"),
-                  "/etc/system.conf could not be read without fault");
+    ConfigRequire(OxysConfigRead(&Config, "/share/defaults/etc/system.conf"),
+                  "/share/defaults/etc/system.conf could not be read without fault");
     ConfigRequire(OxysConfigCount(&Config, "service") >= 1U,
-                  "/etc/system.conf names no service at all");
+                  "/share/defaults/etc/system.conf names no service at all");
 
     {
         bool session = false;
@@ -158,24 +164,24 @@ int main(void)
             }
         }
 
-        ConfigRequire(session, "/etc/system.conf does not name /bin/session as a service");
+        ConfigRequire(session, "/share/defaults/etc/system.conf does not name /bin/session as a service");
     }
 
-    ConfigRequire(OxysConfigRead(&Config, "/etc/desktop.conf"),
-                  "/etc/desktop.conf could not be read without fault");
+    ConfigRequire(OxysConfigRead(&Config, "/share/defaults/etc/desktop.conf"),
+                  "/share/defaults/etc/desktop.conf could not be read without fault");
     ConfigRequire(OxysConfigValue(&Config, "desktop", 0U, "scale") != NULL,
-                  "/etc/desktop.conf does not carry the scale the desktop reads");
+                  "/share/defaults/etc/desktop.conf does not carry the scale the desktop reads");
     ConfigRequire(OxysConfigValue(&Config, "desktop", 0U, "accent") != NULL,
-                  "/etc/desktop.conf does not carry the accent the desktop reads");
+                  "/share/defaults/etc/desktop.conf does not carry the accent the desktop reads");
 
     /* --- The session's file, of sub-task 9.5, says what the session reads. --- */
 
-    ConfigRequire(OxysConfigRead(&Config, "/etc/session.conf"),
-                  "/etc/session.conf could not be read without fault");
+    ConfigRequire(OxysConfigRead(&Config, "/share/defaults/etc/session.conf"),
+                  "/share/defaults/etc/session.conf could not be read without fault");
     ConfigRequire(OxysConfigValue(&Config, "session", 0U, "scale") != NULL,
-                  "/etc/session.conf does not carry the scale the session reads");
+                  "/share/defaults/etc/session.conf does not carry the scale the session reads");
     ConfigRequire(OxysConfigCount(&Config, "launch") >= 1U,
-                  "/etc/session.conf offers the launcher nothing to start");
+                  "/share/defaults/etc/session.conf offers the launcher nothing to start");
 
     for (size_t index = 0U; index < OxysConfigCount(&Config, "launch"); ++index)
     {
@@ -194,7 +200,7 @@ int main(void)
         const int64_t descriptor =
             (background != NULL) ? OxysOpen(background, SYSCALL_OPEN_READ, 0U) : -1;
 
-        ConfigRequire(descriptor >= 0, "/etc/session.conf names no background, or one that is "
+        ConfigRequire(descriptor >= 0, "/share/defaults/etc/session.conf names no background, or one that is "
                                        "not upon the ramdisk");
 
         if (descriptor >= 0)

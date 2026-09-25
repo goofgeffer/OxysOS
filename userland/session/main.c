@@ -175,6 +175,10 @@ static char SessionBackgroundPath[CONFIG_VALUE_MAXIMUM + 1U];
 
 /* Whether the shipped configuration stands in for the person's. */
 static bool SessionUsingDefaults;
+
+/* Whether the shipped background stands in for one the person's file names
+ * and that could not be read. */
+static bool SessionBackgroundIsDefault;
 static OxysImageScaler SessionScaler;
 static uint32_t SessionBand[SESSION_BAND];
 
@@ -422,13 +426,31 @@ static int32_t SessionClockWidth(void)
     return (5 * 8 * SessionScale) + (2 * 3 * SessionScale * 2);
 }
 
-/* The notice's width, where it is shown, and nothing where it is not. */
-#define SESSION_NOTICE "using defaults"
+/*
+ * The notice upon the panel that something shipped stands in for what the
+ * person's file names: the whole configuration, or the background alone.
+ * NULL where nothing does.
+ */
+#define SESSION_NOTICE            "using defaults"
+#define SESSION_NOTICE_BACKGROUND "default background"
 
+static const char *SessionNotice(void)
+{
+    if (SessionUsingDefaults)
+    {
+        return SESSION_NOTICE;
+    }
+
+    return SessionBackgroundIsDefault ? SESSION_NOTICE_BACKGROUND : NULL;
+}
+
+/* The notice's width, where it is shown, and nothing where it is not. */
 static int32_t SessionNoticeWidth(void)
 {
-    return SessionUsingDefaults
-               ? (((int32_t)(sizeof SESSION_NOTICE - 1U) * 8 * SessionScale) + (4 * 3 * SessionScale))
+    const char *const notice = SessionNotice();
+
+    return (notice != NULL)
+               ? (((int32_t)strlen(notice) * 8 * SessionScale) + (4 * 3 * SessionScale))
                : 0;
 }
 
@@ -495,12 +517,12 @@ static void SessionDrawPanel(bool open)
     /* The notice that the shipped configuration stands in for the person's,
      * left of the clock: upon a desktop it is the one place a person sees it,
      * the standard error going to the serial line. */
-    if (SessionUsingDefaults)
+    if (SessionNotice() != NULL)
     {
         SessionText(SessionPanel,
                     SessionScreen.width - SessionClockWidth() - SessionNoticeWidth() +
                         (2 * 3 * SessionScale),
-                    3 * SessionScale, SESSION_NOTICE, SESSION_DIM, SESSION_PANEL, SessionScale);
+                    3 * SessionScale, SessionNotice(), SESSION_DIM, SESSION_PANEL, SessionScale);
     }
 }
 
@@ -799,11 +821,22 @@ static size_t SessionReadFile(const char *path)
  * screen to draw, and the launcher asks for the configuration every time it
  * opens. Returns whether the root must be drawn again.
  *
- * One that cannot be read costs the background and not the desktop: the fault
- * is said upon the standard error and the root is the ground and the mark,
- * which is what a session that named none draws. One that could not be read is
- * tried again at the next opening, the file perhaps having been put there
- * since.
+ * **One that cannot be read falls back to the shipped background**, the one
+ * SESSION_DEFAULTS names, and the panel says `default background` while it
+ * does. A path left stale by a background renamed in an update, or typed
+ * wrongly, would otherwise leave the desktop bare with the reason only upon the
+ * standard error, which upon a desktop nobody reads. Where the shipped one
+ * cannot be read either, the root is the ground and the mark, which is what a
+ * file naming no background gets; naming none is a choice, and no fallback is
+ * made for it.
+ *
+ * A path that failed is not tried again while its fallback stands: a failed
+ * read empties the one image buffer, so each retry would mean reading the
+ * shipped background again. Mending the line changes the path, which is read
+ * at the next opening.
+ *
+ * The shipped file is read into SessionConfig, so this runs after the entries,
+ * which copy what they need out of it.
  */
 static bool SessionLoadBackground(void)
 {
@@ -819,16 +852,38 @@ static bool SessionLoadBackground(void)
 
     SessionCopy(SessionBackgroundPath, sizeof SessionBackgroundPath, wanted);
     SessionHasBackground = false;
+    SessionBackgroundIsDefault = false;
 
-    if (wanted[0] != '\0')
+    if (SessionBackgroundPath[0] == '\0')
     {
-        SessionHasBackground = OxysImageRead(&SessionBackground, wanted, SessionBackgroundBytes,
-                                             sizeof SessionBackgroundBytes);
+        return had;
+    }
 
-        if (!SessionHasBackground)
+    SessionHasBackground = OxysImageRead(&SessionBackground, SessionBackgroundPath,
+                                         SessionBackgroundBytes, sizeof SessionBackgroundBytes);
+
+    if (!SessionHasBackground)
+    {
+        const char *shipped;
+
+        (void)SessionReadFile(SESSION_DEFAULTS);
+        shipped = OxysConfigValue(&SessionConfig, "session", 0U, "background");
+
+        if ((shipped != NULL) && (strcmp(shipped, SessionBackgroundPath) != 0) &&
+            OxysImageRead(&SessionBackground, shipped, SessionBackgroundBytes,
+                          sizeof SessionBackgroundBytes))
+        {
+            SessionHasBackground = true;
+            SessionBackgroundIsDefault = true;
+            (void)fprintf(stderr, "session: %s: the background could not be read; the "
+                                  "shipped %s is drawn until the `background` line of %s "
+                                  "is mended.\n",
+                          SessionBackgroundPath, shipped, SESSION_CONFIGURATION);
+        }
+        else
         {
             (void)fprintf(stderr, "session: %s: the background could not be read; the "
-                                  "desktop is drawn without it.\n", wanted);
+                                  "desktop is drawn without it.\n", SessionBackgroundPath);
         }
     }
 
@@ -934,7 +989,6 @@ static bool SessionReadConfiguration(bool starting)
                            : ((SessionScreen.width >= 1024) ? 2 : 1);
     }
 
-    redraw = SessionLoadBackground();
     SessionLoadEntries();
 
     if (SessionEntryCount == 0U)
@@ -951,6 +1005,9 @@ static bool SessionReadConfiguration(bool starting)
         SessionEntryCount = 1U;
     }
 
+    /* After the entries: a background that falls back reads the shipped file
+     * into SessionConfig, which the entries have finished with. */
+    redraw = SessionLoadBackground();
     SessionUsingDefaults = defaults;
 
     return redraw;

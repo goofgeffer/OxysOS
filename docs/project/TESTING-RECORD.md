@@ -15,6 +15,7 @@ that was cleared that day and renumbered from 1; the date identifies the image.
 
 | Date | Where | What | Result |
 | ---- | ----- | ---- | ------ |
+| 2026-09-24 | QEMU q35 with a persistent `/etc` naming a stale background; VirtualBox and Bochs | The background fallback | Passed; the rose drawn with `default background` on the panel and the line to mend on the serial line; every self-test passed on all three |
 | 2026-09-24 | QEMU q35, VirtualBox and Bochs | The Files icon corner and the two backgrounds | Passed; the icon's corner is clear under QEMU; every self-test passed on all three |
 | 2026-09-24 | QEMU q35, VirtualBox and Bochs | The new Files icon and the photograph background | Passed; the rose covers the desktop and the folder draws in the launcher under QEMU; every self-test passed on all three |
 | 2026-09-24 | QEMU q35, VirtualBox and Bochs | The Files and Windows launcher icons | Passed; the launcher showed all three icons under QEMU; every self-test passed on all three |
