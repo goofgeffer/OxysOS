@@ -79,10 +79,23 @@
 
 /*
  * The pinned programs: a square button the panel's height for each launcher
- * entry marked `pin = yes`, right of the launcher, with its icon inset by
- * SESSION_PIN_INSET units. The list of windows begins after them.
+ * entry marked `pin = yes`, right of the launcher's name, with its icon inset
+ * by SESSION_PIN_INSET units.
+ *
+ * The row is spaced by what the eye sees: one gap, SESSION_BAR_GAP units,
+ * stands between the end of the launcher's name and the first icon, between
+ * each two icons, and between the last icon and the first button of the list
+ * of windows. The launcher's button is its name with SESSION_START_PAD units
+ * either side, so that no empty stretch of it widens the first gap.
  */
 #define SESSION_PIN_INSET 2
+#define SESSION_BAR_GAP   10
+#define SESSION_START_PAD 4
+#define SESSION_START_WIDTH ((4 * 8) + (2 * SESSION_START_PAD))
+
+/* The font's last two columns of every glyph are clear (CONSOLE.md), so the
+ * name's ink ends that far before its last cell does. */
+#define SESSION_GLYPH_CLEAR 2
 
 /*
  * The clock stands apart from the panel, in a box of its own at the top right
@@ -550,26 +563,43 @@ static bool SessionReadConfiguration(bool starting);
 static void SessionDrawIcon(int64_t window, int32_t x, int32_t y, int32_t slot,
                             const OxysIcon *icon, uint32_t paper);
 
-/* Where the pinned programs begin upon the panel, and how far apart they
- * stand: a square the panel's height each, with the gap after it. */
+/*
+ * Where the pinned programs begin upon the panel, and how far apart they
+ * stand: a square the panel's height each. The distances are those that leave
+ * SESSION_BAR_GAP units between what is drawn — the name's last letter and the
+ * first icon, one icon and the next — the button's padding and each icon's
+ * inset counted in.
+ */
 static int32_t SessionPinLeft(void)
 {
-    return (SESSION_LAUNCH_WIDTH + SESSION_TASK_GAP) * SessionScale;
+    return (SESSION_START_WIDTH + SESSION_BAR_GAP - SESSION_START_PAD - SESSION_GLYPH_CLEAR -
+            SESSION_PIN_INSET) *
+           SessionScale;
 }
 
 static int32_t SessionPinStride(void)
 {
-    return SessionPanelHeight() + (SESSION_TASK_GAP * SessionScale);
+    return SessionPanelHeight() + ((SESSION_BAR_GAP - (2 * SESSION_PIN_INSET)) * SessionScale);
 }
 
-/* Where the list of windows begins upon the panel, after the pinned programs,
- * and how wide one of its buttons is with the gap after it. */
+/* Where the list of windows begins upon the panel: SESSION_BAR_GAP units after
+ * the last icon, or after the launcher's name where nothing is pinned. */
 static int32_t SessionTaskLeft(void)
 {
-    return SessionPinLeft() + ((int32_t)SessionPinnedCount() * SessionPinStride()) +
-           (SESSION_TASK_GAP * SessionScale);
+    const size_t pinned = SessionPinnedCount();
+
+    if (pinned == 0U)
+    {
+        return (SESSION_START_WIDTH + SESSION_BAR_GAP - SESSION_START_PAD - SESSION_GLYPH_CLEAR) *
+               SessionScale;
+    }
+
+    return SessionPinLeft() + ((int32_t)pinned * SessionPanelHeight()) +
+           ((int32_t)(pinned - 1U) * (SESSION_BAR_GAP - (2 * SESSION_PIN_INSET)) * SessionScale) +
+           ((SESSION_BAR_GAP - SESSION_PIN_INSET) * SessionScale);
 }
 
+/* How wide one of the list's buttons is with the gap after it. */
 static int32_t SessionTaskStride(void)
 {
     return (SESSION_TASK_UNITS + SESSION_TASK_GAP) * SessionScale;
@@ -667,9 +697,9 @@ static void SessionDrawPanel(bool open)
     const int32_t inset = 3 * SessionScale;
 
     SessionFill(SessionPanel, 0, 0, SessionScreen.width, height, SESSION_PANEL);
-    SessionFill(SessionPanel, 0, 1, SESSION_LAUNCH_WIDTH * SessionScale, height - 1,
+    SessionFill(SessionPanel, 0, 1, SESSION_START_WIDTH * SessionScale, height - 1,
                 open ? SESSION_QUIET : SESSION_PANEL);
-    SessionText(SessionPanel, inset * 2, SessionPanelTextTop(), "OXYS", SESSION_INK,
+    SessionText(SessionPanel, SESSION_START_PAD * SessionScale, SessionPanelTextTop(), "OXYS", SESSION_INK,
                 open ? SESSION_QUIET : SESSION_PANEL, SessionScale);
 
     /* The line above, which is what separates the panel from a window that
@@ -1124,7 +1154,7 @@ static void SessionHandlePress(const SyscallWindowEvent *event)
 {
     if (event->window == (uint32_t)SessionPanel)
     {
-        if (event->x < (SESSION_LAUNCH_WIDTH * SessionScale))
+        if (event->x < (SESSION_START_WIDTH * SessionScale))
         {
             if (SessionMenu >= 0)
             {

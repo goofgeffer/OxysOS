@@ -136,7 +136,9 @@ the bar covers a full window's controls ([`WINDOWS.md`](WINDOWS.md)).
 **The pinned programs** are the launcher entries marked `pin = yes`: a square
 button the bar's height each, right of the launcher's name, showing the entry's
 icon (or its name's first letter where it has none). One press starts it, as its
-launcher row would. The shipped file pins Terminal and Files.
+launcher row would. The shipped file pins Terminal and Files. The row is spaced
+by what is drawn: the same gap stands between the end of the name `OXYS` and the
+first icon, between icons, and between the last icon and the window list.
 
 **The launcher** is a second window **in the panel layer**, so nothing a program
 does can cover it. It opens upward from the launcher's name, above the bar, and
