@@ -11,7 +11,7 @@ row.
 
 | Date | Phase | Change | Commit |
 | ---- | ----- | ------ | ------ |
-| 2026-09-24 | Phase 9 | The pinned icons evenly spaced: one visible gap after the launcher's name, between icons and before the window list | — |
+| 2026-09-24 | Phase 9 | The pinned icons evenly spaced: one visible gap after the launcher's name, between icons and before the window list | `141ac8b` |
 | 2026-09-24 | Phase 9 | The panel moves to the foot of the screen with Terminal and Files pinned beside the launcher; the clock in a box at the top right | `e53fd5f` |
 | 2026-09-24 | Phase 9 | A background that cannot be read falls back to the shipped one, noted on the panel; config-check tests the shipped copies, not a person's `/etc` | `1b977fd` |
 | 2026-09-24 | Phase 9 | The Files icon without its white corner; both backgrounds shipped, the rose the default and the cliff restored | `1df1a73` |
