@@ -352,20 +352,19 @@ regenerates it and fails if what is here differs.*
 
 | | |
 | --- | --- |
-| Builds recorded | 39 |
-| Verified | 32 passed, 7 not |
+| Builds recorded | 40 |
+| Verified | 33 passed, 7 not |
 | Compilers | gcc |
 | Environments | Bochs, QEMU, QEMU q35,  VirtualBox,  Bochs, VirtualBox |
 | First | 2026-09-17T01:34Z |
-| Latest | 2026-09-25T23:31Z |
+| Latest | 2026-09-25T23:36Z |
 
 ## The last 20 builds
 
-The remaining 19 are in [`builds.tsv`](builds.tsv), which is the record.
+The remaining 20 are in [`builds.tsv`](builds.tsv), which is the record.
 
 | # | Date (UTC) | Commit | Compiler | Kernel | ISO | Result | Environments | Note |
 | - | ---------- | ------ | -------- | ------ | --- | ------ | ------------ | ---- |
-| 20 | 2026-09-24T01:25Z | `2b250f0` *(modified)* | gcc 13.2.0 | 3713584 | 10942464 | failed |  | Negative test of clear: the grid's form-feed case disabled; caught, reverted |
 | 21 | 2026-09-24T01:38Z | `393b437` | gcc 13.2.0 | 3715080 | 10944512 | passed (78 assertions) |  | A write of nothing returns zero, and micro saves files with blank lines |
 | 22 | 2026-09-24T01:38Z | `393b437` *(modified)* | gcc 13.2.0 | 3714776 | 10942464 | failed |  | Negative test: meant to refuse a write of nothing again, the sed disabled all four length-zero tests of syscall.c (write, read, version, path canonicalisation); caught, reverted |
 | 23 | 2026-09-24T01:55Z | `e381ca2` | gcc 13.2.0 | 3715328 | 10944512 | passed (78 assertions) |  | The launcher offers the terminal when the file offers nothing; window create and destroy wake the session |
@@ -385,5 +384,6 @@ The remaining 19 are in [`builds.tsv`](builds.tsv), which is the record.
 | 37 | 2026-09-25T21:59Z | `0fc868b` | gcc 13.2.0 | 3784248 | 13109248 | passed (79 assertions) | QEMU q35, VirtualBox, Bochs | The start icon on the launcher's button |
 | 38 | 2026-09-25T22:37Z | `9faf894` | gcc 13.2.0 | 3815704 | 13142016 | passed (79 assertions) | QEMU q35, VirtualBox, Bochs | Sub-task 9.8 and the notifications |
 | 39 | 2026-09-25T23:31Z | `076c3b7` | gcc 13.2.0 | 3815664 | 13142016 | passed (79 assertions) | QEMU q35, VirtualBox, Bochs | Icons at 96 pixels and notification symbols |
+| 40 | 2026-09-25T23:36Z | `9588cd0` | gcc 13.2.0 | 3815664 | 13142016 | passed (79 assertions) | QEMU q35, VirtualBox, Bochs | The settings icon's hole transparent |
 
 <!-- END GENERATED -->
