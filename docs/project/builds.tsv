@@ -55,3 +55,4 @@ number	date	commit	dirty	compiler	cc_version	kernel	iso	result	assertions	enviro
 35	2026-09-25T21:12Z	06bf6b2	no	gcc	13.2.0	3783712	13109248	passed	79	QEMU q35, VirtualBox, Bochs	-	The boot divided into phases in kernel/init/
 36	2026-09-25T21:22Z	d19a474	no	gcc	13.2.0	3784248	13109248	passed	79	QEMU q35, VirtualBox, Bochs	-	The close control as a cross
 37	2026-09-25T21:59Z	0fc868b	no	gcc	13.2.0	3784248	13109248	passed	79	QEMU q35, VirtualBox, Bochs	-	The start icon on the launcher's button
+38	2026-09-25T22:37Z	9faf894	no	gcc	13.2.0	3815704	13142016	passed	79	QEMU q35, VirtualBox, Bochs	-	Sub-task 9.8 and the notifications

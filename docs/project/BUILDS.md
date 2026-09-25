@@ -352,20 +352,19 @@ regenerates it and fails if what is here differs.*
 
 | | |
 | --- | --- |
-| Builds recorded | 37 |
-| Verified | 30 passed, 7 not |
+| Builds recorded | 38 |
+| Verified | 31 passed, 7 not |
 | Compilers | gcc |
 | Environments | Bochs, QEMU, QEMU q35,  VirtualBox,  Bochs, VirtualBox |
 | First | 2026-09-17T01:34Z |
-| Latest | 2026-09-25T21:59Z |
+| Latest | 2026-09-25T22:37Z |
 
 ## The last 20 builds
 
-The remaining 17 are in [`builds.tsv`](builds.tsv), which is the record.
+The remaining 18 are in [`builds.tsv`](builds.tsv), which is the record.
 
 | # | Date (UTC) | Commit | Compiler | Kernel | ISO | Result | Environments | Note |
 | - | ---------- | ------ | -------- | ------ | --- | ------ | ------------ | ---- |
-| 18 | 2026-09-24T01:10Z | `ccdd12e` *(modified)* | gcc 13.2.0 | 3706448 | 10934272 | failed |  | Negative test of the persistent /etc: label prefix accepted, seeding truncating, no write-back on close; all caught, reverted |
 | 19 | 2026-09-24T01:25Z | `2b250f0` | gcc 13.2.0 | 3713576 | 10942464 | passed (78 assertions) |  | clear in a terminal window: the grid acts upon the form feed |
 | 20 | 2026-09-24T01:25Z | `2b250f0` *(modified)* | gcc 13.2.0 | 3713584 | 10942464 | failed |  | Negative test of clear: the grid's form-feed case disabled; caught, reverted |
 | 21 | 2026-09-24T01:38Z | `393b437` | gcc 13.2.0 | 3715080 | 10944512 | passed (78 assertions) |  | A write of nothing returns zero, and micro saves files with blank lines |
@@ -385,5 +384,6 @@ The remaining 17 are in [`builds.tsv`](builds.tsv), which is the record.
 | 35 | 2026-09-25T21:12Z | `06bf6b2` | gcc 13.2.0 | 3783712 | 13109248 | passed (79 assertions) | QEMU q35, VirtualBox, Bochs | The boot divided into phases in kernel/init/ |
 | 36 | 2026-09-25T21:22Z | `d19a474` | gcc 13.2.0 | 3784248 | 13109248 | passed (79 assertions) | QEMU q35, VirtualBox, Bochs | The close control as a cross |
 | 37 | 2026-09-25T21:59Z | `0fc868b` | gcc 13.2.0 | 3784248 | 13109248 | passed (79 assertions) | QEMU q35, VirtualBox, Bochs | The start icon on the launcher's button |
+| 38 | 2026-09-25T22:37Z | `9faf894` | gcc 13.2.0 | 3815704 | 13142016 | passed (79 assertions) | QEMU q35, VirtualBox, Bochs | Sub-task 9.8 and the notifications |
 
 <!-- END GENERATED -->
