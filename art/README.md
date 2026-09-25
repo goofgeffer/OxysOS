@@ -137,6 +137,7 @@ thing has to agree with it about either colour.
 | [`icons/terminal.oxi`](icons/terminal.oxi) | The same, upon nothing rather than white, reduced to forty-eight pixels square with the transparency of every pixel kept, and written in version 2 of the format [`../libc/include/icon.h`](../libc/include/icon.h) sets out. This is what the ramdisk carries and what the session reads. |
 | [`icons/files.png`](icons/files.png), [`icons/files.oxi`](icons/files.oxi) | The file manager's icon, a folder, as the project owner drew it, and the same converted by the command below. |
 | [`icons/windows.png`](icons/windows.png), [`icons/windows.oxi`](icons/windows.oxi) | The window demonstration's icon, a window around the mark, as the project owner drew it, and the same converted by the command below. |
+| [`icons/start.png`](icons/start.png), [`icons/start.oxi`](icons/start.oxi) | The launcher's button, three dots and lines, as the project owner drew it, and the same converted by the command below. |
 
 **They are files and not a header**, which is the whole difference between an
 icon and the mark above. There is one mark and it is drawn before there is a
@@ -154,7 +155,7 @@ somebody builds. `E` is the extent; forty-eight is the launcher's slot of
 twenty-four units at the scale of two.
 
 ```sh
-E=48; N=terminal          # or files, or windows
+E=48; N=terminal          # or files, windows, or start
 convert art/icons/$N.png -background white -alpha remove -alpha set -fuzz 10% -fill none \
         -draw 'color 0,0 floodfill' -trim +repage cut.png
 S=$(convert cut.png -format '%[fx:max(w,h)]' info:)

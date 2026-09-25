@@ -121,8 +121,8 @@ may ([`../../art/README.md`](../../art/README.md)).
 ## 5. The panel
 
 A bar across the foot of the screen, with a line above it (separating it from a
-window of the same colour over it), holding, left to right: the launcher's name
-`OXYS`, the **pinned programs**, the window list, and the `using defaults` or
+window of the same colour over it), holding, left to right: the launcher's
+button, the **pinned programs**, the window list, and the `using defaults` or
 `default background` notice when one applies. The bar is 18 units high, so the
 pinned icons are recognisable. The session has no fill across the protocol, so
 the bar is a tile blitted in bands.
@@ -134,14 +134,21 @@ against the top or bottom edge free of windows made full, so neither the box nor
 the bar covers a full window's controls ([`WINDOWS.md`](WINDOWS.md)).
 
 **The pinned programs** are the launcher entries marked `pin = yes`: a square
-button the bar's height each, right of the launcher's name, showing the entry's
+button the bar's height each, right of the launcher's button, showing the entry's
 icon (or its name's first letter where it has none). One press starts it, as its
 launcher row would. The shipped file pins Terminal and Files. The row is spaced
-by what is drawn: the same gap stands between the end of the name `OXYS` and the
-first icon, between icons, and between the last icon and the window list.
+by what is drawn: the same gap stands between the launcher's icon and the
+first pinned icon, between icons, and between the last icon and the window list.
+
+**The launcher's button** is a square of the same kind, holding
+`/share/icons/start.oxi`, the project owner's list of three dots and lines, since
+2026-09-25; until then it held the name `OXYS`. It is read once, when the
+session starts. Where it cannot be read the button draws three bars instead and
+the session says so on the standard error, so the button every program is reached
+through is never an empty square.
 
 **The launcher** is a second window **in the panel layer**, so nothing a program
-does can cover it. It opens upward from the launcher's name, above the bar, and
+does can cover it. It opens upward from the launcher's button, above the bar, and
 touches neither edge of the screen. It is created when opened and destroyed when
 closed. Its entries are the `[launch]` blocks of `/etc/session.conf` (`run`,
 `name`, optional `icon` and `pin`; [`CONFIG.md`](CONFIG.md)).

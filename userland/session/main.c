@@ -82,20 +82,21 @@
  * entry marked `pin = yes`, right of the launcher's name, with its icon inset
  * by SESSION_PIN_INSET units.
  *
+ * The launcher's own button is a square of the same kind, since 2026-09-25,
+ * holding the start icon the project owner drew (SESSION_START_ICON) where it
+ * had held the word OXYS. Where the icon cannot be read, three bars are drawn
+ * in its place, so that the one button every other program is reached through
+ * is never an empty square a person has to guess at.
+ *
  * The row is spaced by what the eye sees: one gap, SESSION_BAR_GAP units,
- * stands between the end of the launcher's name and the first icon, between
- * each two icons, and between the last icon and the first button of the list
- * of windows. The launcher's button is its name with SESSION_START_PAD units
- * either side, so that no empty stretch of it widens the first gap.
+ * stands between the launcher's icon and the first pinned icon, between each
+ * two icons, and between the last icon and the first button of the list of
+ * windows. Every icon is inset SESSION_PIN_INSET units within its square, so
+ * the gaps between squares are the gap less two insets.
  */
 #define SESSION_PIN_INSET 2
 #define SESSION_BAR_GAP   10
-#define SESSION_START_PAD 4
-#define SESSION_START_WIDTH ((4 * 8) + (2 * SESSION_START_PAD))
-
-/* The font's last two columns of every glyph are clear (CONSOLE.md), so the
- * name's ink ends that far before its last cell does. */
-#define SESSION_GLYPH_CLEAR 2
+#define SESSION_START_ICON "/share/icons/start.oxi"
 
 /*
  * The clock stands apart from the panel, in a box of its own at the top right
@@ -213,6 +214,10 @@ static bool SessionUsingDefaults;
 /* Whether the shipped background stands in for one the person's file names
  * and that could not be read. */
 static bool SessionBackgroundIsDefault;
+
+/* The launcher's icon, and whether it could be read. */
+static OxysIcon SessionStartIcon;
+static bool SessionHasStartIcon;
 static OxysImageScaler SessionScaler;
 static uint32_t SessionBand[SESSION_BAND];
 
@@ -566,15 +571,12 @@ static void SessionDrawIcon(int64_t window, int32_t x, int32_t y, int32_t slot,
 /*
  * Where the pinned programs begin upon the panel, and how far apart they
  * stand: a square the panel's height each. The distances are those that leave
- * SESSION_BAR_GAP units between what is drawn — the name's last letter and the
- * first icon, one icon and the next — the button's padding and each icon's
- * inset counted in.
+ * SESSION_BAR_GAP units between what is drawn — the launcher's icon and the
+ * first pinned icon, one icon and the next — each icon's inset counted in.
  */
 static int32_t SessionPinLeft(void)
 {
-    return (SESSION_START_WIDTH + SESSION_BAR_GAP - SESSION_START_PAD - SESSION_GLYPH_CLEAR -
-            SESSION_PIN_INSET) *
-           SessionScale;
+    return SessionPanelHeight() + ((SESSION_BAR_GAP - (2 * SESSION_PIN_INSET)) * SessionScale);
 }
 
 static int32_t SessionPinStride(void)
@@ -583,15 +585,14 @@ static int32_t SessionPinStride(void)
 }
 
 /* Where the list of windows begins upon the panel: SESSION_BAR_GAP units after
- * the last icon, or after the launcher's name where nothing is pinned. */
+ * the last icon, or after the launcher's icon where nothing is pinned. */
 static int32_t SessionTaskLeft(void)
 {
     const size_t pinned = SessionPinnedCount();
 
     if (pinned == 0U)
     {
-        return (SESSION_START_WIDTH + SESSION_BAR_GAP - SESSION_START_PAD - SESSION_GLYPH_CLEAR) *
-               SessionScale;
+        return SessionPanelHeight() + ((SESSION_BAR_GAP - SESSION_PIN_INSET) * SessionScale);
     }
 
     return SessionPinLeft() + ((int32_t)pinned * SessionPanelHeight()) +
@@ -697,10 +698,29 @@ static void SessionDrawPanel(bool open)
     const int32_t inset = 3 * SessionScale;
 
     SessionFill(SessionPanel, 0, 0, SessionScreen.width, height, SESSION_PANEL);
-    SessionFill(SessionPanel, 0, 1, SESSION_START_WIDTH * SessionScale, height - 1,
-                open ? SESSION_QUIET : SESSION_PANEL);
-    SessionText(SessionPanel, SESSION_START_PAD * SessionScale, SessionPanelTextTop(), "OXYS", SESSION_INK,
-                open ? SESSION_QUIET : SESSION_PANEL, SessionScale);
+    {
+        const int32_t start_inset = SESSION_PIN_INSET * SessionScale;
+        const uint32_t paper = open ? SESSION_QUIET : SESSION_PANEL;
+
+        SessionFill(SessionPanel, 0, 1, height, height - 1, paper);
+
+        if (SessionHasStartIcon)
+        {
+            SessionDrawIcon(SessionPanel, start_inset, start_inset, height - (2 * start_inset), &SessionStartIcon,
+                            paper);
+        }
+        else
+        {
+            /* Three bars, the icon's shape without its dots. */
+            const int32_t bar = (height - (2 * start_inset)) / 7;
+
+            for (int32_t row = 0; row < 3; ++row)
+            {
+                SessionFill(SessionPanel, start_inset, start_inset + bar + (row * 2 * bar), height - (2 * start_inset),
+                            bar, SESSION_INK);
+            }
+        }
+    }
 
     /* The line above, which is what separates the panel from a window that
      * happens to be the same colour standing over it. */
@@ -1154,7 +1174,7 @@ static void SessionHandlePress(const SyscallWindowEvent *event)
 {
     if (event->window == (uint32_t)SessionPanel)
     {
-        if (event->x < (SESSION_START_WIDTH * SessionScale))
+        if (event->x < SessionPanelHeight())
         {
             if (SessionMenu >= 0)
             {
@@ -1267,6 +1287,16 @@ int main(void)
     (void)signal(SIGALRM, SessionAlarmHandler);
 
     (void)SessionReadConfiguration(true);
+
+    /* The launcher's icon, read once: it is the system's and not the
+     * person's, and names no file of theirs that could change. */
+    SessionHasStartIcon = OxysIconRead(&SessionStartIcon, SESSION_START_ICON);
+
+    if (!SessionHasStartIcon)
+    {
+        (void)fprintf(stderr, "session: %s could not be read; the launcher shows three bars.\n",
+                      SESSION_START_ICON);
+    }
 
     {
         SyscallWindowRectangle geometry;
