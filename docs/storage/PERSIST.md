@@ -130,7 +130,7 @@ present, readable, and offer a launcher.
 
 1. Only `/etc` persists. A persistent `/home` needs a second volume, and a second
    volume on the same disk needs partitions, which the block layer does not read
-   ([`BLOCK.md`](BLOCK.md)).
+   ([`BLOCK.md`](BLOCK.md)). Planned as sub-tasks 10.7 to 10.11.
 2. A shipped file that changes does not reach an existing volume: nothing records
    which files were edited. The new copy is at `/share/defaults/etc`.
 3. A volume left open is marked clean without a check. A file being written as

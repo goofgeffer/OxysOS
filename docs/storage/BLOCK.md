@@ -90,7 +90,7 @@ The fourteen refusals are the ones the test provokes.
 2. The buffer cache holds 512-byte blocks only; a device of another block size
    is reachable through this layer but not cached.
 3. No partitions: a device is the whole medium. This is why `/home` cannot yet
-   persist ([`PERSIST.md`](PERSIST.md)).
+   persist ([`PERSIST.md`](PERSIST.md)). Planned as sub-task 10.7.
 4. No ordering or barriers; requests are issued as they arrive.
 5. No lock. User threads run only on the bootstrap processor, and application
    processors reach no block device; widening that affinity requires a lock on

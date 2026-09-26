@@ -70,7 +70,7 @@ The gaps that cross subsystems. Each design document lists its own.
 | A reaper for kernel threads: a finished kernel thread's stack is held until the machine stops. | Not scheduled |
 | Thread migration, work stealing and priorities. | Phase 13 |
 | A resize of a window by hand. [`WINDOWS.md`](../design/WINDOWS.md) | Not scheduled |
-| A persistent `/home`: needs partition tables, which the block layer does not read. [`PERSIST.md`](../storage/PERSIST.md) | Not scheduled |
+| A persistent `/home`: needs partition tables, which the block layer does not read. [`PERSIST.md`](../storage/PERSIST.md) | 10.7 to 10.11 |
 | USB of any kind, and so USB storage. | Not scheduled |
 | A time zone, and a way to set the clock. [`TIME.md`](../devices/TIME.md) | Not scheduled |
 | `CR4.SMEP`, `CR4.SMAP` and `IA32_EFER.NXE`. | 13.3 |

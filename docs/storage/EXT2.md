@@ -261,7 +261,7 @@ These cover all of this kernel's EXT2 support, including
 3. Block sizes above 4 KiB are refused; fragments are not implemented (no EXT2
    ever used them).
 4. One volume per device, starting at its first block: partition tables are not
-   read.
+   read (planned as sub-task 10.7).
 5. Only the first 128 bytes of an inode are decoded: no nanosecond times, no
    extended attributes. `i_faddr`, `i_osd1` and `i_osd2` are not read.
 6. `META_BG` is refused as an unimplemented incompatible feature.

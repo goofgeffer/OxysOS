@@ -147,7 +147,7 @@ self-test runs. A change of state is made in the commit that causes it.
 | 9.7 | Implement the utilities the desktop is not usable without: a file manager, a text viewer and a clock. `Oxys 1 Beta` was cut here: [`RELEASE-1-BETA.md`](RELEASE-1-BETA.md). | Implemented | `KernelVerifyRtc`, `KernelVerifyTime`, `signal-check` |
 | 9.8 | Implement the settings application, by which the configuration of 9.4 is edited rather than hand-written. The notifications were added with it. | Implemented | `KernelVerifyConfig`, `window-check` |
 
-## Phase 10 — Cryptography
+## Phase 10 — Cryptography and Disk Partitions
 
 | Sub-task | Deliverable | State | Asserted by |
 | -------- | ----------- | ----- | ----------- |
@@ -157,6 +157,19 @@ self-test runs. A change of state is made in the commit that causes it.
 | 10.4 | Implement AES-128 and AES-256 with the FIPS 197 test vectors. | Planned | — |
 | 10.5 | Implement CBC and CTR modes of operation. | Planned | — |
 | 10.6 | Expose the primitives to user space by system call and by a `/dev/random` device node. | Planned | — |
+| 10.7 | Read MBR partition tables (UEFI Specification 2.10, Section 5.2.1) in the block layer, and register each primary partition as a block device of its own; a disk with no table stays one device, as today. | Planned | — |
+| 10.8 | Provide a system call by which a trusted program reads and writes a whole disk's blocks, for partitioning and formatting. | Planned | — |
+| 10.9 | Implement an EXT2 formatter that runs upon Oxys-OS, so that a volume is made without another system. | Planned | — |
+| 10.10 | Implement `disk`: list disks and partitions, write an empty partition table, add, format and label a partition. No partition is made by default; a person makes one with this. | Planned | — |
+| 10.11 | Mount partitions by label, as the persistent `/etc` is found, and give `/home` a persistent volume upon one. | Planned | — |
+
+**Why partitions are in this phase.** At the project owner's direction of
+2026-09-26. The persistent `/home` of [`STATUS.md`](STATUS.md) needs them, and
+accounts, below, need a persistent `/home` first.
+
+**Accounts, afterwards.** User identities, a login screen, permissions enforced
+rather than only recorded, and a home directory each, upon 10.11. A direction
+with no sub-tasks yet, written down so that 10.7 to 10.11 do not foreclose it.
 
 ## Phase 11 — Networking
 
