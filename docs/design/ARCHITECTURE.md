@@ -357,6 +357,7 @@ either.
 | `kernel/arch/x86_64/cpu/tss.c` | The task state segment: the stacks the processor loads when it needs one it can trust, its descriptor within the global descriptor table, and the loading of the task register. |
 | `kernel/arch/x86_64/cpu/percpu.c` | The per-processor data areas: their static allocation, the establishment of the executing processor's own, the segment base it is reached through and the repair of that base after a segment reload, and the counted interrupt-disable every critical section is built upon. |
 | `kernel/arch/x86_64/cpu/spinlock.c` | The ticket spinlock: the locked fetch-and-add that issues a ticket, the bounded wait to be served, the release that admits the next arrival, and the two checks that turn the silent misuses of a lock into a report. |
+| `kernel/arch/x86_64/cpu/random.c` | Sub-task 10.1: the processor's sources of randomness — `RDSEED`, `RDRAND` and the time-stamp counter, detected by CPUID and drawn with the retries of Intel's guide. |
 | `kernel/arch/x86_64/interrupt/interrupt_stubs.asm` | The 256 per-vector entry stubs and the common stub that saves the registers and calls the dispatcher. |
 | `kernel/arch/x86_64/interrupt/interrupts.c` | The installation of the stubs, the dispatch table and the routing of each vector to its registered handler. |
 | `kernel/arch/x86_64/interrupt/irq.c` | The interrupt request layer: the handlers claimed by request line rather than by vector, the routing of a request to the driver that claimed it, the signalling of completion at whichever controller delivered it, and the retirement of the 8259A pair in favour of the APIC. |
@@ -412,6 +413,7 @@ either.
 | `kernel/test/arch/smp.c` | The self-tests of the per-processor area, the spinlock, the inter-processor interrupt and the shootdown — the first two asserting internal state, since upon one processor a lock that does not lock behaves like one that does, and the last two asserting behaviour by an interrupt the processor sends to itself. |
 | `kernel/mm/heap.c` | The kernel heap: a slab allocator of eight size classes over the kernel arena. |
 | `kernel/mm/table.c` | The growing table: chunks that never move, the first static, the rest from the heap; the process, thread, node, open-file and pipe tables ([`MEMORY-LAYOUT.md`](MEMORY-LAYOUT.md), Section 16). |
+| `crypto/entropy.c` | Sub-task 10.1: the entropy pool, its mixing and credit, and the Repetition Count Test of the jitter source ([`ENTROPY.md`](ENTROPY.md)). |
 | `kernel/mm/vmm.c` | The kernel virtual address allocator, issuing ranges of the kernel arena backed by frames. |
 | `kernel/arch/x86_64/mm/paging.c` | The permanent kernel paging hierarchy: its construction, activation, software translation and copy-on-write fault resolution. |
 | `kernel/arch/x86_64/mm/shootdown.c` | The translation-lookaside-buffer shootdown: the publication of the address whose translation has become stale, the interrupt that tells the other processors to discard it, the acknowledgement each makes, and the bounded wait for all of them. |
@@ -437,7 +439,7 @@ either.
 | `kernel/fs/ext2_vfs.c` | The binding of the EXT2 implementation to that layer: the operations vector, the translation between the format's mode and the layer's neutral node type, and the mark a mount leaves upon a volume it has open. |
 | `kernel/handoff/multiboot2.c` | The Multiboot2 parser, reducing the boot loader's structure to the neutral `BootInformation` description. |
 | `kernel/kernel.c` | `KernelMain`, which calls the phases of `kernel/init/` in the dependency order of Section 4; the diagnostic channel, the command line, the halt, the boot and power screens, and `KernelPanic`, the unrecoverable-error path. |
-| `kernel/init/*.c` | The phases of the boot, one file each: early, memory, display, interrupts, devices, processes, processors, storage, userland and session. Each initialises its subsystems and runs their self-tests in the order it always has; [`../../kernel/init/README.md`](../../kernel/init/README.md). |
+| `kernel/init/*.c` | The phases of the boot, one file each: early, memory, display, interrupts, devices, entropy, processes, processors, storage, userland and session. Each initialises its subsystems and runs their self-tests in the order it always has; [`../../kernel/init/README.md`](../../kernel/init/README.md). |
 | `drivers/vga/vga.c` | The VGA text-mode display driver: the control characters, the scrolling, the colour attributes, the hardware cursor and the erase limit that bounds a backspace. |
 | `drivers/serial/serial.c` | The interrupt-driven COM1 serial driver used for diagnostics and input. |
 | `drivers/pic/pic.c` | The pair of cascaded 8259A interrupt controllers: their remapping, the masking of request lines, the recognition of a spurious request, the end-of-interrupt protocol, and the silencing of the pair when the APIC supersedes it. |

@@ -181,6 +181,7 @@ and this table shrinks in the same change.
 | `kernel/mm/vmm.c` | The kernel arena. |
 | `kernel/mm/heap.c` | The kernel heap. |
 | `kernel/mm/table.c` | A growing table's chunk directory; growth is refused off the bootstrap processor. |
+| `crypto/entropy.c` | The entropy pool, written only at boot upon the bootstrap processor. |
 | `kernel/block/block.c` | The block device table. |
 | `kernel/block/buffer.c` | The buffer cache; the first structure that will want a lock it can sleep on. |
 | `kernel/fs/vfs/vfs.c` | The mount, node and open-file tables. |

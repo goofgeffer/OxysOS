@@ -211,6 +211,7 @@ C_SOURCES := kernel/kernel.c \
              kernel/init/display.c \
              kernel/init/interrupts.c \
              kernel/init/devices.c \
+             kernel/init/entropy.c \
              kernel/init/processes.c \
              kernel/init/processors.c \
              kernel/init/storage.c \
@@ -220,6 +221,7 @@ C_SOURCES := kernel/kernel.c \
              kernel/test/volume.c \
              kernel/test/program.c \
              kernel/test/mm/memory.c \
+             kernel/test/crypto/entropy.c \
              kernel/test/arch/interrupts.c \
              kernel/test/arch/privilege.c \
              kernel/test/arch/syscall.c \
@@ -273,6 +275,7 @@ C_SOURCES := kernel/kernel.c \
              kernel/mm/vmm.c \
              kernel/mm/heap.c \
              kernel/mm/table.c \
+             crypto/entropy.c \
              kernel/arch/x86_64/mm/paging.c \
              kernel/arch/x86_64/mm/shootdown.c \
              kernel/arch/x86_64/mm/addrspace.c \
@@ -280,6 +283,7 @@ C_SOURCES := kernel/kernel.c \
              kernel/arch/x86_64/cpu/idt.c \
              kernel/arch/x86_64/cpu/tss.c \
              kernel/arch/x86_64/cpu/percpu.c \
+             kernel/arch/x86_64/cpu/random.c \
              kernel/arch/x86_64/cpu/spinlock.c \
              kernel/arch/x86_64/interrupt/interrupts.c \
              kernel/arch/x86_64/interrupt/irq.c \

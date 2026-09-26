@@ -1496,6 +1496,38 @@ register at `0x71` is the conventional companion and is the one every
 environment here decodes; its bit-level description was not reached in the
 register database, and this entry says so rather than claim it.
 
+### Intel Digital Random Number Generator (DRNG) Software Implementation Guide
+Intel Corporation. Read at
+`https://www.intel.com/content/www/us/en/developer/articles/guide/intel-digital-random-number-generator-drng-software-implementation-guide.html`
+on 2026-09-25 for sub-task 10.1.
+
+Sections relied upon: **3.2.3** — no more than 511 × 2 = 1022 sequential values
+of `RDRAND` are generated from one seed. **3.2.4** — the output of `RDSEED` is
+compliant with SP 800-90B and C. **5.2.1** — ten retries of `RDRAND` in a tight
+loop are recommended. **5.2.6** — a 128-bit seed from 512 128-bit values of
+`RDRAND`, which is the eighth of a bit a 64-bit value is credited with.
+**5.3.1** — `RDSEED` retried with `PAUSE`, and given up by a caller that must
+not wait after "somewhere between 1 and 100" retries. The instructions
+themselves, their CPUID bits and the carry flag's meaning are the SDM's,
+Volume 2A, "CPUID", and Volume 2B, "RDRAND", "RDSEED" and "RDTSC", read on the
+same date. Applied in
+[`../../kernel/arch/x86_64/cpu/random.c`](../../kernel/arch/x86_64/cpu/random.c),
+[`../../kernel/init/entropy.c`](../../kernel/init/entropy.c) and
+[`../design/ENTROPY.md`](../design/ENTROPY.md).
+
+### NIST SP 800-90B, Recommendation for the Entropy Sources Used for Random Bit Generation
+National Institute of Standards and Technology, January 2018. Read at
+`https://nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.800-90B.pdf` on
+2026-09-25 for sub-task 10.1.
+
+Sections relied upon: **4.4** — the two approved continuous health tests, and
+α = 2⁻²⁰ as the false-positive probability used throughout. **4.4.1** — the
+Repetition Count Test: identical consecutive samples are counted, and the test
+fails at a cutoff C = 1 + ⌈−log₂ α / H⌉; the section's own example, H = 2,
+gives 11. **3** — an entropy source's min-entropy is to be assessed, which is
+recorded as not done here. Applied in [`../../crypto/entropy.c`](../../crypto/entropy.c)
+and [`../design/ENTROPY.md`](../design/ENTROPY.md).
+
 ## 2. To be consulted in later phases
 
 | Specification | Phase | Subject |

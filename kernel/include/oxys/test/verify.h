@@ -86,6 +86,9 @@ bool KernelCommandLineHasOption(const char *option);
 void KernelVerifyFrameAllocator(void);
 void KernelVerifyPaging(void);
 void KernelVerifyAllocators(void);
+
+/* Sub-task 10.1: the entropy pool and the processor's sources of randomness. */
+void KernelVerifyEntropy(void);
 void KernelVerifyGrowingTable(void);
 void KernelVerifyReferenceCounting(void);
 

@@ -8,7 +8,8 @@
  *          KernelInitialiseDisplay, KernelInitialiseFrameReferences,
  *          KernelInitialiseInterrupts, KernelInitialiseDevices,
  *          KernelInitialiseProcesses, KernelInitialiseProcessors,
- *          KernelInitialiseStorage, KernelVerifyUserland, KernelEnterSession,
+ *          KernelInitialiseStorage, KernelInitialiseEntropy, KernelVerifyUserland,
+ *          KernelEnterSession,
  *          KernelDisplayMode.
  * References:
  *   - docs/design/ARCHITECTURE.md, Section 4: the dependency order KernelMain
@@ -80,6 +81,7 @@ void KernelInitialiseDisplay(void);
 void KernelInitialiseFrameReferences(void);
 void KernelInitialiseInterrupts(void);
 void KernelInitialiseDevices(void);
+void KernelInitialiseEntropy(void);
 void KernelInitialiseProcesses(void);
 void KernelInitialiseProcessors(void);
 void KernelInitialiseStorage(void);

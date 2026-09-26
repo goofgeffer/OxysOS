@@ -11,6 +11,7 @@ row.
 
 | Date | Phase | Change | Commit |
 | ---- | ----- | ------ | ------ |
+| 2026-09-25 | Phase 10 | Sub-task 10.1, which opens Phase 10: the entropy pool in `crypto/`, seeded at boot from `RDSEED`, `RDRAND` and the jitter of the time-stamp counter, with the jitter held to the repetition count test of NIST SP 800-90B | `pending` |
 | 2026-09-25 | Phase 9 | The hole of the settings icon made transparent, by a second flood from its centre recorded in `art/README.md` | `9588cd0` |
 | 2026-09-25 | Phase 9 | The project owner's new Files, Terminal and start icons, a Settings icon, and notification symbols (warnings use the information one); every icon converted at 96 pixels, twice the launcher's slot, and `ICON_EXTENT_MAXIMUM` raised to 96 | `076c3b7` |
 | 2026-09-25 | Phase 9 | Sub-task 9.8, which closes Phase 9: the settings application, editing `/etc` in place with `OxysConfigEdit`; and notifications at the bottom right, posted by any program through `notify` and shown by the session, with `init` and the session posting their own and a `notify` command | `9faf894` |

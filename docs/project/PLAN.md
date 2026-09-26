@@ -12,8 +12,8 @@ works is its design document; when each change was made is
 | - | - |
 | Target | x86_64, monolithic kernel |
 | Boot | Multiboot2 through GRUB (BIOS); UEFI in Phase 12 |
-| Complete | Phases 1 to 9 |
-| Next | Sub-task 10.1, the entropy pool, which opens Phase 10 |
+| Complete | Phases 1 to 9; Phase 10 to sub-task 10.1 |
+| Next | Sub-task 10.2, the deterministic random bit generator |
 | Releases | `Oxys 1 Alpha` at 8.7 (cut); `Oxys 1 Beta` at 9.7 (cut); `Oxys 1` at about 11.10 — [`VERSIONING.md`](VERSIONING.md) |
 
 **State** is one of `Planned`, `In progress` or `Implemented`. A sub-task is
@@ -151,7 +151,7 @@ self-test runs. A change of state is made in the commit that causes it.
 
 | Sub-task | Deliverable | State | Asserted by |
 | -------- | ----------- | ----- | ----------- |
-| 10.1 | Implement an entropy pool seeded from `RDSEED`/`RDRAND` where available and from timer jitter otherwise. | Planned | — |
+| 10.1 | Implement an entropy pool seeded from `RDSEED`/`RDRAND` where available and from timer jitter otherwise. | Implemented | `KernelVerifyEntropy` |
 | 10.2 | Implement a cryptographically secure deterministic random bit generator. | Planned | — |
 | 10.3 | Implement SHA-256 with the FIPS 180-4 test vectors. | Planned | — |
 | 10.4 | Implement AES-128 and AES-256 with the FIPS 197 test vectors. | Planned | — |

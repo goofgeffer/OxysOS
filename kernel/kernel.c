@@ -782,6 +782,10 @@ void KernelMain(uint32_t multiboot_information_address, uint32_t multiboot_magic
 
     KernelInitialiseInterrupts();
     KernelInitialiseDevices();
+
+    /* Sub-task 10.1: the entropy pool, once the time-stamp counter can be read
+     * against a machine that is doing something. */
+    KernelInitialiseEntropy();
     KernelInitialiseProcesses();
 
     /* The APICs adopt every request line claimed so far, so they follow the

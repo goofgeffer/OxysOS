@@ -94,7 +94,7 @@ property the prose alone did not have.
 
 | Directory | Holds | Where its detail is |
 | --------- | ----- | ------------------- |
-| `cpu/` | What the processor is made to load, and the state it keeps for each core: the global descriptor table, the interrupt descriptor table, the task state segments, the per-processor areas reached through the `GS` base, and the ticket spinlock built upon them. | `PRIVILEGE.md`, `CONCURRENCY.md` |
+| `cpu/` | What the processor is made to load, and the state it keeps for each core: the global descriptor table, the interrupt descriptor table, the task state segments, the per-processor areas reached through the `GS` base, and the ticket spinlock built upon them; since sub-task 10.1, the processor's sources of randomness, `random.c`. | `PRIVILEGE.md`, `CONCURRENCY.md`, `ENTROPY.md` |
 | `interrupt/` | Delivery and dispatch: the 256 per-vector stubs, the dispatcher, the exception handlers, and the request layer through which a driver claims a line. | `INTERRUPTS.md` |
 | `syscall/` | The privilege boundary: the model-specific registers that configure `SYSCALL`, the entry path they name, the dispatch table and the validation of a caller's arguments. | `PRIVILEGE.md` |
 | `smp/` | More than one processor: the bring-up sequence, the trampoline a started processor begins in real mode upon, and the inter-processor interrupt. | `SMP.md`, `CONCURRENCY.md` |
