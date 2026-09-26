@@ -61,3 +61,4 @@ number	date	commit	dirty	compiler	cc_version	kernel	iso	result	assertions	enviro
 41	2026-09-26T01:50Z	128c721	no	gcc	13.2.0	3848232	13174784	passed	80	QEMU q35, VirtualBox, Bochs	-	Sub-task 10.1, the entropy pool
 42	2026-09-26T16:33Z	cb2bb59	no	gcc	13.2.0	3854096	13178880	passed	80	QEMU q35, VirtualBox, Bochs	-	Notepad and System Info; the window demonstration removed
 43	2026-09-26T17:32Z	2e61dcc	no	gcc	13.2.0	3859840	13185024	passed	80	QEMU q35, VirtualBox, Bochs	-	The owner's bars, buttons, pointer and icons
+44	2026-09-26T17:42Z	38fbb4f	no	gcc	13.2.0	3859840	13185024	passed	80	QEMU q35, VirtualBox, Bochs	-	The panel's icons without buttons
