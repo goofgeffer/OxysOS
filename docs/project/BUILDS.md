@@ -352,20 +352,19 @@ regenerates it and fails if what is here differs.*
 
 | | |
 | --- | --- |
-| Builds recorded | 44 |
-| Verified | 37 passed, 7 not |
+| Builds recorded | 45 |
+| Verified | 38 passed, 7 not |
 | Compilers | gcc |
 | Environments | Bochs, QEMU, QEMU q35,  VirtualBox,  Bochs, VirtualBox |
 | First | 2026-09-17T01:34Z |
-| Latest | 2026-09-26T17:42Z |
+| Latest | 2026-09-26T19:39Z |
 
 ## The last 20 builds
 
-The remaining 24 are in [`builds.tsv`](builds.tsv), which is the record.
+The remaining 25 are in [`builds.tsv`](builds.tsv), which is the record.
 
 | # | Date (UTC) | Commit | Compiler | Kernel | ISO | Result | Environments | Note |
 | - | ---------- | ------ | -------- | ------ | --- | ------ | ------------ | ---- |
-| 25 | 2026-09-24T02:27Z | `9382d5e` *(modified)* | gcc 13.2.0 | 3717944 | 10946560 | failed |  | Negative test: defaults unstaged, micro's file beside left, no write-back after unlink; all caught, reverted |
 | 26 | 2026-09-24T21:44Z | `8ca9ae5` | gcc 13.2.0 | 3718160 | 10946560 | passed (78 assertions) |  | Documentation revamp: subsystem documents rewritten, section references stripped (comments only) |
 | 27 | 2026-09-24T22:06Z | `51e019e` | gcc 13.2.0 | 3718160 | 10946560 | passed (78 assertions) |  | Launcher icons for Files and Windows |
 | 28 | 2026-09-24T22:37Z | `4bd8769` | gcc 13.2.0 | 3718160 | 13043712 | passed (78 assertions) |  | New Files icon; rose photograph background; ramdisk 4 MiB |
@@ -385,5 +384,6 @@ The remaining 24 are in [`builds.tsv`](builds.tsv), which is the record.
 | 42 | 2026-09-26T16:33Z | `cb2bb59` | gcc 13.2.0 | 3854096 | 13178880 | passed (80 assertions) | QEMU q35, VirtualBox, Bochs | Notepad and System Info; the window demonstration removed |
 | 43 | 2026-09-26T17:32Z | `2e61dcc` | gcc 13.2.0 | 3859840 | 13185024 | passed (80 assertions) | QEMU q35, VirtualBox, Bochs | The owner's bars, buttons, pointer and icons |
 | 44 | 2026-09-26T17:42Z | `38fbb4f` | gcc 13.2.0 | 3859840 | 13185024 | passed (80 assertions) | QEMU q35, VirtualBox, Bochs | The panel's icons without buttons |
+| 45 | 2026-09-26T19:39Z | `bf5c871` *(modified)* | gcc 13.2.0 | 3984272 | 13309952 | passed (80 assertions) |  |  |
 
 <!-- END GENERATED -->
