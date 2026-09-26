@@ -18,8 +18,9 @@ with it on the framebuffer. The same face is the one programs draw text with
 
 Ninety-five glyphs, `0x20` to `0x7E`, compiled into the image.
 
-- **Drawn for this project**, pixel by pixel. `PROJECT_GUIDELINES.md`, Section 2,
-  forbids transcription, and the code page 437 face is easy to lift unnoticed.
+- **Drawn for this project**, pixel by pixel. The code page 437 face circulates
+  under no stated licence, so it cannot be recorded in `LICENSING.md` as a
+  third-party work must be (`PROJECT_GUIDELINES.md`, Section 2).
   Reading the firmware's font from VGA plane 2 is not possible either: the loader
   has already set a graphics mode, and UEFI (Phase 12) has no VGA at all.
 - **Eight by eight.** A glyph row is one byte, **most significant bit leftmost**,

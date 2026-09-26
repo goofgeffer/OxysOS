@@ -130,10 +130,9 @@ in Section 7 with its rationale, and its size is asserted at compile time.
   bitwise operations must be defined by ISO/IEC 9899:2011. Type punning is
   performed by a union or by `memcpy`, never by casting a pointer to an
   incompatible type.
-- Third-party code within the kernel proper. The sole external dependencies are
-  GRUB and the cross-compiler.
-- The transcription of code from other operating systems. Reference
-  implementations may be studied; the code that results must be original.
+- Third-party code whose licence is incompatible with the path it is placed in,
+  or that is not recorded in `LICENSING.md` (`PROJECT_GUIDELINES.md`,
+  Section 2).
 
 ## 9. Documentation discipline
 

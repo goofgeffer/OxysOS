@@ -10,20 +10,16 @@
  * References:
  *   - ANSI X3.4-1986: the code points 0x20 to 0x7E this font covers, and their
  *     names, which are the comments beside each glyph below.
- *   - PROJECT_GUIDELINES.md, Section 2: all source must be original. The glyphs
- *     below were drawn for this project and are not a transcription of any other
- *     font; see the note upon that immediately below.
  *   - docs/design/CONSOLE.md: the design of the face and the
  *     metrics it is drawn to.
  *
  * Where this font came from.
  *
- * It was drawn for this project, pixel by pixel. That is not a boast; it is a
- * constraint, and it is why the face is a plain one. `PROJECT_GUIDELINES.md`,
- * Section 2, prohibits transcribing anybody else's source, and a font is
- * exactly the kind of asset that is easy to lift and hard to notice having
- * lifted — the IBM code page 437 face is in a hundred repositories and would
- * have been quicker to copy than to draw.
+ * It was drawn for this project, pixel by pixel, and is not a copy of any
+ * other font, which is why the face is a plain one. The IBM code page 437 face
+ * is in a hundred repositories under no stated licence, so it could not have
+ * been recorded in LICENSING.md as PROJECT_GUIDELINES.md, Section 2, requires
+ * of a work taken from elsewhere.
  *
  * The alternative considered and rejected was to read the font the firmware
  * loaded into plane 2 of the VGA character generator, which would have been

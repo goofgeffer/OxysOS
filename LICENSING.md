@@ -20,7 +20,7 @@ intended to be used differently.
 | `boot/`, `kernel/`, `drivers/`, `graphics/`, `crypto/`, `net/`, `uefi/`, `linker.ld` | GNU Lesser General Public License, version 3 or later | `LGPL-3.0-or-later` |
 | `kernel/abi/` — the interface a program is entitled to, and an exception to the row above it | MIT License | `MIT` |
 | `libc/`, `userland/` | MIT License | `MIT` |
-| A ported third-party tool, in the directory of its own that `PROJECT_GUIDELINES.md`, Section 2, requires | Whatever licence it arrived under, unchanged | The upstream project's own identifier |
+| A third-party work, wherever `PROJECT_GUIDELINES.md`, Section 2, permits it, and recorded in Section 4 | Whatever licence it arrived under, unchanged | The upstream project's own identifier |
 | `docs/`, every `README.md`, `PROJECT_GUIDELINES.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SECURITY.md`, this file | Creative Commons CC0 1.0 Universal | `CC0-1.0` |
 | `Makefile`, `build_*.sh`, `boot/grub/grub.cfg`, `.gitignore`, `.gitattributes`, `.github/` | CC0 1.0 Universal, as documentation of how the work is built rather than part of it | `CC0-1.0` |
 | `etc/` — the system configuration of sub-task 9.4 | CC0 1.0 Universal, as settings a person edits rather than work that is linked into anything | `CC0-1.0` |
@@ -68,12 +68,13 @@ than one settled afterwards when there is code to argue about. `libc/` was among
 them until sub-task 7.1 and `userland/` until sub-task 7.5, which placed the
 first program there.
 
-**A port carries its own licence and does not acquire this project's.** The row
-above is not a licence this repository grants; it is a record that the licence of
-a ported tool is the upstream project's, and `PROJECT_GUIDELINES.md`, Section 2,
-requires it to be written into this table before the port is committed. A port
-whose licence cannot be reconciled with the rest of this repository is one that
-must not be brought in — which is a decision to take before porting, not after.
+**A third-party work carries its own licence and does not acquire this
+project's.** The row above is not a licence this repository grants; it records
+that the licence of a work taken from elsewhere is its upstream's. The work must
+be one whose licence is compatible with the path it stands in, so that the
+kernel image stays distributable under `LGPL-3.0-or-later` and a program under
+`MIT` or a licence it is compatible with; a work that cannot be reconciled must
+not be brought in, which is a decision to take before bringing it, not after.
 
 **Both the LGPL and the GPL texts are present**, and the second is not a
 mistake. The Lesser General Public License version 3 is written as a set of
@@ -150,27 +151,23 @@ how a great many hardware interfaces actually behave, and of the ways each of
 them fails silently. Somebody writing an unrelated kernel should be able to take
 any of it, without attribution and without asking.
 
-## 4. Originality
+## 4. Third-party work
 
-Every line of source in this repository was written for it.
-`PROJECT_GUIDELINES.md`, Section 2, requires the kernel and userland to be
-original and prohibits transcribing reference implementations, and nothing here
-is vendored: there is no third-party code, no imported header, and no obtained
-asset. The bitmap face in `graphics/font.c` was drawn for this project for
-exactly that reason, a font being the kind of asset that is easy to lift without
-noticing.
+`PROJECT_GUIDELINES.md`, Section 2, permits code, tools, fonts and other assets
+written elsewhere to be used anywhere in this repository, on three conditions:
+a licence compatible with the path, the upstream notice and SPDX identifier kept
+in each file with the licence text in `LICENSES/`, and an entry in the table
+below made in the commit that brings the work in. The table is what keeps the
+licences of Section 1 grantable: every file not listed here was written for this
+project and is licensed by it, and every file listed here is licensed by its
+upstream.
 
-The consequence is that the licences above may be granted at all. A repository
-carrying vendored code cannot license itself freely, and this one carries none.
+| Work | Version | Source | Licence | Where |
+| ---- | ------- | ------ | ------- | ----- |
 
-**That will change, and the change is planned rather than accidental.** Section 2
-of the guidelines permits third-party tools to be ported, and self-hosting
-depends upon it: the compiler, assembler and linker Oxys-OS will eventually build
-itself with are ports. When the first arrives, this section stops describing the
-whole repository and begins describing the part of it this project wrote. The
-distinction is why a port is held in a directory of its own — the boundary
-between what may be licensed here and what may not is then a path, and not a
-recollection.
+The table is empty: every file in the repository was written for this project.
+`make spdx-check` enforces Section 1 by path, so the first entry must also teach
+[`tools/spdx.sh`](tools/spdx.sh) to accept the listed files' own identifiers.
 
 ## 5. Limitations
 

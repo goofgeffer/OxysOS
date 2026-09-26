@@ -6,25 +6,11 @@
 inspiration bears upon a decision recorded elsewhere, and whenever a phase the
 inspiration concerns is reached.
 
-**Authority**: `PROJECT_GUIDELINES.md`, Section 2. This document exists so that
-the projects named in it are recorded as what they are — sources of design and
-of character — and are never mistaken for sources of code. Section 2 states the
-rule that governs every one of them:
-
-> **Original Kernel and Userland**: All source code under `kernel/`, `boot/`,
-> `drivers/`, `graphics/`, `libc/`, `net/`, `crypto/`, `uefi/` and `userland/`
-> must be original. Reference implementations may be studied for understanding
-> but must not be transcribed. The only permitted inclusions there are standard
-> public domain headers or minimal stub code explicitly required by the
-> toolchain (e.g., linker scripts).
-
-That rule is not weakened by anything written here, and it is not weakened by
-the permission that stands beside it either. Section 2 also allows a
-third-party **tool** to be ported and depended upon — that is how Oxys-OS
-becomes self-hosting — but a port is a whole program brought across intact,
-under its own licence, in a directory of its own. It is the opposite of what
-this document guards against, which is a line of somebody else's
-implementation appearing inside this project's own, unattributed, because a
+**Authority**: `PROJECT_GUIDELINES.md`, Section 2. This document records the
+projects named in it as what they are: sources of design and of character.
+Section 2 permits work taken from elsewhere where its licence is compatible and
+it is recorded in `LICENSING.md`; what it never permits is somebody else's
+implementation appearing inside this project's own unattributed, because a
 system was admired.
 
 An inspiration is a reason for a decision, not a source for an implementation.

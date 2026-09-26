@@ -28,15 +28,20 @@ governs and the other is wrong.
 - **Documentation in the same change.** A change is complete only when every
   document it makes untrue has been corrected in the same commit, under the
   rules of Sections 7 and 11.
-- **Original kernel and userland.** Everything under `kernel/`, `boot/`,
-  `drivers/`, `graphics/`, `libc/`, `net/`, `crypto/`, `uefi/` and `userland/`
-  is original. Reference implementations may be studied, never transcribed. The
-  only exceptions are public-domain headers and stubs the toolchain requires.
-- **Ported tools are permitted.** Third-party tools, toolchains and their
-  libraries may be ported to run upon Oxys-OS and depended upon. A port lives in
-  a directory of its own, carries its upstream name, version and licence, is
-  recorded in `LICENSING.md` before it is committed, and is modified no further
-  than porting requires.
+- **Third-party work is permitted anywhere.** Code, libraries, tools, fonts and
+  other assets written elsewhere may be used in any directory, the kernel
+  included, provided that:
+  - its licence is compatible with the licence of the path it is placed in
+    (`LICENSING.md`, Section 1), so the combination may still be distributed
+    under that licence; GPL-2.0-only code, for example, cannot enter the
+    `LGPL-3.0-or-later` kernel;
+  - it keeps its upstream copyright notice and its own licence, the licence text
+    in `LICENSES/` and its own SPDX identifier in each file; and
+  - it is recorded in `LICENSING.md` with its upstream name, version, source and
+    licence in the commit that brings it in.
+
+  What this project wrote and what it took stay distinguishable by that record,
+  never by recollection.
 - **Testing mandate.** Every milestone boots and is tested under QEMU
   (`-machine q35 -cpu qemu64 -smp cores=2`), VirtualBox and Bochs; UEFI under
   QEMU with OVMF. Real hardware is considered from the first image.
@@ -116,8 +121,8 @@ assembler and linker.
 - Floating point in the kernel without a documented, specific justification.
 - Reliance on undefined behaviour; pointer arithmetic, type punning and bitwise
   operations must be defined by C11.
-- Third-party code inside the kernel proper. The kernel depends on GRUB and the
-  toolchain only; ported tools run upon the system, not within the kernel.
+- Third-party work whose licence is incompatible with the path it is placed in,
+  or that is not recorded in `LICENSING.md` (Section 2).
 
 ## 9. Session checklist
 

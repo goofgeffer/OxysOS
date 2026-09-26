@@ -184,11 +184,10 @@ that makes it. Section 7 of that document.
 code and fails a build whose tags disagree with it.
 
 By contributing you agree that your contribution is licensed under the licence
-applying to the path it touches, and you affirm that you wrote it. **Transcribing
-a reference implementation is prohibited** by `PROJECT_GUIDELINES.md`, Section 2,
-and it is also what would make the licences above impossible to grant: a
-repository carrying vendored code cannot license itself freely. Studying another
-system for understanding is expressly permitted; copying from it is not.
+applying to the path it touches, and you affirm that you wrote it. **Work taken
+from elsewhere is welcome** under `PROJECT_GUIDELINES.md`, Section 2, provided its
+licence is compatible with the path, it keeps its own notice and SPDX
+identifier, and it is recorded in `LICENSING.md` in the same commit.
 
 No formal contributor agreement or sign-off is in force, there being one
 contributor. Should that change, the ordinary mechanism is the Developer

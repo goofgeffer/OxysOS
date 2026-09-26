@@ -9,10 +9,7 @@
 
 The kernel's cryptography, as Phase 10 builds it: the entropy pool of 10.1 now,
 and later the generator of 10.2, SHA-256 of 10.3, AES of 10.4 and its modes of
-10.5. Everything here is original work, per `PROJECT_GUIDELINES.md`, Section 2.
-Reference implementations may be studied and never transcribed, which matters
-more here than anywhere: a transcribed cipher carries its source's mistakes
-with it.
+10.5, written for this project.
 
 The code here is portable. It includes no `<oxys/arch/...>` header: the
 processor's sources of randomness are `kernel/arch/x86_64/cpu/random.c`, and
