@@ -11,7 +11,7 @@ row.
 
 | Date | Phase | Change | Commit |
 | ---- | ----- | ------ | ------ |
-| 2026-09-26 | Phase 10 | Disk partitions planned as sub-tasks 10.7 to 10.11 of Phase 10, and accounts noted as the direction after them; nothing implemented | `pending` |
+| 2026-09-26 | Phase 10 | Disk partitions planned as sub-tasks 10.7 to 10.11 of Phase 10, and accounts noted as the direction after them; nothing implemented | `58783f5` |
 | 2026-09-26 | Phase 10 | The buttons taken from behind the launcher's and the pinned programs' icons, at the owner's request; the icons' spacing restored | `38fbb4f` |
 | 2026-09-26 | Phase 10 | The project owner's interface art: the bars' colour, buttons in their style on the panel and in Settings, their pointer with a halo, and icons for Notepad and System Info | `2e61dcc` |
 | 2026-09-26 | Phase 10 | Notepad, a text editor in a window; System Info, with a `sysinfo` call for its figures, in place of the window demonstration, which is removed with `/etc/desktop.conf`; `init` falls back to the session; the documents corrected | `cb2bb59` |
