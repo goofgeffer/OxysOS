@@ -451,7 +451,7 @@ void KernelVerifyCursor(void)
 
     /* The hot spot is part of the shape. A pointer whose tip is transparent
      * points at a pixel it does not draw, and cannot be aimed. */
-    if (!CursorShapeIsOpaque(0, 0))
+    if (!CursorShapeIsOpaque(CURSOR_HOT_X, CURSOR_HOT_Y))
     {
         KernelWriteString("  The hot spot is not part of the shape.\n");
         succeeded = false;
@@ -505,10 +505,12 @@ void KernelVerifyCursor(void)
     }
 
     /*
-     * The rendering agrees with the bitmaps, pixel for pixel.
+     * The rendering agrees with the tables of art/pointer.h, pixel for pixel.
      *
-     * A covered pixel must have full coverage and the colour its interior bit
-     * chooses; an uncovered pixel must have none. The two failures this catches
+     * A covered pixel must have the coverage the tables give it and the colour
+     * of the arrow or its halo, whichever covers more (black and white since
+     * 2026-09-26); an uncovered pixel must have none, and the colour
+     * is not read. The two failures this catches
      * are opposite and both silent: a mask taken from the wrong bitmap gives a
      * pointer that is a solid rectangle, and an interior test inverted gives one
      * drawn inside out, which upon a black background looks almost right.
@@ -521,7 +523,8 @@ void KernelVerifyCursor(void)
             const bool opaque = CursorShapeIsOpaque(column, row);
             const uint32_t pixel = GraphicsPixelAt(image, column, row);
 
-            if (opaque != (mask[index] == 255U))
+            if ((opaque != (mask[index] != 0U)) ||
+                (mask[index] != CursorShapeCoverage(column, row)))
             {
                 KernelWriteString("  The coverage does not follow the shape.\n");
                 succeeded = false;
@@ -534,8 +537,8 @@ void KernelVerifyCursor(void)
             }
 
             if (pixel != (CursorShapeIsInterior(column, row)
-                              ? FramebufferEncode(255U, 255U, 255U)
-                              : FramebufferEncode(0U, 0U, 0U)))
+                              ? FramebufferEncode(0U, 0U, 0U)
+                              : FramebufferEncode(255U, 255U, 255U)))
             {
                 KernelWriteString("  A rendered pixel is not the colour its bit "
                                   "chooses.\n");

@@ -61,8 +61,10 @@
 #define SETTINGS_PAPER OXYS_RGB(OXYS_PAPER_RED, OXYS_PAPER_GREEN, OXYS_PAPER_BLUE)
 #define SETTINGS_INK   OXYS_RGB(OXYS_INK_RED, OXYS_INK_GREEN, OXYS_INK_BLUE)
 #define SETTINGS_DIM   OXYS_RGB(OXYS_DIM_RED, OXYS_DIM_GREEN, OXYS_DIM_BLUE)
-#define SETTINGS_CHOSEN OXYS_RGB(OXYS_BAR_RED, OXYS_BAR_GREEN, OXYS_BAR_BLUE)
-#define SETTINGS_BUTTON OXYS_RGB(OXYS_BAR_QUIET_RED, OXYS_BAR_QUIET_GREEN, OXYS_BAR_QUIET_BLUE)
+#define SETTINGS_CHOSEN OXYS_RGB(OXYS_BAR_QUIET_RED, OXYS_BAR_QUIET_GREEN, OXYS_BAR_QUIET_BLUE)
+#define SETTINGS_BUTTON OXYS_RGB(OXYS_BUTTON_RED, OXYS_BUTTON_GREEN, OXYS_BUTTON_BLUE)
+#define SETTINGS_EDGE \
+    OXYS_RGB(OXYS_BUTTON_EDGE_RED, OXYS_BUTTON_EDGE_GREEN, OXYS_BUTTON_EDGE_BLUE)
 
 /* The most backgrounds offered, and the most launcher entries shown. */
 #define SETTINGS_BACKGROUNDS_MAXIMUM 4U
@@ -444,9 +446,10 @@ static void SettingsFill(int32_t x, int32_t y, int32_t width, int32_t height, ui
     }
 }
 
-/* Draws a button and records where it stands. A chosen one is drawn in the
- * panel's colour with its label marked, so that what is chosen is plain even
- * to a person who cannot tell the two colours apart. */
+/* Draws a button, in the project owner's style since 2026-09-26, and records
+ * where it stands. A chosen one is drawn in the quiet colour with its label
+ * marked, so that what is chosen is plain even to a person who cannot tell
+ * the two colours apart. */
 static int32_t SettingsButtonAt(int32_t row, int32_t column, const char *label, bool chosen,
                                 SettingsAction action, size_t which)
 {
@@ -460,6 +463,20 @@ static int32_t SettingsButtonAt(int32_t row, int32_t column, const char *label, 
     SettingsFill(column * cell, (row * pitch) + SettingsScale, width * cell,
                  pitch - (2 * SettingsScale), ground);
     SettingsLabel(row, column, text, SETTINGS_INK, ground);
+
+    /* The edge of the owner's button, a unit wide, drawn last: the label's
+     * paper begins at the button's left and would cover it. */
+    {
+        const int32_t left = column * cell;
+        const int32_t top = (row * pitch) + SettingsScale;
+        const int32_t across = width * cell;
+        const int32_t down = pitch - (2 * SettingsScale);
+
+        SettingsFill(left, top, across, SettingsScale, SETTINGS_EDGE);
+        SettingsFill(left, top + down - SettingsScale, across, SettingsScale, SETTINGS_EDGE);
+        SettingsFill(left, top, SettingsScale, down, SETTINGS_EDGE);
+        SettingsFill(left + across - SettingsScale, top, SettingsScale, down, SETTINGS_EDGE);
+    }
 
     if (SettingsButtonCount < SETTINGS_BUTTONS_MAXIMUM)
     {

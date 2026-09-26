@@ -137,8 +137,8 @@ the bar covers a full window's controls ([`WINDOWS.md`](WINDOWS.md)).
 button the bar's height each, right of the launcher's button, showing the entry's
 icon (or its name's first letter where it has none). One press starts it, as its
 launcher row would. The shipped file pins Terminal and Files. The row is spaced
-by what is drawn: the same gap stands between the launcher's icon and the
-first pinned icon, between icons, and between the last icon and the window list.
+by what is drawn: the same gap stands between each two buttons, and between the
+last and the window list.
 
 **The launcher's button** is a square of the same kind, holding
 `/share/icons/start.oxi`, the project owner's list of three dots and lines, since
@@ -146,6 +146,12 @@ first pinned icon, between icons, and between the last icon and the window list.
 session starts. Where it cannot be read the button draws three bars instead and
 the session says so on the standard error, so the button every program is reached
 through is never an empty square.
+
+**Every button is the project owner's**, since 2026-09-26: a yellow within an
+olive edge a unit wide, from their drawing of one ([`../../art/palette.h`](../../art/palette.h)),
+set a unit within its square with its icon clear of the edge. The launcher when
+open, and the window holding the focus in the list, are drawn in the quiet
+colour within the same edge. The bar itself is their orange.
 
 **The launcher** is a second window **in the panel layer**, so nothing a program
 does can cover it. It opens upward from the launcher's button, above the bar, and

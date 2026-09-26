@@ -358,7 +358,7 @@ Three things, and all three are what the sub-task exists for.
 | What to look for | What its absence would mean |
 | ---------------- | --------------------------- |
 | The boot log appears at all, from its first line | The console is drawing into a back buffer nothing carries out, or into the framebuffer while presentations copy the back buffer over it |
-| The pointer is drawn **over** the text, its black outline cutting into the letters beneath | The layer is composited under the base, or not at all |
+| The pointer is drawn **over** the text, its white halo (black outline before 2026-09-26) cutting into the letters beneath | The layer is composited under the base, or not at all |
 | After the pointer has crossed the screen, **the text it passed over is intact and there is no trail** | [`../design/COMPOSITOR.md`](../design/COMPOSITOR.md): a layer that marks only where it has arrived leaves its previous appearance standing. This is the fault the save-under existed to prevent, and reintroducing it would undo the sub-task |
 | A fault screen stays on the screen | [`../design/COMPOSITOR.md`](../design/COMPOSITOR.md): the compositor must be suspended, or the next `KernelWriteString` carries the back buffer over the page |
 

@@ -108,13 +108,14 @@ a notification, `Saved notes.txt.` or an error.
 says so on the bottom row, and a second, with nothing typed between, discards
 them.
 
-It has no icon yet; the launcher shows its name, and the panel its initial.
+Its icon, a pencil, is the project owner's, since 2026-09-26.
 
 ## 5. System Info, `/bin/sysinfo`
 
 **Added on 2026-09-25** in place of the window demonstration, which the project
-owner asked to be removed, with the demonstration's icon, a window around the
-mark. A window of what the machine is and is doing:
+owner asked to be removed, with an icon of the project owner's, a window of text since 2026-09-26 (the
+demonstration's window around the mark before that). A window of what the machine
+is and is doing:
 
 | Row | From |
 | --- | ---- |

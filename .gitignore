@@ -29,16 +29,8 @@ cross-*/
 x86_64-elf-*/
 sysroot/
 
-#special
-use_this.png
-use_this.jpg
-use_this.jpeg
-use_this.bmp
-
-use_this2.png
-use_this2.jpg
-use_this2.jpeg
-use_this2.bmp
+# Temporary assets by ME
+use_assets/
 
 # Object files and dependency files
 *.d

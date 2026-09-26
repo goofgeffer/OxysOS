@@ -48,18 +48,24 @@
 #define OXYS_GFX_CURSOR_H
 
 #include <oxys/types.h>
+#include <pointer.h>
 #include <oxys/gfx/graphics.h>
 
 /*
  * The pointer's extent, in pixels.
  *
- * Twelve by eighteen is the shape drawn in graphics/cursor.c and is fixed by
+ * The extent is the project owner's pointer, art/pointer.h, and is fixed by
  * that table rather than chosen here; the constants are declared so that the
  * rendered surface and its coverage mask, which the self-test reads, have a size
  * a reader can compute.
  */
-#define CURSOR_WIDTH  12
-#define CURSOR_HEIGHT 18
+#define CURSOR_WIDTH  POINTER_WIDTH
+#define CURSOR_HEIGHT POINTER_HEIGHT
+
+/* The pixel of the shape that stands at the pointer's position: the arrow's
+ * tip, since 2026-09-26 one pixel in from the corner the halo occupies. */
+#define CURSOR_HOT_X POINTER_HOT_X
+#define CURSOR_HOT_Y POINTER_HOT_Y
 
 /*
  * Renders the shape in the two colours given and registers it as a compositor
@@ -115,6 +121,10 @@ int32_t CursorY(void);
  */
 bool CursorShapeIsOpaque(int32_t column, int32_t row);
 bool CursorShapeIsInterior(int32_t column, int32_t row);
+
+/* How much of a pixel the pointer covers, 0 to 255: the arrow and its halo
+ * together, which is the coverage the compositor blends by. */
+uint8_t CursorShapeCoverage(int32_t column, int32_t row);
 
 /*
  * The rendered pointer and its coverage, for the self-test.

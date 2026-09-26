@@ -112,7 +112,8 @@ pixels:
   [`../../art/palette.h`](../../art/palette.h) is the whole of it — one header
   the kernel and the session both read, so that a colour cannot be decided
   twice — and [`../design/SESSION.md`](../design/SESSION.md) is
-  where it is drawn.
+  where it is drawn. On 2026-09-26 the bars took the owner's own colour, an
+  orange a little darker than the ground, and their buttons joined the palette.
 - **Legibility first.** Where a playful choice and a legible one disagree, the
   legible one is taken. A desktop that is pleasant to look at and hard to read
   has failed at the thing it exists to do.

@@ -6,7 +6,8 @@
  *          the window manager's frames and the session's desktop cannot drift
  *          apart from one another.
  * Key definitions: OXYS_GROUND_*, OXYS_BAR_*, OXYS_BAR_QUIET_*, OXYS_INK_*,
- *          OXYS_DIM_*, OXYS_PAPER_*, OXYS_BORDER_*, OXYS_DISC_*, OXYS_RGB.
+ *          OXYS_DIM_*, OXYS_PAPER_*, OXYS_BORDER_*, OXYS_DISC_*, OXYS_BUTTON_*,
+ *          OXYS_BUTTON_EDGE_*, OXYS_RGB.
  * References:
  *   - docs/project/INSPIRATIONS.md: a small palette, mostly quiet,
  *     with colour reserved for the few things that must be told apart at a
@@ -43,15 +44,30 @@
 #define OXYS_GROUND_BLUE  60U
 
 /*
- * The bars: the panel, and the title band of the window holding the focus. A
- * lighter and more orange yellow than the ground, which is what separates a bar
- * from the ground behind it without a line between them — the two differ in
- * lightness and in hue at once, so neither a person who sees colour poorly nor
- * a screen that renders it badly is left with two identical yellows.
+ * The bars: the panel, the clock's box, and the title band of the window
+ * holding the focus. Since 2026-09-26 the project owner's colour, taken from
+ * the bars they drew: an orange a little darker and less saturated than the
+ * ground, where it had been a lighter one. The two differ in hue and in
+ * saturation at once, and the panel keeps its line of the ground's colour
+ * above it, so a bar is not lost against the ground behind it.
  */
-#define OXYS_BAR_RED   255U
-#define OXYS_BAR_GREEN 201U
-#define OXYS_BAR_BLUE  120U
+#define OXYS_BAR_RED   227U
+#define OXYS_BAR_GREEN 174U
+#define OXYS_BAR_BLUE  84U
+
+/*
+ * The buttons, since 2026-09-26, from the project owner's drawing of one: a
+ * strong yellow within an edge of darker olive, the edge a fiftieth of the
+ * button's width in the drawing and a unit of the layout on the screen. The
+ * panel's launcher, pinned programs and list of windows, and the buttons of
+ * Settings, are drawn so.
+ */
+#define OXYS_BUTTON_RED        234U
+#define OXYS_BUTTON_GREEN      194U
+#define OXYS_BUTTON_BLUE       0U
+#define OXYS_BUTTON_EDGE_RED   165U
+#define OXYS_BUTTON_EDGE_GREEN 139U
+#define OXYS_BUTTON_EDGE_BLUE  12U
 
 /*
  * The quiet bar: the title band of every window that does not hold the focus.

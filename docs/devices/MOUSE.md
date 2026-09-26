@@ -102,9 +102,14 @@ defaulting to a plausible screen size would report a position it invented.
 
 ## 7. The pointer
 
-The shape is two bitmaps, opacity and interior, giving three states per pixel:
-transparent, outline, interior. A white arrow in a black outline is visible on any
-background. It was drawn for this project (`PROJECT_GUIDELINES.md`, Section 2).
+The shape is the project owner's since 2026-09-26: a black arrow, drawn by them
+(`art/pointer.png`) and generated into two tables of coverage, one byte a pixel
+(`art/pointer.h`): the arrow's body, drawn black, and a halo one pixel wide about
+it, drawn white, which the drawing does not have and which keeps a black arrow
+visible over a black window such as the terminal. It is 16 by 24, and its tip,
+the hot spot, is at (1, 1), inside the halo; `CursorMoveTo` places the layer so the
+tip stands at the position. Until then it was a white arrow within a black
+outline, twelve by eighteen, drawn as two bitmaps for this project.
 
 The shape is rendered once to a surface and composited as a layer, so nothing is
 saved or restored beneath it ([`../design/COMPOSITOR.md`](../design/COMPOSITOR.md)).

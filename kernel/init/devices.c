@@ -55,13 +55,14 @@ static void KernelAttachPointer(void)
     MouseSetPosition((int32_t)(display->width / 2U), (int32_t)(display->height / 2U));
 
     /*
-     * Black within white. The two are chosen so that the pointer is visible upon
+     * White about black, since 2026-09-26: the owner's arrow is black, and its
+     * halo white. The two are chosen so that the pointer is visible upon
      * whatever it stands over: a single colour disappears against itself, and the
      * console draws light text upon a dark ground, which either alone would be
      * lost in.
      */
-    (void)CursorInitialise(FramebufferEncode(0U, 0U, 0U),
-                           FramebufferEncode(255U, 255U, 255U));
+    (void)CursorInitialise(FramebufferEncode(255U, 255U, 255U),
+                           FramebufferEncode(0U, 0U, 0U));
 
     CursorMoveTo(MouseX(), MouseY());
 }

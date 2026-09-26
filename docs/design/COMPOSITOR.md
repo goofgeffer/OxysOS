@@ -39,8 +39,9 @@ needs restoring when a layer moves.
 
 - **A mask, not a transparent colour.** A reserved colour is one the shape may not
   contain, and the pointer contains black and white. Coverage is a byte, so a soft
-  edge needs only different mask values.
-- **The pointer is a layer**, rendered once from its two bitmaps into a surface and
+  edge needs only different mask values, which the owner's pointer of 2026-09-26
+  has.
+- **The pointer is a layer**, rendered once from its coverage tables into a surface and
   a mask ([`../devices/MOUSE.md`](../devices/MOUSE.md)). Moving it is one call that
   marks two rectangles.
 

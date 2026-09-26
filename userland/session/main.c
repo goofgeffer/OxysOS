@@ -88,14 +88,20 @@
  * in its place, so that the one button every other program is reached through
  * is never an empty square a person has to guess at.
  *
+ * Every one is a button as the project owner drew one, since 2026-09-26: a
+ * yellow within an edge of olive a unit wide, SessionDrawButton, set
+ * SESSION_BUTTON_INSET units within its square, with its icon SESSION_PIN_INSET
+ * units within the square and so clear of the edge. The launcher open, and the
+ * window holding the focus, are drawn in the quiet colour within the same edge.
+ *
  * The row is spaced by what the eye sees: one gap, SESSION_BAR_GAP units,
- * stands between the launcher's icon and the first pinned icon, between each
- * two icons, and between the last icon and the first button of the list of
- * windows. Every icon is inset SESSION_PIN_INSET units within its square, so
- * the gaps between squares are the gap less two insets.
+ * stands between each two buttons and between the last and the first button of
+ * the list of windows. Each button is inset within its square, so the gaps
+ * between squares are the gap less two insets.
  */
-#define SESSION_PIN_INSET 2
-#define SESSION_BAR_GAP   10
+#define SESSION_BUTTON_INSET 1
+#define SESSION_PIN_INSET    3
+#define SESSION_BAR_GAP      6
 #define SESSION_START_ICON "/share/icons/start.oxi"
 
 /*
@@ -160,6 +166,9 @@
 #define SESSION_GROUND OXYS_RGB(OXYS_GROUND_RED, OXYS_GROUND_GREEN, OXYS_GROUND_BLUE)
 #define SESSION_PANEL  OXYS_RGB(OXYS_BAR_RED, OXYS_BAR_GREEN, OXYS_BAR_BLUE)
 #define SESSION_QUIET  OXYS_RGB(OXYS_BAR_QUIET_RED, OXYS_BAR_QUIET_GREEN, OXYS_BAR_QUIET_BLUE)
+#define SESSION_BUTTON OXYS_RGB(OXYS_BUTTON_RED, OXYS_BUTTON_GREEN, OXYS_BUTTON_BLUE)
+#define SESSION_BUTTON_EDGE \
+    OXYS_RGB(OXYS_BUTTON_EDGE_RED, OXYS_BUTTON_EDGE_GREEN, OXYS_BUTTON_EDGE_BLUE)
 #define SESSION_INK    OXYS_RGB(OXYS_INK_RED, OXYS_INK_GREEN, OXYS_INK_BLUE)
 #define SESSION_DIM    OXYS_RGB(OXYS_DIM_RED, OXYS_DIM_GREEN, OXYS_DIM_BLUE)
 #define SESSION_DISC   OXYS_RGB(OXYS_DISC_RED, OXYS_DISC_GREEN, OXYS_DISC_BLUE)
@@ -325,6 +334,17 @@ static void SessionFill(int64_t window, int32_t x, int32_t y, int32_t width, int
 
         drawn += band;
     }
+}
+
+/* A button as the project owner drew one, since 2026-09-26: `fill` within an
+ * edge of SESSION_BUTTON_EDGE a unit wide. */
+static void SessionDrawButton(int64_t window, int32_t x, int32_t y, int32_t width,
+                              int32_t height, uint32_t fill)
+{
+    const int32_t edge = SessionScale;
+
+    SessionFill(window, x, y, width, height, SESSION_BUTTON_EDGE);
+    SessionFill(window, x + edge, y + edge, width - (2 * edge), height - (2 * edge), fill);
 }
 
 static void SessionText(int64_t window, int32_t x, int32_t y, const char *text, uint32_t ink,
@@ -1132,12 +1152,12 @@ static void SessionDrawTasks(void);
  */
 static int32_t SessionPinLeft(void)
 {
-    return SessionPanelHeight() + ((SESSION_BAR_GAP - (2 * SESSION_PIN_INSET)) * SessionScale);
+    return SessionPanelHeight() + ((SESSION_BAR_GAP - (2 * SESSION_BUTTON_INSET)) * SessionScale);
 }
 
 static int32_t SessionPinStride(void)
 {
-    return SessionPanelHeight() + ((SESSION_BAR_GAP - (2 * SESSION_PIN_INSET)) * SessionScale);
+    return SessionPanelHeight() + ((SESSION_BAR_GAP - (2 * SESSION_BUTTON_INSET)) * SessionScale);
 }
 
 /* Where the list of windows begins upon the panel: SESSION_BAR_GAP units after
@@ -1148,12 +1168,12 @@ static int32_t SessionTaskLeft(void)
 
     if (pinned == 0U)
     {
-        return SessionPanelHeight() + ((SESSION_BAR_GAP - SESSION_PIN_INSET) * SessionScale);
+        return SessionPanelHeight() + ((SESSION_BAR_GAP - SESSION_BUTTON_INSET) * SessionScale);
     }
 
     return SessionPinLeft() + ((int32_t)pinned * SessionPanelHeight()) +
-           ((int32_t)(pinned - 1U) * (SESSION_BAR_GAP - (2 * SESSION_PIN_INSET)) * SessionScale) +
-           ((SESSION_BAR_GAP - SESSION_PIN_INSET) * SessionScale);
+           ((int32_t)(pinned - 1U) * (SESSION_BAR_GAP - (2 * SESSION_BUTTON_INSET)) * SessionScale) +
+           ((SESSION_BAR_GAP - SESSION_BUTTON_INSET) * SessionScale);
 }
 
 /* How wide one of the list's buttons is with the gap after it. */
@@ -1193,7 +1213,8 @@ static void SessionDrawTasks(void)
         const int32_t x = SessionTaskLeft() + ((int32_t)index * SessionTaskStride());
         const bool focused = (task->flags & SYSCALL_WINDOW_ENTRY_FOCUSED) != 0U;
         const bool minimised = (task->flags & SYSCALL_WINDOW_ENTRY_MINIMISED) != 0U;
-        const uint32_t paper = focused ? SESSION_QUIET : SESSION_PANEL;
+        const uint32_t paper = focused ? SESSION_QUIET : SESSION_BUTTON;
+        const int32_t button = SESSION_BUTTON_INSET * SessionScale;
         char title[SYSCALL_WINDOW_TITLE_MAXIMUM + 1U];
         size_t length = 0U;
 
@@ -1206,9 +1227,7 @@ static void SessionDrawTasks(void)
 
         title[length] = '\0';
 
-        SessionFill(SessionPanel, x, 1, width, height - 1, paper);
-        SessionFill(SessionPanel, x - SessionScale, inset, 1, height - (2 * inset),
-                    SESSION_GROUND);
+        SessionDrawButton(SessionPanel, x, button, width, height - (2 * button), paper);
         SessionText(SessionPanel, x + inset, SessionPanelTextTop(), title,
                     minimised ? SESSION_DIM : SESSION_INK, paper, SessionScale);
     }
@@ -1220,6 +1239,7 @@ static void SessionDrawPins(void)
 {
     const int32_t height = SessionPanelHeight();
     const int32_t inset = SESSION_PIN_INSET * SessionScale;
+    const int32_t button = SESSION_BUTTON_INSET * SessionScale;
     int32_t x = SessionPinLeft();
 
     for (size_t index = 0U; index < SessionEntryCount; ++index)
@@ -1231,17 +1251,20 @@ static void SessionDrawPins(void)
             continue;
         }
 
+        SessionDrawButton(SessionPanel, x + button, button, height - (2 * button),
+                          height - (2 * button), SESSION_BUTTON);
+
         if (entry->has_picture)
         {
             SessionDrawIcon(SessionPanel, x + inset, inset, height - (2 * inset), &entry->picture,
-                            SESSION_PANEL);
+                            SESSION_BUTTON);
         }
         else
         {
             const char letter[2] = { entry->name[0], '\0' };
 
             SessionText(SessionPanel, x + ((height - (8 * SessionScale)) / 2),
-                        SessionPanelTextTop(), letter, SESSION_INK, SESSION_PANEL, SessionScale);
+                        SessionPanelTextTop(), letter, SESSION_INK, SESSION_BUTTON, SessionScale);
         }
 
         x += SessionPinStride();
@@ -1256,9 +1279,11 @@ static void SessionDrawPanel(bool open)
     SessionFill(SessionPanel, 0, 0, SessionScreen.width, height, SESSION_PANEL);
     {
         const int32_t start_inset = SESSION_PIN_INSET * SessionScale;
-        const uint32_t paper = open ? SESSION_QUIET : SESSION_PANEL;
+        const uint32_t paper = open ? SESSION_QUIET : SESSION_BUTTON;
+        const int32_t button = SESSION_BUTTON_INSET * SessionScale;
 
-        SessionFill(SessionPanel, 0, 1, height, height - 1, paper);
+        SessionDrawButton(SessionPanel, button, button, height - (2 * button),
+                          height - (2 * button), paper);
 
         if (SessionHasStartIcon)
         {

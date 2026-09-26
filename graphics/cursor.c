@@ -59,69 +59,13 @@
 #include <oxys/kernel.h>
 
 /*
- * The pointer, twelve wide and eighteen high, drawn for this project.
- *
- * Each row is a bit per column with column 0 in bit 11, which is the same
- * convention the font of sub-task 6.4 uses for its glyphs: the leftmost pixel is
- * the most significant bit, so that the number as written reads left to right in
- * the order the pixels are drawn.
- *
- * The picture beside each row is the row, and is the thing to edit; the number
- * is what the row was transcribed to. A row whose number and picture disagree is
- * a fault the self-test cannot see, both being data — which is why they are kept
- * adjacent rather than in a table of numbers with a comment somewhere above.
- *
- *   O denotes the outline, W the interior, and a full stop a pixel the pointer
- *   does not cover.
+ * The shape is the project owner's pointer since 2026-09-26: art/pointer.h,
+ * generated from art/pointer.png, holds the arrow's coverage and a halo's, one
+ * byte to a pixel. The arrow is drawn in the interior colour and the halo in
+ * the outline colour, so the pointer is still visible upon anything, which is
+ * the reason the hand-drawn shape before it had two masks. A pixel covered by
+ * both is drawn in the colour of whichever covers more of it.
  */
-static const uint16_t CursorOpacity[CURSOR_HEIGHT] = {
-    0x800U, /* O...........  */
-    0xC00U, /* OO..........  */
-    0xE00U, /* OWO.........  */
-    0xF00U, /* OWWO........  */
-    0xF80U, /* OWWWO.......  */
-    0xFC0U, /* OWWWWO......  */
-    0xFE0U, /* OWWWWWO.....  */
-    0xFF0U, /* OWWWWWWO....  */
-    0xFF8U, /* OWWWWWWWO...  */
-    0xFFCU, /* OWWWWWWWWO..  */
-    0xFFEU, /* OWWWWWWWWWO.  */
-    0xFFFU, /* OWWWWWOOOOOO  */
-    0xFE0U, /* OWWOWWO.....  */
-    0xEF0U, /* OWO.OWWO....  */
-    0xCF0U, /* OO..OWWO....  */
-    0x878U, /* O....OWWO...  */
-    0x078U, /* .....OWWO...  */
-    0x038U  /* ......OOO...  */
-};
-
-static const uint16_t CursorInterior[CURSOR_HEIGHT] = {
-    0x000U, /* O...........  */
-    0x000U, /* OO..........  */
-    0x400U, /* OWO.........  */
-    0x600U, /* OWWO........  */
-    0x700U, /* OWWWO.......  */
-    0x780U, /* OWWWWO......  */
-    0x7C0U, /* OWWWWWO.....  */
-    0x7E0U, /* OWWWWWWO....  */
-    0x7F0U, /* OWWWWWWWO...  */
-    0x7F8U, /* OWWWWWWWWO..  */
-    0x7FCU, /* OWWWWWWWWWO.  */
-    0x7C0U, /* OWWWWWOOOOOO  */
-    0x6C0U, /* OWWOWWO.....  */
-    0x460U, /* OWO.OWWO....  */
-    0x060U, /* OO..OWWO....  */
-    0x030U, /* O....OWWO...  */
-    0x030U, /* .....OWWO...  */
-    0x000U  /* ......OOO...  */
-};
-
-/*
- * The shape must fit the word its rows are held in. Twelve columns in sixteen
- * bits is not close to the limit, but a shape widened to seventeen would
- * silently lose its rightmost column rather than failing to build.
- */
-_Static_assert(CURSOR_WIDTH <= 16, "A cursor row is held in a 16-bit word.");
 
 /*
  * The pointer, rendered once.
@@ -134,7 +78,8 @@ _Static_assert(CURSOR_WIDTH <= 16, "A cursor row is held in a 16-bit word.");
  * the same answer.
  *
  * The coverage is a byte and not a bit, so that a shape with a soft edge needs
- * no change here — only a table with values between. Nothing yet has one.
+ * no change here — only a table with values between, which the owner's
+ * pointer of 2026-09-26 is.
  */
 static uint32_t CursorPixels[CURSOR_HEIGHT * CURSOR_WIDTH];
 static uint8_t CursorCoverage[CURSOR_HEIGHT * CURSOR_WIDTH];
@@ -161,23 +106,37 @@ static uint64_t CursorMoves;
 /* Whether the pixel at this column and row is covered by the pointer at all. */
 bool CursorShapeIsOpaque(int32_t column, int32_t row)
 {
-    if ((column < 0) || (column >= CURSOR_WIDTH) || (row < 0) || (row >= CURSOR_HEIGHT))
-    {
-        return false;
-    }
-
-    return (CursorOpacity[row] & (uint16_t)(1U << (CURSOR_WIDTH - 1 - column))) != 0U;
+    return CursorShapeCoverage(column, row) != 0U;
 }
 
-/* Whether it is drawn in the interior colour rather than the outline colour. */
 bool CursorShapeIsInterior(int32_t column, int32_t row)
 {
+    size_t index;
+
     if ((column < 0) || (column >= CURSOR_WIDTH) || (row < 0) || (row >= CURSOR_HEIGHT))
     {
         return false;
     }
 
-    return (CursorInterior[row] & (uint16_t)(1U << (CURSOR_WIDTH - 1 - column))) != 0U;
+    index = ((size_t)row * CURSOR_WIDTH) + (size_t)column;
+
+    return (PointerBody[index] != 0U) && (PointerBody[index] >= PointerHalo[index]);
+}
+
+uint8_t CursorShapeCoverage(int32_t column, int32_t row)
+{
+    size_t index;
+    uint32_t sum;
+
+    if ((column < 0) || (column >= CURSOR_WIDTH) || (row < 0) || (row >= CURSOR_HEIGHT))
+    {
+        return 0U;
+    }
+
+    index = ((size_t)row * CURSOR_WIDTH) + (size_t)column;
+    sum = (uint32_t)PointerBody[index] + (uint32_t)PointerHalo[index];
+
+    return (sum > 255U) ? 255U : (uint8_t)sum;
 }
 
 /*
@@ -206,7 +165,7 @@ static void CursorRender(void)
 
             CursorPixels[index] = CursorShapeIsInterior(column, row) ? CursorInteriorColour
                                                                      : CursorOutlineColour;
-            CursorCoverage[index] = 255U;
+            CursorCoverage[index] = CursorShapeCoverage(column, row);
         }
     }
 }
@@ -247,8 +206,9 @@ bool CursorInitialise(uint32_t outline, uint32_t interior)
         return false;
     }
 
-    CursorLayer = CompositorAddLayer(&CursorImage, CursorCoverage, CursorPositionX,
-                                     CursorPositionY);
+    CursorLayer = CompositorAddLayer(&CursorImage, CursorCoverage,
+                                     CursorPositionX - CURSOR_HOT_X,
+                                     CursorPositionY - CURSOR_HOT_Y);
 
     if (CursorLayer == COMPOSITOR_LAYER_NONE)
     {
@@ -327,7 +287,7 @@ void CursorMoveTo(int32_t x, int32_t y)
          * That is the whole of what replaced the save-under, and it is one call
          * rather than a read of 216 pixels followed by a write of them.
          */
-        CompositorMoveLayer(CursorLayer, x, y);
+        CompositorMoveLayer(CursorLayer, x - CURSOR_HOT_X, y - CURSOR_HOT_Y);
     }
 }
 
