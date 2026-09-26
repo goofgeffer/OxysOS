@@ -59,8 +59,8 @@
  * The buttons, since 2026-09-26, from the project owner's drawing of one: a
  * strong yellow within an edge of darker olive, the edge a fiftieth of the
  * button's width in the drawing and a unit of the layout on the screen. The
- * panel's launcher, pinned programs and list of windows, and the buttons of
- * Settings, are drawn so.
+ * panel's list of windows and the buttons of
+ * Settings are drawn so; the icons on the panel are not, at the owner's word.
  */
 #define OXYS_BUTTON_RED        234U
 #define OXYS_BUTTON_GREEN      194U

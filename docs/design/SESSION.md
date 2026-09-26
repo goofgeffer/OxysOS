@@ -147,11 +147,12 @@ session starts. Where it cannot be read the button draws three bars instead and
 the session says so on the standard error, so the button every program is reached
 through is never an empty square.
 
-**Every button is the project owner's**, since 2026-09-26: a yellow within an
-olive edge a unit wide, from their drawing of one ([`../../art/palette.h`](../../art/palette.h)),
-set a unit within its square with its icon clear of the edge. The launcher when
-open, and the window holding the focus in the list, are drawn in the quiet
-colour within the same edge. The bar itself is their orange.
+**The list of windows is buttons of the project owner's**, since 2026-09-26: a
+yellow within an olive edge a unit wide, from their drawing of one
+([`../../art/palette.h`](../../art/palette.h)), the window holding the focus in
+the quiet colour within the same edge. The launcher and the pinned programs are
+their icons on the bar with nothing behind them: for a day they had the same
+buttons, and the owner had them removed. The bar itself is their orange.
 
 **The launcher** is a second window **in the panel layer**, so nothing a program
 does can cover it. It opens upward from the launcher's button, above the bar, and
