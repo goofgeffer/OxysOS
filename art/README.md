@@ -100,34 +100,22 @@ the points that can be computed by hand.
 ## What reads it
 
 [`../kernel/kernel.c`](../kernel/kernel.c), for the boot screen and the power
-screen; [`../userland/session/main.c`](../userland/session/main.c), for the
-desktop root; and [`../userland/windows/main.c`](../userland/windows/main.c),
-for the window the demonstration opens. All three draw the same bitmap at the
-same size, which is what makes the hand-over from the boot screen to the
-desktop look like one machine starting rather than pictures replacing each
-other.
+screen; and [`../userland/session/main.c`](../userland/session/main.c), for the
+desktop root. Both draw the same bitmap at the same size, which is what makes
+the hand-over from the boot screen to the desktop look like one machine starting
+rather than pictures replacing each other.
 
-The third was added on 2026-09-21, a day after the other two. It had a ring of
-discs this project drew before there was artwork to draw, and the ring outlived
-its reason: for that day the screen a person boots to carried the owner's mark
-and the window a person opens carried the stand-in. A directory of artwork
-makes a mark easy to share and does nothing at all about a program that never
-asked for it.
+A third reader, the window demonstration, was added on 2026-09-21 and removed
+with the demonstration on 2026-09-25.
 
-`palette.h` is read by the same three. `/bin/windows` takes its paper, its ink
-and its accent from here; it held its own copy of the three until the same day,
-and the copy was a blue from the scheme that preceded the yellow one, which had
-looked like the system for exactly as long as the system did not change. The
-coral and the mint it draws beside them stay its own, because a colour belongs
-here when two things must agree about it and nothing else draws those.
+`palette.h` is read by the same two, and by Settings, Notepad and System Info
+for their paper and ink, so that every window of the desktop's own is drawn in
+one set of colours.
 
 `/bin/terminal` of sub-task 9.6 takes neither, and that is the same rule seen
 from the other side: it draws white upon black, because a window of text read
 for minutes at a time is not the problem a label upon a panel is, and no second
 thing has to agree with it about either colour.
-
-`/etc/desktop.conf` ships `accent = system` to name this header from a file —
-[`../docs/design/CONFIG.md`](../docs/design/CONFIG.md).
 
 ## `icons/` — the pictures the launcher draws, which are files
 
@@ -136,7 +124,7 @@ thing has to agree with it about either colour.
 | [`icons/terminal.png`](icons/terminal.png) | The terminal's icon as the project owner drew it. It is the source and nothing reads it at build time. |
 | [`icons/terminal.oxi`](icons/terminal.oxi) | The same, upon nothing rather than white, reduced to ninety-six pixels square with the transparency of every pixel kept, and written in version 2 of the format [`../libc/include/icon.h`](../libc/include/icon.h) sets out. This is what the ramdisk carries and what the session reads. |
 | [`icons/files.png`](icons/files.png), [`icons/files.oxi`](icons/files.oxi) | The file manager's icon, a folder, as the project owner drew it, and the same converted by the command below. |
-| [`icons/windows.png`](icons/windows.png), [`icons/windows.oxi`](icons/windows.oxi) | The window demonstration's icon, a window around the mark, as the project owner drew it, and the same converted by the command below. |
+| [`icons/sysinfo.png`](icons/sysinfo.png), [`icons/sysinfo.oxi`](icons/sysinfo.oxi) | System Info's icon, a window around the mark, as the project owner drew it and the same converted by the command below. It was the window demonstration's until that was removed on 2026-09-25. |
 | [`icons/start.png`](icons/start.png), [`icons/start.oxi`](icons/start.oxi) | The launcher's button, three dots and lines, as the project owner drew it, and the same converted by the command below. |
 | [`icons/settings.png`](icons/settings.png), [`icons/settings.oxi`](icons/settings.oxi) | The settings application's icon, a gear, as the project owner drew it, and the same converted by the command below. |
 | [`icons/notify-information.png`](icons/notify-information.png), [`icons/notify-success.png`](icons/notify-success.png), [`icons/notify-error.png`](icons/notify-error.png), and the three `.oxi` files | The notifications' symbols as the project owner drew them: an `i` in blue, which warnings use as well; a tick in green; an `!` in red. Converted by the command below. |
@@ -159,7 +147,7 @@ twenty-four units at the scale of two, so every place an icon is drawn is an
 average of several of its pixels. It was forty-eight.
 
 ```sh
-E=96; N=terminal   # or files, windows, start, settings, notify-information,
+E=96; N=terminal   # or files, sysinfo, start, settings, notify-information,
                    # notify-success or notify-error
 convert art/icons/$N.png -background white -alpha remove -alpha set -fuzz 10% -fill none \
         -draw 'color 0,0 floodfill' -trim +repage cut.png

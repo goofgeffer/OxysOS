@@ -10,7 +10,7 @@
 the wrappers in [`../../libc/syscall/calls.c`](../../libc/syscall/calls.c);
 `KernelServiceDisplay` in [`../../kernel/kernel.c`](../../kernel/kernel.c);
 `TerminalAttachKeyboard` in [`../../kernel/terminal/terminal.c`](../../kernel/terminal/terminal.c);
-the demonstration [`../../userland/windows/main.c`](../../userland/windows/main.c).
+the window programs of the desktop ([`UTILITIES.md`](UTILITIES.md)).
 **Specifications**: none governs a window manager. Three notions are taken, as
 notions only, from the X Window System Protocol (X11R7.7): keyboard input has one
 scope (*input focus*), siblings obscure one another in an order (*stacking order*),
@@ -79,7 +79,7 @@ glyphs beside it; it was a disc until 2026-09-25. Its reach is a
 24-pixel band.
 
 **Colours come from [`../../art/palette.h`](../../art/palette.h)**, shared with the
-boot screen, the session and `/bin/windows`, so the frame and what it stands on are
+boot screen, the session and the desktop's own programs, so the frame and what it stands on are
 one decision:
 
 | Use | Colour | Why |
@@ -190,12 +190,12 @@ the manager's structure can change without the ABI moving.
   with no thread to sleep on is refused with `ENOTSUP`. A program waiting on its
   window and a pipe together uses `poll` ([`TERMINAL.md`](TERMINAL.md)).
 
-**`/bin/windows`**, the launcher's *Windows* entry, is the demonstration: an *Oxys*
-window showing the mark, a *Pointer* window whose disc follows the pointer and grows
-while a button is held (and vanishes, still receiving, when dragged out while
-bound), and a *Keys* window drawing a tile per character. It asks the screen's size
-and doubles its scale on screens at least 1,024 wide, and ends when its last window
-is closed. Its settings are `/etc/desktop.conf` ([`CONFIG.md`](CONFIG.md)).
+**The window demonstration**, `/bin/windows`, was the first client of the
+protocol, from sub-task 9.2: an *Oxys* window showing the mark, a *Pointer*
+window whose disc followed the pointer, and a *Keys* window drawing a tile per
+character. It was removed on 2026-09-25 at the project owner's request, and
+Notepad and System Info took its place in the launcher
+([`UTILITIES.md`](UTILITIES.md)); `window-check` is what asserts the protocol.
 
 ## Verification
 
@@ -261,7 +261,8 @@ damages the first masks the second), the program's window survives it.
 3. No resize by hand, no title change.
 4. Focus follows a press only; no key moves it, no window can request it.
 5. No rounded corners or asymmetry, both wanted by `INSPIRATIONS.md`.
-6. The mode is the loader's; `/bin/windows` scales, nothing else does.
+6. The mode is the loader's; programs choose a scale from the screen, and nothing
+   changes the mode.
 7. Every pixel a program draws is copied and converted one at a time; no shared
    mapping.
 8. "Full" keeps the title band and the panel; there is no true full-screen mode.

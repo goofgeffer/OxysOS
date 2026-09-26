@@ -56,6 +56,8 @@
 #include <oxys/arch/syscall/sigframe.h>
 #include <oxys/terminal/terminal.h>
 #include <oxys/dev/rtc.h>
+#include <oxys/mm/pmm.h>
+#include <oxys/crypto/entropy.h>
 
 /* Defined in kernel/arch/x86_64/syscall/syscall_entry.asm. */
 extern void SyscallEntry(void);
@@ -2251,6 +2253,35 @@ static int64_t SyscallDoPipe(uint64_t address)
 
 /* ------------------------------------------------------------- the dispatch */
 
+/*
+ * sysinfo, of 2026-09-25: the counters the System Info program shows, read as
+ * they stand. Each is a read of a counter its own subsystem keeps, so the
+ * figures are consistent with each other only to within the moment it takes to
+ * read them, which is all a window redrawn every second asks.
+ */
+static int64_t SyscallDoSystemInformation(uint64_t address)
+{
+    SyscallSystemInformation *destination;
+
+    if (!SyscallUserRangeIsWritable(address, (uint64_t)sizeof *destination))
+    {
+        ++SyscallRefusals;
+
+        return SYSCALL_EFAULT;
+    }
+
+    destination = (SyscallSystemInformation *)(uintptr_t)address;
+    destination->processors = PerCpuOnlineCount();
+    destination->memory_bytes = (uint64_t)FrameTotalCount() * PAGE_SIZE;
+    destination->memory_free_bytes = (uint64_t)FrameFreeCount() * PAGE_SIZE;
+    destination->uptime_milliseconds = PitMillisecondsElapsed();
+    destination->processes = ProcessCount();
+    destination->threads = ThreadCount();
+    destination->entropy_bits = EntropyBits(EntropySystemPool());
+
+    return SYSCALL_OK;
+}
+
 /* A call: what it is named, and how many arguments it reads. The count is
  * recorded so that the report says something a reader can check the caller
  * against; nothing is refused upon it, the registers being there either way. */
@@ -2306,7 +2337,8 @@ static const SyscallEntryDescriptor SyscallTable[SYSCALL_COUNT] = {
     { "time", 0U },
     { "alarm", 1U },
     { "notify", 3U },
-    { "notification", 1U }
+    { "notification", 1U },
+    { "sysinfo", 1U }
 };
 
 bool SyscallNumberIsValid(uint64_t number)
@@ -2566,6 +2598,10 @@ void SyscallDispatch(SyscallFrame *frame)
 
     case SYSCALL_NOTIFICATION:
         frame->rax = (uint64_t)WindowClientNotification(frame->rdi);
+        break;
+
+    case SYSCALL_SYSINFO:
+        frame->rax = (uint64_t)SyscallDoSystemInformation(frame->rdi);
         break;
 
     default:

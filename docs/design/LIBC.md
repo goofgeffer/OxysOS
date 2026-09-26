@@ -2007,8 +2007,8 @@ what `windows` does. No new `errno` was needed; `EBADF` is a window the caller
 does not hold, as it is a descriptor the caller does not hold.
 
 There is no drawing library above the calls and no face: a program draws
-rectangles and discs with arithmetic of its own, as `userland/windows/main.c`
-does, and cannot draw text. [`WINDOWS.md`](WINDOWS.md) limitation
+rectangles and discs with arithmetic of its own, as the window demonstration
+(removed on 2026-09-25) did, and cannot draw text. [`WINDOWS.md`](WINDOWS.md) limitation
 4, is where that is owed, and 9.6 is where it is paid.
 
 ## 15. `power` and `pause`

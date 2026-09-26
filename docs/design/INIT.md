@@ -33,7 +33,7 @@ screen for ever. Two bounds:
   `ENOTSUP` (the entries that give the shell the screen), or they would be refused
   and restarted endlessly.
 - A service ending **five times in a row** is given up on, and `init` says so:
-  `init: desktop ended 5 times in a row, last with status 0x7f; it is not started again.`
+  `init: session ended 5 times in a row, last with status 0x7f; it is not started again.`
   The count is cleared only when `init` itself stops the service.
 
 Since 2026-09-25, `init` also posts a notification for a service that could not

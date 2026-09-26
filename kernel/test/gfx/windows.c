@@ -9,8 +9,9 @@
  *          queue — and the disc primitive the close control was drawn with
  *          until 2026-09-25, when it became a cross. Until
  *          sub-task 9.2 it also held the demonstration the default boot entry
- *          presents; that is a program now, userland/windows/main.c, run at
- *          privilege level 3 through the client protocol.
+ *          presents; that became the program userland/windows/main.c, run at
+ *          privilege level 3 through the client protocol, and was removed on
+ *          2026-09-25.
  * Key functions: KernelVerifyWindows, KernelVerifyCircle.
  * References:
  *   - docs/design/WINDOWS.md: every assertion here paired with the

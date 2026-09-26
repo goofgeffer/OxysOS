@@ -44,7 +44,8 @@
  *          SYSCALL_DESCRIPTOR_OUTPUT, SYSCALL_DESCRIPTOR_ERROR,
  *          SYSCALL_DESCRIPTOR_FIRST, SYSCALL_ARGUMENT_COUNT_MAXIMUM,
  *          SYSCALL_ARGUMENT_BYTES_MAXIMUM, SYSCALL_NOTIFY, SYSCALL_NOTIFICATION,
- *          SYSCALL_NOTIFY_* kinds, SyscallNotification.
+ *          SYSCALL_NOTIFY_* kinds, SyscallNotification, SYSCALL_SYSINFO,
+ *          SyscallSystemInformation.
  * References:
  *   - Intel 64 and IA-32 Architectures Software Developer's Manual, Volume 2B,
  *     "SYSCALL" and "SYSRET": the instruction places the address of the
@@ -491,7 +492,24 @@
  */
 #define SYSCALL_NOTIFY         44U
 #define SYSCALL_NOTIFICATION   45U
-#define SYSCALL_COUNT          46U
+
+/*
+ * The call of the System Info program, of 2026-09-25.
+ *
+ *   sysinfo(buffer)                    Fills a SyscallSystemInformation with
+ *                                      what only the kernel knows of the
+ *                                      machine: the processors running, the
+ *                                      memory and how much of it is free, the
+ *                                      milliseconds since the interval timer
+ *                                      started, the processes and threads, and
+ *                                      the entropy pool's estimate. Any process
+ *                                      may ask; none of it is another program's
+ *                                      business in a way `ps` does not already
+ *                                      show. EFAULT for an address that is not
+ *                                      the caller's.
+ */
+#define SYSCALL_SYSINFO        46U
+#define SYSCALL_COUNT          47U
 
 /* The layer a window stands in, given to window_create. A root and a panel may
  * be made by the session alone and carry no frame; every other program's
@@ -650,6 +668,20 @@ typedef struct SyscallNotification
     uint64_t sender;
     char text[SYSCALL_NOTIFICATION_TEXT_MAXIMUM + 1U];
 } SyscallNotification;
+
+/* What `sysinfo` reports. Memory is in bytes, counted in the frames the
+ * physical allocator governs, which is what the machine gave the kernel less
+ * what the firmware and the kernel image hold. */
+typedef struct SyscallSystemInformation
+{
+    uint64_t processors;
+    uint64_t memory_bytes;
+    uint64_t memory_free_bytes;
+    uint64_t uptime_milliseconds;
+    uint64_t processes;
+    uint64_t threads;
+    uint64_t entropy_bits;
+} SyscallSystemInformation;
 
 /* What `procinfo` reports of one process. The state is one of
  * SYSCALL_PROCESS_STATE_*, and the name is what the process was created as —

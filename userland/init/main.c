@@ -50,8 +50,8 @@
 
 /* Where the configuration stands, and what is used in its absence. */
 #define INIT_CONFIGURATION "/etc/system.conf"
-#define INIT_FALLBACK_NAME "desktop"
-#define INIT_FALLBACK_RUN  "/bin/windows"
+#define INIT_FALLBACK_NAME "session"
+#define INIT_FALLBACK_RUN  "/bin/session"
 
 /*
  * How many times a service that keeps ending is started again before `init`

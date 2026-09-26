@@ -479,6 +479,10 @@ int64_t OxysAlarm(uint64_t milliseconds);
 int64_t OxysNotify(uint64_t kind, uint64_t flags, const char *text);
 int64_t OxysNotification(SyscallNotification *notification);
 
+/* The counters the System Info program shows, of 2026-09-25: processors,
+ * memory, uptime, processes, threads and the entropy estimate. */
+int64_t OxysSystemInformation(SyscallSystemInformation *information);
+
 /*
  * OxysPoll waits until one of the things named can be read without sleeping and
  * reports how many can, writing each entry's `ready`. SYSCALL_POLL_WINDOWS in

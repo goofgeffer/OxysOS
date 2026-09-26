@@ -15,6 +15,7 @@ that was cleared that day and renumbered from 1; the date identifies the image.
 
 | Date | Where | What | Result |
 | ---- | ----- | ---- | ------ |
+| 2026-09-26 | QEMU q35, VirtualBox and Bochs | Notepad and System Info | Passed; under QEMU Notepad typed two lines, saved them with Control-S to `/notes.txt`, which `cat` showed as typed, with the notification; System Info showed the version, two processors, memory, an advancing uptime and the processes; every self-test passed on all three, `sysinfo` asserted by `window-check` |
 | 2026-09-25 | QEMU q35 (three processor models), VirtualBox and Bochs | Sub-task 10.1, the entropy pool | Passed; 80 assertions under QEMU; `qemu64` seeded 256 bits from jitter alone, `qemu64,+rdrand` from 2048 values of `RDRAND` and jitter, `max` and VirtualBox from four values of `RDSEED` and jitter; Bochs, with neither instruction, credited 256 bits of jitter from a counter that is expected to be deterministic, which the design document records; a negative test, the cutoff multiplied a thousandfold, failed the self-test twice |
 | 2026-09-25 | QEMU q35, VirtualBox and Bochs | The settings icon's hole | Passed; under QEMU the launcher's colour showed through the gear's hole; every self-test passed on all three |
 | 2026-09-25 | QEMU q35, VirtualBox and Bochs | The icons at 96 pixels and the notification symbols | Passed; under QEMU the launcher, the panel and all four kinds of notification drew the new art, a warning with the information symbol; every self-test passed on all three and no icon was reported unreadable |

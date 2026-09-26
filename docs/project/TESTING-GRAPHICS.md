@@ -453,31 +453,27 @@ memory and reads the stacking order from the pixel where two windows overlap;
 assertions with the failure it would catch. What follows is what only looking
 establishes, and how it is looked at.
 
-**Boot the default entry.** Three windows stand upon a dark ground: *Oxys*,
-*Pointer* and *Keys*, the last with its band in blue — it holds the focus. The
-pointer is at the centre of the screen. Since sub-task 9.2 the three are drawn
-by `/bin/windows` at privilege level 3, so everything below is also a judgement
-upon the client protocol: a program that could not blit, or that never woke
-for an event, would show a window that never changes. Judge:
+**Boot the default entry, and open Notepad and System Info from the
+launcher.** Until 2026-09-25 this section was judged upon the window
+demonstration, `/bin/windows`, which was removed that day; the two programs
+that replaced it in the launcher serve the same purpose, and what they draw is
+also a judgement upon the client protocol: a program that could not blit, or
+that never woke for an event, would show a window that never changes. Judge:
 
-1. **Typing** adds a tile per character to the Keys window and nowhere else,
-   and a backspace removes the last. Press the Pointer window and type again:
-   nothing arrives anywhere, the Pointer window ignoring keys, and the blue has
-   moved to its band.
-2. **The pointer** moved into the Pointer window makes a disc follow it. Hold a
-   button: the disc grows. Drag out of the window with the button held: the
-   disc goes out of sight while the window still receives — the program's
-   event has coordinates beyond the content — and no other window reacts.
-   Release, and the pointer is the other windows' again. (At 9.1 the window
-   printed the coordinates as well; a program cannot draw text yet.)
+1. **Typing** reaches Notepad while its band is the focused colour, and
+   nowhere else. Press System Info's content and type again: nothing arrives
+   in Notepad, System Info ignoring keys, and the focus has moved to its band.
+2. **A window that is not touched still changes**: System Info's `Up for`
+   advances each second while the pointer and the keyboard are idle, which is
+   the alarm ending a program's wait for an event.
 3. **A drag** by a band moves the window under the hand with no trail where it
    was and no lag a person can see, and the dragged window is on top of whatever
    it crosses from the moment it is pressed. Drag it to every edge: the band
    never leaves the screen.
-4. **The disc** at the right of a band closes the window: it vanishes whole, the
-   ground and whatever it covered are repainted beneath, and the blue passes to
-   the topmost window remaining. Close all three: the ground is bare, the
-   pointer still moves, and nothing is drawn.
+4. **The close control** closes the window: it vanishes whole, the ground and
+   whatever it covered are repainted beneath, and the focus passes to the
+   topmost window remaining. Notepad with unsaved changes asks for a second
+   press first, which is the program's decision and not the manager's.
 
 **Under QEMU without a person**, the monitor drives all of it: `sendkey` for the
 keys, `mouse_move` and `mouse_button` for the pointer, and `screendump` after
@@ -492,7 +488,7 @@ meant, which was the script's defect and is recorded there.
 there is no way to move the mouse from `VBoxManage`, so the pointer and the
 drag are judged at the console when a person is at it. **Under Bochs** with
 `nogui` nothing can be operated and the evidence is the log: the manager's
-report after the banner names the three windows at their places.
+report after the banner names the windows at their places.
 
 **The two entries that give the shell the screen** are judged by the absence:
 *Shell-only* shows the banner and a prompt with the pointer following the
@@ -512,13 +508,12 @@ supervision, and all four are judged from one boot of the default entry.
    **Shell Diagnostics** entries to see the other half of the rule: neither
    draws it, and each shows what it showed before.
 2. **The desktop is `init`'s.** At the prompt — the serial line's, upon the
-   default entry — `ps` shows `init`, and shows `windows` carrying `init`'s
+   default entry — `ps` shows `init`, and shows `session` carrying `init`'s
    identifier as its parent. That is the supervision, before anything is done
    to it.
 3. **It is started again.** `kill -9` upon the desktop's identifier, and within
-   a second the three windows are back; `ps` shows a new `windows`, still
-   `init`'s child. Closing all three windows by their discs does the same
-   thing by the other route.
+   a second the desktop is back; `ps` shows a new `session`, still
+   `init`'s child.
 4. **The power screen.** `shutdown` replaces the desktop with the mark,
    `OXYS-OS` and `it is now safe to turn off the machine`, and the machine
    stops; `shutdown -r` shows `RESTARTING` and the machine restarts, which
@@ -539,20 +534,19 @@ carry the keys the programs read;
 with what it would catch. What only looking establishes is that a setting
 changed in a file changes what is drawn.
 
-1. **Change the accent.** In `/etc/desktop.conf` set `accent` to something no
-   part of the desktop uses — `230, 120, 40` is what the run of 2026-09-18
-   used — rebuild the image, and boot the default entry. The discs the desktop
-   draws in its own windows are that colour.
+1. **Change the background.** In `/etc/session.conf`, or with Settings, name
+   the other background: it is drawn at once by Settings' Save, or at the next
+   opening of the launcher after an edit by hand. Until 2026-09-25 this
+   section changed `/etc/desktop.conf`'s accent, which went with the window
+   demonstration.
 2. **The frame does not change**, and that is the half of the assertion a
-   person is most likely to skip. The title band of the focused window stays
-   blue: the frame's colours are the window manager's, drawn by the kernel,
-   and the file says so where a person will read it. A change that altered the
-   band too would mean the desktop had been given the frame to draw, which is
-   sub-task 9.1's boundary gone.
-3. **Change the scale.** `scale = 1` draws the windows and their contents at
-   the face's own size upon a screen where `0` would have chosen two; `scale =
-   9` is refused and the default stands, which is the bound a person cannot
-   draw a window outside of.
+   person is most likely to skip. The title bands keep their colours: the
+   frame's colours are the window manager's, drawn by the kernel. A change
+   that altered the bands too would mean the session had been given the frame
+   to draw, which is sub-task 9.1's boundary gone.
+3. **Change the scale.** `scale = 1` draws the panel and the launcher at the
+   face's own size upon a screen where `0` would have chosen two, at the next
+   start of the desktop; `scale = 9` is refused and the default stands.
 4. **Break a line.** Put `run` before any section, or leave a bracket unclosed,
    and the faults are printed upon the serial line with their line numbers
    while everything else in the file still takes effect — which is the format's
@@ -595,8 +589,8 @@ with what it would catch. What only looking establishes is the desktop.
    could not be read — which says so upon the serial line and offers the entry
    anyway; and **a stepped edge or a dark fringe** about the picture is an icon
    converted as version 1 was, or composed without weighting by opacity.
-7. **The mark's edge, since 2026-09-23.** Upon the boot screen, the desktop and
-   the window demonstration, the disc's outline and the figure are smooth
+7. **The mark's edge, since 2026-09-23.** Upon the boot screen and the desktop,
+   the disc's outline and the figure are smooth
    curves, with no steps of two pixels, and no box of a slightly different
    yellow stands about the disc. Look at 640 by 480 as well as wider: the
    narrow screen draws the table averaged and the wide one draws it one to one,
@@ -609,16 +603,16 @@ with what it would catch. What only looking establishes is the desktop.
    `SESSION.md`; the mark and the wordmark are not drawn upon it. **The ground
    and the mark in its place** is a background that could not be read, which
    the serial line says.
-9. **Minimise, full screen and the list of windows, of 2026-09-23.** Open the
-   demonstration and the terminal from the launcher: the panel lists `Oxys`,
-   `Pointer`, `Keys` and `Terminal`, the window holding the focus upon the
-   quiet colour. Each frame carries, from the right, the close disc, a square
+9. **Minimise, full screen and the list of windows, of 2026-09-23.** Open
+   System Info and the terminal from the launcher: the panel lists `System Info`
+   and `Terminal`, the window holding the focus upon the
+   quiet colour. Each frame carries, from the right, the close cross, a square
    and a bar. Type `ls` into the terminal and press its square: it fills the
    screen below the panel with the text kept and more rows and columns about
    it, and the square becomes two. Press the bar: the terminal vanishes and
    its name upon the panel is dimmed, and the focus passes to the window left
-   on top. Press the square of `Oxys`: the mark grows with the window and
-   stays smooth. Press `Terminal` upon the panel: it returns, full, focused,
+   on top. Press System Info's square: its lines keep their places in the
+   larger window. Press `Terminal` upon the panel: it returns, full, focused,
    its text intact; press its two squares and it returns to its size and
    place. Pressing the focused window's name minimises it. Failures that
    report nothing: **a stripe of white** at the right or foot of the full

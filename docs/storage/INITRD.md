@@ -23,8 +23,8 @@ that reads a disk.
 
 | Path | Contents |
 | ---- | -------- |
-| `/bin` | The programs of `INITRD_UTILITIES` in the `Makefile`: the shell and its utilities ([`../design/SHELL.md`](../design/SHELL.md)), `init` and `shutdown` ([`../design/INIT.md`](../design/INIT.md)), the session, terminal and desktop utilities ([`../design/SESSION.md`](../design/SESSION.md)), and the window demonstration. |
-| `/etc` | `system.conf`, `desktop.conf`, `session.conf`, staged from [`../../etc/`](../../etc/) ([`../design/CONFIG.md`](../design/CONFIG.md)). Covered by the persistent volume when one is attached ([`PERSIST.md`](PERSIST.md)). |
+| `/bin` | The programs of `INITRD_UTILITIES` in the `Makefile`: the shell and its utilities ([`../design/SHELL.md`](../design/SHELL.md)), `init` and `shutdown` ([`../design/INIT.md`](../design/INIT.md)), the session, terminal and desktop utilities ([`../design/SESSION.md`](../design/SESSION.md), [`../design/UTILITIES.md`](../design/UTILITIES.md)), and Settings ([`../design/SETTINGS.md`](../design/SETTINGS.md)). |
+| `/etc` | `system.conf` and `session.conf`, staged from [`../../etc/`](../../etc/) ([`../design/CONFIG.md`](../design/CONFIG.md)). Covered by the persistent volume when one is attached ([`PERSIST.md`](PERSIST.md)). |
 | `/share/defaults/etc` | Read-only copies of the same files, never covered. |
 | `/share/icons`, `/share/backgrounds` | The launcher icons and the desktop background, converted from [`../../art/`](../../art/). |
 | `/mnt` | Empty: where a disk the machine carries is mounted (Section 5). |

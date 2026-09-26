@@ -167,12 +167,6 @@ int main(void)
         ConfigRequire(session, "/share/defaults/etc/system.conf does not name /bin/session as a service");
     }
 
-    ConfigRequire(OxysConfigRead(&Config, "/share/defaults/etc/desktop.conf"),
-                  "/share/defaults/etc/desktop.conf could not be read without fault");
-    ConfigRequire(OxysConfigValue(&Config, "desktop", 0U, "scale") != NULL,
-                  "/share/defaults/etc/desktop.conf does not carry the scale the desktop reads");
-    ConfigRequire(OxysConfigValue(&Config, "desktop", 0U, "accent") != NULL,
-                  "/share/defaults/etc/desktop.conf does not carry the accent the desktop reads");
 
     /* --- The session's file, of sub-task 9.5, says what the session reads. --- */
 
@@ -217,8 +211,7 @@ int main(void)
      * fall-back that was itself missing or empty would be a desktop with an
      * empty launcher again, which is the failure it exists to prevent.
      */
-    ConfigRequire(OxysConfigRead(&Config, "/share/defaults/etc/system.conf") &&
-                      OxysConfigRead(&Config, "/share/defaults/etc/desktop.conf"),
+    ConfigRequire(OxysConfigRead(&Config, "/share/defaults/etc/system.conf"),
                   "a shipped copy at /share/defaults/etc could not be read without fault");
     ConfigRequire(OxysConfigRead(&Config, "/share/defaults/etc/session.conf") &&
                       (OxysConfigCount(&Config, "launch") >= 1U),

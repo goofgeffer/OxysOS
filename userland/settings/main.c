@@ -5,9 +5,9 @@
  * Purpose: The settings application of sub-task 9.8: a window in which the
  *          configuration of sub-task 9.4 is chosen with the pointer rather than
  *          written by hand — the background, the size the desktop is drawn at,
- *          which programs are pinned beside the launcher, and the colour of the
- *          window demonstration — and saved to /etc, the session told to read
- *          it again and a notification saying so.
+ *          and which programs are pinned beside the launcher — and saved to
+ *          /etc, the session told to read it again and a notification saying
+ *          so.
  * Key functions: main, SettingsLoad, SettingsSave, SettingsWriteFile,
  *          SettingsDraw, SettingsPress.
  * References:
@@ -20,8 +20,9 @@
  * What it edits, and what it leaves to `micro`.
  *
  *   The choices a person makes of their desktop: /etc/session.conf's
- *   background, scale and each launcher entry's `pin`, and /etc/desktop.conf's
- *   accent. It does not edit /etc/system.conf, which is the services `init`
+ *   background, scale and each launcher entry's `pin`. (Until 2026-09-25 it
+ *   also set /etc/desktop.conf's accent, which went with the window
+ *   demonstration.) It does not edit /etc/system.conf, which is the services `init`
  *   starts: a service removed by a stray press is a machine that does not
  *   start its desktop, and the file says so in its own comments; `micro` edits
  *   it, where a person can see every line they change. Nor does it add or
@@ -46,7 +47,6 @@
 #include <syscall.h>
 
 #define SETTINGS_SESSION  "/etc/session.conf"
-#define SETTINGS_DESKTOP  "/etc/desktop.conf"
 #define SETTINGS_DEFAULTS "/share/defaults/etc/"
 #define SETTINGS_BACKGROUNDS "/share/backgrounds"
 #define SETTINGS_SAVE_SUFFIX ".settings"
@@ -56,7 +56,7 @@
 #define SETTINGS_GLYPH   8
 #define SETTINGS_PITCH   12
 #define SETTINGS_COLUMNS 46
-#define SETTINGS_ROWS    22
+#define SETTINGS_ROWS    18
 
 #define SETTINGS_PAPER OXYS_RGB(OXYS_PAPER_RED, OXYS_PAPER_GREEN, OXYS_PAPER_BLUE)
 #define SETTINGS_INK   OXYS_RGB(OXYS_INK_RED, OXYS_INK_GREEN, OXYS_INK_BLUE)
@@ -68,12 +68,6 @@
 #define SETTINGS_BACKGROUNDS_MAXIMUM 4U
 #define SETTINGS_ENTRIES_MAXIMUM     6U
 
-/* The window demonstration's colours: `system`, and three of the kind the
- * file's comment describes. */
-static const char *const SettingsAccentNames[] = { "System", "Blue", "Green", "Red" };
-static const char *const SettingsAccentValues[] = { "system", "79, 134, 247", "46, 150, 88",
-                                                    "200, 64, 56" };
-#define SETTINGS_ACCENTS 4U
 
 /* The sizes: 0 is the session's own choice from the screen. */
 static const char *const SettingsScaleNames[] = { "Automatic", "Small", "Large" };
@@ -85,7 +79,6 @@ typedef struct SettingsChoice
 {
     char background[CONFIG_VALUE_MAXIMUM + 1U]; /* Empty for none. */
     size_t scale;
-    size_t accent;                              /* SETTINGS_ACCENTS where unrecognised. */
     bool pinned[SETTINGS_ENTRIES_MAXIMUM];
 } SettingsChoice;
 
@@ -173,7 +166,6 @@ static void SettingsFindBackgrounds(void)
 static void SettingsLoad(void)
 {
     SettingsChoice choice;
-    const char *accent;
 
     (void)memset(&choice, 0, sizeof choice);
 
@@ -204,22 +196,6 @@ static void SettingsLoad(void)
             SettingsCopy(SettingsEntryNames[index], CONFIG_VALUE_MAXIMUM, name);
             choice.pinned[index] = OxysConfigBoolean(&SettingsConfig, "launch", index, "pin",
                                                      false);
-        }
-    }
-
-    choice.accent = 0U;
-
-    if (SettingsReadConfig(SETTINGS_DESKTOP, "desktop.conf"))
-    {
-        accent = OxysConfigValue(&SettingsConfig, "desktop", 0U, "accent");
-        choice.accent = SETTINGS_ACCENTS;
-
-        for (size_t index = 0U; index < SETTINGS_ACCENTS; ++index)
-        {
-            if ((accent == NULL) ? (index == 0U) : (strcmp(accent, SettingsAccentValues[index]) == 0))
-            {
-                choice.accent = index;
-            }
         }
     }
 
@@ -368,18 +344,6 @@ static void SettingsSave(void)
         saved = saved && SettingsWriteFile(SETTINGS_SESSION, length);
     }
 
-    if (saved && (SettingsNow.accent != SettingsRead.accent) &&
-        (SettingsNow.accent < SETTINGS_ACCENTS))
-    {
-        int64_t read = SettingsStart(SETTINGS_DESKTOP, "desktop.conf");
-        size_t length = (read >= 0) ? (size_t)read : 0U;
-
-        changed = true;
-        saved = (read >= 0) &&
-                SettingsEdit(&length, "desktop", 0U, "accent",
-                             SettingsAccentValues[SettingsNow.accent]) &&
-                SettingsWriteFile(SETTINGS_DESKTOP, length);
-    }
 
     if (!changed)
     {
@@ -391,8 +355,8 @@ static void SettingsSave(void)
     if (!saved)
     {
         SettingsCopy(SettingsStatus, SETTINGS_COLUMNS, "The settings could not be saved.");
-        (void)fprintf(stderr, "settings: %s or %s could not be written: %s\n", SETTINGS_SESSION,
-                      SETTINGS_DESKTOP, strerror(errno));
+        (void)fprintf(stderr, "settings: %s could not be written: %s\n", SETTINGS_SESSION,
+                      strerror(errno));
         (void)OxysNotify(SYSCALL_NOTIFY_ERROR, 0U, "The settings could not be saved.");
 
         return;
@@ -422,7 +386,6 @@ typedef enum SettingsAction
     SETTINGS_NO_BACKGROUND,
     SETTINGS_SCALE,
     SETTINGS_PIN,
-    SETTINGS_ACCENT,
     SETTINGS_SAVE,
     SETTINGS_REVERT
 } SettingsAction;
@@ -591,15 +554,6 @@ static void SettingsDraw(void)
         (void)SettingsButtonAt(row++, 2, label, false, SETTINGS_PIN, index);
     }
 
-    row += 1;
-    SettingsLabel(row++, 1, "Colour of the window demonstration", SETTINGS_INK, SETTINGS_PAPER);
-    column = 2;
-
-    for (size_t index = 0U; index < SETTINGS_ACCENTS; ++index)
-    {
-        column = SettingsButtonAt(row, column, SettingsAccentNames[index],
-                                  SettingsNow.accent == index, SETTINGS_ACCENT, index);
-    }
 
     row = SETTINGS_ROWS - 3;
     column = SettingsButtonAt(row, 2, "Save", false, SETTINGS_SAVE, 0U);
@@ -639,9 +593,6 @@ static void SettingsPress(int32_t x, int32_t y)
             break;
         case SETTINGS_PIN:
             SettingsNow.pinned[button->which] = !SettingsNow.pinned[button->which];
-            break;
-        case SETTINGS_ACCENT:
-            SettingsNow.accent = button->which;
             break;
         case SETTINGS_SAVE:
             SettingsSave();

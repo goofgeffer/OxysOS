@@ -567,7 +567,7 @@ $(USER_CRT0): libc/crt/crt0.asm
 # Within the generated rule, the archive is named *after* the program's objects,
 # which is not a style choice: a linker resolves an archive's members against the
 # references it has already seen, so an archive named first contributes nothing.
-USER_PROGRAMS := date notify settings view files poll-check terminal startup-check arg-check exec-check file-check line-check dir-check env-check signal-check window-check init-check config-check echo cat ls mkdir rm touch cp rmdir wc micro head tail grep sort mv ps sh windows init shutdown session
+USER_PROGRAMS := date notify settings view files poll-check terminal startup-check arg-check exec-check file-check line-check dir-check env-check signal-check window-check init-check config-check echo cat ls mkdir rm touch cp rmdir wc micro head tail grep sort mv ps sh notepad sysinfo init shutdown session
 
 USER_PROGRAM_SOURCES := $(foreach program,$(USER_PROGRAMS),$(wildcard userland/$(program)/*.c))
 USER_PROGRAM_IMAGES  := $(foreach program,$(USER_PROGRAMS),$(USER_DIR)/$(program).elf)
@@ -735,7 +735,7 @@ INITRD_UUID    := 0c5f7a10-7b41-4d2e-9a3c-6f0c5f7a1000
 # check program is a test's apparatus: it is embedded in the kernel image, where
 # the self-test that runs it is, and a system that shipped it in /bin would be
 # shipping its own test harness to somebody who asked for a shell.
-INITRD_UTILITIES := date notify settings view files terminal echo cat ls mkdir rm touch cp rmdir wc micro head tail grep sort mv ps sh windows init shutdown session
+INITRD_UTILITIES := date notify settings view files terminal echo cat ls mkdir rm touch cp rmdir wc micro head tail grep sort mv ps sh notepad sysinfo init shutdown session
 INITRD_SOURCES   := $(foreach utility,$(INITRD_UTILITIES),$(USER_DIR)/$(utility).embed.elf)
 
 # The `/etc` hierarchy of sub-task 9.4: the configuration `init` and the desktop
@@ -743,7 +743,7 @@ INITRD_SOURCES   := $(foreach utility,$(INITRD_UTILITIES),$(USER_DIR)/$(utility)
 # recipe, so that the thing a person edits upon the running machine and the
 # thing they edit in the source are the same file, and so that a change to one
 # is a change git can show.
-INITRD_CONFIGURATION := etc/system.conf etc/desktop.conf etc/session.conf
+INITRD_CONFIGURATION := etc/system.conf etc/session.conf
 #
 # Each is staged twice: at `/etc`, where it is read and edited, and at
 # `/share/defaults/etc`, read-only, where it stays reachable when a persistent
@@ -756,7 +756,7 @@ INITRD_CONFIGURATION := etc/system.conf etc/desktop.conf etc/session.conf
 # in, which is what lets somebody add an entry to `/etc/session.conf` and give
 # it a picture without rebuilding the system — the whole reason an icon is a
 # file. art/README.md holds the format and the one command that makes one.
-INITRD_ICONS := art/icons/terminal.oxi art/icons/files.oxi art/icons/windows.oxi \
+INITRD_ICONS := art/icons/terminal.oxi art/icons/files.oxi art/icons/sysinfo.oxi \
                 art/icons/start.oxi art/icons/settings.oxi \
                 art/icons/notify-information.oxi art/icons/notify-success.oxi \
                 art/icons/notify-error.oxi

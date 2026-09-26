@@ -8,7 +8,7 @@ interface), [`../../libc/config/config.c`](../../libc/config/config.c) (parser),
 [`../../libc/config/system.c`](../../libc/config/system.c) (the one place a file is
 read); the files in [`../../etc/`](../../etc/); the readers
 [`../../userland/init/main.c`](../../userland/init/main.c),
-[`../../userland/windows/main.c`](../../userland/windows/main.c) and
+[`../../userland/settings/main.c`](../../userland/settings/main.c) and
 [`../../userland/session/main.c`](../../userland/session/main.c).
 **Specifications**: none governs a configuration format; the familiar shape (a
 comment, a bracketed section, `key = value`) is taken as a shape, not from any
@@ -50,7 +50,7 @@ element.
 
 | Rule | The failure it prevents |
 | ---- | ----------------------- |
-| A value is trimmed, and a comment after it is not part of it. | `run = /bin/windows   # the desktop` naming a program with a comment in its path. |
+| A value is trimmed, and a comment after it is not part of it. | `run = /bin/session   # the desktop` naming a program with a comment in its path. |
 | Quotes exist, needed only to keep a `#` in a value. | Noise on every line, or values silently cut at a hash. |
 | Sections, keys and truth values ignore case. | `[Service]` quietly meaning something else. |
 | A key given twice in one section is a fault; the first stands. | Two disagreeing lines, one silently winning. |
@@ -90,8 +90,10 @@ and the file in the source are the same, and git shows changes to it.
 | File | Read by | Contents |
 | ---- | ------- | -------- |
 | `system.conf` | `/bin/init`, at start | `[system]` `banner`; one `[service]` per supervised program. |
-| `desktop.conf` | `/bin/windows`, at start | `[desktop]` `scale`, `accent`. |
 | `session.conf` | `/bin/session`, at start and at every opening of the launcher | `[session]` `scale`, `background`; one `[launch]` per launcher entry. |
+
+`desktop.conf`, which the window demonstration read its scale and accent
+from, was removed with it on 2026-09-25: nothing else read it.
 
 **`[service]`** ([`INIT.md`](INIT.md)):
 
@@ -108,15 +110,12 @@ five times in a row is given up on, and `init` says so. If `system.conf` cannot 
 read at all, `init` reports it and starts its one built-in service rather than
 leaving a bare screen.
 
-**`[desktop]`**: `scale` is 1–4, or `0` to choose from the screen (shipped); others
-are refused. `accent` is `system` (shipped), meaning the accent in
-[`../../art/palette.h`](../../art/palette.h), or three numbers `r, g, b`. A word is
-needed because every triple, including `0, 0, 0`, is a colour someone may want. A
-file holding its own copy of the system's colour would be right until the system
-changed it. The accent is the content's; the frame's colours belong to the window
-manager in the kernel ([`WINDOWS.md`](WINDOWS.md)). Every key has a default, so a
-missing or faulty file leaves the desktop as it was, with faults printed to
-standard error (the serial line).
+**`[desktop]`** was `desktop.conf`'s one section, read by the window
+demonstration, and went with it on 2026-09-25. Its two lessons stand in the
+session's file: every key has a default, so a missing or faulty file leaves the
+desktop as it was with faults on the serial line; and a colour named by a word
+(`system`) rather than copied as numbers stays right when the system's colour
+changes.
 
 **`[session]` and `[launch]`** are [`SESSION.md`](SESSION.md): the scale, the
 background picture, and each launcher entry's `run`, `name`, `icon` and `pin` (whether it
@@ -140,11 +139,11 @@ privilege level 3 for the file half.
 | **The parse continues past a fault**, reading what follows. | One bad line costing the file. |
 | An over-long value is refused, not cut; the store refuses beyond its capacity; faults beyond those kept are counted. | A different path; a store overrun; a file that looks nearly right. |
 | A file the program wrote reads back as written; a missing file leaves the configuration empty. | Success reported on nothing; a previous file's settings left standing. |
-| **The shipped files carry the keys the programs read**, read from `/share/defaults/etc` so that a person's own `/etc` cannot fail the test: a service running `/bin/session` with `needs = display`; `desktop.conf`'s `scale` and `accent`; `session.conf`'s `scale`, at least one `[launch]` with `run`, and a readable background; the shipped copies at `/share/defaults/etc`, readable and offering a launcher. | A key renamed in a program and not its file: a bare screen with every other test passing. |
+| **The shipped files carry the keys the programs read**, read from `/share/defaults/etc` so that a person's own `/etc` cannot fail the test: a service running `/bin/session` with `needs = display`; `session.conf`'s `scale`, at least one `[launch]` with `run`, and a readable background; the shipped copies at `/share/defaults/etc`, readable and offering a launcher. | A key renamed in a program and not its file: a bare screen with every other test passing. |
 
-That settings are **obeyed** is checked by eye: changing `accent` to three numbers
-changes the colour of the desktop's discs and not the frames; `accent = system`
-draws the palette's colour ([`../project/TESTING-GRAPHICS.md`](../project/TESTING-GRAPHICS.md)).
+That settings are **obeyed** is checked by eye: changing the background changes the
+desktop and not the frames
+([`../project/TESTING-GRAPHICS.md`](../project/TESTING-GRAPHICS.md), Section 10).
 
 ## Limitations
 
@@ -155,8 +154,8 @@ draws the palette's colour ([`../project/TESTING-GRAPHICS.md`](../project/TESTIN
    `session.conf`, which the launcher rereads when opened; a program wanting new
    settings is restarted.
 3. Without an `oxys-etc` disk, `/etc` is the ramdisk's and edits are lost at boot.
-4. Values are strings, numbers and truths; no lists within a value (the accent's
-   three numbers are split by the desktop), durations, sizes or paths.
+4. Values are strings, numbers and truths; no lists within a value (a reader
+   splits one itself), durations, sizes or paths.
 5. A fault gives its line number, not its column or text.
 6. The parser's bounds (Section 2); beyond them, the excess is refused and
    reported.

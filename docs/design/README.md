@@ -30,7 +30,7 @@ phases build them, which is the order to read them in.
 | [`CONFIG.md`](CONFIG.md) | The configuration format and `/etc`. | 9.4 |
 | [`SESSION.md`](SESSION.md) | The session: layers, root, panel, launcher, icons, background. | 9.5 |
 | [`TERMINAL.md`](TERMINAL.md) | The terminal emulator, `poll`, and the shell without a terminal. | 9.6 |
-| [`UTILITIES.md`](UTILITIES.md) | The file manager, the text viewer and the clock. | 9.7 |
+| [`UTILITIES.md`](UTILITIES.md) | The file manager, the text viewer, the clock, Notepad and System Info. | 9.7 |
 | [`SETTINGS.md`](SETTINGS.md) | The settings application, the editing of a configuration file in place, and the notifications. | 9.8 |
 | [`ENTROPY.md`](ENTROPY.md) | The entropy pool: its mixing, the credit each source is given and why, and the health test of the jitter source. | 10.1 |
 

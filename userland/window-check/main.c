@@ -180,6 +180,27 @@ int main(void)
     WindowRequire((OxysWindowMove(first, 100000, 0) == -1) && (errno == EINVAL),
                   "a move beyond the coordinate limit was not EINVAL");
 
+
+    /* --- sysinfo, of 2026-09-25, for the System Info program. --- */
+    {
+        SyscallSystemInformation information;
+
+        (void)memset(&information, 0, sizeof information);
+        WindowRequire(OxysSystemInformation(&information) == 0, "sysinfo was refused");
+        WindowRequire(information.processors >= 1U, "sysinfo reported no processor");
+        WindowRequire((information.memory_bytes > 0U) &&
+                          (information.memory_free_bytes <= information.memory_bytes),
+                      "sysinfo reported memory that cannot be: none, or more free than there is");
+        WindowRequire(information.uptime_milliseconds > 0U, "sysinfo reported no time since start");
+        WindowRequire((information.processes >= 1U) &&
+                          (information.threads >= information.processes),
+                      "sysinfo reported fewer processes than this one, or fewer threads than "
+                      "processes");
+        errno = 0;
+        WindowRequire((OxysSystemInformation((SyscallSystemInformation *)8) == -1) &&
+                          (errno == EFAULT),
+                      "sysinfo wrote to an address that is not the caller's");
+    }
     /* --- The session of sub-task 9.5, and the layers it alone may use. --- */
 
     {

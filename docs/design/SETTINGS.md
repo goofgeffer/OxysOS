@@ -22,7 +22,6 @@ makes of their desktop:
 | The background: each file of `/share/backgrounds`, or none | `/etc/session.conf`, `[session]` `background` |
 | The size of the desktop: automatic, small or large | `/etc/session.conf`, `[session]` `scale` |
 | Which launcher entries are pinned beside the launcher | `/etc/session.conf`, each `[launch]` block's `pin` |
-| The colour of the window demonstration | `/etc/desktop.conf`, `[desktop]` `accent` |
 
 **Nothing is written until Save.** A press changes what is shown as chosen, and
 Save writes it. Were every press an edit of `/etc`, a person trying the
@@ -44,7 +43,8 @@ The session reads its configuration again before showing that notice, so the
 new background and pins are on the screen when the notice appears. The size is
 the exception: the session makes its panel and clock that size as it starts, so
 a new size is used when the desktop next starts, and a second notice says so.
-The window demonstration reads its colour when it starts.
+Until 2026-09-25 it also set the window demonstration's colour, in
+`/etc/desktop.conf`; both went with the demonstration.
 
 **What it does not edit.** `/etc/system.conf` lists the services `init`
 starts, and a service removed by a stray press is a machine that does not start

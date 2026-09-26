@@ -1,12 +1,14 @@
 <!-- SPDX-FileCopyrightText: 2026 The Oxys-OS Authors -->
 <!-- SPDX-License-Identifier: CC0-1.0 -->
-# The Desktop Utilities: File Manager, Text Viewer, Clock
+# The Desktop Utilities: File Manager, Text Viewer, Clock, Notepad, System Info
 
 **Phase**: sub-task 9.7 of [`../project/PLAN.md`](../project/PLAN.md), at which
 `Oxys 1 Beta` is fixed.
 **Source**: [`../../userland/files/main.c`](../../userland/files/main.c),
 [`../../userland/view/main.c`](../../userland/view/main.c),
-[`../../userland/date/main.c`](../../userland/date/main.c); the clock in
+[`../../userland/date/main.c`](../../userland/date/main.c),
+[`../../userland/notepad/main.c`](../../userland/notepad/main.c),
+[`../../userland/sysinfo/main.c`](../../userland/sysinfo/main.c); the clock in
 [`../../userland/session/main.c`](../../userland/session/main.c).
 **Specifications**: ISO/IEC 9899:2011, Section 7.27 (`<time.h>`); IEEE Std
 1003.1-2017, `alarm()`, `date`, `fork()`. The appearance is judged against
@@ -78,9 +80,65 @@ the error does not grow with uptime ([`../devices/TIME.md`](../devices/TIME.md))
 extended form rather than the POSIX default, which names a time zone this
 system does not have.
 
+## 4. Notepad, `/bin/notepad`
+
+**Added on 2026-09-25** at the project owner's request: a text editor in a
+window, for a person at the desktop as `micro` is for a person at the shell.
+
+**The keys.** Printable characters are typed where the cursor stands; Enter
+breaks the line; Backspace and Delete remove; Tab types four spaces. The arrows,
+Home, End, Page Up and Page Down move, the column kept where a line is long
+enough. Control-S saves, Control-O opens and Control-N begins a new file; the
+modifier is read from the key event (`TERM_MODIFIER_CONTROL`). A file with no
+name yet, and a file to open, is asked for on the bottom row, which Enter
+accepts and Escape abandons. `notepad path` opens a file, or begins one of that
+name where none exists.
+
+**The text is one buffer and the cursor an offset**, and a line is found by
+walking from the start whenever the window is drawn. For the 64 KiB it holds
+that costs less than the drawing does, and it is one representation rather
+than two kept in step. A longer file is refused at opening, not cut: saving a
+file cut would lose its end.
+
+**Saving is `micro`'s**: into a file beside the one named, which takes the name
+only when whole, so a failure part way leaves the file as it was. A save posts
+a notification, `Saved notes.txt.` or an error.
+
+**Closing with changes unsaved** asks first: the first press of the close control
+says so on the bottom row, and a second, with nothing typed between, discards
+them.
+
+It has no icon yet; the launcher shows its name, and the panel its initial.
+
+## 5. System Info, `/bin/sysinfo`
+
+**Added on 2026-09-25** in place of the window demonstration, which the project
+owner asked to be removed, with the demonstration's icon, a window around the
+mark. A window of what the machine is and is doing:
+
+| Row | From |
+| --- | ---- |
+| System | `version`, the string the banner prints. |
+| Processors, memory, up for, processes | `sysinfo`: the processors online, the physical allocator's frames and those free, the interval timer's milliseconds, the processes and threads. |
+| Screen | `window_screen`. |
+| Date | `time`, as `date` shows it, without the seconds. |
+| Entropy | `sysinfo`: the entropy pool's estimate ([`ENTROPY.md`](ENTROPY.md)). |
+
+**`sysinfo`** is a call of its own, number 46, because the figures are the
+kernel's alone and none was reachable before. It reads each counter as it
+stands; they agree with each other only to within the moment it takes to read
+them, which is all a window redrawn each second asks. It is open to every
+process: nothing in it is another program's business in a way `ps` does not
+already show.
+
+**Redrawn every second by an alarm**, as the clock is by the minute: the alarm
+ends the wait for an event with `EINTR`, so the uptime advances with no thread
+and no polling.
+
 ## Verification
 
-The three programs are drawing and choice, and have no self-test of their own.
+The programs are drawing and choice and have no self-test of their own, save
+the `sysinfo` call beneath System Info, which `window-check` asserts.
 What they stand on is asserted in [`../devices/TIME.md`](../devices/TIME.md):
 the clock's decoding, the date arithmetic, `gmtime`, and the alarm at privilege
 level 3. The checks a person performs are in
@@ -92,6 +150,8 @@ level 3. The checks a person performs are in
 | Two presses on a directory list it; on a file, open a viewer titled with its name. | Selection and opening confused. |
 | Making a viewer full rewraps the text with the top row unchanged. | A resize that loses the reader's place. |
 | The panel's clock matches the host's minute and turns by itself. | An alarm that is not re-armed. |
+| Notepad types, moves, and saves two lines with Control-S to a path asked for, which `cat` then shows as typed, and a notification says so. | A save that writes nothing, or writes the wrong bytes. |
+| System Info shows the version, two processors under QEMU, memory free less than memory, and an uptime that advances by itself. | Figures read from the wrong counter; an alarm not re-armed. |
 
 ## Limitations
 
@@ -101,3 +161,7 @@ level 3. The checks a person performs are in
 3. The viewer wraps by character, not by word, and has no search.
 4. The viewer reads the file once; a change while it is shown is not shown.
 5. The clock has no time zone ([`../devices/TIME.md`](../devices/TIME.md)).
+6. Notepad has no undo, no search, no selection and no clipboard, and does not
+   wrap long lines; it scrolls sideways instead.
+7. System Info names no processor model and no disk: there is no call for
+   either.
