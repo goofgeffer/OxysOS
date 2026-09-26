@@ -352,20 +352,19 @@ regenerates it and fails if what is here differs.*
 
 | | |
 | --- | --- |
-| Builds recorded | 42 |
-| Verified | 35 passed, 7 not |
+| Builds recorded | 43 |
+| Verified | 36 passed, 7 not |
 | Compilers | gcc |
 | Environments | Bochs, QEMU, QEMU q35,  VirtualBox,  Bochs, VirtualBox |
 | First | 2026-09-17T01:34Z |
-| Latest | 2026-09-26T16:33Z |
+| Latest | 2026-09-26T17:32Z |
 
 ## The last 20 builds
 
-The remaining 22 are in [`builds.tsv`](builds.tsv), which is the record.
+The remaining 23 are in [`builds.tsv`](builds.tsv), which is the record.
 
 | # | Date (UTC) | Commit | Compiler | Kernel | ISO | Result | Environments | Note |
 | - | ---------- | ------ | -------- | ------ | --- | ------ | ------------ | ---- |
-| 23 | 2026-09-24T01:55Z | `e381ca2` | gcc 13.2.0 | 3715328 | 10944512 | passed (78 assertions) |  | The launcher offers the terminal when the file offers nothing; window create and destroy wake the session |
 | 24 | 2026-09-24T02:27Z | `9382d5e` | gcc 13.2.0 | 3718160 | 10946560 | passed (78 assertions) |  | Settings recoverable without knowing how, and seen without a restart |
 | 25 | 2026-09-24T02:27Z | `9382d5e` *(modified)* | gcc 13.2.0 | 3717944 | 10946560 | failed |  | Negative test: defaults unstaged, micro's file beside left, no write-back after unlink; all caught, reverted |
 | 26 | 2026-09-24T21:44Z | `8ca9ae5` | gcc 13.2.0 | 3718160 | 10946560 | passed (78 assertions) |  | Documentation revamp: subsystem documents rewritten, section references stripped (comments only) |
@@ -385,5 +384,6 @@ The remaining 22 are in [`builds.tsv`](builds.tsv), which is the record.
 | 40 | 2026-09-25T23:36Z | `9588cd0` | gcc 13.2.0 | 3815664 | 13142016 | passed (79 assertions) | QEMU q35, VirtualBox, Bochs | The settings icon's hole transparent |
 | 41 | 2026-09-26T01:50Z | `128c721` | gcc 13.2.0 | 3848232 | 13174784 | passed (80 assertions) | QEMU q35, VirtualBox, Bochs | Sub-task 10.1, the entropy pool |
 | 42 | 2026-09-26T16:33Z | `cb2bb59` | gcc 13.2.0 | 3854096 | 13178880 | passed (80 assertions) | QEMU q35, VirtualBox, Bochs | Notepad and System Info; the window demonstration removed |
+| 43 | 2026-09-26T17:32Z | `2e61dcc` | gcc 13.2.0 | 3859840 | 13185024 | passed (80 assertions) | QEMU q35, VirtualBox, Bochs | The owner's bars, buttons, pointer and icons |
 
 <!-- END GENERATED -->
