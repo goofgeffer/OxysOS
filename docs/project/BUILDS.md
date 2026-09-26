@@ -352,20 +352,19 @@ regenerates it and fails if what is here differs.*
 
 | | |
 | --- | --- |
-| Builds recorded | 41 |
-| Verified | 34 passed, 7 not |
+| Builds recorded | 42 |
+| Verified | 35 passed, 7 not |
 | Compilers | gcc |
 | Environments | Bochs, QEMU, QEMU q35,  VirtualBox,  Bochs, VirtualBox |
 | First | 2026-09-17T01:34Z |
-| Latest | 2026-09-26T01:50Z |
+| Latest | 2026-09-26T16:33Z |
 
 ## The last 20 builds
 
-The remaining 21 are in [`builds.tsv`](builds.tsv), which is the record.
+The remaining 22 are in [`builds.tsv`](builds.tsv), which is the record.
 
 | # | Date (UTC) | Commit | Compiler | Kernel | ISO | Result | Environments | Note |
 | - | ---------- | ------ | -------- | ------ | --- | ------ | ------------ | ---- |
-| 22 | 2026-09-24T01:38Z | `393b437` *(modified)* | gcc 13.2.0 | 3714776 | 10942464 | failed |  | Negative test: meant to refuse a write of nothing again, the sed disabled all four length-zero tests of syscall.c (write, read, version, path canonicalisation); caught, reverted |
 | 23 | 2026-09-24T01:55Z | `e381ca2` | gcc 13.2.0 | 3715328 | 10944512 | passed (78 assertions) |  | The launcher offers the terminal when the file offers nothing; window create and destroy wake the session |
 | 24 | 2026-09-24T02:27Z | `9382d5e` | gcc 13.2.0 | 3718160 | 10946560 | passed (78 assertions) |  | Settings recoverable without knowing how, and seen without a restart |
 | 25 | 2026-09-24T02:27Z | `9382d5e` *(modified)* | gcc 13.2.0 | 3717944 | 10946560 | failed |  | Negative test: defaults unstaged, micro's file beside left, no write-back after unlink; all caught, reverted |
@@ -385,5 +384,6 @@ The remaining 21 are in [`builds.tsv`](builds.tsv), which is the record.
 | 39 | 2026-09-25T23:31Z | `076c3b7` | gcc 13.2.0 | 3815664 | 13142016 | passed (79 assertions) | QEMU q35, VirtualBox, Bochs | Icons at 96 pixels and notification symbols |
 | 40 | 2026-09-25T23:36Z | `9588cd0` | gcc 13.2.0 | 3815664 | 13142016 | passed (79 assertions) | QEMU q35, VirtualBox, Bochs | The settings icon's hole transparent |
 | 41 | 2026-09-26T01:50Z | `128c721` | gcc 13.2.0 | 3848232 | 13174784 | passed (80 assertions) | QEMU q35, VirtualBox, Bochs | Sub-task 10.1, the entropy pool |
+| 42 | 2026-09-26T16:33Z | `cb2bb59` | gcc 13.2.0 | 3854096 | 13178880 | passed (80 assertions) | QEMU q35, VirtualBox, Bochs | Notepad and System Info; the window demonstration removed |
 
 <!-- END GENERATED -->
