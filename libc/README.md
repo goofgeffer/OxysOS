@@ -9,10 +9,9 @@ conversion, and sub-task 7.5 the runtime startup object, the termination
 functions and the link a program is built by. Sub-task 7.6 added the six
 filesystem wrappers and the thirteen failure names they report, and is where
 `errno` stopped being seven numbers.
-**Detailed design**: [`../docs/design/LIBC.md`](../docs/design/LIBC.md), Sections
-2 to 7 for sub-task 7.1, Section 8 for sub-task 7.2, Section 9 for sub-task 7.3,
-Section 10 for sub-task 7.4, Section 11 for sub-task 7.5 and Section 12 for
-sub-task 7.6.
+**Detailed design**: [`../docs/design/LIBC.md`](../docs/design/LIBC.md), one
+section per concern: the interface header, the strings, the wrappers, the heap,
+the streams, startup and the link, the filesystem calls and `<signal.h>`.
 
 ## Purpose
 
@@ -26,9 +25,8 @@ the boundary between the two falls.
 directory's include root in reach so that nothing here can become part of it by
 accident. The one exception is named explicitly by a rule in the
 [`../Makefile`](../Makefile): the boot-time self-test that asserts this code.
-[`../docs/design/LIBC.md`](../docs/design/LIBC.md) explains why that
-self-test is presently the only thing that runs any of this, and what sub-task
-7.5 changes about it.
+[`../docs/design/LIBC.md`](../docs/design/LIBC.md), Section 1, explains why
+the library is compiled into the kernel image as well as into the archive.
 
 ## Contents
 
@@ -139,13 +137,8 @@ holds. The corpus is enumerated in
 [`../kernel/test/libc/wrappers.c`](../kernel/test/libc/wrappers.c) and
 [`../kernel/test/libc/heap.c`](../kernel/test/libc/heap.c), all run by
 `make verify` at every boot.
-[`../docs/design/LIBC.md`](../docs/design/LIBC.md) holds the table
-pairing each of the first test's assertions with the silent failure it exists to
-catch, and Section 5.1 records the negative test that found a defect in the test
-itself; Section 8.4 holds the same table for the second, and Section 8.7 the
-negative test that found *its* first version worthless; Section 9.4 holds the two
-tables for the third, and Section 9.7 the fourteen negative tests of which one
-found a limitation and one found code that did nothing.
+[`../docs/design/LIBC.md`](../docs/design/LIBC.md), Verification, pairs each
+assertion of all three with the silent failure it exists to catch.
 
 **The second and third tests are each in two halves because the kernel cannot
 call what they assert.** `SYSCALL` executes at any privilege level, but the

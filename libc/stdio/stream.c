@@ -21,9 +21,9 @@
  *     function below, cited at the function.
  *   - libc/include/stream.h: the seam — OxysStreamWrite and OxysStreamFill —
  *     which is the whole of what this file knows about the machine beneath it.
- *   - docs/design/LIBC.md: the design of this sub-task, and Section
- *     10.5 the table pairing every asserted property with the silent failure it
- *     exists to catch.
+ *   - docs/design/LIBC.md: the design of this sub-task, Section 6, and its
+ *     Verification, the table pairing every asserted property with the
+ *     silent failure it exists to catch.
  *
  * This file holds the policy and nothing about where bytes go.
  *
@@ -42,7 +42,7 @@
  *   four more ways to be wrong — the buffer boundary, the pushback, the
  *   line-buffering decision and the partial transfer — and there is no workload
  *   here to measure the difference against. docs/design/LIBC.md
- *   limitation 1, records it as the thing a ported compiler will change.
+ *   limitation 4, records it as the thing a ported compiler will change.
  *
  * Concurrency.
  *

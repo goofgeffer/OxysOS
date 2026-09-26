@@ -27,10 +27,11 @@ why the twelve `-check` programs are **not** carried there: each exists to make 
 machine-readable statement about a system call, so each is embedded in the kernel
 image beside the self-test that runs it, and a system that shipped them in `/bin`
 would be shipping its own test harness to somebody who asked for a shell.
-**Detailed design**: [`../docs/design/LIBC.md`](../docs/design/LIBC.md), Section
-11, which is the runtime and the link procedure every program here is built by,
-and Section 12, which is the five utilities, the calls beneath them and the three
-programs that assert what they cannot assert of themselves.
+**Detailed design**: [`../docs/design/LIBC.md`](../docs/design/LIBC.md), Sections
+7, which is the startup object and the link every program here is built by, and
+10, which is the Phase 7 utilities and the three programs that assert what they
+cannot assert of themselves; the later programs are in the documents this
+directory's table names.
 **Licence**: `MIT`, as [`../LICENSING.md`](../LICENSING.md), Section 1, assigns
 to this path — the same licence as `libc/`, and for the same reason: a program
 that links the C library should be under no obligation the kernel's licence would

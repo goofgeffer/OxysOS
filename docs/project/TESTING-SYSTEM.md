@@ -1020,8 +1020,8 @@ first and the last is a failure, each naming the property that failed.
 
 ## 14. Verification of the C library's heap, and of the break beneath it
 
-**Sub-task**: 7.3. **Design**: [`../design/LIBC.md`](../design/LIBC.md), Section
-9, whose Section 9.4 holds the two tables pairing every assertion with the silent
+**Sub-task**: 7.3. **Design**: [`../design/LIBC.md`](../design/LIBC.md), Verification,
+which pairs every assertion with the silent
 failure it exists to catch. **Test**:
 [`../../kernel/test/libc/heap.c`](../../kernel/test/libc/heap.c).
 

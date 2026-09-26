@@ -21,8 +21,8 @@
  * outside the C language, so the two can be — and are — asserted separately: the
  * policy by the kernel's own boot-time self-test, which gives it a region
  * directly, and the system call beneath this function by a program at privilege
- * level 3 that exercises `brk` and uses what it gets. Section 9.5 of the design
- * document holds both tables.
+ * level 3 that exercises `brk` and uses what it gets. docs/design/LIBC.md, Verification,
+ * holds both.
  *
  * **This function cannot be called by the kernel**, and neither can anything
  * else that reaches a system call: SYSRET returns to privilege level 3

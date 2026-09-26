@@ -98,8 +98,8 @@
  *
  * That is what lets `free` refuse a pointer instead of corrupting the heap with
  * it. ISO/IEC 9899:2011, Section 7.22.3.3, paragraph 2, makes such a call
- * undefined behaviour and this library defines it; Section 9.4 of the design
- * document records the limits of the courtesy.
+ * undefined behaviour and this library defines it; docs/design/LIBC.md, Section 5,
+ * records the limits of the courtesy.
  */
 #define HEAP_BLOCK_FREE      UINT64_C(0x4F58595346524545)
 #define HEAP_BLOCK_ALLOCATED UINT64_C(0x4F5859534C495645)

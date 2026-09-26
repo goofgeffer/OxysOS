@@ -123,7 +123,7 @@ char *strrchr(const char *string, int c)
  * sized for a compiler will eventually want; it is not built here because the
  * table costs a quarter of a kilobyte of stack in functions that are presently
  * called upon sets of two or three bytes. docs/design/LIBC.md
- * limitation 1, records the measurement that would justify changing it.
+ * limitation 4, records the measurement that would justify changing it.
  *
  * The terminator is deliberately not a member of any set: the loop stops before
  * comparing it, so strcspn(s, "") is the length of s rather than zero.
@@ -199,13 +199,13 @@ char *strpbrk(const char *string, const char *accept)
  * was added with a comment claiming it was what made *every* empty needle work,
  * and the self-test asserted the empty needle against a haystack that was not
  * empty — so deleting the guard altogether changed no result the test could see.
- * docs/design/LIBC.md records the negative test that found it and
- * the assertion that now covers it.
+ * docs/design/LIBC.md pairs the empty-haystack case with
+ * the failure it would catch.
  *
  * The search is the product of the two lengths in the worst case. A
  * Boyer-Moore or Knuth-Morris-Pratt search would be linear and would want a
  * table proportional to the needle; docs/design/LIBC.md limitation
- * 1, records that this is deliberate and what would justify revisiting it.
+ * 4, records that this is deliberate and what would justify revisiting it.
  */
 char *strstr(const char *haystack, const char *needle)
 {

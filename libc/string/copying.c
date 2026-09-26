@@ -15,7 +15,7 @@
  *     what permits memcpy to copy forwards without asking whether the objects
  *     overlap.
  *   - docs/design/LIBC.md: the group these six belong to, and
- *     Section 5, which pairs each assertion of the self-test with the failure it
+ *     its Verification, which pairs each assertion of the self-test with the failure it
  *     would catch.
  *
  * Every byte here is moved through `unsigned char`, which is the only type the
@@ -111,7 +111,7 @@ char *strcpy(char *restrict destination, const char *restrict source)
  * Neither is repaired here. A strncpy that terminated would be a function with
  * a standard name and non-standard behaviour, which is worse than either the
  * standard function or a differently-named one; docs/design/LIBC.md
- * limitation 2, records the bounded copy that ought to exist beside it and why
+ * limitation 3, records the bounded copy that ought to exist beside it and why
  * it is not being invented in this sub-task.
  */
 char *strncpy(char *restrict destination, const char *restrict source, size_t n)

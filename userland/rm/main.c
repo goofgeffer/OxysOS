@@ -32,8 +32,8 @@
  *   directory. `OxysUnlink` refuses one with EISDIR, so a recursive removal
  *   could empty a directory and then be unable to remove it — which is worse
  *   than not offering the option, since the person would be left with the
- *   contents gone and the directory still there. docs/design/LIBC.md, Section
- *   12.7, limitation 3.
+ *   contents gone and the directory still there. docs/design/LIBC.md,
+ *   Section 10.
  *
  *   The consequence is that a directory is always the case POSIX describes for
  *   an operand without -r: a diagnostic, no removal, and on to the next operand.
