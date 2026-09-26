@@ -2,472 +2,155 @@
 <!-- SPDX-License-Identifier: CC0-1.0 -->
 # Oxys-OS System Architecture
 
-**Corresponding phase**: All phases. This document is revised whenever a
-subsystem is added or its interface altered.
+**Phase**: all phases of [`../project/PLAN.md`](../project/PLAN.md).
+**Source**: the whole tree; the boot's order in
+[`../../kernel/kernel.c`](../../kernel/kernel.c) and
+[`../../kernel/init/`](../../kernel/init/).
+**Specifications**: none of its own; each subsystem's document cites its own.
+
+How the system is divided: the premises it is built on, where each kind of code
+lives and the rules that decide it, the order in which subsystems depend on one
+another, the privilege model, and the diagnostic paths.
 
 ## 1. Design premises
 
-Oxys-OS is a monolithic operating system for the x86_64 architecture. The
-monolithic model was selected in preference to a microkernel because the
-project's objectives concern the direct exercise of hardware interfaces, and
-because the inter-process communication overhead of a microkernel would obscure
-rather than illuminate the mechanisms under study.
+Oxys-OS is a monolithic kernel for x86_64. A monolithic kernel is chosen because
+the project's purpose is the direct exercise of hardware interfaces, which a
+microkernel's message passing would obscure. Three properties are designed in
+from the start rather than retrofitted:
 
-The following properties are treated as first-class design constraints rather
-than as later additions, in accordance with `PROJECT_GUIDELINES.md`, Section 5:
+1. **Symmetric multi-processing.** Every kernel structure is written on the
+   assumption that several processors will reach it, and its file's header says
+   how it is synchronised ([`CONCURRENCY.md`](CONCURRENCY.md)). Retrofitting locks
+   to structures built without them is where the worst concurrency faults come
+   from.
+2. **Copy-on-write.** The frame allocator keeps a reference count per frame from
+   the outset, so the fault resolution and the address-space cloning above it
+   ([`MEMORY-LAYOUT.md`](MEMORY-LAYOUT.md)) did not require every consumer of the
+   allocator to change.
+3. **Boot-protocol neutrality.** Everything above `kernel/handoff/` consumes the
+   neutral `BootInformation` of `<oxys/boot/bootinfo.h>` and cannot tell which
+   boot protocol supplied it, so the UEFI path of Phase 12 is a new reader and
+   not a change to the kernel ([`BOOT.md`](BOOT.md)).
 
-1. **Symmetric multi-processing.** Every kernel data structure introduced from
-   Phase 2 onward is designed on the assumption that it will be accessed
-   concurrently by several processors. Locking discipline is recorded in the
-   header of the structure's defining file at the time the structure is
-   introduced, not retrofitted in Phase 6.
-2. **Copy-on-write.** The physical frame allocator introduced in Phase 2
-   maintains a per-frame reference count from the outset, because retrofitting
-   reference counting to an allocator that lacks it would require the
-   modification of every consumer. The fault resolution built upon it is
-   complete as of sub-task 2.7, and sub-task 2.8 added the address-space cloning
-   that creates the shared pages upon which it acts.
-3. **Boot-protocol neutrality.** The kernel proper consumes a boot-protocol
-   neutral handoff structure. In Phase 1 that structure is the Multiboot2
-   information block read directly; in Phase 12 an equivalent structure is
-   populated from the UEFI System Table, and the kernel above the handoff layer
-   is unchanged.
-
-## 2. Source tree layout
-
-| Directory | Contents | Introduced |
-| --------- | -------- | ---------- |
-| `boot/` | The Multiboot2 header, the 32-bit entry point, the long-mode transition, and the GRUB configuration. | Phase 1 |
-| `kernel/` | The kernel core: entry, memory management, scheduling, the block layer, the virtual filesystem, and the boot-protocol handoff. It was described here as architecture-independent while `kernel/cpu/` sat within it, which it plainly was not; what is architecture-independent is this directory **less** `arch/`, and that is now a statement about the tree rather than about the prose. | Phase 1 |
-| `kernel/include/oxys/` | The kernel's internal header corpus, grouped to mirror the source tree: `arch/`, `mm/`, `proc/`, `exec/`, `acpi/`, `block/`, `fs/`, `boot/`, `dev/`, `gfx/`, `terminal/` and `test/`, with `types.h` and `kernel.h` at the root because they belong to no subsystem. Section 2.5 records the grouping and what it buys. | Phase 1 |
-| `kernel/abi/oxys/` | A **second include root**: the system-call interface a program is entitled to — the call numbers, the failure results, the register convention and the two limits an argument is judged against — held apart from the corpus above it and licensed permissively so that the `MIT` C library may include it without including the kernel. It holds constants and never a declaration. | Phase 7 (sub-task 7.1) |
-| `kernel/arch/x86_64/` | Everything in the kernel that could not survive a change of processor, in six subdirectories: `cpu/`, `interrupt/`, `syscall/`, `smp/`, `mm/` and `proc/`. The headers of these subsystems are **not** here; they are in the corpus above, under `oxys/arch/`, which mirrors this tree without naming a processor. [`kernel/arch/README.md`](../../kernel/arch/README.md) states the test for admitting a file, and Section 2.4 below records the boundary. | Phase 1, gathered here at the sub-task 7.3 review |
-| `kernel/test/` | The boot-time self-tests, one file per subsystem, and the composed volume they are conducted upon. | Phase 2 |
-| `kernel/init/` | The phases of the boot, one file each, which `KernelMain` calls in the order of Section 4. | 2026-09-25, after `Oxys 1 Beta` |
-| `kernel/handoff/` | The boot-protocol handoff layer: the reading of whatever structure the boot loader left, reduced to the neutral `BootInformation` of `<oxys/boot/bootinfo.h>`. It carries its own private header rather than one in the corpus above, because the wire format of a boot protocol is exactly what design premise 3 forbids anything above it to know. Multiboot2 is its one member; the UEFI equivalent joins it in Phase 12. | Phase 1 |
-| `kernel/acpi/` | The reading of the firmware's ACPI description tables. | Phase 6 (sub-task 6.12) |
-| `kernel/block/` | The generic block-device layer and the buffer cache above it: the layer a storage driver registers into, and the cache the filesystems read through. Above `drivers/` and below `kernel/fs/`, and in neither. | Phase 4 (sub-tasks 4.5 and 4.6) |
-| `kernel/terminal/` | The terminal input path: one byte stream, drawn from the keyboard and the serial line, that a program's `read` of descriptor 0 delivers — the keyboard's keys translated to the sequences a terminal sends, and nothing echoed or assembled. Above `drivers/` and below the system call, and in neither. | Phase 8 (sub-task 8.1) |
-| `drivers/` | Device drivers, one subdirectory per device class. | Phase 1 |
-| `libc/` | The minimal C library linked into user programs. `libc/include/` is its header root and `libc/string/` its first material. | Phase 7 (sub-task 7.1) |
-| `userland/` | User programs: the utilities of Phase 7, and from sub-task 8.1 the shell — whose tokeniser and parser are compiled into the kernel image as well, under `SHELL_SOURCES`, for the self-test to assert. | Phases 7 and 8 |
-| `graphics/` | The framebuffer, the drawing primitives, the font and the compositing surface. | Phase 6 (established) |
-| `crypto/` | The random-number generator, the hash function and the symmetric cipher. | Phase 10 |
-| `net/` | The network protocol stack. | Phase 11 |
-| `uefi/` | The UEFI application entry point and the UEFI handoff path. | Phase 12 |
-| `docs/` | The documentation corpus, grouped by subject into `project/`, `design/`, `devices/` and `storage/` and indexed by [`docs/README.md`](../README.md). | Phase 1 |
-
-### 2.1 The grouping of `docs/`
+## 2. The source tree
 
 | Directory | Holds |
 | --------- | ----- |
-| `docs/project/` | How the work is conducted: the plan, the test procedure and record, the toolchain, the coding standards, the bibliography. |
-| `docs/design/` | The kernel itself: this document, the boot sequence, the address space, the interrupts, the privilege transition, and the framebuffer with the drawing above it. |
-| `docs/devices/` | One document per device the kernel drives. |
-| `docs/storage/` | The stack from a medium to a caller: the disk, the block layer, the buffer cache. |
+| `boot/` | The Multiboot2 header, the 32-bit entry, the long-mode transition, the application processors' trampoline, and the GRUB configuration. |
+| `kernel/` | The kernel core: the entry point, memory management, processes and scheduling, the ELF loader, the block layer, the filesystems, the terminal and the boot handoff. |
+| `kernel/arch/x86_64/` | What could not survive a change of processor: `cpu/`, `interrupt/`, `syscall/`, `smp/`, `mm/`, `proc/` (Section 2.3). |
+| `kernel/include/oxys/` | The kernel's header corpus, grouped to mirror the source tree (Section 2.4). |
+| `kernel/abi/oxys/` | A second include root: the system-call interface a program may rely on, licensed permissively so that the `MIT` C library can include it, and holding constants and structures, never a kernel declaration. |
+| `kernel/init/` | The phases of the boot, one file each, called by `KernelMain` in the order of Section 4. |
+| `kernel/test/` | The boot-time self-tests, one file per subsystem, and the fixtures they run on ([`../../kernel/test/README.md`](../../kernel/test/README.md)). |
+| `drivers/` | Device drivers, one directory per device class. |
+| `graphics/` | The framebuffer, the drawing primitives, the face, the console, the compositor, the pointer and the window manager. |
+| `crypto/` | The entropy pool, and the generator, hash and cipher of Phase 10. |
+| `libc/` | The C library linked into user programs; `libc/include/` is its header root. |
+| `userland/` | The user programs: the shell, the utilities, `init`, the session and the desktop's programs. |
+| `art/` | The project owner's artwork and the palette, with the commands that convert them. |
+| `etc/` | The shipped configuration staged into `/etc` on the ramdisk. |
+| `tools/` | Scripts the build and the checks run. |
+| `docs/` | The documentation, indexed by [`../README.md`](../README.md). |
+| `net/`, `uefi/` | Reserved for the networking of Phase 11 and the UEFI path of Phase 12. |
 
-The grouping is by subject and not by phase, since a document is amended in every
-phase that touches its subject. A directory `README.md` describes its directory's
-contents locally; these documents describe the system by subject. The two are
-complementary and neither replaces the other.
+What each file holds is written once, in its directory's `README.md`; this
+document gives the rules that decide which directory a file belongs in.
 
-### 2.2 When a subsystem becomes a directory
+### 2.1 When a subsystem becomes a directory
 
-Four subsystems occupy a directory of their own rather than a file, and the rule
-they establish is worth stating once.
+A translation unit is divided when it stops being readable as one thing. The
+sign is its own header: when the `Purpose` line describes a fraction of what the
+file does, the file has become several. `kernel/fs/ext2/`, `kernel/fs/vfs/`,
+`drivers/ata/` and `kernel/test/storage/ext2/` are such divisions.
 
-| Directory | Was | Is now |
-| --------- | --- | ------ |
-| `kernel/fs/ext2/` | `kernel/fs/ext2.c`, 4,325 lines | Nine units, 306 to 856 lines, and a private header |
-| `kernel/fs/vfs/` | `kernel/fs/vfs.c`, 2,355 lines | Six units, 184 to 532 lines, and a private header |
-| `kernel/test/storage/ext2/` | part of `kernel/test/verify_ext2.c`, 2,618 lines | Five chapters and a private header, the entry point remaining above them at 318 lines |
-| `drivers/ata/` | `drivers/ata/ata.c`, 1,282 lines | Six units, 160 to 320 lines, and a private header |
+- **Divide along the lines faults fall on**, not only the lines functions group
+  by. In EXT2 a fault in `path.c` resolves a name to the wrong file, in `name.c`
+  leaves a volume malformed, and in `alloc.c` leaves the bitmaps disagreeing
+  with their summaries: three kinds of wrongness found in three ways.
+- **A division is not a rewrite.** Nothing is reordered or improved in passing,
+  so the check afterwards is mechanical: the same set of functions, and every
+  non-comment line surviving but for the qualifiers the new boundaries force.
+  An improvement in the same diff would hide a defect the division introduced.
+- **What the parts share goes in an `internal.h` beside them**, not in the
+  public corpus. The corpus is what a consumer may depend on; a subsystem's
+  private seams are not that.
 
-A translation unit is divided when it stops being readable as one thing.
-`kernel/fs/ext2.c` reached 4,325 lines, and the evidence that it had outgrown
-itself was in its own header block: the `Purpose` said it implemented "the
-reading and validation of an EXT2 superblock", which had been true when it was
-written and described about a twelfth of what the file had become. A header that
-no longer describes its file is not a documentation defect to be corrected in
-place — it is the file telling you it has become several.
+### 2.2 Where a file belongs
 
-The division is along the lines the *faults* fall upon and not merely the lines
-the functions group by: a fault in `path.c` resolves a name to the wrong file, a
-fault in `name.c` leaves a volume malformed, a fault in `alloc.c` leaves the
-bitmaps disagreeing with the summaries. Each is a different kind of wrongness
-with a different way of being found.
+A directory's `README.md` is a claim about what is in it
+(`PROJECT_GUIDELINES.md`, Section 10). A file that contradicts the claim is in
+the wrong place, and the fix is to move the file, not to amend the prose to
+admit an exception: an exception admitted spends the rule. The tests that
+follow from this:
 
-The same test applied to the other three. `drivers/ata/` divides at the point
-where the *symptoms* diverge: a fault in `port.c` is a timing rule broken and a
-status register believed too early, a fault in `channel.c` is a disk this driver
-never looked in the right place for, and a fault in `transfer.c` is the wrong
-sector returned — and only the last of the three is visible to the caller at all.
-`kernel/test/storage/ext2/probe.c` is separated on a line the project had already drawn
-in prose: a probe asserts nothing, and `kernel/test/README.md` explains at length
-why the two must not be confused. Making that distinction a file boundary means
-it can no longer be blurred by accident.
+- **A driver programs a device.** A registry or a cache that holds no register,
+  port or timing rule is not a driver: the block layer and the buffer cache are
+  in `kernel/block/`, above `drivers/` and below `kernel/fs/`.
+- **A boot protocol's wire format stays in `kernel/handoff/`**, with its own
+  private header, because premise 3 forbids anything above the handoff to know
+  it.
+- **A fixture used only by the self-tests lives in `kernel/test/`**, beside the
+  tests, as `volume.h` and `program.h` do.
 
-**A division is not a rewrite.** Nothing was reordered, renamed for taste, or
-improved in passing. What changed is the set of files the same code lives in, so
-that the check afterwards can be mechanical: the function definitions before and
-after must be the same set, and every non-comment line must survive but for the
-qualifiers the new boundaries force. Anything else in that difference is a defect
-introduced by the division, and would be invisible in a diff that also carried
-improvements.
+### 2.3 The architecture boundary
 
-Such a directory carries an `internal.h` beside its sources and **not** in
-`kernel/include/oxys/`. The public corpus is what a consumer may depend upon;
-what the parts of one subsystem share between themselves is not that. Those
-declarations were file-scope statics before the division and would be statics
-still if C offered any way to share them among a chosen few, and placing the
-header beside the implementation is the whole of what records that limit.
+`kernel/arch/x86_64/` holds what is answerable to the processor's manual rather
+than to an algorithm. The two kinds of defect are found differently: a mistake
+in `mm/pmm.c` is found by reasoning about the bitmap, and a mistake in
+`arch/x86_64/cpu/tss.c` is found only by checking a citation against Intel's
+manual. The path says which kind of file a reader has open.
+[`../../kernel/arch/README.md`](../../kernel/arch/README.md) states the test and
+applies it file by file.
 
-### 2.3 When a subsystem is in the wrong directory
+- **`cpu/` is about a processor and `smp/` about several.** The spinlock is in
+  `cpu/` because masking interrupts while it is held is owed on one core too.
+- **Two subsystems span both trees.** `kernel/mm/` keeps the frame allocator,
+  the arena and the heap, and `arch/x86_64/mm/` the four-level hierarchy and
+  what depends on its shape; `kernel/proc/` keeps the tables and the scheduler,
+  and `arch/x86_64/proc/` the context switch.
+- **This is not preparation for a port**, which no phase plans. It groups the
+  kernel by what a defect is answerable to, and it does not isolate the
+  portable part: the portable core includes `<oxys/arch/...>` headers
+  seventeen times across eight files, each listed with its reason in
+  `tools/check-docs.sh`, Section 8, and graded in `kernel/arch/README.md`.
 
-Section 2.2 is about a file that outgrew itself. This one is about a file that
-was never where it belonged, which is a different defect and has a different
-symptom: not a header that stopped describing its file, but a **directory whose
-`README.md` stopped describing its contents**.
+### 2.4 The header corpus and the self-tests
 
-Three relocations were made at one review, at the project owner's direction.
-Nothing was rewritten: a move is not a division and a division is not a rewrite,
-so the same check applies — what changed is the path a file is at, and every
-other line of it must survive.
+**`kernel/include/oxys/` mirrors the source tree**, so a header's path says what
+it describes:
 
-| Was | Is now | The claim it falsified |
-| --- | ------ | ---------------------- |
-| `drivers/block/block.c`, `drivers/block/buffer.c` | `kernel/block/` | `drivers/README.md`: "one subdirectory per device class", and "a driver implements an interface declared in `kernel/include/oxys/`; it does not export declarations of its own" |
-| `kernel/multiboot2.c`, `kernel/include/oxys/multiboot2.h` | `kernel/handoff/` | Section 1, premise 3: nothing above the handoff layer knows which boot protocol it was booted by |
-| `kernel/include/oxys/testvolume.h` | `kernel/test/volume.h` | Section 2.2: what the parts of one subsystem share between themselves does not go in the public corpus |
+| Under `oxys/` | Mirrors |
+| ------------- | ------- |
+| `types.h`, `kernel.h` | Nothing: universal, owned by no subsystem. |
+| `arch/cpu/`, `arch/interrupt/`, `arch/syscall/`, `arch/smp/`, `arch/mm/` | `kernel/arch/x86_64/` |
+| `mm/`, `proc/`, `exec/`, `acpi/`, `block/`, `fs/`, `crypto/`, `terminal/`, `test/` | The kernel directory of the same name, and `crypto/` |
+| `boot/` | `kernel/handoff/` |
+| `dev/`, `dev/storage/` | `drivers/` |
+| `gfx/` | `graphics/` |
 
-**The block layer.** `drivers/README.md` already carried the test, and had
-already applied it once: the framebuffer is not a driver, "because nothing
-programs it". Applied to `block.c` and `buffer.c` the same test excludes them
-just as plainly — a registry with four validations, and a hash table with a
-recency list. Neither holds a register, a port address or a timing rule, and
-neither cites a hardware specification, which every genuine driver in that
-directory opens by doing. The relation was inverted besides: a driver implements
-an interface this corpus declares, and `block.c` *declares* `<oxys/block/block.h>`,
-which `ata/ata.c`, `ahci/ahci.c` and `sdhci/sdhci.c` register into. A directory
-that excludes the framebuffer and admits a hash table is not applying a rule.
+The path is `arch/`, not `arch/x86_64/`: a consumer's `#include` says that what
+it uses is processor-bound, and must not change if the processor ever did.
 
-**The handoff.** `kernel/include/oxys/multiboot2.h` had exactly one consumer in
-the entire tree — the file beside which it now sits. It holds one boot protocol's
-wire format, and premise 3 of Section 1 is that everything above the handoff
-layer consumes `<oxys/boot/bootinfo.h>` instead and cannot tell which protocol
-supplied it. Leaving the wire format in the public corpus advertised, to every
-future subsystem, a dependency the premise forbids; the corpus is where a
-consumer looks for what it may use. Phase 12 adds the UEFI handoff, and it now
-has a directory to be added to rather than a decision to be made under the
-pressure of adding it.
+**`kernel/test/` is grouped by the subsystem each test asserts**, and a file in
+`kernel/test/libc/` is exactly a test compiled against the C library's headers,
+so one `Makefile` pattern covers them and a new one is added by placing it
+there. The test functions keep their `KernelVerify` prefix, because every
+subsystem's symbols share one namespace.
 
-**The fixture.** `testvolume.h` had ten consumers and every one of them was under
-`kernel/test/`. Its sibling fixture had kept its header locally as
-`kernel/test/program.h` from the day it was written, so two fixtures of identical
-role sat in two different corpora, and the rule of Section 2.2 decided which of
-them was wrong.
+## 3. Where a file is described
 
-The common lesson is that **a directory's `README.md` is a claim about what is in
-it**, and `PROJECT_GUIDELINES.md`, Section 10, is what makes each directory carry
-one. Where a file contradicts that claim, one of the two is wrong, and the cheaper
-repair — amending the prose to admit the exception — is the one that costs
-something later: it spends the rule. Each of these three was found by reading a
-`README.md` against `git ls-files` and asking which of the two to believe.
-
-### 2.4 The architecture boundary
-
-Sections 2.2 and 2.3 are about one file at a time. This one is about a line drawn
-through the whole kernel, at the project owner's direction, and it is the only
-structural change here that was not forced by a document contradicting itself.
-
-`kernel/arch/x86_64/` gathers what could not survive a change of processor.
-[`kernel/arch/README.md`](../../kernel/arch/README.md) states the test and
-applies it file by file; what belongs here is why the line is worth drawing at
-all, and what it does not yet achieve.
-
-| Was | Is now | The subject |
-| --- | ------ | ----------- |
-| `kernel/cpu/gdt.*`, `idt.c`, `tss.c`, `percpu.c`, `spinlock.c` | `kernel/arch/x86_64/cpu/` | What the processor loads, and the state each core keeps |
-| `kernel/cpu/exceptions.c`, `interrupts.c`, `irq.c`, `interrupt_stubs.asm` | `kernel/arch/x86_64/interrupt/` | Delivery and dispatch |
-| `kernel/cpu/syscall.c`, `syscall_entry.asm` | `kernel/arch/x86_64/syscall/` | The privilege boundary |
-| `kernel/cpu/smp.c`, `smp_trampoline.asm`, `ipi.c` | `kernel/arch/x86_64/smp/` | More than one processor |
-| `kernel/mm/paging.c`, `addrspace.c`, `shootdown.c` | `kernel/arch/x86_64/mm/` | The paging hierarchy and what depends upon its shape |
-| `kernel/proc/switch.asm` | `kernel/arch/x86_64/proc/` | The context switch |
-
-**This is not preparation for a port.** `PLAN.md` has thirteen phases and none of
-them is one; Phase 12 changes the boot protocol and not the processor. A
-directory justified by a port that is not planned would be exactly the
-speculative structure Section 8 of `PROJECT_GUIDELINES.md` discourages, and the
-justification is a different one.
-
-It is that **this kernel contains two kinds of claim, and they fail differently.**
-A defect in `mm/pmm.c` is a mistake about an algorithm: the bitmap and the
-reference counts disagree, and the argument that they should not is one you can
-follow on paper. A defect in `arch/x86_64/cpu/tss.c` is a mistake about a
-manual — a field at the wrong offset, a segment one byte short, a register named
-to an instruction not defined upon it. The second kind is not found by reasoning,
-because the reasoning is somebody else's and is in Intel's manual; it is found by
-checking the citation. Section 2 of `PROJECT_GUIDELINES.md` requires every such
-assertion to carry one, and the distinction between a file that owes citations
-and a file that does not was, until this change, held in the head of whoever was
-reading. It is now a path.
-
-The `cpu/` and `smp/` division within it is worth stating because it is not
-obvious: `cpu/` is about **a** processor and `smp/` about **several**. The ticket
-spinlock is in `cpu/` although it exists for contention, because the other half
-of its job — masking interrupts for as long as it is held — is owed on a machine
-with one core, and `CONCURRENCY.md` is about that half.
-
-**Two subsystems are now split across both trees**, which is the cost of the line
-and not a defect in it. `kernel/mm/` keeps the frame allocator, the address-range
-allocator and the heap; `kernel/arch/x86_64/mm/` takes the four-level hierarchy
-and the two files whose correctness depends on its shape. `kernel/proc/` keeps
-the process table and the scheduler; the context switch is six registers and an
-`IRETQ`, and is here. A reader looking for "memory management" now looks in two
-places, and the compensation is that they can tell which of the two they are in.
-
-**What this did not at first achieve.** The headers did not move with the
-implementations. `<oxys/paging.h>` described a four-level hierarchy and
-`<oxys/tss.h>` a 104-byte segment, and both sat in `kernel/include/oxys/` beside
-`<oxys/vfs.h>`, which described nothing of the sort — so the implementations
-made the distinction and the interfaces did not. This section recorded that as
-the boundary's one loose end, and **Section 2.5 closed it**: the corpus is now
-grouped the way this tree is, and the interface to anything here is reached
-through `<oxys/arch/...>`. What the path names is `arch`, which is a claim about
-portability; what it still does not name is `x86_64`, which would be a claim
-about this processor and is the dependency a second include root would have
-advertised.
-
-`kernel/kernel.c`, `proc/sched.c` and `proc/process.c` each retain a handful of
-instructions that are plainly x86 — `sti; hlt` in the idle loop, `cli; hlt` in
-the termination guard, a `CR3` in a comment about why a switch does what it does.
-They were left where they are because extracting three instructions into an
-architecture shim would cost a layer of indirection to buy a boundary nothing is
-pressing against.
-
-**And the boundary is crossed more widely than that, which this section first
-understated.** It said the line was drawn at the file and three files sat
-slightly on the wrong side. Measured rather than asserted, the portable core
-includes `<oxys/arch/...>` headers **seventeen times**, across eight files:
-`proc/process.c` six, `proc/sched.c` three, `exec/elf.c` three, and `mm/vmm.c`
-and `acpi/acpi.c` one each — and, since sub-task 8.6, `fs/vfs/pipe.c` one, for
-the masked section a sleep upon the wait channel requires, and since 8.7
-`proc/signal.c` one, for the same section against the tick handler, and since
-2026-09-25 `mm/table.c` one, which refuses to grow a table off the bootstrap
-processor.
-`kernel/arch/README.md` lists them and grades them,
-the shallow ones — a spinlock, which every processor has in some form — apart
-from the deep, such as `process.c` writing `rsp0` into a task state segment,
-which is not a facility another processor has a different version of but a
-question it would not ask.
-
-So the honest statement of what this division achieves is the weaker one:
-**it groups the kernel by what a defect in it is answerable to, and it does not
-isolate the portable part.** The grouping is worth having on that ground alone —
-it is the ground Section 2.4 opens with — but the stronger claim is not yet
-earned and should not be made until the number above comes down.
-
-`tools/check-docs.sh`, Section 8, is what keeps it honest from here. The seventeen
-crossings are recorded with a reason apiece and checked in both directions, so an
-eighteenth fails `make lint` and so does an entry left behind when a crossing is
-removed. The debt can now only change deliberately, which is the property the
-prose alone never had — and which `drivers/` lacking it for three phases, at
-Section 2.3, is the cautionary case for.
-
-### 2.5 The grouping of the header corpus and of the self-tests
-
-Two directories had stayed flat while everything around them acquired a shape,
-and both were reorganised at the project owner's direction.
-
-**`kernel/include/oxys/` was fifty-four headers in one directory.** It is now
-grouped to mirror the source tree, so that the interface to a subsystem sits
-where the subsystem does:
-
-| Under `oxys/` | Holds | Mirrors |
-| ------------- | ----- | ------- |
-| *(root)* | `types.h`, `kernel.h` | Nothing: these two are universal, included from every corner, and belong to no subsystem. |
-| `arch/cpu/`, `arch/interrupt/`, `arch/syscall/`, `arch/smp/`, `arch/mm/` | The interfaces of the processor-bound subsystems | `kernel/arch/x86_64/` |
-| `mm/` | `memory.h`, `pmm.h`, `vmm.h`, `heap.h` | `kernel/mm/` |
-| `proc/`, `exec/`, `acpi/`, `block/`, `fs/`, `test/` | One group each | The kernel directory of the same name |
-| `boot/` | `bootinfo.h`, the neutral description everything above the handoff consumes | `kernel/handoff/` |
-| `dev/`, `dev/storage/` | The driver interfaces | `drivers/` |
-| `gfx/` | The framebuffer, the drawing, the console, the compositor | `graphics/` |
-
-The gain is the one Section 2.4 asked for and could not have. A header's path is
-now a claim about it, and the claim a reader most needs is the portability one:
-`<oxys/arch/mm/paging.h>` announces that what it describes is answerable to
-Intel's manual, and `<oxys/mm/pmm.h>` announces that what it describes is not.
-Two headers that had sat side by side, indistinguishable, now sort into different
-directories on exactly the line the implementations were sorted on.
-
-`arch/` and not `arch/x86_64/`, deliberately. The consumer's `#include` says that
-a thing is processor-bound; it does not say which processor, because it must not
-have to change if that ever answered differently.
-
-**`kernel/test/` was twenty-four files named `verify_*.c` in one directory.** The
-prefix was doing the work a directory should do — it existed to say "this is a
-self-test" in a directory where nothing else was — and twenty-four files sharing
-one prefix sort as a single undifferentiated block, which is the arrangement a
-reader has to read all of to search any of. They are now grouped by the subsystem
-they assert and the prefix is dropped, `kernel/test/arch/syscall.c` saying what
-`kernel/test/verify_syscall.c` said with one word fewer and a shape besides:
-
-| Directory | Asserts |
-| --------- | ------- |
-| `arch/` | `interrupts.c`, `privilege.c`, `syscall.c`, `usermode.c`, `apic.c`, `smp.c` |
-| `mm/` | `memory.c` |
-| `proc/` | `process.c`, `sched.c`, `lifecycle.c` |
-| `exec/` | `elf.c` |
-| `storage/` | `stack.c`, `ext2.c` with its five chapters beneath, `vfs.c` |
-| `gfx/` | `framebuffer.c`, `graphics.c`, `console.c`, `compositor.c`, `faultscreen.c` |
-| `dev/` | `devices.c`, `mouse.c` |
-| `libc/` | `string.c`, `wrappers.c`, `heap.c`, `stdio.c`, `startup.c`, `utilities.c`, `line.c` |
-| `terminal/` | `terminal.c` |
-| `shell/` | `parser.c` |
-
-The **function** names did not change. `KernelVerifySyscall` is still
-`KernelVerifySyscall`, because `<oxys/test/verify.h>` declares it and `kernel.c`
-calls it by name in the order the tests run; the prefix earns its place there,
-where the symbols of every subsystem do share one namespace. It was only in the
-file names that it was redundant, and only there that it was dropped.
-
-**One consequence was a simplification rather than a rename.** Three self-tests
-are compiled against the C library's include root, and the `Makefile` named them
-in three explicit rules because — its note said — a pattern over `kernel/test/`
-would put every future self-test in reach of the userland's headers whether or
-not it asserted the userland. That was true of `kernel/test/` and is not true of
-`kernel/test/libc/`, whose membership *is* the exception: a file is in it exactly
-when it asserts the C library. The three rules are now one pattern whose scope
-and whose exception are the same set, and a fourth such test is added by putting
-it in the directory rather than by remembering to add a fourth rule.
-
-## 3. Present composition
-
-As of the completion of Phase 5 and of sub-tasks 6.1 to 6.13, the system
-comprises the following translation units. The list is the `C_SOURCES` and
-`ASM_SOURCES` of the `Makefile` and must be revised in the same change as
-either.
-
-| Unit | Role |
-| ---- | ---- |
-| `boot/boot.asm` | The Multiboot2 header; the 32-bit entry point `_start`; CPUID and long-mode feature detection; the construction of the boot-time paging hierarchy; the long-mode transition; the higher-half entry point `KernelEntryHigh`. |
-| `boot/trampoline.asm` | The real-mode trampoline an application processor begins executing on answering a startup inter-processor interrupt: real mode with `CS` normalised, 32-bit protected mode, and 64-bit long mode upon the kernel's own paging hierarchy, with the parameter block the bootstrap processor fills in. Assembled to a flat binary at a fixed origin, not linked. |
-| `kernel/arch/x86_64/cpu/gdt.c`, `kernel/arch/x86_64/cpu/gdt.asm` | The kernel global descriptor table and the reloading of the segment registers. |
-| `kernel/arch/x86_64/cpu/idt.c` | The interrupt descriptor table: its storage, the installation of a gate, the assignment of an interrupt stack table entry to a gate, and the loading of the table. |
-| `kernel/arch/x86_64/cpu/tss.c` | The task state segment: the stacks the processor loads when it needs one it can trust, its descriptor within the global descriptor table, and the loading of the task register. |
-| `kernel/arch/x86_64/cpu/percpu.c` | The per-processor data areas: their static allocation, the establishment of the executing processor's own, the segment base it is reached through and the repair of that base after a segment reload, and the counted interrupt-disable every critical section is built upon. |
-| `kernel/arch/x86_64/cpu/spinlock.c` | The ticket spinlock: the locked fetch-and-add that issues a ticket, the bounded wait to be served, the release that admits the next arrival, and the two checks that turn the silent misuses of a lock into a report. |
-| `kernel/arch/x86_64/cpu/random.c` | Sub-task 10.1: the processor's sources of randomness — `RDSEED`, `RDRAND` and the time-stamp counter, detected by CPUID and drawn with the retries of Intel's guide. |
-| `kernel/arch/x86_64/interrupt/interrupt_stubs.asm` | The 256 per-vector entry stubs and the common stub that saves the registers and calls the dispatcher. |
-| `kernel/arch/x86_64/interrupt/interrupts.c` | The installation of the stubs, the dispatch table and the routing of each vector to its registered handler. |
-| `kernel/arch/x86_64/interrupt/irq.c` | The interrupt request layer: the handlers claimed by request line rather than by vector, the routing of a request to the driver that claimed it, the signalling of completion at whichever controller delivered it, and the retirement of the 8259A pair in favour of the APIC. |
-| `kernel/arch/x86_64/interrupt/exceptions.c` | The handlers for the architecture-defined exceptions and the diagnostic report. |
-| `kernel/arch/x86_64/syscall/syscall.c` | The configuration of the fast system-call mechanism — `IA32_STAR`, `IA32_LSTAR`, `IA32_FMASK`, `IA32_KERNEL_GS_BASE` and the enabling bit of `IA32_EFER` — and, from sub-task 6.7, the dispatch table and the validation of a caller's arguments; the table holds three calls from 6.7 and seven from sub-task 6.11, which adds `fork`, `execve`, `exit` and `wait`. |
-| `kernel/arch/x86_64/syscall/syscall_entry.asm` | The entry point `IA32_LSTAR` names. Provisional in sub-task 6.1; replaced at sub-task 6.7 by the path that swaps `GS`, loads the kernel stack from the per-processor area, dispatches, and returns by `SYSRET`. |
-| `kernel/arch/x86_64/smp/ipi.c` | The inter-processor interrupt layer: the composition of a command for each of the three audiences a sender may address, the accounting, and the handler by which a panicking processor stops the others. |
-| `kernel/arch/x86_64/smp/smp.c` | The bring-up of the application processors: the proving and mapping of the low page the trampoline requires, the resources each processor is given before it is started, the INIT-startup-startup sequence and the bounded waits around it, and the C entry point a started processor arrives at and parks in. |
-| `kernel/arch/x86_64/smp/smp_trampoline.asm` | Carries the assembled trampoline into the kernel image with `incbin`, and gives its two ends the symbols the C takes the size from. |
-| `kernel/acpi/acpi.c` | The firmware's ACPI description tables: the discovery and validation of the Root System Description Pointer, the walk of the RSDT or XSDT, and the parse of the Multiple APIC Description Table. |
-| `kernel/exec/elf.c` | The ELF64 loader for statically linked executables: the decoding of the file and program headers, the fifteen refusals an image must survive whole before a page of it is mapped, and the placing of its segments into an address space through the direct physical map. |
-| `kernel/proc/process.c` | The process control block, the thread and the saved context: the two tables, the address space a process is given, the kernel stack and guard page a thread is given, the writing of `rsp0` when a thread becomes current, the switch, the descent to privilege level 3, the termination that returns from it, and — from sub-task 6.11 — `fork`, `execve`, `exit` and `wait`. |
-| `userland/init/main.c` | `init` of sub-task 9.3: the first user process, which starts and supervises the desktop, collects every orphan, and stops the machine in order when it is asked to. |
-| `userland/session/main.c` | The session of sub-task 9.5: the program that claims the display, paints the desktop root, holds the panel, and starts what a person chooses from its launcher. |
-| `libc/config/config.c` | The parser of the system configuration format of sub-task 9.4, and `libc/config/system.c` the one place it opens a file. |
-| `kernel/terminal/terminal.c` | The terminal input path of sub-task 8.1: the queue, the poll that drains the keyboard's events and the serial adapter's characters into it, the translation of a key event to the bytes a terminal would send, and the wait a `read` of descriptor 0 makes upon it. |
-| `kernel/arch/x86_64/proc/switch.asm` | `ThreadSwitchContext`, which exchanges six registers and a stack pointer; `ThreadTrampoline`, where a thread that has never run begins; `ThreadEnterUser`, which clears every register and descends to privilege level 3 by `IRETQ`; and `ThreadResumeUser`, which descends with a whole saved register set restored, as a thread made by `fork` requires. |
-| `graphics/compositor.c` | The compositor: the back buffer that stands in for the framebuffer, the ordered layers composited over it, the damage rectangle that narrows what is carried to the display, and the suspension a fault screen imposes. |
-| `graphics/cursor.c` | The pointer: its two-bitmap shape, and the layer the compositor draws it as. |
-| `graphics/window.c` | The window manager of sub-task 9.1: the table of windows, the stack, the focus, the binding of the pointer by a held button, the frame drawn about each window, the routing of keys and movements into the windows' queues, and the composition of the changed region. |
-| `graphics/client.c` | The client side of the window manager, sub-task 9.2: the six window calls, the ownership of a window by a process, the copy of a client's pixels with the screen's encoding, and the wait for an event. |
-| `graphics/draw.c` | The two-dimensional primitives upon a surface: rectangle arithmetic and clipping, the pixel, the filled and outlined rectangle, the integer line, and the blit. |
-| `graphics/framebuffer.c` | The framebuffer the boot loader supplies: its validation, the write-combining memory type given to its pages, its mapping into the kernel arena, and the description every later phase draws through. |
-| `graphics/font.c` | The bitmap face — ninety-five glyphs of eight by eight, drawn for this project — and the drawing of one glyph upon a surface. |
-| `graphics/console.c` | The graphical console: a grid of character cells upon the framebuffer, the four control characters, a scroll performed by blitting the surface upon itself, and the replay of what was written before the framebuffer could be mapped. |
-| `graphics/faultscreen.c` | The full-screen page a severe fault produces: one screen for each fault, with its own title, colour, account and evidence. |
-| `kernel/test/volume.c` | The test fixture: two block devices backed by memory, and an EXT2 volume composed within them. |
-| `kernel/test/mm/memory.c` | The self-tests of the frame allocator, the paging hierarchy, the allocators, reference counting, copy-on-write and address spaces. |
-| `kernel/test/arch/interrupts.c` | The self-tests of the descriptor table, the stubs and their trap frame, the dispatcher and the exception handlers. |
-| `kernel/test/gfx/graphics.c` | The self-tests of the drawing primitives, conducted upon a surface in memory. |
-| `kernel/test/gfx/framebuffer.c` | The self-tests of the framebuffer's description, its mapping, its memory type, and the pattern a person judges. |
-| `kernel/test/gfx/console.c` | The self-tests of the bitmap face against its own metrics, of a glyph drawn upon a surface against its own bytes, and of the four control characters upon the live console. |
-| `kernel/test/gfx/faultscreen.c` | The self-tests of the fault screen table: that every severe fault has a screen of its own and that no two of them are alike. |
-| `kernel/test/arch/privilege.c` | The self-tests of the descriptors, the task state segment, the interrupt stack table and the system-call configuration. |
-| `kernel/test/arch/syscall.c` | The self-tests of the system-call dispatch table and of the validation of a caller's arguments. |
-| `kernel/test/exec/elf.c` | The self-tests of the ELF64 loader, upon an image composed in memory so that every field may be made wrong on purpose. |
-| `kernel/test/proc/process.c` | The self-tests of the process and thread tables, the per-thread kernel stack and its guard, and the balance of the arena. |
-| `kernel/test/arch/usermode.c` | The self-tests of the context switch, and of a program composed, loaded, entered at privilege level 3 and ended. |
-| `kernel/test/proc/lifecycle.c` | The self-tests of `fork`, `execve`, `exit` and `wait`: a process cloned and examined without running, and a program that forks twice, replaces one child with a program read from a volume, and collects what each ended with. |
-| `kernel/test/gfx/compositor.c` | The self-tests of the clip stack, the blend, the damage arithmetic and the layer table. |
-| `kernel/test/dev/mouse.c` | The self-tests of the mouse's packet decoder, driven without a mouse, and of the pointer upon a surface in memory. |
-| `kernel/test/dev/devices.c` | The self-tests of the interrupt controllers, the interval timer, the keyboard, the serial adapter, the display and the bus. |
-| `kernel/test/storage/stack.c` | The self-tests of the disk, the block layer and the buffer cache. |
-| `kernel/test/storage/ext2.c` | The entry point of the EXT2 self-test: the fixture composed, the superblock and its refusals asserted, and the five chapters below called in turn. |
-| `kernel/test/storage/ext2/internal.h` | What those chapters share: their own entry points, the restoration of the fixture between them, and the two helpers more than one judges through. |
-| `kernel/test/storage/ext2/format.c` | The superblock, the group descriptors and the inode, and the dozen ways a volume may contradict itself and be refused. |
-| `kernel/test/storage/ext2/directory.c` | The directory record, its traversal, and the resolution of a path across symbolic links. |
-| `kernel/test/storage/ext2/file.c` | The reading of a file's contents, its holes, and both forms of symbolic link. |
-| `kernel/test/storage/ext2/write.c` | Everything that alters a volume: allocation, writing, truncation, and the insertion and removal of names. |
-| `kernel/test/storage/ext2/probe.c` | The report upon whatever volume the machine actually carries. **Not a self-test**: it asserts nothing, and the distinction is the reason it is a file of its own. |
-| `kernel/test/storage/vfs.c` | The self-tests of the virtual filesystem layer, and the probe of a real volume through it. |
-| `kernel/test/arch/apic.c` | The self-tests of the ACPI parse, the Local APIC, the I/O APIC, and the routing of the request lines through them once the 8259A pair has been retired. |
-| `kernel/test/arch/smp.c` | The self-tests of the per-processor area, the spinlock, the inter-processor interrupt and the shootdown — the first two asserting internal state, since upon one processor a lock that does not lock behaves like one that does, and the last two asserting behaviour by an interrupt the processor sends to itself. |
-| `kernel/mm/heap.c` | The kernel heap: a slab allocator of eight size classes over the kernel arena. |
-| `kernel/mm/table.c` | The growing table: chunks that never move, the first static, the rest from the heap; the process, thread, node, open-file and pipe tables ([`MEMORY-LAYOUT.md`](MEMORY-LAYOUT.md), Section 16). |
-| `crypto/entropy.c` | Sub-task 10.1: the entropy pool, its mixing and credit, and the Repetition Count Test of the jitter source ([`ENTROPY.md`](ENTROPY.md)). |
-| `kernel/mm/vmm.c` | The kernel virtual address allocator, issuing ranges of the kernel arena backed by frames. |
-| `kernel/arch/x86_64/mm/paging.c` | The permanent kernel paging hierarchy: its construction, activation, software translation and copy-on-write fault resolution. |
-| `kernel/arch/x86_64/mm/shootdown.c` | The translation-lookaside-buffer shootdown: the publication of the address whose translation has become stale, the interrupt that tells the other processors to discard it, the acknowledgement each makes, and the bounded wait for all of them. |
-| `kernel/arch/x86_64/mm/addrspace.c` | The address space: its creation, its cloning by the copy-on-write discipline, its activation and its destruction. |
-| `kernel/mm/pmm.c` | The physical frame allocator: a bitmap of every 4 KiB frame below the highest usable address. |
-| `kernel/fs/ext2/internal.h` | What the nine translation units below share with one another and with nothing else: the record of the last refusal, the accounting, the decoders and encoders of the volume's byte order, and the block-level transfer. |
-| `kernel/fs/ext2/core.c` | The shared state, the refusals, the decoding and encoding of the stored byte order, the block-level transfer in both directions, and the accounting accessors. |
-| `kernel/fs/ext2/superblock.c` | The superblock: its reading, its validation, the geometry derived from it, its writing, and the judgement of whether a volume may be read, written, or addressed at all. |
-| `kernel/fs/ext2/group.c` | The block group descriptor table: the geometry of the groups, one descriptor read and written, and the validation of the whole table. |
-| `kernel/fs/ext2/inode.c` | The inode: its retrieval and writing, the resolution of a file's block index through every level of indirection, and the allocation of the blocks a file grows into. |
-| `kernel/fs/ext2/file.c` | The contents of a file: reading a range of its bytes, the two forms of symbolic link, the writing that extends it, and the truncation that releases what it no longer covers. |
-| `kernel/fs/ext2/alloc.c` | The two bitmaps: the testing and setting of a bit, the search for a free one, and the group and superblock summaries kept in step with every allocation. |
-| `kernel/fs/ext2/directory.c` | The record a directory is made of: the file types, the decoding and validation of one entry, the traversal, and the search for a name. |
-| `kernel/fs/ext2/path.c` | The resolution of an absolute path to the inode it names, across symbolic links and with a bound upon how many may be followed. |
-| `kernel/fs/ext2/name.c` | The names themselves: the insertion and removal of a record, and the creation and destruction of files, directories and hard links. |
-| `kernel/fs/vfs/internal.h` | What the six units below share: the two fixed and two growing tables the layer's whole state lives in, the refusal record and the accounting, the open file, and the resolution and node-cache primitives. |
-| `kernel/fs/vfs/vfs.c` | The state itself, the refusals and the names of the error codes, the bounded string primitives, and the accounting and reports. |
-| `kernel/fs/vfs/node.c` | The node cache: the identity a file has within the kernel, and why one file must be one node however many callers reach it. |
-| `kernel/fs/vfs/path.c` | The resolution of a path: the walk through each component, the crossing of mount points in both directions, and the following of symbolic links. |
-| `kernel/fs/vfs/mount.c` | The registry of filesystem types and the mount table that joins several volumes into one tree. |
-| `kernel/fs/vfs/file.c` | The open file: the descriptor table, the position that advances, and the reading, writing and seeking above it. |
-| `kernel/fs/vfs/namespace.c` | The operations that name a file rather than hold one open: stat, truncate, the creation and removal of names and directories, and the flush. |
-| `kernel/fs/ext2_vfs.c` | The binding of the EXT2 implementation to that layer: the operations vector, the translation between the format's mode and the layer's neutral node type, and the mark a mount leaves upon a volume it has open. |
-| `kernel/handoff/multiboot2.c` | The Multiboot2 parser, reducing the boot loader's structure to the neutral `BootInformation` description. |
-| `kernel/kernel.c` | `KernelMain`, which calls the phases of `kernel/init/` in the dependency order of Section 4; the diagnostic channel, the command line, the halt, the boot and power screens, and `KernelPanic`, the unrecoverable-error path. |
-| `kernel/init/*.c` | The phases of the boot, one file each: early, memory, display, interrupts, devices, entropy, processes, processors, storage, userland and session. Each initialises its subsystems and runs their self-tests in the order it always has; [`../../kernel/init/README.md`](../../kernel/init/README.md). |
-| `drivers/vga/vga.c` | The VGA text-mode display driver: the control characters, the scrolling, the colour attributes, the hardware cursor and the erase limit that bounds a backspace. |
-| `drivers/serial/serial.c` | The interrupt-driven COM1 serial driver used for diagnostics and input. |
-| `drivers/pic/pic.c` | The pair of cascaded 8259A interrupt controllers: their remapping, the masking of request lines, the recognition of a spurious request, the end-of-interrupt protocol, and the silencing of the pair when the APIC supersedes it. |
-| `drivers/apic/lapic.c` | The Local APIC: its detection, the mapping of its register page as uncacheable memory, its two enables, the local vector table entries this kernel programmes, and the end-of-interrupt every handler owes it. |
-| `drivers/apic/ioapic.c` | The I/O APIC: the indirect register pair its registers are reached through, and the redirection table entry that decides what vector an interrupt input presents and to which processor. |
-| `drivers/pit/pit.c` | Counter 0 of the 8253 interval timer: the system tick, the elapsed-time conversion and the bounded wait. |
-| `drivers/ata/internal.h` | What the six units below share: the register and status constants, the table of devices found, the addresses each channel answers at, the accounting, and the register-level discipline. |
-| `drivers/ata/ata.c` | The driver's state, its refusals, the initialisation that finds what is present, the device accessors and the binding to the block layer. |
-| `drivers/ata/port.c` | The register-level discipline of the task file: the settling delay a selection must be followed by, the two waits every command is bracketed by, and the reset of a channel. |
-| `drivers/ata/identify.c` | The identification of whatever stands at one of the four addresses, and the distinction between a device that is absent and one answering a different command set. |
-| `drivers/ata/channel.c` | Where each channel actually answers: the base address registers of a controller in native mode, and the classification of storage this driver cannot reach at all. |
-| `drivers/ata/transfer.c` | The transfer of sectors: the judgement of a request, both addressing forms, and the cache flush that makes a write durable. |
-| `drivers/ata/report.c` | The report, including — for a machine upon which no disk was found — every controller the bus carries and why each was not reached. |
-| `drivers/pci/pci.c` | The PCI configuration-space enumeration by access mechanism one: the walk of buses, devices and functions, and the searches by which a driver finds its hardware. |
-| `drivers/ps2/ps2.c` | The 8042 controller itself: its configuration byte, written whole by the one module that owns it, and the two device ports it presents. |
-| `drivers/keyboard/keyboard.c` | The PS/2 keyboard upon the controller's first port: initialisation, the decoding of scan code set 1, the modifier state and the circular event buffer. |
-| `drivers/mouse/mouse.c` | The PS/2 mouse upon the controller's second port: the framing of a packet stream that has none, the nine-bit movement, the single inversion of the vertical sense, and the position the driver keeps. |
-| `drivers/ahci/ahci.c` | The AHCI adaptor by first-party direct memory access: the handoff from the firmware, the ports it implements, the command list, and the region descriptors that name a caller's pages to the device. |
-| `drivers/sdhci/sdhci.c` | The SD host controller and the card behind it: the card's own command set, the two encodings of its capacity, and the transfer through the buffer data port. |
-| `drivers/ramdisk/ramdisk.c` | The extent of physical memory a boot module occupies, presented to the block layer as a device. The one driver here that converses with nothing: a transfer is a copy and cannot fail. It is what makes the initial ramdisk of sub-task 7.7 readable by the code that reads a disk. |
-| `kernel/block/block.c` | The generic block-device layer: the registry of devices that transfer fixed-size blocks, and the validated path through which every caller above reaches a driver. |
-| `kernel/block/buffer.c` | The buffer cache above the block layer: the hash, the recency list, the reference discipline and the write-back policy. |
-| `linker.ld` | The link script establishing the higher-half image layout. |
+| To find | Look in |
+| ------- | ------- |
+| What a file contains | Its directory's `README.md`, one line per file |
+| How a subsystem works | Its document, indexed by [`README.md`](README.md), [`../devices/README.md`](../devices/README.md) and [`../storage/README.md`](../storage/README.md) |
+| The detail of a function | The source file's comments |
+| Which files are built | `C_SOURCES`, `ASM_SOURCES` and the user programs of the `Makefile` |
 
 ## 4. Subsystem dependency ordering
 
-The phase ordering of `PLAN.md` is dictated by the following dependencies, which
-must not be violated.
+The phases of `PLAN.md` follow these dependencies, which must not be violated:
 
 ```
 Phase 1  Bootstrapping
@@ -492,7 +175,7 @@ Phase 1  Bootstrapping
                                                      |
                           +--------------------------+--------------+
                           v                          v              v
-              Phase 9  Desktop           Phase 10  Crypto   Phase 11  Networking
+              Phase 9  Desktop       Phase 10  Crypto, partitions   Phase 11  Networking
                           |                          |              |
                           +--------------------------+--------------+
                                                      v
@@ -502,209 +185,101 @@ Phase 1  Bootstrapping
                                        Phase 13  Polish and hardening
 ```
 
-Phases 2 and 3 are mutually dependent in one particular: the copy-on-write fault
-handler of sub-task 2.7 cannot be exercised until the page-fault vector of
-Phase 3 is installed. The dependency is resolved by implementing the memory
-management structures of sub-tasks 2.1 to 2.6 first, then Phase 3, and finally
-returning to sub-tasks 2.7 and 2.8.
+**Phases 2 and 3 depend on each other in one place.** Copy-on-write resolution
+(2.7) cannot run until Phase 3 delivers page faults, so 2.1 to 2.6 come first,
+then Phase 3, then 2.7 and 2.8.
 
-**Status.** Phases 1 to 8 are complete, `Oxys 1 Alpha` was cut at the close of
-Phase 8 on 2026-09-16, and Phase 9 has begun: sub-task 9.1, the window manager,
-closed on 2026-09-17. What follows was written as each phase closed and stands
-as the account of how the order above was discharged. The mutual dependency described above has been discharged:
-sub-task 3.4 supplied the fault handler, sub-task 2.7 the copy-on-write
-resolution beneath it, and sub-task 2.8 the address-space cloning that creates
-the shared pages the resolution acts upon. Sub-task 3.5 remapped the interrupt
-controllers, so that a device may be heard; 3.6 supplied the first device that
-speaks and 3.7 the first that a person operates. Phase 4 supplied the devices
-beneath a filesystem and Phase 5 the filesystem itself, which sub-task 5.8
-completed by mounting an EXT2 volume through a virtual filesystem layer.
+**The graphics of 6.2 to 6.6 precede the processes they could have waited for**,
+because nothing in them needs a process: a framebuffer is memory to map, and the
+primitives, face and compositor are arithmetic on it. Every later phase gains a
+readable console by it. What does need processes, the window manager and its
+client protocol, is Phase 9. The cost is that the surface interface was designed
+before a user-mode client existed, which 9.2 revisited.
 
-Phase 6 has since established the apparatus a privilege transition is performed
-out of (6.1); acquired the linear framebuffer, mapped write-combining (6.2); the
-primitives that draw into it (6.3); the font and console that put the boot log
-back upon the screen the framebuffer had displaced (6.4); the pointer, which
-required the 8042 controller to become a module of its own first (6.5); the
-compositor beneath all of it, after which nothing reads the framebuffer (6.6);
-the `SYSCALL` entry path, its dispatch table and its argument validation (6.7);
-the ELF64 loader (6.8); the process, the thread and the context (6.9); and the
-switch and the descent to privilege level 3 (6.10), at which point a program
-first ran; then `fork()`, `execve()`, `exit()` and `wait()` (6.11), the APIC
-(6.12), the locks and the shootdown (6.13), the application processors (6.14)
-and the scheduler (6.15). Phase 7 supplied the C library and the utilities
-built upon it, and the initial ramdisk they are read from; Phase 8 the terminal,
-the shell, and everything from a redirection to job control. Phase 9 stands upon
-all of it: the window manager of 9.1 is the first graphical thing here that
-needed a process to exist, and the first thing built against the appearance
-[`../project/INSPIRATIONS.md`](../project/INSPIRATIONS.md) wrote
-down — [`WINDOWS.md`](WINDOWS.md).
+**The locks (6.13) precede the application processors (6.14)**, because every
+mechanism of 6.13 can be exercised on one processor, while a second processor
+started without locks would corrupt the machine in ways no assertion catches.
 
-### 4.1 The two orderings chosen against the obvious one
+**The boot follows the same order at run time.** `KernelMain` calls one phase
+function per file of `kernel/init/`: early, memory, display, frame references,
+interrupts, devices, entropy, processes, processors, storage, the userland
+self-tests, and the session. Two places differ from the phase numbers, each
+commented in `KernelMain`:
 
-Most of the phase order follows from the diagram above without argument. Two
-places do not, and both were changed on 2026-09-03 at the project owner's
-decision. The arguments are recorded here rather than in
-[`../project/PLAN.md`](../project/PLAN.md), which states the order and not the
-reasoning for it.
+- **The display follows memory directly**, taking the framebuffer's range from
+  the arena before anything fragments it.
+- **Storage follows the processors**: the bus is enumerated once everything
+  driven so far is proved, so its failures are reported through channels known
+  to work.
 
-#### Why sub-tasks 6.2 to 6.6 are in Phase 6 and not in Phase 9
-
-The framebuffer and the drawing above it were sub-tasks 9.1 to 9.5, and
-`PROJECT_GUIDELINES.md`, Section 5, placed the whole of the graphical work after
-the shell. They were moved forward, and the split is along a real line rather
-than an arbitrary one: **nothing in 6.2 to 6.6 depends upon a process existing.**
-A framebuffer is memory the boot loader describes and this kernel maps;
-primitives, a font and a compositing surface are arithmetic upon that memory; and
-a mouse is another device upon the 8042 controller, whose second port the
-keyboard driver of sub-task 3.7 already leaves alone. Every one of them is
-written, exercised and asserted with the machinery Phases 2 to 5 already provide.
-
-What genuinely does need processes is the half that stays in Phase 9: a window
-manager has nothing to manage, and a client protocol has no client, until there
-is something to run. That division is why this is a split and not a wholesale
-reordering, and it is why Phase 9 is no longer "graphics" but the desktop as a
-thing a person uses — the window system, the services that maintain it, and the
-configuration they read.
-
-Two things are gained and one is given up. The diagnostic path acquires a console
-that is not eighty by twenty-five characters of text, and every phase from here
-to the end reports through it; and the choice between the VESA path and the UEFI
-Graphics Output Protocol is forced now, while Phase 12 can still be shaped around
-it, rather than in Phase 9 when it can no longer be. **What is given up** is that
-the surface abstraction of sub-task 6.6 is designed before any user-mode client
-exists to design it against, so its interface is a judgement rather than a
-response. That is recorded so that the judgement is revisited at sub-task 9.2 and
-not merely inherited.
-
-#### Why sub-task 6.13 precedes 6.14
-
-These two stood in the opposite order, and the order was wrong. Sub-task 6.14
-starts processors; sub-task 6.13 supplies the locks without which nothing they
-touch is safe. Every shared structure this kernel has — the frame allocator's
-bitmap and search hint, the heap, the buffer cache, the mount and node tables of
-the filesystem layer, the interrupt dispatch table — was unsynchronised then and
-remains so, save the diagnostic channel 6.14 locked; each says so in its own
-file's header.
-
-Bringing a second processor up before the locks existed would have produced a
-milestone that the testing mandate requires to be bootable and testable and that
-could be neither: it would either park the new processors immediately, in which
-case nothing is demonstrated, or let them run, in which case the machine is
-corrupt in a way no assertion here would catch.
-
-**The order chosen produced the first of those two, deliberately.** 6.14 does
-park its processors — but it parks them against locks that exist, and it
-demonstrates them by the one thing a parked processor can still do: answer an
-interrupt, and record having answered it in an area only it writes. That is
-`KernelVerifyApplicationProcessors`, and it is the assertion the wrong order
-could not have produced. See [`SMP.md`](SMP.md).
-
-The reordering costs nothing, because everything in 6.13 can be exercised upon
-one processor. A spinlock's uncontended acquire and release, and the per-CPU data
-area reached through `GS`, are single-processor mechanisms outright. An
-inter-processor interrupt sent to one's own Local APIC is delivered like any
-other, so the shootdown handler may be made to run and the invalidation it
-performs observed — the same device as sub-task 6.1's execution of `SYSCALL` from
-privilege level 0, where a mechanism is exercised in full although the condition
-it exists for has not yet arrived.
-
-**The reordering was borne out.** Sub-task 6.13 closed on 2026-09-09 and every
-one of its mechanisms was exercised upon the one processor, the shootdown against
-a mapping the self-test made stale on purpose. It also found two defects that
-would otherwise have surfaced during the bring-up itself, which is the hardest
-moment there is to diagnose one: a segment reload destroys `GS.base`, and the
-interrupt entry path performed no `SWAPGS`. Both had been harmless only because
-nothing in the kernel read `GS`, and both are recorded in
-[`CONCURRENCY.md`](CONCURRENCY.md).
+Each phase runs its subsystems' self-tests as soon as they are established, and
+none earlier, because a test run before its subsystem exists reads zeroes and
+can pass.
 
 ## 5. Privilege and address-space model
 
 The kernel occupies the upper half of the canonical 48-bit address space and is
-mapped into every address space, so that a system call or an interrupt requires
-no change of the page-table root. User processes occupy the lower half. The
-detailed layout is recorded in `MEMORY-LAYOUT.md`.
-
-The machinery of the transition between the two privilege levels — the user-mode
-descriptors and the order the processor's own arithmetic imposes upon them, the
-task state segment holding the stacks the processor loads when it needs one it
-can trust, and the three registers that configure `SYSCALL` — was established by
-sub-task 6.1 and is recorded in `PRIVILEGE.md`. Sub-task 6.7 supplied the entry
-path and the dispatch above it, and sub-task 6.10 the descent itself: a program
-is loaded into an address space of its own, entered at privilege level 3 by
-`IRETQ`, returned to by `SYSRET` when it makes a system call, and ended when it
-faults. What does not yet exist is pre-emption — nothing takes a processor away
-from a thread that has not given it up. Sub-task 6.15 supplies it for threads
-upon a run queue; a *program* is not yet placed upon one.
+mapped into every address space, so a system call or an interrupt needs no
+change of page-table root; user processes occupy the lower half
+([`MEMORY-LAYOUT.md`](MEMORY-LAYOUT.md)). A program is loaded into an address
+space of its own, entered at privilege level 3 by `IRETQ`, returned to by
+`SYSRET` from a system call, and ended if it faults
+([`PRIVILEGE.md`](PRIVILEGE.md), [`PROCESS.md`](PROCESS.md)). The timer
+pre-empts threads on a run queue ([`SCHEDULER.md`](SCHEDULER.md)).
 
 ## 6. Diagnostic policy
 
-Two output paths are maintained from Phase 1 onward. The VGA text console is the
-operator-facing path; the COM1 serial port is the machine-readable path, and is
-the basis of the automated verification described in `TESTING.md`. Every
-diagnostic message of consequence is written to both, so that a failure is
-recorded irrespective of which device remains functional.
+**Every diagnostic goes to every output path** the machine has: the COM1 serial
+port, which the automated tests read ([`../project/TESTING.md`](../project/TESTING.md)),
+the VGA text display, and the framebuffer console. A failure is recorded
+whichever device still works.
 
-From sub-task 4.1 the serial path is buffered and carried by interrupt, but it
-retains its polled path and reverts to it whenever the interrupt flag is clear.
-That is not a fallback for hardware that fails: it is the ordinary path of a
-panic, which reports with interrupts disabled and must not be left holding its
-message in a buffer that nothing will drain. `docs/devices/SERIAL.md` records
-the rule and the single place it is decided.
+- **`KernelWriteString` writes to all of them unconditionally** and is the only
+  routine that names an output device. Deciding between paths there would put
+  knowledge of the display mode into the one routine that must work before the
+  mode is known.
+- **The serial path reverts to polling whenever interrupts are masked**, which
+  is the ordinary path of a panic: a message left in a buffer nothing drains is
+  lost ([`../devices/SERIAL.md`](../devices/SERIAL.md)).
+- **A quiet boot silences the screens, never the serial line**, which is the
+  record the tests and a bug report rely on.
+- **A fault the kernel cannot survive takes the display**: an abort, a
+  non-maskable interrupt, a malformed descriptor table, or any fault the kernel
+  raises within itself draws a full-screen page composed for it
+  ([`FAULTSCREEN.md`](FAULTSCREEN.md)); `ExceptionDispositionOf` decides which
+  ([`INTERRUPTS.md`](INTERRUPTS.md)). A fault a program raises costs that
+  program alone and draws nothing, since announcing the end of the machine for
+  it would be false.
 
-From sub-task 4.2 the display path is a formal driver equally. It is not the path
-the tests read and not the path a panic can most be relied upon to reach; it is
-the path a person looking at the machine has, and the property it is built for is
-that the machine can verify what it displayed rather than merely that it wrote
-something. `docs/devices/DISPLAY.md` records why a display is unusually hard
-to test and what is asserted at each boot in consequence.
+## Verification
 
-**From sub-task 6.2 the operator-facing path is addressed two ways, and the policy
-above must be read accordingly.** The kernel asks the boot loader for a linear
-framebuffer, and a boot loader that supplies one sets a graphics mode to do it;
-the display driver then writes to memory the adapter is not displaying. Sub-task
-6.4 supplies a console that draws text upon the framebuffer, so from that point
-there are **three** output paths and the operator can see whichever of the first
-two the boot loader's chosen mode makes visible.
+The structure is asserted by `tools/check-docs.sh`, run by `make lint`, rather
+than by a self-test:
 
-`KernelWriteString` writes to all three unconditionally and decides between none
-of them. Deciding there would put knowledge of the display mode into the one
-routine that must work before anything has established what the mode is, and the
-two screen paths do not know about each other. That routine is also **the only
-one permitted to name an output device**: the numeric routines named the display
-and the serial port themselves until sub-task 6.4, and the console was in
-consequence shown every word of the boot log and not one of its numbers.
+| Asserted | The silent failure it would catch |
+| -------- | --------------------------------- |
+| Every inclusion of an `<oxys/arch/...>` header from the portable core is listed with a reason, and every listed one still exists. | The boundary eroded by an unrecorded crossing, or an exemption left behind. |
+| Every document is indexed, every relative link resolves, and every section reference names a heading that exists. | A reader sent to a file or a section that is not there. |
+| Every top-level source directory that holds tracked files has a `README.md`, and the build targets `PROJECT_GUIDELINES.md` names are the `Makefile`'s. | A directory with no index; a documented target that does not exist. |
 
-Between sub-tasks 6.2 and 6.4 the cost was real and is worth recording: a machine
-with no serial adapter this kernel detects — VirtualBox is one — had **no readable
-diagnostic output at all**. `docs/design/FRAMEBUFFER.md` and `docs/design/CONSOLE.md` record
-the position, and `docs/project/TESTING.md` what it cost the
-VirtualBox procedure.
+The boot order of Section 4 is asserted by `make verify`: a phase that ran
+before one it depends on would fail that phase's self-tests.
 
-**A fault that the kernel cannot survive leaves the ordinary paths and takes the
-display.** Which faults those are is decided by `ExceptionDispositionOf` and set
-out in `INTERRUPTS.md`: an abort, a non-maskable interrupt, a
-malformed descriptor table, or any fault the kernel raised within itself. A
-divide by zero or an unresolved page fault raised by a program belongs to that
-program, costs it alone, and draws nothing — announcing the end of the machine
-for one would be a false account of what happened.
+## Limitations
 
-Such a fault draws a full-screen page composed for it — its own
-title, colour, account of what the processor is reporting, and the evidence that
-bears upon it rather than upon the others — and the console is suspended for good
-when it does. That is not a duplicate of the report: the report goes to every
-path and remains the record; the screen is a summary for a person standing at a
-machine that has stopped, who may have no other channel at all.
-`docs/design/FAULTSCREEN.md`.
+1. The portable core is not isolated from the architecture: seventeen
+   crossings are recorded, and a handful of x86 instructions (`sti; hlt`,
+   `cli; hlt`) remain in `kernel/kernel.c` and `kernel/proc/`.
+2. `net/` and `uefi/` are reserved and empty until Phases 11 and 12.
 
 ## Appendix A. Reference: capacity limits
 
 The bounds a person or a program can reach, with the constant that sets each.
 A **chunk** row is not a limit: the table grows by a chunk of that size at a time,
 up to 256 chunks, and memory is the practical limit
-([`MEMORY-LAYOUT.md`](MEMORY-LAYOUT.md), Section 16). A **fixed** row is a
+([`MEMORY-LAYOUT.md`](MEMORY-LAYOUT.md), Section 14). A **fixed** row is a
 static bound; what happens at it, whether a refusal, a cut or a drop, is in the
-constant's header. The constants are the authority; this table is a summary of
-them as of 2026-09-25.
+constant's header, which is the authority.
 
 | What | Kind | Value | Constant, header |
 | ---- | ---- | ----: | ---------------- |

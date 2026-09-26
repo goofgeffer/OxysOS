@@ -2,1096 +2,297 @@
 <!-- SPDX-License-Identifier: CC0-1.0 -->
 # Oxys-OS Memory Layout
 
-**Corresponding phases**: Phase 1, sub-tasks 1.2 and 1.4, which establish the
-layout and the boot-time hierarchy; and the whole of Phase 2, which realises it.
+**Phase**: sub-tasks 1.2 and 1.4, Phase 2, 7.3 and the growing tables of
+[`../project/PLAN.md`](../project/PLAN.md).
+**Source**: [`../../boot/boot.asm`](../../boot/boot.asm),
+[`../../linker.ld`](../../linker.ld), [`../../kernel/mm/`](../../kernel/mm/),
+[`../../kernel/arch/x86_64/mm/`](../../kernel/arch/x86_64/mm/).
+**Specifications**: Intel SDM, Volume 3A, Sections 3.3.7.1, 4.1.2, 4.5, 4.6,
+4.10.4, 4.10.5 and 6.15, Figure 4-8 and Tables 4-15 and 4-19; Volume 1,
+Section 3.3.7.1; Multiboot2 Specification, Sections 3.6.6 to 3.6.8.
 
-**Specifications**: Intel 64 and IA-32 Architectures Software Developer's Manual,
-Volume 3A, Sections 3.3.7.1, 4.1.2, 4.5, 4.6, 4.10.4 and 6.15, and Tables 4-15
-and 4-19; Volume 1, Section 3.3.7.1.
+How memory is divided and managed: the virtual address space and its regions,
+the kernel image's placement, the physical frame allocator, the kernel's paging
+hierarchy and direct map, the arena and heap above them, reference counting,
+copy-on-write and address-space cloning, the user address space, and the
+growing tables the kernel's object tables are built from.
 
-## 1. The canonical address space
+## 1. The address space
 
-The x86_64 processors implemented to date translate 48 significant bits of a
-linear address. Intel SDM, Volume 3A, Section 3.3.7.1, requires that bits 63 to
-47 of a linear address be identical; an address satisfying this constraint is
-termed canonical. The address space is therefore divided into two usable halves
-separated by a non-canonical void.
+x86_64 translates 48 bits of a linear address, and bits 63 to 47 must be equal
+(Volume 3A, Section 3.3.7.1). The space is therefore two usable halves separated
+by a non-canonical gap:
 
 | Range | Extent | Assignment |
 | ----- | ------ | ---------- |
-| `0x0000000000000000` – `0x00007FFFFFFFFFFF` | 128 TiB | The lower half. Reserved for user address spaces, from Phase 6. |
-| `0x0000800000000000` – `0xFFFF7FFFFFFFFFFF` | — | Non-canonical. Any reference faults. |
-| `0xFFFF800000000000` – `0xFFFFFFFFFFFFFFFF` | 128 TiB | The upper half. Reserved for the kernel, and mapped identically into every address space. |
-
-## 2. The planned upper-half assignment
-
-The following assignment is planned. Only the kernel image region is realised at
-the completion of Phase 1; the remainder is recorded here so that the regions do
-not conflict when they are introduced.
-
-| Base | Extent | Region | Introduced |
-| ---- | ------ | ------ | ---------- |
-| `0xFFFF800000000000` | 64 TiB | The direct map of all physical memory. | Phase 2, sub-task 2.4 (established) |
-| `0xFFFFC00000000000` | 32 TiB | The kernel virtual allocator arena, comprising the kernel heap and device mappings. The first device mapping is the framebuffer of sub-task 6.2; see [`FRAMEBUFFER.md`](FRAMEBUFFER.md). | Phase 2, sub-task 2.5 (established) |
-| `0xFFFFFFFF80000000` | 2 GiB | The kernel image: text, read-only data, data and BSS. | Phase 1 |
-
-The kernel image is placed within the topmost 2 GiB so that every kernel symbol
-may be reached by a 32-bit sign-extended displacement, which is the requirement
-of the GCC `kernel` code model. That model is selected in the `Makefile` by
-`-mcmodel=kernel` and materially reduces both code size and instruction count
-relative to the `large` model.
-
-## 3. The boot-time paging hierarchy
-
-The hierarchy constructed by `BootBuildPageTables` in `boot/boot.asm` comprises
-four 4096-byte structures, each aligned as Intel SDM, Volume 3A, Section 4.5
-requires.
-
-```
-BootPml4                          (page-map level 4)
-  entry[0]   ---> BootPdptIdentity
-  entry[511] ---> BootPdptHigher
-
-BootPdptIdentity                  (page-directory-pointer table)
-  entry[0]   ---> BootPageDirectory
-
-BootPdptHigher                    (page-directory-pointer table)
-  entry[510] ---> BootPageDirectory
-
-BootPageDirectory                 (page directory)
-  entry[0..511] ---> 2 MiB pages covering physical [0, 1 GiB)
-```
-
-Both page-directory-pointer tables refer to the same page directory, so a single
-set of 512 large-page entries serves both mappings. The consequent mappings are:
-
-| Linear range | Physical range | Purpose |
-| ------------ | -------------- | ------- |
-| `0x0000000000000000` – `0x000000003FFFFFFF` | `0x0` – `0x3FFFFFFF` | The identity mapping, required at the instant paging is enabled. Removed in Phase 2, sub-task 2.3. |
-| `0xFFFFFFFF80000000` – `0xFFFFFFFFBFFFFFFF` | `0x0` – `0x3FFFFFFF` | The higher-half mapping, at which the kernel is linked. |
-
-### 3.1 Derivation of the indices
-
-The higher-half base `0xFFFFFFFF80000000` decomposes as follows, in accordance
-with Intel SDM, Volume 3A, Figure 4-8.
-
-| Field | Bits | Value |
-| ----- | ---- | ----- |
-| Page-map level 4 index | 47:39 | 511 |
-| Page-directory-pointer index | 38:30 | 510 |
-| Page-directory index | 29:21 | 0 |
-| Offset within a 2 MiB page | 20:0 | 0 |
-
-### 3.2 Entry flags
-
-The flags employed are those of Intel SDM, Volume 3A, Table 4-15.
-
-| Flag | Bit | Applied to | Purpose |
-| ---- | --- | ---------- | ------- |
-| `P` (present) | 0 | All entries | The referenced structure or page is present. |
-| `R/W` (writable) | 1 | All entries | Writes are permitted. |
-| `PS` (page size) | 7 | Page-directory entries only | The entry maps a 2 MiB page rather than referring to a page table. |
-
-The `U/S` flag remains clear throughout, so every mapping is accessible only at
-privilege levels 0, 1 and 2. The `NX` flag is not yet employed; it is introduced
-in Phase 13, sub-task 13.3, together with `SMEP` and `SMAP`.
-
-## 4. The physical layout of the kernel image
-
-`linker.ld` places the image at physical `0x00100000`, one mebibyte, which is the
-conventional lowest address free of legacy device and firmware reservations. The
-sections are laid out as follows.
-
-| Section | Virtual address | Load address | Type | Contents |
-| ------- | --------------- | ------------ | ---- | -------- |
-| `.boot` | `0x00100000` | `0x00100000` | PROGBITS | The Multiboot2 header, the 32-bit entry code and the 64-bit trampoline. |
-| `.boot.data` | `0x00101000` | `0x00101000` | PROGBITS | The boot GDT, the preserved boot loader values, the boot stack and the four boot-time paging structures. |
-| `.text` | `KernelVirtualBase + p` | `p` | PROGBITS | The 64-bit kernel code. |
-| `.rodata` | `KernelVirtualBase + p` | `p` | PROGBITS | Read-only data and string literals. |
-| `.data` | `KernelVirtualBase + p` | `p` | PROGBITS | Initialised writable data. |
-| `.bss` | `KernelVirtualBase + p` | `p` | NOBITS | Uninitialised data, including the 64 KiB kernel stack. |
-
-Here `p` denotes the load address that the linker assigns by continuing
-contiguously from the preceding section, and `KernelVirtualBase` is
-`0xFFFFFFFF80000000`.
-
-The `.boot` and `.boot.data` sections are linked at their physical addresses
-because they are used before paging is enabled. They are two sections and not
-one so that each may occupy a program header of its own: the entry code is
-executed and never written, the boot data is written and never executed, and a
-single section holding both obliged the linker to describe the pair as readable,
-writable and executable together. See [`BOOT.md`](BOOT.md). Every subsequent section is linked at its higher-half virtual
-address, with an explicit `AT()` clause fixing its load address, so that GRUB
-places the image correctly while the code executes from the upper half.
-
-The `.bss` section is of type `NOBITS` and occupies no space in the file. It is
-placed last so that no `PROGBITS` section follows it, which would otherwise
-oblige the linker to emit a further program header. The boot loader zeroes the
-difference between the memory size and the file size of the containing program
-header.
-
-The boot-time paging structures are emitted as initialised zero data within
-`.boot.data` rather than being reserved in `.bss`, so that they occupy a defined
-physical location within the loaded image and require no action by the boot
-loader before `_start` executes.
-
-## 5. Address translation helpers
-
-`kernel/include/oxys/kernel.h` provides `PhysicalToVirtual` and
-`VirtualToPhysical`, which add and subtract `KERNEL_VIRTUAL_BASE` respectively.
-While the boot-time hierarchy is in effect these are valid only for physical
-addresses below one gibibyte. Phase 2, sub-task 2.4, introduces the direct
-physical map and extends their domain to the whole of physical memory.
-
-
-## 6. The physical memory map and the extents that must be reserved
-
-From Phase 2, sub-task 2.1, the kernel parses the Multiboot2 memory map into the
-boot-protocol-neutral `BootInformation` structure declared in
-`kernel/include/oxys/boot/bootinfo.h`. The map observed under QEMU with 512 MiB of
-memory is representative:
-
-| Range | Extent | Classification |
-| ----- | ------ | -------------- |
-| `0x00000000` – `0x0009FC00` | 639 KiB | usable |
-| `0x0009FC00` – `0x000A0000` | 1 KiB | reserved |
-| `0x000F0000` – `0x00100000` | 64 KiB | reserved |
-| `0x00100000` – `0x1FFDF000` | 523132 KiB | usable |
-| `0x1FFDF000` – `0x20000000` | 132 KiB | reserved |
-| `0xB0000000` – `0xC0000000` | 262144 KiB | reserved |
-| `0xFED1C000` – `0xFED20000` | 16 KiB | reserved |
-| `0xFFFC0000` – `0x100000000` | 256 KiB | reserved |
-| `0xFD00000000` – `0x10000000000` | 12582912 KiB | reserved |
-
-### 6.1 Why the map alone is insufficient
-
-Multiboot2 Specification, Section 3.6.8, states that the map "includes the
-regions occupied by kernel, mbi, segments and modules", and that the kernel must
-take care not to overwrite them. The map is a description of the machine, not of
-what is free. Five extents therefore fall within a region the map calls usable
-and must be reserved separately by the frame allocator of sub-task 2.2. The
-fourth was added by sub-task 7.7; the third has been reserved since sub-task 2.2
-and is listed here for the first time, this table having described three of the
-four reservations `pmm.c` actually makes.
-
-| Extent | Source | Observed range |
-| ------ | ------ | -------------- |
-| The kernel image | The linker symbols `KernelPhysicalStart` and `KernelPhysicalEnd`. | `0x00100000` – `0x0011A000` |
-| The boot information structure | Its address and its `total_size` field. | `0x00120370` – `0x00120948` |
-| The frame bitmap itself | `PhysicalMemoryPlaceBitmap`, which chooses where it stands before the bitmap governs anything. | Varies with the size of memory. |
-| **The boot modules** | Each module tag of Multiboot2, Section 3.6.6: `mod_start` and `mod_end`. | `0x003E7000` – `0x005E7000`, the initial ramdisk, under QEMU |
-| The low 1 MiB | Legacy device and firmware reservations, the real-mode interrupt vector table and the VGA frame buffer. | `0x00000000` – `0x00100000` |
-
-**The modules are the one of these whose omission would not be noticed.** A
-kernel that failed to reserve its own image, its boot information or its bitmap
-stops almost immediately and obviously. A kernel that fails to reserve a module
-boots perfectly, mounts the filesystem upon it, and then reads from it whatever
-the frame allocator has since put there — which is a root filesystem that decays
-under load rather than one that fails, and by the time anything notices, the
-evidence has been overwritten. The reservation was added with the initial ramdisk
-at sub-task 7.7; [`../storage/INITRD.md`](../storage/INITRD.md).
-
-Each is reserved by extent and not by page, `FrameMarkRange` marking every frame a
-range touches in its entirety. That is what makes it safe for a module to be
-unaligned: a frame shared between a module and something else is reserved for
-both, which costs a frame and never issues one from beneath a module. It is why
-the Multiboot2 module-alignment header tag is not carried; [`BOOT.md`](BOOT.md).
-
-The low mebibyte is reserved in its entirety rather than by the map, because it
-contains structures that the map does not describe and that later phases will
-require. The application processor trampoline of sub-task 6.14 is one: it is
-placed at physical `0x8000`, which must lie below 1 MiB, a processor released
-from reset beginning execution in real mode. The page is fixed rather than
-allocated, and `SmpTrampolinePageIsUsable` proves the firmware calls it available
-and that neither the kernel image nor the boot information structure stands
-within it — the same two exclusions `pmm.c` applies, applied again because this
-page does not come from the allocator. See [`SMP.md`](SMP.md)
-and 3.3.
-
-### 6.2 Why the kernel extent is not derived from the ELF sections tag
-
-Section 3.6.7 states that the address fields of the section headers "refer to
-where the sections are in memory". That holds for a kernel linked at the address
-at which it is loaded. Oxys-OS is a higher-half kernel: the address field of
-every section other than `.boot` and `.boot.data` holds a virtual address in
-the topmost two gibibytes. Deriving a physical extent from those values would
-yield an absurd range spanning almost the whole address space.
-
-The extent is therefore taken from the linker symbols, which are correct by
-construction, and the ELF sections tag is parsed for validation and reporting
-alone. The tag is nevertheless useful: the count of section headers it reports
-confirms that the tag was interpreted correctly, since the parser rejects it
-unless the entry size is exactly 64 bytes, the size of an ELF64 section header.
-
-
-## 7. The physical frame allocator
-
-Sub-task 2.2 introduces the frame allocator of `kernel/mm/pmm.c`. It is the sole
-authority upon which frames are free; every later subsystem that requires
-physical memory obtains it here.
-
-### 7.1 Structure
-
-The allocator is a bitmap of one bit per 4 KiB frame, in which a set bit denotes
-a frame that is allocated or reserved. A bitmap is chosen in preference to a
-free-frame stack because the initialisation sequence must be able to reserve a
-frame *by address*: the kernel image, the boot information structure and the
-bitmap itself all fall within regions the memory map classifies as usable, and
-must be excluded after those regions have been released. A stack would allocate
-in constant time but offers no means of removing a particular frame from the
-middle.
-
-### 7.2 Extent governed
-
-The allocator governs every frame below the highest usable address, and no
-frames above it. This is deliberate. Under QEMU the memory map reports a reserved
-region beginning at `0xFD00000000`; representing it would demand a bitmap of some
-two mebibytes to describe memory that does not exist. Nothing usable lies above
-the highest usable address, so nothing is lost.
-
-### 7.3 Order of initialisation
-
-The order is significant, and a different one would be incorrect:
-
-1. **Every frame is marked unavailable.** A region the boot loader did not
-   describe is thereby treated as reserved. Memory whose existence is unattested
-   must not be issued.
-2. **Frames of usable regions are released.** The start of each region is rounded
-   *upward* and its end *downward*, so that a frame only partially covered by a
-   usable region is not released; the remainder of such a frame belongs to an
-   adjacent region which may be reserved.
-3. **The reserved extents are marked again.** Here the start is rounded
-   *downward* and the end *upward*, so that a partially occupied frame is
-   reserved in its entirety. The two roundings are deliberately opposite: both
-   err towards withholding a frame rather than issuing one that is in use.
-
-Step 3 must follow step 2, or the release would undo it.
-
-### 7.4 Placement of the bitmap
-
-The bitmap must itself occupy memory, and cannot be allocated by the allocator it
-constitutes. It is placed by scanning the usable regions for one that can
-accommodate it, advancing a candidate address past the low mebibyte, the kernel
-image and the boot information structure. Two passes are made over the two
-obstructions, because advancing past one may bring the candidate into the other
-and their order in memory is not guaranteed.
-
-The bitmap must also be addressable, which until sub-task 2.4 confines it to the
-first gibibyte of physical memory, that being the extent of the higher-half
-mapping.
-
-### 7.6 The boot-time self-test
-
-There is no test harness in a kernel, and none can exist before the userland of
-Phase 7. `KernelVerifyFrameAllocator` therefore exercises the allocator at every
-boot and asserts the properties whose violation would corrupt memory silently:
-that issued frames are page aligned, that a frame is not issued twice, that no
-frame is issued from the low mebibyte or from within the kernel image, that the
-free count moves correctly, and that a freed frame is reissued in preference to
-an untouched one.
-
-
-## 8. The permanent kernel paging hierarchy
-
-Sub-task 2.3 replaces the boot-time structures of `boot/boot.asm` with a
-hierarchy built from frames obtained from the allocator of Section 7.
-
-### 8.1 Structure
-
-| Structure | Frames | Contents |
-| --------- | ------ | -------- |
-| Page-map level 4 | 1 | Entry 511 alone. Entry 0 is deliberately absent. |
-| Page-directory-pointer table | 1 | Entry 510, reaching the kernel's 1 GiB window. |
-| Page directory | 1 | Entry 0 refers to the page table below; entries 1 to 511 map 2 MiB pages. |
-| Page table | 1 | 512 entries of 4 KiB, covering the first 2 MiB of physical memory. |
-
-Four frames, 16 KiB in total, with the root observed at `0x0011F000`.
-
-### 8.2 Why two granularities
-
-The first 2 MiB of physical memory is mapped with 4 KiB pages, and the remainder
-of the gibibyte with 2 MiB pages.
-
-The kernel image lies within the first 2 MiB, and per-section permissions cannot
-be applied at a granularity coarser than the sections themselves; a 2 MiB page
-spanning both `.text` and `.data` would have to be writable, which would defeat
-the protection entirely. Beyond the image there is nothing to distinguish, and
-2 MiB pages cost 511 entries where 4 KiB pages would cost 261632, besides
-consuming fewer translation-lookaside-buffer entries.
-
-### 8.3 Permissions
-
-| Region | Permission | Reason |
-| ------ | ---------- | ------ |
-| `.text` | Read, execute | Code must not be modifiable. |
-| `.rodata` | Read | Constant data must not be modifiable. |
-| `.data`, `.bss`, `.boot.data`, all other mapped memory | Read, write | Required for operation. |
-
-The execute-disable bit is not applied. It requires `IA32_EFER.NXE` to be set,
-and its introduction together with SMEP and SMAP belongs to Phase 13, sub-task
-13.3. Withholding write permission is the part of the protection obtainable
-without that machinery, and it is taken now rather than retrofitted.
-
-**`CR0.WP` is required for any of this to bind.** Intel SDM, Volume 3A, Section
-6.15, provides that supervisor-mode code faults upon writing to a read-only page
-only when that flag is set; it is clear upon reset and GRUB does not set it.
-Until Phase 3, sub-task 3.4, added the flag to `PagingInitialise`, the read-only
-mappings described here were advisory: the kernel could write through them and no
-fault would arise. Refer to `docs/design/INTERRUPTS.md`.
-
-Restrictions are applied at the leaf entry, never at an intermediate one. Intel
-SDM, Volume 3A, Section 4.6, provides that the permissions of a translation are
-the conjunction of those at every level, so a restrictive intermediate entry
-would restrict every mapping beneath it rather than the one intended.
-
-### 8.4 The removal of the identity mapping
-
-No entry is created at index 0 of the page-map level 4 table, so the identity
-mapping ceases to exist the instant CR3 is written. Per Intel SDM, Volume 3A,
-Section 4.10.4.1, that write invalidates every translation-lookaside-buffer entry
-for the current process context save those marked global; no mapping here is
-global, so no stale translation of the low addresses can survive.
-
-The switch is safe because the instruction following the write to CR3 is fetched
-through the new hierarchy, and the kernel already executes from the higher half,
-which the new hierarchy maps. The stack likewise resides in the kernel's BSS.
-Nothing depends upon the identity map at this point: the values that the boot
-code preserved at low physical addresses were consumed by `KernelEntryHigh`
-before `KernelMain` was entered, and every pointer the kernel holds is a
-higher-half address.
-
-**One thing did depend upon it, and was missed.** The global descriptor table
-loaded by `boot/boot.asm` resides in the `.boot.data` section at physical
-`0x101000`.
-No segment register was reloaded after the switch, so the cached descriptors
-remained in force and the table was never read again — until Phase 3 installed
-interrupt gates, delivery of which obliges the processor to read the descriptor
-named by the gate's selector. The consequence and the remedy are recorded in
-`docs/design/INTERRUPTS.md`. The general rule it illustrates is that a
-structure the processor reads directly must remain mapped for as long as the
-processor may read it, and such reads are not visible in the source.
-
-#### 8.4.1 How the removal is reported, and the alarm that had to be corrected
-
-`PagingReport` states whether the identity mapping is still standing, and it asks
-the question **of a translation** rather than of the root entry that happens to
-lead to one. It reports whether `LOW_MEMORY_LIMIT` — one mebibyte, the kernel's
-own load address, within the range the boot mapping covered and an address
-nothing else has reason to map — still translates.
-
-It tested index 0 of the root table until the review that followed sub-task 6.10,
-and that test was wrong for a reason worth recording. **That entry spans the
-first 512 gibibytes, so it is present whenever anything at all is mapped low** —
-and something transiently is: the self-test of sub-task 6.7 maps a page at one
-gibibyte, to assert the validation of a caller's arguments against a real mapping
-rather than against a description, and then unmaps it. Unmapping clears the leaf
-and leaves the three tables above it standing, as it must, those being the tables
-any later low mapping would need. The root entry therefore remains present for
-the rest of the machine's life.
-
-The consequence was that every healthy boot printed
-`Low identity mapping: PRESENT (unexpected)` — of a mapping that had in fact been
-removed some two hundred lines of log earlier, and had been correctly reported as
-removed by the same routine when it ran the first time. **An alarm about the one
-condition in this subsystem whose survival would be catastrophic, raised falsely
-upon every boot, is worse than no alarm at all**: it is the mechanism by which a
-reader learns to disregard the line. The two reports now agree, and both say
-`removed.`
-
-The intermediate tables are still not reclaimed when the last leaf beneath them
-goes, and that is deliberate: the kernel arena is long-lived, so a scheme that
-tore down a page table upon every unmap would rebuild it upon the next map, and
-the tables retained are three frames for each region ever mapped rather than
-three for each mapping. It is nevertheless the reason the report cannot infer the
-mapping's absence from the root entry, and any later accounting of the hierarchy
-must treat a present intermediate as evidence of nothing but history.
-
-### 8.5 Verification
-
-The hierarchy is verified by walking it in software rather than by dereferencing
-addresses. There is no interrupt descriptor table until Phase 3, so a page fault
-would escalate to a triple fault and reset the machine, destroying the evidence.
-`KernelVerifyPaging` therefore confirms that the VGA frame buffer and the kernel
-text translate to the physical addresses they were derived from, that a low
-virtual address translates to nothing, that the text is not writable and the data
-is, and that a write through a writable mapping is observable.
-
-A read-only mapping cannot be confirmed by attempting a write until a page-fault
-handler exists. That negative test belongs to Phase 3, sub-task 3.4.
-
-
-## 9. The direct physical map
-
-Sub-task 2.4 adds a second mapping of physical memory, at `0xFFFF800000000000`,
-covering everything below the highest usable address.
-
-### 9.1 Why a second mapping is needed
-
-The kernel image window of Section 8 covers only the first gibibyte, because it
-exists to map the kernel where it is linked. That was sufficient while the only
-frames the kernel had to address were its own paging structures, which
-`FrameAllocateBelow` confined to that gibibyte. It is not sufficient in general:
-a machine with more memory would be unable to use any frame above the boundary
-for a page table, a heap page or a process image.
-
-The direct map removes the restriction. Every physical address has a
-corresponding virtual address, `PhysicalToDirect` of it, and the kernel may
-address any frame the allocator issues.
-
-### 9.2 Why the window is retained
-
-The kernel image window is not superseded. The kernel is linked within it: every
-code address, every string literal and the kernel stack are addresses in that
-window. Abandoning it would invalidate all of them at the instant CR3 was
-written. Both mappings therefore coexist, and the same physical frame is
-reachable by two virtual addresses.
-
-The distinction is one of purpose, and the two translation helpers name it:
-
-| Helper | Domain | Use |
-| ------ | ------ | --- |
-| `PhysicalToVirtual` | Below 1 GiB | The kernel image window. Used during the construction of the hierarchy, before the direct map is active. |
-| `PhysicalToDirect` | All physical memory | The direct map. Used by everything running after `PagingInitialise`. |
-
-### 9.3 Granularity and extent
-
-2 MiB pages are used throughout. A gibibyte costs 512 entries in one page
-directory; 4 KiB pages would cost 262144 entries across 512 page tables, which is
-2 MiB of paging structures for every gibibyte mapped.
-
-The extent runs to the highest usable address, rounded up to a large-page
-boundary. Nothing usable lies beyond it, and the reserved regions at the top of
-the address space, one of which QEMU reports at `0xFD00000000`, would demand an
-enormous number of entries to describe memory that does not exist.
-
-Under QEMU with 512 MiB the map covers 524288 KiB, and the whole hierarchy,
-window and direct map together, occupies six frames.
-
-### 9.4 The bootstrap ordering
-
-The direct map cannot be used to build itself. Paging structures are reached
-through `PagingTableAt`, which consults the window until the map is active and
-the direct map thereafter. The flag governing that choice is set only after CR3
-has been written, because until then the map exists in the structures but not in
-the translations the processor performs.
-
-`PagingAllocateTable` observes the same distinction, drawing from
-`FrameAllocateBelow` before the map exists and from `FrameAllocate` afterwards.
-
-
-## 10. The kernel virtual address allocator
-
-Sub-task 2.5 introduces the arena of `kernel/mm/vmm.c`, occupying the 32 TiB at
-`0xFFFFC00000000000`. It issues virtually contiguous ranges and backs every page
-with a frame from the physical allocator.
-
-### 10.1 Why it is distinct from the direct map
-
-The direct map of Section 9 makes every physical frame addressable, but the
-address of a frame there is fixed by its physical address. Two frames that are
-not physically adjacent are not adjacent in the direct map either. A caller
-requiring a contiguous buffer larger than a page cannot use it.
-
-The arena provides the missing property. It allocates *address space*, and maps
-arbitrary frames into it, so a range is contiguous in virtual memory whatever the
-physical arrangement of the frames beneath it. The frames are explicitly not
-contiguous, and a caller needing physical contiguity, such as a driver
-programming a bus master, requires a facility this allocator does not offer.
-
-### 10.2 Structure
-
-Address space is issued by a bump pointer, with a free list of released ranges
-searched first. The free list is a fixed-capacity array of 128 entries rather
-than a linked structure, because this allocator sits *beneath* the heap: the heap
-obtains its pages here, so allocating a list node from the heap would be
-circular. The array introduces no such dependency.
-
-Ranges are held in ascending order and coalesced with an adjacent neighbour upon
-release. Without coalescing, a sequence of allocations and releases of differing
-sizes would fragment the list into entries too small to satisfy any request while
-the address space they describe remained contiguous.
-
-A range released when the list is full is not reused, and the event is counted
-and reported. Only address space is forfeit; the frames are always returned to
-the physical allocator, and the arena has 32 TiB to lose.
-
-### 10.3 Failure partway through
-
-An allocation that cannot obtain a frame for every page unwinds: the pages
-already mapped are unmapped, their frames returned, and the address range
-restored to the free list. Returning NULL with part of the range mapped would
-leak both frames and address space and leave the arena inconsistent.
-
-### 10.4 Bounding a page count before it is multiplied
-
-Every bound in the arena is computed as `page_count * PAGE_SIZE`, and that
-product is a 64-bit unsigned quantity. The count arrives from a caller, and a
-sufficiently large one wraps it:
-
-| Count | Product | Effect upon the bound |
-| ----- | ------- | --------------------- |
-| 2³⁸ pages | 2⁵⁰ bytes | `0xFFFFC00000000000 + 2⁵⁰` carries past the top of the address space and truncates to `0x0003C00000000000`, which compares below the end of the arena. |
-| 2⁵² pages | 0 | The bound becomes the bump pointer itself, so every request is admitted. |
-
-In each case the comparison guarding the arena compares a wrapped number against
-the arena's end, finds it smaller, and admits the request — a guard computing a
-value the guard itself cannot trust. This is defined behaviour and not undefined:
-unsigned arithmetic wraps by the standard. It is a defect of logic and not of
-conformance, which is why it survived a compiler configured to refuse a great
-deal.
-
-The remedy is not an overflow test at each site. It is to bound the count once,
-at each entry point, by what the arena could hold were it wholly empty:
-
-```
-ARENA_PAGE_CAPACITY = KERNEL_ARENA_SIZE / PAGE_SIZE = 32 TiB / 4 KiB = 2³³
-```
-
-A count so bounded gives a product of at most `KERNEL_ARENA_SIZE`, and the arena
-ends at `0xFFFFE00000000000`, far enough below the top of the address space that
-no sum of the two can wrap. Every later multiplication and addition is then safe
-**by construction** rather than by a check repeated wherever one occurs.
-
-`KernelPagesAllocate` applies exactly this bound, having no base to measure from
-at the point it must decide. `KernelPagesFree` has one, and is therefore held to
-a stronger test; see Section 10.5.
-
-The damage the check prevents is not the refusal itself — the mapping loop is
-bounded by physical memory and unwinds when a frame cannot be obtained, so an
-oversized request returned NULL before this check existed too. The damage is what
-the wrapped arithmetic left behind:
-
-1. **The bump pointer is carried out of the arena.** A request of 2³⁸ pages
-   advanced it by 2⁵⁰ bytes, leaving it at `0x0003C00000000000` — in the lower
-   half, which is user address space. The next allocation would have been served
-   from there and reported as a success.
-2. **The free list is corrupted.** The unwinding of Section 10.3 inserts the
-   range it failed to map, and `ArenaFreeListInsert` performs the same
-   multiplication when testing for adjacency. A range that outlives the call is
-   left where a later allocation will take it.
-
-Both persist after the failed call and surface far from it, which is what makes
-the defect worth refusing at the door rather than diagnosing later.
-
-
-### 10.5 The whole range released must lie within the arena
-
-`KernelPagesFree` validates the base address, the alignment and the mapping of
-every page it releases. None of that establishes that the **range** lies within
-the arena: a base at the arena's last page with a count of 2³³ satisfies both the
-base test and the capacity bound of Section 10.4 while describing a range that
-sweeps the 32 TiB above the arena.
-
-Because the base is known to lie within the arena, the test is a subtraction:
-
-```c
-page_count > ((KERNEL_ARENA_BASE + KERNEL_ARENA_SIZE - base) / PAGE_SIZE)
-```
-
-The difference lies in `(0, KERNEL_ARENA_SIZE]` and so cannot wrap, and no
-multiplication is performed at all. This subsumes the bound of Section 10.4,
-which is this same test for a base at the arena's first page, so the release path
-applies this one alone.
-
-**Something already stopped such a range**, and it is worth being exact about
-what. The release loop calls `PagingTranslate` upon each page and panics upon an
-unmapped one; the space above the arena is unassigned, so the walk met an
-unmapped page almost at once and halted, and neither the accounting nor the free
-list was reached. There was no silent corruption. The check is nonetheless worth
-stating, for three reasons:
-
-1. **It named the wrong error.** A caller passing an over-long range was told
-   that an unmapped page had been passed to it — a symptom observed partway
-   through the range, pointing away from the argument that was actually wrong.
-2. **It refused after acting.** Pages were unmapped and frames returned before
-   the diagnosis. That the panic makes this moot is luck rather than design, and
-   it is the opposite of the discipline the base and alignment tests follow.
-3. **It held only while nothing was mapped above the arena.** Section 2 reserves
-   that space for later use. On the day something is placed there the loop stops
-   panicking: it unmaps and frees pages belonging to whatever now lives there,
-   completes, and inserts the range into the free list. The protection would
-   become a corruption path with nothing in the file to warn whoever introduced
-   it.
-
-The third is the reason the check is worth its two lines. An incidental
-protection that depends upon a region being empty is not a protection; it is a
-coincidence with an expiry date.
-
-## 11. The kernel heap
-
-Sub-task 2.5 also introduces the slab heap of `kernel/mm/heap.c`, providing
-allocations of arbitrary size above the arena.
-
-### 11.1 Structure
-
-Eight size classes are served: 16, 32, 64, 128, 256, 512, 1024 and 2048 bytes. A
-class is refilled by taking one page from the arena and carving it into objects,
-which are threaded onto the class free list. A request larger than the greatest
-class is served by whole pages.
-
-Free objects hold the free-list link in their own first eight bytes. An object
-that is free is by definition not in use by any caller, so this costs no storage.
-
-### 11.2 How the size class is recovered
-
-An allocation carries no header of its own. Every slab is one page, is page
-aligned, and no object crosses a page boundary, so rounding a pointer down to a
-page boundary yields the header of the slab containing it.
-
-This matters more than it may appear. A per-object header of 32 bytes would be 6
-per cent overhead on the 2048-byte class but 200 per cent on the 16-byte class,
-which is the class small kernel structures will use most.
-
-### 11.3 Validation
-
-The slab header carries a magic value. A pointer passed to `KernelFree` that was
-not obtained from the heap will almost always land on a page whose header does
-not bear it, and is reported rather than acted upon. Releasing an object from a
-slab that records none in use is likewise reported. Neither check is complete —
-a pointer into the middle of a live slab would pass both — but each converts a
-class of silent corruption into an immediate diagnosis.
-
-### 11.4 A size that cannot be represented
-
-A request larger than the greatest class is served by whole pages, and the pages
-required are computed by adding the slab header to the size and rounding the sum
-up to a page:
-
-```c
-AlignUp((uint64_t)size + sizeof(HeapPageHeader), PAGE_SIZE) / PAGE_SIZE
-```
-
-`AlignUp` is `(value + (alignment - 1)) & ~(alignment - 1)`, so the expression
-adds `sizeof(HeapPageHeader) + PAGE_SIZE - 1` to the size before it divides. For
-a size within that distance of `SIZE_MAX` the sum wraps to a small number, the
-division yields a page count of one or two, and **the allocation succeeds**.
-
-This is a worse failure than the arena's, and of a different kind. The arena's
-wrapped bound admitted a request that then failed; this one returns a valid
-pointer to two pages for a request of very nearly the whole address space.
-Nothing reports an error. The caller learns the truth by writing past the end of
-what it was given, at which point the fault has no visible connection to the
-allocation that caused it — and the bound of Section 10.4 does not catch it,
-the page count reaching the arena having already been made small by the wrap.
-
-The size is therefore refused before the addition is performed. A request that
-cannot be represented fails exactly as a request that cannot be satisfied does,
-NULL being the only honest answer to either.
-
-### 11.5 Known limitation
-
-A slab whose objects have all been released is not returned to the arena. Doing
-so would require removing its remaining objects from the class free list, which
-is singly linked and offers no means of locating them. The page is retained and
-reused by the next allocation of its class.
-
-The consequence is that the heap's page consumption follows the high-water mark
-of each class rather than the current demand. This is acceptable at present and
-becomes worth addressing when the heap comes under sustained and varied load,
-which is not before Phase 6. The remedy is a doubly linked free list per slab
-rather than per class, at the cost of eight further bytes per free object.
-
-### 11.7 The boot-time self-test of the refusals
-
-The refusals of Sections 10.4 and 11.4 are asserted at each boot, with counts and
-sizes chosen for what each does to the arithmetic rather than for being large:
-one page beyond `ARENA_PAGE_CAPACITY`, 2³⁸ pages to wrap the addition, 2⁵² pages
-to wrap the multiplication, and `SIZE_MAX`, `SIZE_MAX - sizeof(void *)` and
-`SIZE_MAX - PAGE_SIZE` to wrap the heap's rounding.
-
-Asserting that each returns NULL is necessary and **not sufficient**, and the
-distinction matters. A request of 2⁵² pages returned NULL before these checks
-existed as well, the mapping loop having exhausted physical memory and unwound;
-a self-test asserting NULL alone would have passed against the very defect it was
-written for. What the wrapped arithmetic did was leave the arena broken behind
-it.
-
-Two further assertions therefore follow the refusals. The count of pages in use
-must be unchanged, and — the one that does the work — an ordinary single-page
-allocation made afterwards must return an address **within the arena**. Before
-the bound existed, a request of 2³⁸ pages left the bump pointer at
-`0x0003C00000000000`, and that subsequent allocation would have been served from
-the lower half and reported as a success.
-
-The heap's refusals need no such corroboration: before the check existed
-`KernelAllocate(SIZE_MAX)` returned a non-null pointer, so asserting NULL
-distinguishes the two states directly.
-
-**What is not asserted, and cannot be.** The impossible arguments to
-`KernelPagesFree` — an address outside the arena, a misaligned address, an
-unmapped page, and the range test of Section 10.5 — each panic, which halts the
-machine. Asserting one would require a means of surviving a panic, and there is
-none before the test harness of Phase 7. The self-test therefore exercises the
-other direction: a legitimate multi-page range is allocated, written, read back,
-released, reissued from the free list and released again, and the arena's count
-of pages in use is required to return to exactly what it was. A bound that was
-inverted or off by one would panic upon that legitimate range rather than pass
-silently, so the admit direction is covered even though the refusal is not.
-## 12. Per-frame reference counting
-
-Sub-task 2.6 gives every frame a reference count, which is the substrate upon
-which copy-on-write is built in sub-task 2.8.
-
-### 12.1 Semantics
-
-`FrameAllocate` issues a frame with a count of one. `FrameReferenceIncrement`
-records a further holder, as when an address space is cloned and a page becomes
-shared. `FrameFree` releases one reference, and returns the frame to the
-allocator only when the count reaches zero.
-
-This redefinition of `FrameFree` is deliberate and required no change to its
-existing callers. The kernel arena allocates a frame, holds the single reference
-that allocation confers, and releases it when the page is unmapped; that is
-correct under both the old semantics and the new. Copy-on-write will take
-additional references, and the frame will then survive the release of all but the
-last.
-
-### 12.2 Why the table is allocated later than the allocator
-
-The table is 255 KiB for the 131039 frames of a 512 MiB machine, and is allocated
-from the kernel heap. The heap does not exist until sub-task 2.5, so reference
-counting is established in a separate step after it, rather than within
-`PhysicalMemoryInitialise`.
-
-Frames allocated before that point — the paging structures, the arena's page
-tables, the heap's own slabs, and the pages of the table itself — are seeded with
-a single reference when the table is created. This is correct: each was issued
-once and released no times.
-
-The table is seeded *before* it is published. Publishing first and seeding
-afterwards would leave a window in which `FrameFree` observed a zero count for a
-live frame and reported a double release.
-
-### 12.3 Width and overflow
-
-A count is 16 bits, bounding the sharing of a single frame at 65535 address
-spaces. That is far beyond any plausible degree of sharing. An attempt to exceed
-it is reported rather than allowed to wrap, because a wrapped count would free a
-frame that is still in use — a corruption that would surface arbitrarily later
-and nowhere near its cause.
-
-## 13. Copy-on-write
-
-Sub-task 2.7 implements the resolution of a copy-on-write fault. Sub-task 2.8,
-described in Section 14, creates the shared pages that make it useful, by cloning
-an address space.
-
-### 13.1 How a page is marked
-
-A copy-on-write page is mapped with two properties: `PAGE_ENTRY_WRITABLE` is
-**clear**, and bit 9 of the page-table entry is **set**.
-
-Bit 9 is available because Intel SDM, Volume 3A, Table 4-19 ("Format of a
-Page-Table Entry that Maps a 4-KByte Page"), records bits 11:9 as *Ignored* — the
-processor neither interprets nor modifies them.
-
-Both properties are required and they do different work. The absence of write
-permission is what causes the processor to raise the fault; the software flag
-alone would be inert, since the processor ignores it. The flag records *why* the
-page is read-only, distinguishing a shared page from one that is genuinely
-constant, such as the kernel's `.rodata`.
-
-### 13.2 Resolution
-
-`PagingResolveCopyOnWriteFault` accepts a fault only when three conditions hold,
-and each rejection is meaningful:
-
-| Condition | Why |
-| --------- | --- |
-| The page is present | A fault upon an absent page is a different matter, to be resolved by supplying a page, not by copying one. |
-| The software flag is set | The page was never shared; its read-only state is deliberate and permanent. |
-| Write permission is absent | If the page is already writable the fault was raised for some other reason, and granting write permission again would resolve nothing — the instruction would restart and fault without end. |
-
-It then takes one of two paths:
-
-**More than one referrer.** A frame is allocated, the contents copied, and the
-private copy installed with write permission and the flag cleared. One reference
-to the original is then released. The frame returns to the allocator only when
-its last holder releases it, which is precisely the property sub-task 2.6 exists
-to provide.
-
-**A single referrer.** No copy is made; write permission is restored and the flag
-cleared. There is nobody to protect from the write, and copying would be pure
-waste. This is the common case once the other holders of a shared page have
-released it, and avoiding the copy is the whole economy of the scheme.
-
-### 13.3 The direct map earns its keep
-
-The copy is performed between `PhysicalToDirect` of the two frames. Neither need
-have any other virtual address, and the two need not be related in the address
-space of the faulting code. Without the direct map of sub-task 2.4 the kernel
-would have to construct a temporary mapping for each frame and tear it down
-afterwards, on every fault.
-
-### 13.4 Verification
-
-The self-test exercises the real handler rather than a substituted probe. Only
-the *sharing* is simulated, a reference being taken to the frame directly rather
-than by cloning; the test of Section 14.6 exercises the same handler upon pages
-that a genuine clone has shared.
-
-Both paths are tested. The shared case asserts that the frame changed, that the
-duplicate retains all 4096 bytes of a pattern save the one written, that the flag
-and the read-only state are cleared afterwards, and that the original frame still
-carries the simulated holder's reference. The sole-owner case asserts that the
-frame did *not* change and that no duplication was counted.
-
-A leak assertion closes the test: the count of free frames must return to its
-starting value. Copy-on-write allocates on one path and releases a reference on
-another, and an imbalance between the two would leak physical memory in
-proportion to the number of faults — the least visible and most damaging way for
-the mechanism to be wrong.
-
-### 13.6 Limitations
-
-1. Only 4 KiB pages are supported. A copy-on-write fault upon a large page would
-   require the mapping to be split first, which nothing yet needs.
-2. Resolution operates upon whichever hierarchy CR3 names, which from sub-task
-   2.8 need not be the kernel's. It has no means of resolving a fault in an
-   address space that is not the active one, and needs none: a fault is raised
-   only by the processor that is translating through that space.
-3. Discharged at sub-task 6.13. `INVLPG`
-   invalidates the translation upon the executing processor only, per Intel SDM,
-   Volume 3A, Section 4.10.5, so `PagingInvalidate` now announces the address to
-   every other processor by inter-processor interrupt and waits for each to
-   acknowledge. Upon a machine with one processor started the announcement costs
-   one comparison. A shootdown that is not acknowledged is fatal: Section 4.10.4.4
-   permits an invalidation to be deferred only while no processor can use the
-   stale translation, and a caller that returned would go on to give the frame
-   away. See [`CONCURRENCY.md`](CONCURRENCY.md).
-
-## 14. Address-space cloning
-
-Sub-task 2.8 completes the memory-management substrate. An address space is a
-paging hierarchy that may be created, cloned by the copy-on-write discipline,
-activated and destroyed. `fork()`, in sub-task 6.11, is little more than a clone
-of the calling process's address space together with a copy of its thread state —
-and that is how it turned out: `ProcessFork` is one call to `AddressSpaceClone`,
-one call to `ThreadCreate`, and a copy of the system-call frame the entry path had
-already saved. Nothing in this section needed changing to carry it, the
-invalidation of Section 14.4 having anticipated a source hierarchy that is the
-active one, which under `fork` it always is. What the sub-task did add is a
-consumer within the kernel: `wait` writes a status into a page the fork has just
-protected, so the argument validation of
-[`PRIVILEGE.md`](PRIVILEGE.md) must resolve a copy-on-write fault
-rather than refuse the address.
-
-The implementation is `kernel/arch/x86_64/mm/addrspace.c`; the interface is
-`kernel/include/oxys/arch/mm/addrspace.h`.
-
-### 14.1 The two halves
-
-The page-map level 4 index occupies bits 47:39 of a linear address, so an index
-below 256 has bit 47 clear. Intel SDM, Volume 1, Section 3.3.7.1, requires bits
-63:48 to replicate bit 47 for an address to be canonical. The 512 entries of the
-root table therefore divide exactly into the two canonical halves:
-
-| Entries | Linear addresses | Treatment |
-| ------- | ---------------- | --------- |
-| 0 to 255 | `0x0000000000000000` to `0x00007FFFFFFFFFFF` | The address space proper. Cloned. |
-| 256 to 511 | `0xFFFF800000000000` to `0xFFFFFFFFFFFFFFFF` | The kernel. Shared. |
-
-`AddressSpaceCreate` copies the higher-half entries from the kernel hierarchy, so
-every address space refers to the *same* kernel page tables rather than to copies
-of them. Three consequences follow, and all three are wanted:
-
-1. The kernel is mapped identically wherever execution is. An interrupt may be
-   delivered whichever space is active, and its handler finds its code, its stack
-   and its data where it left them.
-2. A change of CR3 does not disturb the executing kernel. This is what permits
-   `AddressSpaceSwitch` to be called from ordinary C code.
-3. A mapping the kernel establishes afterwards is visible in every existing
-   address space, the structures beneath those entries being the very ones the
-   kernel modifies.
-
-The third holds only for a mapping that requires no *new* page-map level 4 entry.
-The kernel establishes all of its higher-half entries during `PagingInitialise`,
-before any address space can exist, so the case does not presently arise. Should
-a later phase extend the kernel's half into a fresh root entry, every existing
-address space would have to be amended.
-
-### 14.2 What is copied and what is shared
-
-| Object | Treatment | Why |
-| ------ | --------- | --- |
-| Paging structures of the lower half | Duplicated | The two spaces must be able to diverge, and they diverge by acquiring different entries. A shared table would propagate every such change from one space to the other. |
-| Frames mapped by those structures | Shared, with a reference recorded | This is the economy the whole mechanism exists for. A clone costs one frame per paging structure, not one per page of the address space. |
-| Higher half | Shared, no reference taken | The kernel is not owned by any address space and outlives all of them. |
-
-### 14.3 Protecting the parent
-
-For each present leaf entry of the lower half:
-
-- **The page is writable.** `PAGE_ENTRY_WRITABLE` is cleared and
-  `PAGE_ENTRY_COPY_ON_WRITE` set, in **both** hierarchies, and the reference
-  count of the frame is incremented.
-- **The page is already read-only.** It is shared unchanged. Neither holder can
-  write to it, so neither can observe a change made by the other, and there is
-  nothing for the protection to prevent. Marking it would be worse than
-  redundant: the mark would provoke a fault that could resolve to nothing, there
-  being no write permission to restore.
-
-Marking both hierarchies is essential rather than symmetric. Were only the child
-protected, a write by the parent would proceed into the shared frame and the
-child would observe it — the exact failure the mechanism exists to prevent, and
-one that would produce no diagnostic of any kind.
-
-### 14.4 Invalidation
-
-The clone modifies the source hierarchy: pages that were writable are so no
-longer. Where the source is the active hierarchy, the processor may hold cached
-translations that still grant write permission, and a write through such a
-translation would proceed without raising the fault upon which everything
-depends.
-
-CR3 is therefore rewritten at the end of a successful clone, rather than each
-protected page being invalidated in turn. Intel SDM, Volume 3A, Section 4.10.4.1,
-provides that writing CR3 discards every translation-lookaside-buffer entry for
-the current process context save those marked global, and no mapping the kernel
-establishes is global. The choice is one of bounded cost: a clone may protect an
-arbitrary number of pages, so a sequence of `INVLPG` instructions is unbounded
-where the single write is not.
-
-The destination hierarchy needs no invalidation at all. It has never been loaded
-into CR3, so the processor holds no translation derived from it.
-
-### 14.5 Destruction
-
-`AddressSpaceDestroy` walks the lower half, releasing one reference to each
-mapped frame and releasing each paging structure outright. A frame still shared
-with another address space survives, `FrameFree` returning it to the allocator
-only upon the last reference. The higher half is not walked; it is the kernel's
-and is merely referred to.
-
-Destroying the active address space is refused with a panic. The hierarchy the
-processor is translating through cannot be dismantled beneath it.
-
-### 14.6 Verification
-
-The self-test builds a parent address space containing two lower-half pages, one
-writable and one read-only, clones it, and asserts the properties whose violation
-would be silent:
-
-| Assertion | The failure it detects |
-| --------- | ---------------------- |
-| The clone has a distinct root table | A clone that shared the hierarchy entirely. |
-| The parent's writable page is read-only and marked | The failure of Section 14.3 — two spaces sharing memory each believes to be private. |
-| The read-only page is *not* marked | A mark that would provoke an unresolvable fault. |
-| Both frames carry two references | A clone that shared frames without recording the fact, so that the first release would free a frame still in use. |
-| A write by the parent duplicates the frame | Sharing that was never protected. |
-| The child still maps the original frame, holding the original contents | The parent's write leaking into the child. |
-| The original frame falls to one reference | A resolution that released the frame outright rather than dropping one reference. |
-| The child's own write duplicates nothing | The sole-owner path of Section 13.2, upon a genuinely shared page rather than a simulated one. |
-| Destroying the child leaves the read-only frame allocated | A destruction that released a shared frame. |
-| The count of free frames returns to its starting value | A leak of frames or of paging structures, in proportion to the number of clones. |
-
-The test is performed with the parent and then the child actually loaded into
-CR3, so the faults it provokes are resolved by the real page-fault handler within
-the real hierarchy, not by a probe.
-
-### 14.8 Limitations
-
-1. A large page in the lower half is rejected rather than provided for. Sharing
-   one at 4 KiB granularity would require the mapping to be split first, and
-   nothing yet establishes such a mapping.
-2. There is still no accounting of an address space's extent *in the space
-   itself*, and there deliberately is not: an address space is a paging
-   hierarchy and nothing besides. The record lives in the process control block
-   of sub-task 6.9, which is what put things there and therefore what can say
-   what it mapped. See [`PROCESS.md`](PROCESS.md).
-3. Cloning is not safe against a concurrent fault upon the same address space. It
-   must be performed under the lock governing the space, which has existed since
-   sub-task 6.13 and has not yet been applied here, there being one thread of
-   control. The other half of that limitation **is** discharged: the invalidation
-   of Section 14.4 goes through `PagingInvalidate`, which announces the address to
-   every other processor upon which the source may be active. See
-   [`CONCURRENCY.md`](CONCURRENCY.md).
-
----
-
-## 15. The user address space, and the break that divides it
-
-**Corresponding sub-task**: 7.3, which is where a user address space first
-acquired a region that grows.
-
-Until this sub-task a user address space held two things the kernel had placed
-and nothing else: the program's image, at the addresses its program headers
-named, and a stack of sixteen pages below `PROCESS_USER_STACK_TOP`. Both are
-fixed at the moment the program is loaded and neither ever moves. A heap is the
-first region whose extent a *program* decides.
-
-| Range | Assignment |
-| ----- | ---------- |
-| `0x0000000000000000` – one page | Never mapped. This is what makes a null pointer dereference a fault. |
-| The image | Wherever the program headers name, which for everything this project loads is at or above `0x0000000000400000`. |
-| One page above the image | **The guard.** Never mapped. |
-| From there upward to the break | **The heap.** Grown and shrunk by `SYSCALL_BRK`, bounded at `PROCESS_BREAK_MAXIMUM` above its first byte. |
-| … | Unmapped. The gap between the two growing regions is the width of the address space. |
-| One page below the stack | The stack's guard. Never mapped. |
-| `0x00006FFFFFFF0000` – `0x0000700000000000` | The stack, sixteen pages, growing downward. |
-| Above that to `0x0000800000000000` | Unmapped. |
-
-**The heap grows up and the stack grows down, and nothing enforces the gap
-between them.** It is not enforced because it does not need to be: the bound upon
-the break is sixteen mebibytes above the image, and the image is at four
-mebibytes, so the heap's greatest reach is some twenty mebibytes — against a
-stack at 112 tebibytes. The day either bound changes, `ProcessSetBreak` is where
-the check belongs, and the reason it is not there now is that a check against a
-condition that cannot arise is a check nothing can test.
-
-**Why the guard above the image is a page and not a byte.** The image's highest
-address is the end of the program's `.bss`, and the granularity of a mapping is a
-page; a guard smaller than a page is not a guard at all, since the page holding
-it would be mapped for the sake of the heap's first byte and the overrun would
-find it writable.
-
-**The two extents are recorded in the process control block**, beside the image
-extent and for the same reason Section 14.8, limitation 2, gives: an address
-space is a paging hierarchy and cannot say what it maps or why. `break_start` is
-fixed when the program is loaded and never moves; `break_current` is what the
-program has asked for. See [`PROCESS.md`](PROCESS.md) and
-[`LIBC.md`](LIBC.md) which holds the design of the call itself.
-
-### 15.1 The unmapping primitive this required
-
-`AddressSpaceUnmapPage`, above `PagingUnmapPageIn`, is new at this sub-task and
-is **the first operation in this kernel that takes a mapping away from a live
-address space**. Everything before it either established a mapping or destroyed
-an entire hierarchy.
-
-It returns the frame it withdrew rather than releasing it. Whether the caller
-holds the last reference is something only the caller knows: a frame shared by a
-copy-on-write clone has more than one referrer, and a function that decided for
-its caller would free a frame another address space is still translating through.
-Every present caller passes the result to `FrameFree`, which releases it upon the
-last reference and does nothing before then — so a heap page a forked child still
-holds survives its parent giving it back.
-
-**The intermediate paging structures are left standing.** A page table that has
-gone empty describes a region the caller is very likely to use again — a heap
-that shrank is a heap that will grow — and releasing it would mean allocating one
-again upon the next byte asked for. They are released with the address space, by
-`AddressSpaceDestroy`, which is the one moment nothing can ask for them back.
-That is a deliberate retention and not a leak: it is bounded by the extent of the
-address space and is reclaimed in full when the process ends.
-
-## 16. The growing table
-
-**Added 2026-09-25.** The process, thread, filesystem node, open-file and pipe
-tables were fixed arrays of 64, 128, 64, 32 and 8 until this date. A desktop with
-a few terminals open holds two pipes and a handful of open files per terminal,
-and would have been refused a ninth pipe or a thirty-third file with memory to
-spare. [`../../kernel/include/oxys/mm/table.h`](../../kernel/include/oxys/mm/table.h)
-and [`../../kernel/mm/table.c`](../../kernel/mm/table.c) replace each of them
-with a table that grows.
-
-### 16.1 Structure
-
-A table is a directory of up to 256 chunks, each an array of a fixed number of
-entries. The first chunk is a static array; each further chunk is one
-`KernelAllocateZeroed` of the chunk's size, taken when a claim finds every slot in
-use. An index is divided by the chunk size to find the chunk, and the remainder
-is the entry within it.
+| `0x0000000000000000` – `0x00007FFFFFFFFFFF` | 128 TiB | User address spaces (Section 13). |
+| `0x0000800000000000` – `0xFFFF7FFFFFFFFFFF` | — | Non-canonical; any reference faults. |
+| `0xFFFF800000000000` – `0xFFFFFFFFFFFFFFFF` | 128 TiB | The kernel, mapped identically into every address space. |
+
+The kernel half:
+
+| Base | Extent | Region |
+| ---- | ------ | ------ |
+| `0xFFFF800000000000` | 64 TiB | The direct map of all physical memory (Section 7). |
+| `0xFFFFC00000000000` | 32 TiB | The kernel arena: the heap and device mappings such as the framebuffer (Section 8). |
+| `0xFFFFFFFF80000000` | 2 GiB | The kernel image. |
+
+**The image is in the top 2 GiB** so every kernel symbol is reachable by a
+32-bit sign-extended displacement, the requirement of GCC's `-mcmodel=kernel`,
+which gives smaller and faster code than the `large` model.
+
+## 2. The boot-time paging hierarchy
+
+`BootBuildPageTables` in `boot/boot.asm` builds four 4 KiB structures, aligned
+as Section 4.5 requires. Both page-directory-pointer tables refer to one page
+directory of 512 2 MiB pages, so one set of entries serves two mappings of
+physical `[0, 1 GiB)`: an identity mapping, needed at the instant paging is
+enabled, and the higher-half mapping at `0xFFFFFFFF80000000` (root index 511,
+pointer index 510, by Figure 4-8). Entries carry `P`, `R/W` and, in the
+directory, `PS` (Table 4-15); `U/S` stays clear, so nothing is reachable from
+privilege level 3. The structures are initialised data in `.boot.data`, at a
+defined physical address, needing nothing from the boot loader.
+
+## 3. The kernel image
+
+`linker.ld` loads the image at physical `0x00100000`, above the legacy
+reservations of the first mebibyte.
+
+| Section | Linked at | Holds |
+| ------- | --------- | ----- |
+| `.boot` | Its physical address | The Multiboot2 header and the 32-bit entry code. |
+| `.boot.data` | Its physical address | The boot GDT, the preserved boot-loader values, the boot stack and the boot paging structures. |
+| `.text`, `.rodata`, `.data` | `0xFFFFFFFF80000000` + load address | The kernel. |
+| `.bss` | The same | Uninitialised data, including the 64 KiB kernel stack; placed last. |
+
+- **`.boot` and `.boot.data` are separate** so each has a program header of its
+  own: one executed and never written, the other written and never executed. One
+  section would force the linker to make both readable, writable and executable
+  ([`BOOT.md`](BOOT.md)).
+- **`.bss` is last** because a `PROGBITS` section after a `NOBITS` one forces an
+  extra program header; the boot loader zeroes the difference.
+
+`PhysicalToVirtual` and `VirtualToPhysical` (`kernel.h`) translate within the
+image window, and so only below 1 GiB; `PhysicalToDirect` (Section 7) covers all
+physical memory.
+
+## 4. The physical memory map and its reservations
+
+The Multiboot2 memory map, reduced to `BootInformation`, describes the machine,
+not what is free: the map "includes the regions occupied by kernel, mbi,
+segments and modules" (Section 3.6.8). The frame allocator therefore reserves,
+within regions the map calls usable:
+
+| Extent | Taken from |
+| ------ | ---------- |
+| The kernel image | The linker symbols `KernelPhysicalStart` and `KernelPhysicalEnd`. |
+| The boot information structure | Its address and `total_size`. |
+| The frame bitmap | Where `PhysicalMemoryPlaceBitmap` placed it. |
+| The boot modules, including the initial ramdisk | Each module tag's `mod_start` and `mod_end` (Section 3.6.6). |
+| The low mebibyte | Wholly: legacy reservations the map does not describe, and the application processors' trampoline page at `0x8000`. |
+
+- **A missed module reservation is the one that fails quietly.** A kernel that
+  forgot its own image or bitmap stops at once; one that forgot the ramdisk
+  mounts it and later reads whatever the allocator has since put there.
+- **Every reservation is by extent**, marking each frame a range touches, so an
+  unaligned module costs a frame and never shares one
+  ([`../storage/INITRD.md`](../storage/INITRD.md)).
+- **The kernel's extent comes from the linker symbols, not the ELF sections
+  tag**, whose addresses for a higher-half kernel are virtual (Section 3.6.7);
+  the tag is parsed only to validate and report it.
+
+## 5. The physical frame allocator
+
+`kernel/mm/pmm.c` is the sole authority on which frames are free: a bitmap of
+one bit per 4 KiB frame below the highest usable address. A bitmap rather than a
+free stack, because initialisation must reserve frames by address, which a stack
+cannot remove from its middle. Frames above the highest usable address are not
+represented: a reserved region QEMU reports at `0xFD00000000` would otherwise
+cost megabytes of bitmap for memory that does not exist.
+
+**Initialisation runs in an order that errs toward withholding:**
+
+1. Every frame is marked unavailable, so memory the map does not attest is never
+   issued.
+2. Usable regions are released, rounded inward, so a frame only partly usable
+   stays withheld.
+3. The reservations of Section 4 are marked, rounded outward, so a partly
+   occupied frame is reserved whole. This must follow step 2 or the release
+   would undo it.
+
+The bitmap is placed by scanning usable regions past the low mebibyte, the image
+and the boot information, in two passes because moving past one obstruction may
+land in the other.
+
+## 6. The kernel paging hierarchy
+
+`PagingInitialise` replaces the boot structures with a hierarchy built from
+allocator frames: root entry 511 alone, a pointer table reaching the image
+window, and a directory whose first entry is a 4 KiB page table for the first
+2 MiB and whose others map 2 MiB pages.
+
+- **Two granularities.** The image lies in the first 2 MiB, and section
+  permissions need pages no larger than the sections; beyond it 2 MiB pages cost
+  511 entries where 4 KiB pages would cost 261,632.
+- **Permissions.** `.text` is read and execute, `.rodata` read only, everything
+  else read-write. Execute-disable needs `IA32_EFER.NXE` and waits for 13.3.
+- **`CR0.WP` is set**, because without it supervisor writes ignore read-only
+  pages (Section 6.15) and the permissions above would be advisory.
+- **Restrictions are applied at the leaf**, because a translation's rights are
+  the conjunction of every level (Section 4.6), and a restrictive intermediate
+  entry would restrict everything beneath it.
+- **The identity mapping is gone the instant CR3 is written**: root entry 0 is
+  never created, the write flushes every non-global translation (Section
+  4.10.4.1), and nothing after `KernelEntryHigh` uses a low address. A structure
+  the processor reads directly, such as the boot GDT, must stay mapped while it
+  may be read, which the kernel's own GDT ensures ([`INTERRUPTS.md`](INTERRUPTS.md)).
+- **The report asks of a translation, not a root entry.** `PagingReport` states
+  whether one mebibyte still translates. Root entry 0 spans 512 GiB and stays
+  present once anything was ever mapped low, since unmapping keeps the
+  intermediate tables, which a later mapping of the region reuses.
+
+## 7. The direct physical map
+
+`0xFFFF800000000000` maps all physical memory below the highest usable address,
+in 2 MiB pages, so `PhysicalToDirect` gives every frame an address. The image
+window covers only its first gibibyte and cannot address a frame above it. The
+window stays, because the kernel is linked in it; one frame is reachable by two
+addresses, and the helpers name which is meant.
+
+The map cannot build itself: `PagingTableAt` reaches paging structures through
+the window until the map is active and through the map afterwards, the switch
+made only after CR3 is written, and `PagingAllocateTable` draws below 1 GiB
+until then.
+
+## 8. The kernel arena
+
+`kernel/mm/vmm.c` issues virtually contiguous ranges of the 32 TiB arena, each
+page backed by an allocator frame. The direct map cannot give contiguity, since
+a frame's address there is fixed by its physical address; the arena maps any
+frames into adjacent pages. Physically contiguous memory, as a bus master
+needs, is not offered.
+
+- **A bump pointer and a free list of 128 released ranges**, sorted and
+  coalesced. The list is an array because the heap draws its pages from here,
+  and a list node taken from the heap would be circular. A range released with
+  the list full is counted and forfeited: address space only, of which there is
+  32 TiB.
+- **A failed allocation unwinds**: pages mapped so far are unmapped, their
+  frames returned and the range restored, so nothing is left half made.
+- **A page count is bounded before it is multiplied.** `page_count * PAGE_SIZE`
+  wraps for a large count: 2³⁸ pages carries the bound past the top of the
+  address space, and 2⁵² pages makes it zero, and either is then admitted. The
+  wrapped arithmetic moves the bump pointer into the user half and corrupts the
+  free list. Every count is therefore refused above the arena's capacity, 2³³
+  pages, so every later product and sum is safe by construction.
+- **A released range must lie wholly within the arena**, tested by subtraction
+  from the arena's end, which cannot wrap. A range that ran above the arena would
+  unmap whatever came to be mapped there.
+
+## 9. The kernel heap
+
+`kernel/mm/heap.c` serves eight size classes, 16 to 2048 bytes, each refilled
+one arena page at a time; larger requests take whole pages.
+
+- **No per-object header.** Every slab is one page-aligned page, so rounding a
+  pointer down finds its slab's header. A header per object would cost
+  200 per cent on the 16-byte class the kernel uses most.
+- **Validation by magic value**: a pointer not from the heap, or a release from
+  a slab with none in use, is reported rather than acted on.
+- **A size that cannot be represented is refused** before the header is added,
+  since `size + header + PAGE_SIZE - 1` wraps near `SIZE_MAX` and would succeed
+  with two pages for a request of nearly the whole address space.
+- **An emptied slab is kept** for its class, the class list being singly linked;
+  consumption follows each class's high-water mark.
+
+## 10. Per-frame reference counting
+
+Every frame has a 16-bit reference count. `FrameAllocate` issues a count of one,
+`FrameReferenceIncrement` adds a holder, and `FrameFree` releases one reference,
+returning the frame only at zero, which is what copy-on-write needs and what
+every earlier caller already did.
+
+- **The table is created after the heap**, from which its 255 KiB (for 512 MiB)
+  is allocated, and it is seeded with one reference for every frame already
+  issued before it is published, so `FrameFree` never sees a live frame at zero.
+  `KernelInitialiseFrameReferences` runs it after the display phase.
+- **An overflow is reported**, not wrapped: a wrapped count frees a frame still
+  in use.
+
+## 11. Copy-on-write
+
+A copy-on-write page has `PAGE_ENTRY_WRITABLE` clear and bit 9 of its entry set,
+a bit the processor ignores (Table 4-19). The clear bit makes the processor
+fault; the set bit says why the page is read-only, distinguishing it from
+constant data.
+
+`PagingResolveCopyOnWriteFault` accepts a fault only on a present, flagged,
+non-writable page: an absent page is a different fault, an unflagged one is
+genuinely read-only, and a writable one would fault again forever. Then:
+
+- **More than one referrer**: a frame is allocated, the contents copied through
+  the direct map, the copy installed writable, and one reference to the original
+  released.
+- **One referrer**: write permission is restored and nothing is copied, which is
+  the whole economy of the scheme.
+
+`PagingInvalidate` removes the stale translation on every processor, by
+interrupt and acknowledgement, because `INVLPG` acts on one (Section 4.10.5); an
+unacknowledged shootdown is fatal, since the frame may otherwise be given away
+while another processor still uses it ([`CONCURRENCY.md`](CONCURRENCY.md)).
+
+## 12. Address-space cloning
+
+`kernel/arch/x86_64/mm/addrspace.c` creates, clones, activates and destroys
+address spaces; `fork` is one clone and one thread ([`PROCESS.md`](PROCESS.md)).
+
+- **Root entries 256 to 511 are shared**, copied from the kernel's hierarchy, so
+  every space has the same kernel page tables: an interrupt finds the kernel
+  wherever it lands, CR3 can change under running C code, and a later kernel
+  mapping appears everywhere. All the kernel's root entries exist before any
+  address space does.
+- **Lower-half tables are duplicated and their frames shared**, one reference
+  added per frame: a clone costs a frame per table, not per page.
+- **A writable page is protected in both spaces.** Protecting only the child
+  would let the parent's writes appear in it, silently. A read-only page is
+  shared unmarked, since a mark would provoke a fault with nothing to restore.
+- **CR3 is rewritten after a clone** of the active space, flushing every
+  translation that still grants write; one write, where invalidating each page
+  would cost without bound.
+- **Destruction** releases one reference per mapped frame and every lower-half
+  table; destroying the active space panics.
+
+## 13. The user address space
+
+| Range | Holds |
+| ----- | ----- |
+| The first page | Never mapped: a null dereference faults. |
+| The image | Where its program headers say, at or above `0x400000`. |
+| One page above the image | A guard, never mapped. |
+| Above it, to the break | The heap, moved by `brk`, bounded at `PROCESS_BREAK_MAXIMUM`. |
+| Below the stack | A guard page. |
+| `0x00006FFFFFFF0000` – `0x0000700000000000` | The stack, sixteen pages. |
+
+- **The guard is a page**, the unit of mapping; anything smaller would share the
+  heap's first page and be writable.
+- **Nothing enforces the gap between heap and stack**, because the break's bound
+  keeps the heap near twenty mebibytes against a stack at 112 TiB. A check for a
+  case that cannot arise cannot be tested; `ProcessSetBreak` is where it goes if
+  the bounds change.
+- **The extents are kept in the process control block**, since an address space
+  is only a hierarchy and cannot say what it maps or why ([`LIBC.md`](LIBC.md)
+  holds the call).
+- **`AddressSpaceUnmapPage` returns the frame it withdrew** rather than freeing
+  it, because only the caller knows whether another space still shares it. The
+  empty page tables it leaves are kept until the space is destroyed, a heap that
+  shrank being one that will grow.
+
+## 14. The growing table
+
+The process, thread, filesystem node, open-file and pipe tables are growing
+tables (`kernel/include/oxys/mm/table.h`, `kernel/mm/table.c`): a directory of up
+to 256 chunks, the first a static array and each further one a zeroed heap
+allocation taken when a claim finds every slot in use.
 
 | Table | Chunk constant | Entries per chunk |
 | ----- | -------------- | ----------------- |
@@ -1101,62 +302,54 @@ is the entry within it.
 | Open files | `VFS_FILE_CHUNK` | 32 |
 | Pipes | `VFS_PIPE_CHUNK` | 8 |
 
-**Chunks never move and are never freed.** A reallocated array would be the
-simpler structure, and it would leave every pointer to a process, a thread or a
-node naming freed memory. Run queues, wait channels, per-processor areas and
-open files all hold such pointers. A chunk stays where it is for the life of the
-machine, so a pointer to an entry is good for as long as the entry is. The cost
-is that memory taken at a peak is kept after it. That is bounded by the peak and
-is the same retention a fixed array of the peak size would have had from boot.
+- **Chunks never move and are never freed**, because run queues, wait channels,
+  per-processor areas and open files hold pointers into these tables; a
+  reallocated array would leave them naming freed memory. Memory taken at a peak
+  is kept, as a fixed table of that size would have been.
+- **The first chunk is static**, so the tables exist before the heap and a file
+  can still be opened when the heap is exhausted; the heap's refusal is a full
+  table, as before.
+- **A zeroed entry is an unused one** in every table, so a new chunk needs no
+  pass over it.
+- **Memory, not the directory, is the limit** in practice: 256 chunks is 16,384
+  processes. Exhaustion is `ENOMEM` from `fork` and `EMFILE` from `open` and
+  `pipe`.
+- **Growth happens on the bootstrap processor only**, because the heap is
+  unsynchronised; elsewhere a full table is refused and the refusal counted.
+- **A chunk is published pointer first, then a compiler barrier, then the
+  count.** x86_64 does not reorder stores, so another processor sees either the
+  old capacity or the new chunk in place.
+- **A walk runs to the capacity at the time**, and `procinfo` answers `EINVAL`
+  beyond it, which is where `ps` and `shutdown` stop.
 
-**The first chunk is static.** Each table is needed before the heap exists, and
-the filesystem layer must still be able to open a file when the heap is
-exhausted, since writing a diagnostic is the commonest reason to want one then.
-The heap is asked only for load beyond the first chunk. When it refuses, the
-claim fails the way a full fixed table did.
+## Verification
 
-**A zeroed entry is an unused one** in every table: `PROCESS_UNUSED` and
-`THREAD_UNUSED` are zero, and a node's `in_use`, an open file's `open` and a
-pipe's `in_use` are false. A grown chunk is therefore empty without a pass over
-it. A table whose unused state was not zero would read a new chunk as entries
-that nobody made.
+The self-tests are in [`../../kernel/test/mm/memory.c`](../../kernel/test/mm/memory.c)
+and, for the tables' users, [`../../kernel/test/storage/vfs.c`](../../kernel/test/storage/vfs.c).
 
-**The directory's 256 chunks are not the limit in practice.** They allow 16,384
-processes and 32,768 threads, far beyond what their kernel stacks and address
-spaces would need in memory. What limits a table is memory, and exhaustion is
-reported as a lack of it: `ENOMEM` from `fork`, `EMFILE` from `open` and `pipe`.
+| Property asserted | The silent failure it would catch |
+| ----------------- | --------------------------------- |
+| Issued frames are page aligned, never twice, never from the low mebibyte or the image; the free count moves correctly; a freed frame is reissued first. | Two owners of one frame; an allocation over the kernel. |
+| The image and the VGA buffer translate to their physical addresses, a low address to nothing; text is not writable and data is. | A hierarchy that maps the wrong frames or grants the wrong rights. |
+| Arena ranges map and unmap; oversized counts (2³³+1, 2³⁸, 2⁵² pages) are refused, the pages in use unchanged, and the next allocation lands inside the arena. | A wrapped bound that moves the bump pointer into the user half. |
+| `KernelAllocate(SIZE_MAX)` and its near neighbours return NULL; a zeroed allocation is zero. | Two pages returned for a request of nearly the address space. |
+| A shared frame survives the release of all but its last reference. | A frame freed while in use, or never freed. |
+| A copy-on-write fault on a shared page copies it, keeps every byte but the one written, clears the flag, and drops one reference; on a sole page it copies nothing; the free count returns to its start. | Sharing never broken, or a leak per fault. |
+| A clone has its own root; the parent's writable page becomes read-only and flagged, its read-only page unflagged; both frames hold two references; writes by either diverge; destroying the child keeps shared frames; the free count returns. | Two spaces sharing memory each believes private; a leak per clone. |
+| A growing table keeps its first entry's address and value when it grows, zeroes the new chunk, refuses the index at its capacity and counts the growth; forty open files and ten pipes are made and used. | Pointers left dangling by growth; a new chunk read as live entries. |
 
-### 16.2 Growth and other processors
+The refusals of `KernelPagesFree` panic and cannot be asserted; the admitting
+direction is, with a multi-page range allocated, written, released, reissued and
+released again, the pages in use returning exactly to their start.
 
-The heap is unsynchronised ([`CONCURRENCY.md`](CONCURRENCY.md)), so
-`GrowingTableGrow` refuses on any processor but the bootstrap one and counts the
-refusal. On an application processor a full table is refused as a fixed one
-was. Nothing that runs there claims slots today except `ThreadAdoptCurrent`,
-which takes one thread per processor at start and does not grow.
+## Limitations
 
-A chunk is published by writing its pointer into the directory, then a compiler
-barrier, then the count. x86_64 does not reorder a store with an earlier store,
-so a reader on another processor sees either the old capacity or the new one
-with its chunk in place. It never sees an index that leads to a null chunk.
-
-A walk of a table runs to its capacity at the time. `procinfo` refuses an index
-at or beyond the capacity with `EINVAL`, so `ps` and `shutdown` walk from 0 until
-they are refused, where they used to walk to a constant of the ABI.
-`SYSCALL_PROCESS_CAPACITY` was withdrawn from the ABI in the same change.
-
-### 16.3 Verification
-
-`KernelVerifyGrowingTable` grows a table of its own from a first chunk of four
-and asserts:
-
-- that the first entry keeps its address and value;
-- that the grown chunk is zeroed;
-- that an index at the new capacity is refused;
-- that the growth is counted.
-
-The filesystem self-test then opens eight files more than `VFS_FILE_CHUNK` and
-makes two pipes more than `VFS_PIPE_CHUNK`. It reads through the last descriptor,
-carries bytes through the last pipe, and closes them all. A growth that handed
-out an entry beyond the table, or one already in use, would fail there. The
-reports of `ProcessReport`, the filesystem layer and the pipes give each table's
-capacity, chunks, growths and refusals.
+1. No execute-disable, SMEP or SMAP until 13.3.
+2. Copy-on-write and cloning support 4 KiB pages only; a large page in the
+   lower half is refused.
+3. Cloning is not yet done under the address space's lock, there being one
+   user thread of control ([`CONCURRENCY.md`](CONCURRENCY.md)).
+4. An emptied heap slab is not returned to the arena.
+5. A range released to a full free list forfeits its address space.
+6. Intermediate page tables are never reclaimed while their address space lives.
+7. A table grows only on the bootstrap processor.

@@ -42,7 +42,7 @@ void KernelInitialiseMemory(void)
 
 /*
  * Per-frame reference counting, which the heap must exist for
- * (docs/design/MEMORY-LAYOUT.md, Section 12.2). KernelMain calls it after the
+ * (docs/design/MEMORY-LAYOUT.md, Section 10). KernelMain calls it after the
  * display phase, the position it has always held in the boot, and the seeding
  * counts every frame issued until then, the display's included.
  */

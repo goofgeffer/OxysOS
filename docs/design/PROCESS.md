@@ -2,1074 +2,306 @@
 <!-- SPDX-License-Identifier: CC0-1.0 -->
 # The Process
 
-**Phase**: 6, sub-tasks 6.9, 6.10 and 6.11, of
-[`../project/PLAN.md`](../project/PLAN.md). Sections 1 to 8 are 6.9, which
-defines the structures; Sections 9 and 10 are 6.10, which switches to them and
-descends to privilege level 3; Sections 11 to 16 are 6.11, which gives a program
-the four calls by which it governs another. **Section 10.2 is sub-task 7.5 and
-Section 10.2.1 is sub-task 7.6**, and they are
-here rather than in [`LIBC.md`](LIBC.md) because it is the kernel's half of a
-contract that document holds the other half of: what stands upon a stack before a
-program's first instruction. **Section 14 is amended by sub-task 7.6**, which is
-where `execve` stopped refusing the two vectors and began closing the
-descriptors a replaced program held. **Section 17 is sub-task 8.6**, where a
-child of `fork` first ran beside its parent rather than inside its `wait`;
-**Section 18 is sub-task 8.7**, the signals, the process groups and `waitpid`.
-
-**Authority**: `PROJECT_GUIDELINES.md`, Sections 2, 3 and 6.
-
-**Specifications**: Intel 64 and IA-32 Architectures Software Developer's Manual,
-Volume 3A, "IRETQ" and Section 6.12 (the return to an outer privilege level);
-System V Application Binary Interface, AMD64 supplement, Section 3.4.1 (the
-initial process stack and the register state at process entry), which Section
-10.2 implements the kernel's half of.
-
-**Implementation**: [`../../kernel/proc/process.c`](../../kernel/proc/process.c),
+**Phase**: sub-tasks 6.9 to 6.11, 7.5, 7.6, 8.5 to 8.7 and 9.3 of
+[`../project/PLAN.md`](../project/PLAN.md).
+**Source**: [`../../kernel/proc/process.c`](../../kernel/proc/process.c),
+[`../../kernel/proc/signal.c`](../../kernel/proc/signal.c),
 [`../../kernel/arch/x86_64/proc/switch.asm`](../../kernel/arch/x86_64/proc/switch.asm),
-[`../../kernel/include/oxys/proc/process.h`](../../kernel/include/oxys/proc/process.h).
-The dispatch and the validation of a caller's arguments are
-[`../../kernel/arch/x86_64/syscall/syscall.c`](../../kernel/arch/x86_64/syscall/syscall.c), whose design is
-[`PRIVILEGE.md`](PRIVILEGE.md).
+[`../../kernel/arch/x86_64/syscall/sigframe.c`](../../kernel/arch/x86_64/syscall/sigframe.c),
+[`../../kernel/include/oxys/proc/process.h`](../../kernel/include/oxys/proc/process.h),
+[`../../kernel/include/oxys/proc/signal.h`](../../kernel/include/oxys/proc/signal.h).
+**Specifications**: Intel SDM, Volume 3A, "IRETQ" and Section 6.12; System V
+ABI, AMD64 supplement, Section 3.4.1 (the initial process stack); IEEE Std
+1003.1-2017, `fork`, `execve`, `_exit`, `waitpid`, `kill`, `sigaction`, and
+Sections 2.4.1 and 2.4.3 (signal generation and default actions).
 
-## 1. What this sub-task is, and what it is not
+The structures a running program is held in and the calls by which programs
+make, replace, end and signal one another: processes and threads, their stacks,
+the context switch, the descent to privilege level 3 and the ways back, `fork`,
+`execve`, `exit`, `wait` and `waitpid`, and signals and process groups. The
+system-call dispatch and argument validation are [`PRIVILEGE.md`](PRIVILEGE.md);
+the scheduler is [`SCHEDULER.md`](SCHEDULER.md).
 
-It defines the structures a running program is held in, the tables that hold
-them, and the allocations each is given. It creates a process with an address
-space of its own and a thread with a kernel stack of its own.
+## 1. Processes and threads
 
-**Sub-task 6.9 ran nothing.** No context was restored, no address space made
-active, and no thread had executed an instruction; that is what Sections 1 to 8
-describe. Sub-task 6.10 is Sections 9 and 10, and a program has now run.
+A process holds an address space, an identifier, its parent's identifier, a
+group, a descriptor table, a pending signal set and its dispositions, and the
+extents of its image, stack and heap. A thread holds a saved context and a
+kernel stack. Both are entries of growing tables
+([`MEMORY-LAYOUT.md`](MEMORY-LAYOUT.md), Section 14).
 
-The division is deliberate rather than tidy. A structure that has never been
-switched to is one whose shape can still be argued about; one that has is a
-structure with assembly written against its offsets. Getting the shape settled
-first is cheaper than getting it settled afterwards.
+- **A thread is a structure of its own because its kernel stack must be.** Two
+  threads of one process share every page, but if they shared the stack the
+  kernel is entered on, a system call by one would build its frame on the stack
+  the other was using and return into it: kernel state corrupted by threads that
+  never touched each other's memory.
+- **Identifiers are numbers, never reused, and slots are.** A parent records its
+  child by number, so a parent that outlives its child finds nobody rather than
+  whoever took the slot next; a pointer or an index would name the wrong process
+  convincingly, and signalling the wrong process is how a program kills an
+  unrelated one.
+- **The extents live in the process control block**, because an address space
+  is only a paging hierarchy and cannot say what it maps or why.
 
-## 2. Three promises this sub-task was made
+## 2. Stacks and the heap
 
-| Promised in | Promise |
-| ----------- | ------- |
-| [`PRIVILEGE.md`](PRIVILEGE.md), limitation 4 | Each thread takes a kernel stack from the arena **with a guard page beneath it** |
-| [`PRIVILEGE.md`](PRIVILEGE.md), limitation 6 | `rsp0` is written when a thread becomes current; `TssSetKernelStack` has existed and been uncalled since 6.1 for that moment |
-| [`MEMORY-LAYOUT.md`](MEMORY-LAYOUT.md), limitation 2 | An address space has no record of its own extent, and the process control block is where that record belongs |
+**The kernel stack** is five arena pages: four of stack and a guard beneath it,
+left **mapped read-only**. An overflow is a write, and a write to a read-only
+page faults; an unmapped guard could not be released, `KernelPagesFree` treating
+an unmapped page in a range as a lost mapping. The stack pointer begins one past
+the last byte, since a push decrements before it writes.
 
-All three are kept, and a fourth from
-[`EXECUTABLE.md`](EXECUTABLE.md) — that the process is what knows how large a
-user stack should be — is kept with `ProcessCreateUserStack`.
+**The user stack** is sixteen zeroed pages below `PROCESS_USER_STACK_TOP`, with
+an **unmapped** guard below, which costs nothing in an address space and catches
+reads as well as writes. It is at the far end of the lower half so that it
+cannot grow into the program's data. The pages are zeroed because a frame holds
+whatever its last owner left, and the stack is the first thing a program reads.
 
-## 3. Why a thread is a structure of its own
+**The break** is the heap's extent, `break_start` fixed when the image is loaded
+and `break_current` moved only by `brk`:
 
-Two threads of one process share every page of memory. They must not share the
-stack the kernel is entered upon.
+- **It is re-established whenever the image changes**, at load and at `execve`,
+  since a break carried across an `execve` could lie inside the new program's
+  `.bss`.
+- **A process with no image has no heap**, since one derived from an image end
+  of zero would sit in the unmapped first page.
+- **A forked child inherits both bounds**, since its heap pages were cloned; a
+  child with its parent's data but an empty break would map fresh frames over
+  pages it still used.
 
-If they did, a system call made by one would build its frame upon the stack the
-other was using, and would return into it. That is a corruption of the kernel's
-own state by two threads that never touched each other's memory — and it is
-invisible, every byte involved being one something meant to write.
+## 3. The context switch
 
-The kernel stack therefore belongs to the **thread** and not to the processor,
-and that single fact is the whole reason this structure exists separately from
-the process.
+`ThreadSwitchContext` is an ordinary function call, so the System V convention
+has already saved everything the compiler wanted: **a context is six registers
+and a stack pointer** (`RBX`, `RBP`, `R12` to `R15`, `RSP`). The instruction
+pointer is the return address on the stack. One context format serves every
+switch; an interrupt-driven switch would need all registers and a second format.
 
-## 4. What a context holds, and what it does not
+**A thread that has never run is given a return address and nothing else**,
+into `ThreadTrampoline`, since the switch keeps the six registers in the context
+structure rather than popping them. A quadword of padding above it leaves the
+stack as an ordinary call would, eight modulo sixteen at entry, which the
+compiler is entitled to assume.
 
-Six registers and a stack pointer: `RBX`, `RBP`, `R12` to `R15`, and `RSP`.
+`ThreadSwitchTo` also carries the per-processor interrupt state (the critical
+depth and the saved interrupt flag) out of the outgoing thread and into the
+incoming one: a thread sleeps inside its own masked section and is resumed by
+whichever thread switched next, whose state would otherwise enable interrupts
+inside a system call ([`CONCURRENCY.md`](CONCURRENCY.md)).
 
-The System V convention provides that those six are preserved across a call, so a
-switch performed **as an ordinary function call** — which is what sub-task 6.10
-will do — need save no others: the compiler has already spilled anything else it
-cared about at the call site.
+## 4. The descent to privilege level 3
 
-**The instruction pointer is not among them**, and that is not an omission. A
-switch that returns to its caller resumes at the return address upon the stack,
-so the stack pointer carries the instruction pointer with it. A thread that has
-never run has no such address, which is what `entry` is for — and putting one
-there is 6.10's, because 6.10 is what will know what a thread should return
-*into*.
+`ThreadEnterUser` clears every register, because what is left in one is a
+kernel address as often as not, and a program that printed it would disclose it
+with no fault to report. Then `IRETQ`, which unlike a far return also loads
+`RFLAGS`, pops:
 
-## 5. The allocations
+| Value | Why |
+| ----- | --- |
+| `SS`: user data selector, RPL 3 | RPL 3 makes it a return to an outer level; without it the program runs in the kernel. |
+| `RSP`: 48 bytes below the stack's top | Where the ABI's initial frame stands (below). |
+| `RFLAGS`: `0x202` | The interrupt flag, so the program can be pre-empted; bit 1 is architecturally one. |
+| `CS`: user code selector, RPL 3 | As `SS`. |
+| `RIP`: the image's entry point | |
 
-### 5.1 The kernel stack, and its guard
+**The initial stack is the ABI's** (Section 3.4.1): the argument count at the
+stack pointer, the argument pointers, a null, the environment pointers, a null,
+and an auxiliary vector ending in a null entry, with the stack pointer 16-byte
+aligned. `ProcessLayOutArguments` builds it downward: the strings at the top,
+then the vectors naming them, then the count, the pointer aligned after the frame
+is sized. It writes through the direct map of the stack's own frames, since the
+space being filled is usually not the active one. A process with no arguments
+gets the same frame of zeroes, 48 bytes rather than 40 so that it is aligned: a
+misaligned entry faults in the first aligned move of code the program did not
+write ([`LIBC.md`](LIBC.md)).
 
-Five pages from the arena: four of stack and one of guard beneath it.
+## 5. The ways back into the kernel
 
-The guard is left **mapped and read-only** rather than unmapped, and that is a
-decision. `KernelPagesFree` panics upon an unmapped page within a range it is
-releasing — deliberately, an unmapped page there meaning the caller has lost
-track of what it owns — so a guard that was unmapped could not be given back
-without first putting a frame under it. A read-only guard catches what an
-overflow actually does: a push is a write, and a write to a read-only page
-faults.
+| Way | What happens |
+| --- | ------------ |
+| A system call | Returned by `SYSRET` ([`PRIVILEGE.md`](PRIVILEGE.md)). |
+| An interrupt, including the timer | Returned by `IRETQ`; the timer may switch to another thread ([`SCHEDULER.md`](SCHEDULER.md)). |
+| A fault | The program is ended, reported as the signal its vector maps to (Section 9), and its parent collects it. |
+| `exit` | The program is ended with the status it chose. |
 
-The one thing it does not catch is a *read* below the stack, which is not what an
-overflow is.
+## 6. What a transition owes
 
-Before this sub-task there was one kernel stack, and its overflow ran into the
-`.bss` below — which happened to be the double-fault stack, so the overflow was
-caught by the double fault. `PRIVILEGE.md` recorded that as "an accident of
-placement and not a design", and with a stack per thread the accident stops
-holding: the stacks are numerous and what lies below one is another one.
+Two pieces of machine state are **written at every transition** rather than left
+to history, because a thread resumed can have entered the kernel either way.
 
-**The top is one past the last byte.** A stack pointer begins there because the
-first push decrements it and then writes; a top set to the last byte would have
-the first push write one byte beyond the reservation.
+- **The `GS` bases are written, not exchanged.** `SWAPGS` exchanges the kernel
+  and user values, so which one `GS.base` holds depends on how the kernel was
+  entered. `SyscallEstablishKernelGsBase` writes it where a thread resumes and
+  `SyscallEstablishUserGsBase` where one departs. Exchanging would, after a child
+  that ended by faulting, hand the per-processor block to privilege level 3 and
+  leave the next `SYSCALL` looking for its stack at address 8.
+- **The kernel stack is recorded twice** and both copies follow the current
+  thread. `SYSCALL` switches no stack, so its entry path reads the stack from
+  the per-processor area rather than `rsp0`; `ThreadSetCurrent` writes both.
+  With one copy stale, a child's system call builds its frame over a parent
+  suspended in `wait`, and the parent returns through the child's registers.
 
-### 5.2 The user stack
+## 7. `fork` and `execve`
 
-Sixteen pages immediately below `PROCESS_USER_STACK_TOP`, growing downward, with
-the page beneath left **unmapped**.
+**`fork`** clones the address space by copy-on-write
+([`MEMORY-LAYOUT.md`](MEMORY-LAYOUT.md)), copies the parent's saved system-call
+frame into the child's thread with `RAX` zero, and admits the child to the run
+queue with its stack prepared for the trampoline. The child runs when the parent
+sleeps or is pre-empted, and runs even if the parent never waits.
 
-Unlike the kernel stack's guard this one may be a hole, because a hole in an
-address space costs nothing — and a hole catches a read as well as a write.
+- **The child keeps its parent's registers**, not cleared as a new program's
+  are: the convention entitles code after a call to find `RBX`, `RBP` and `R12`
+  to `R15` unchanged, and every value is one the parent already held at
+  privilege level 3.
+- **It leaves the kernel by `ThreadResumeUser` and `IRETQ`**, restoring the
+  whole frame, because `SYSRET` takes its return address and flags from `RCX`
+  and `R11`, which nothing loaded for a thread reached by a switch.
+- **The child inherits its parent's descriptors, group and dispositions.**
 
-It is placed at the far end of the address space rather than after the program's
-own segments because the two must not meet. A stack growing into a program's data
-corrupts it silently; putting the stack at the far end makes the gap between them
-the size of the address space.
+**`execve`** builds the new program entire before touching the old: a fresh
+address space with the image loaded from its path, and only then the exchange.
 
-Every page is zeroed, for the reason [`EXECUTABLE.md`](EXECUTABLE.md), Section
-5.3 gives: a frame arrives holding whatever its last owner left in it, and a
-stack is the first thing a program reads.
+- **Arguments and environment are copied out of the caller before anything is
+  destroyed**, into a `ProcessArguments` on the kernel stack, since the strings
+  stand in the address space about to go. Both bounds of the ABI are enforced
+  before the point of no return, so a program that exceeds one keeps running.
+- **The new space is activated before the old is released**, because the space
+  the processor translates through cannot be dismantled; the kernel half is the
+  same in both.
+- **Refusals are distinguished**: a path that leads nowhere and an image the
+  loader refuses are `ENOENT`, a frame that could not be had is `ENOMEM`, so a
+  program is not sent looking for a missing file when memory ran out. Past the
+  point of no return a failure ends the process with a status saying which.
+- **Descriptors are kept**, as IEEE Std 1003.1-2017 has it without
+  close-on-exec, which is how the shell's redirections reach a program; handlers
+  are reset to the default and ignores kept; the process takes the program's
+  name, the last component of its path.
 
-### 5.3 The heap
+## 8. Ending and collecting
 
-Sub-task 7.3 gave the process control block a third extent beside the image and
-the stack: **the break**, being the address one past the last byte of the region
-a program may use for a heap, and the address at which that region begins.
+**What a process held is given back at its ending**, in `ThreadTerminateCurrent`,
+not when it is collected: its descriptors, so a pipeline that finished in the
+background delivers its end of file at once; its windows; and its children,
+given to `init` by `ProcessAdoptOrphansOf`, which is woken if one of them has
+already ended ([`INIT.md`](INIT.md)). The parent is woken on its own process as
+the channel and sent SIGCHLD.
 
-It is recorded here and not in the address space for the reason the other two
-are — an address space is a paging hierarchy and cannot say what it maps or why —
-and it differs from both in that a *program* decides it. `break_start` is fixed
-when the image is loaded and never moves; `break_current` is what the program has
-asked for, and `SYSCALL_BRK` is the only thing that changes it.
+**`wait` and `waitpid`** (`ProcessWaitFor`) choose one child by identifier, any
+child, or any of a group:
 
-Three consequences fall to this file rather than to the call:
+- **An ended child is preferred** over a running one, so children are collected
+  as they finish.
+- **The caller's buffer is validated before anything is collected**, since a
+  status produced with nowhere to go would lose the child's outcome for good.
+- **The validation resolves a copy-on-write fault** on the page it will write,
+  since `wait`'s status often lands in a page the fork just made read-only;
+  refusing would fail for a reason the caller cannot see or correct.
+- **`SYSCALL_WAIT_NO_HANG`** returns 0 where nothing has ended;
+  **`SYSCALL_WAIT_UNTRACED`** reports a stopped child once per stop, without
+  collecting it.
+- **The status is encoded**: a kind in bits 8 to 15 (exited, signalled,
+  stopped) and a number in bits 0 to 7, the code or the signal. `exit_status`
+  keeps the full quadword for the self-tests.
+- **It sleeps on the caller's own process.** The kernel's own flow of control,
+  which cannot sleep, instead starts the child by `ThreadStart` and returns when
+  it ends, which is also what a machine without a calibrated timer uses.
 
-- **`ProcessEstablishBreak` is called whenever the image changes and at no other
-  time** — once when a program is loaded and again when `execve` replaces it. A
-  break carried across an `execve` names an address derived from a program that
-  no longer exists, and the new image being smaller, that address may lie within
-  the new program's own `.bss`.
-- **A process with no image gets no heap.** Deriving one from an `image_highest`
-  of zero would place the break in the lowest page of the address space, which is
-  the page deliberately left unmapped so that a null pointer dereference faults.
-- **A forked child inherits both bounds and not merely the first.** The pages
-  between them were cloned like any other, so copying only `break_start` would
-  leave a child whose heap holds its parent's data and whose break says it holds
-  nothing — after which the child's first growth maps a fresh frame over a page
-  it was still using.
+The identifier returned names nobody by the time the caller sees it; the slot,
+threads and address space are already released.
 
-The placement and the guard page beneath it are
-[`MEMORY-LAYOUT.md`](MEMORY-LAYOUT.md); the call itself is
-[`LIBC.md`](LIBC.md).
+## 9. Signals and process groups
 
-## 6. Identifiers are numbers, not indices
+**A signal is a pending bit, set by the sender and acted on by the target**, on
+its next way out of the kernel, the one moment all its registers stand in a
+frame the kernel can edit. A sender never touches the target's frame; where the
+target sleeps in a call, it is woken, the call re-tests its condition, finds the
+signal, and reports `EINTR`.
 
-A slot in a table is reused the moment its occupant is destroyed. An identifier
-never is.
+- **Delivery takes the lowest pending signal** and acts by its disposition:
+  ignore, the standard's default (terminate; ignore for SIGCHLD; stop for
+  SIGSTOP, SIGTSTP, SIGTTIN and SIGTTOU; continue for SIGCONT), or a handler.
+- **A signal that would do nothing is discarded at generation**: an ignored one,
+  an unrequested SIGCHLD, a SIGCONT to a running process. A sleeping call is
+  never woken for nothing.
+- **SIGKILL and SIGSTOP cannot be caught or ignored**; a stop discards a pending
+  SIGCONT and SIGCONT a pending stop (Section 2.4.1).
+- **The numbers are the x86 System V and Linux ones**, so `kill -9` means what a
+  person expects, and a fault is reported as SIGSEGV, SIGILL, SIGFPE, SIGBUS or
+  SIGTRAP by its vector.
 
-A parent therefore records its child **by number**, so that a parent outliving
-its child finds nobody rather than finding whoever was given that slot next. A
-pointer, or an index, would name the wrong process convincingly — and acting upon
-the wrong process is how a program kills an unrelated one.
+**Stopping** marks the process stopped, wakes and signals the parent, and sleeps
+on its own `stop_channel` until SIGCONT; only SIGKILL and SIGCONT reach it
+meanwhile, the rest waiting until it continues.
 
-## 7. Verification
+**Groups.** Every process is in a group, the identifier of its leader; a child
+begins in its parent's, `setpgid` moves oneself or a child, and `kill` with a
+negative identifier reaches every member. The terminal's foreground group
+receives control-C and control-Z, and a member of another group that reads the
+terminal is stopped by SIGTTIN inside the `read`, which retries when continued.
+The foreground group is cleared when its last member ends.
+
+**A handler runs on the program's own stack**, below the ABI's 128-byte red
+zone, aligned as a call, with the signal number in `RDI` and the C library's
+restorer as its return address. The restorer calls `sigreturn`, which puts back
+the whole interrupted context from a `SignalContext` above the return address.
+
+- **One delivery serves both frames** a program's registers can stand in, the
+  `SyscallFrame` of a system call and the `TrapFrame` of an interrupt, through
+  two small adapters to one register set.
+- **The flags a program hands back are masked**: only the status flags, `DF`
+  and `TF` are taken, `IF` is forced set, and an instruction pointer above the
+  user limit is refused, since `SYSRET` loads what it is given.
+- **A call a signal interrupted is restarted** where no handler ran (ignored, or
+  stopped and continued): the instruction pointer moves back to the `SYSCALL` and
+  `RAX` back to the number, so `cat` stopped by control-Z reads on after `fg`. A
+  handler that ran leaves `EINTR` to the program.
+
+## 10. Threads started by the kernel
+
+`ThreadStart` runs a thread by a call and returns when it ends, recording the
+caller in the started thread's own `return_to`: right for a program the kernel
+waits for. `ThreadLaunch` admits a thread to the scheduler with nothing to
+return to, so the kernel can start the desktop and the shell side by side. A
+launched process has no parent and is `init`'s when it ends. `ThreadDestroy`
+clears every `return_to` naming the thread destroyed, since returning through a
+released slot resumes on a stack the arena has given to someone else, silently.
+
+## Verification
+
+The self-tests are [`../../kernel/test/proc/process.c`](../../kernel/test/proc/process.c),
+[`../../kernel/test/arch/usermode.c`](../../kernel/test/arch/usermode.c),
+[`../../kernel/test/proc/lifecycle.c`](../../kernel/test/proc/lifecycle.c) and
+[`../../kernel/test/proc/signal.c`](../../kernel/test/proc/signal.c), with the
+programs `signal-check`, `env-check` and `dir-check` and the shell's sessions.
 
 | Property asserted | The silent failure it would catch |
 | ----------------- | --------------------------------- |
-| A process is given an address space, and two processes are not given the same one | Two programs writing over one another with every appearance of isolation |
-| A child records its parent, and by number | Section 6 |
-| A thread knows its process and the process records the thread | A thread destroyed without its owner knowing, leaving a pointer to a released slot |
-| A thread's stack pointer begins at the top of its stack, and the top is the end of the reservation | Section 5.1: a first push one byte beyond the stack |
-| The page beneath a thread's stack is **not writable** | Section 5.1: an overflow that runs into whatever is below rather than faulting |
-| The first page of the stack **is** writable | The other half. A guard covering the stack itself is a thread that faults upon its first push |
-| Two threads of one process have different stacks | Section 3: a system call made by one returning into the other |
-| Making a thread current points `rsp0` at its stack, and following it | The promise of `PRIVILEGE.md` limitation 6. A thread entered while `rsp0` names another thread's stack takes its first interrupt onto a stack somebody else is using |
-| A user stack is placed where it belongs and given once | A second stack mapped over the first, losing whatever the process had pushed |
-| Destroying a process destroys its threads | A thread with a pointer to a slot that no longer describes anything |
-| A destroyed thread is no longer the current one | `rsp0` naming a stack that has gone back to the arena |
-| **The arena returns to what it held** | A leak of four pages a thread, which is a kernel that runs out of address space after a few thousand programs |
-| A new process does not take a destroyed one's identifier | Section 6 |
-
-The arena measurement is the one that catches the widest class of fault. Every
-other assertion here is about a field; that one is about whether the whole
-sequence of allocations and releases balanced.
-
-**One guard here is not asserted, and is recorded as unasserted.** `ThreadDestroy`
-clears `ProcessCurrentThread` where it named the thread being destroyed, and the
-table above asserts that. It did not clear `ProcessReturnThread`, which
-sub-task 6.10 introduced beside it and which is worse to leave dangling:
-`ThreadTerminateCurrent` switches to whatever it names, so a destroyed thread
-there means loading a stack pointer out of a released slot's context and resuming
-upon a kernel stack the arena has since given to somebody else — which does not
-fault, but continues, wrongly, with nothing to indicate that anything happened.
-The review after 6.10 added the clearing. Asserting it would need an accessor for
-a variable that has no other reader, and the mechanism cannot be reached at all
-while there is one thread of control (limitation 3); it becomes assertable, and
-must be asserted, when something makes more than one
-program's death possible.
-
-## 9. The switch
-
-### 9.1 Why it is a function call
-
-A switch performed by an ordinary call inherits the calling convention's promise:
-the compiler has already saved whatever it wanted to keep across the call, so
-**six registers and a stack pointer are the whole of a context**.
-
-A switch performed from an interrupt would have to save every register, the
-interrupted code having made no such promise — and would then need a second,
-different context format for threads switched voluntarily. One format is better
-than two, and the voluntary switch is the one that happens most.
-
-The instruction pointer is not saved. The call put a return address upon the
-stack, so saving the stack pointer saves the return address with it, and
-switching back returns through it.
-
-### 9.2 The prepared frame, and the fault it caused
-
-A thread that has never run has no history upon its stack, so one is fabricated:
-the stack is given **a return address and nothing else**, and the switch's `RET`
-takes it.
-
-Nothing else, and that is the whole of what went wrong first. The frame was
-prepared with six saved registers beneath the return address, in the belief that
-the switch popped them — and it does not: it keeps them in the context structure
-and moves them with loads and stores. The `RET` therefore took the lowest of the
-six zeroes, and the machine faulted at an instruction pointer of zero with a
-stack pointer that was perfectly valid. The trace said `IP=0000000000000000` and
-nothing else, which is as little as a fault can say.
-
-The frame also carries a quadword of padding above the return address, so that
-the address sits sixteen bytes below the top rather than eight. A function
-entered by an ordinary call finds the stack pointer eight modulo sixteen, the
-call having pushed eight bytes onto a boundary; a thread entered with the other
-alignment is one the compiler is entitled to assume it is not.
-
-## 10. The descent to privilege level 3
-
-`IRETQ` is the instruction that can do it. A far return could too, but `IRETQ` is
-the one that also loads `RFLAGS`, and the flags a program starts with are part of
-the state it is entitled to.
-
-Five quadwords, pushed in the reverse of the order the instruction pops them:
-
-| Pushed | Value | Why |
-| ------ | ----- | --- |
-| `SS` | The user data selector, **RPL 3** | The requested privilege level is what makes this a return to an outer level; without it the return is same-privilege and the program runs in the kernel |
-| `RSP` | What `ProcessCreateUserStack` returned: forty-eight bytes below the top of the stack, where the initial process frame of the System V ABI stands. Section 10.2 |
-| `RFLAGS` | `0x202` | The interrupt flag, because a program that could not be interrupted could not be pre-empted and would own the machine. Bit 1 is written because the architecture reserves it as one — though the processor forces it whether or not it is written, which was established by clearing it and observing that nothing changed. It is there for the reader |
-| `CS` | The user code selector, **RPL 3** | As `SS` |
-| `RIP` | The image's entry point | |
-
-**Every register is cleared first.** What is left in a register at that moment is
-a kernel address as often as not, and handing one to a program that then prints
-it is a disclosure no fault would report.
-
-
-### 10.2 What stands upon the stack
-
-The table above says `RSP` is "the top of the process's user stack", and until
-sub-task 7.5 it was — which is one byte past the last mapped byte.
-
-Every program before that sub-task was composed instruction by instruction by
-`kernel/test/program.c` and never read its own stack, so nothing noticed. The
-System V Application Binary Interface, AMD64 supplement, Section 3.4.1, "Stack
-State", puts **the argument count at the stack pointer**, the argument pointers
-at `8+%rsp`, the null pointer ending them at `8+8*argc+%rsp`, the environment
-pointers after those, a null pointer ending them, and the auxiliary vector ending
-with a null entry; and it guarantees that `%rsp` "is 16-byte aligned at process
-entry". The first conforming `_start` reads the argument count and faults.
-
-`ProcessCreateUserStack` therefore returns forty-eight bytes below the top, and
-that subtraction is the whole of the change. This kernel's `execve` accepts
-neither vector, so every eightbyte the ABI names is zero — and a stack's pages
-are already zeroed, for the disclosure reason above — so the frame is already
-standing and only the room for it was missing.
-
-Forty-eight and not forty, which is what five eightbytes would be: a page-aligned
-top less forty is not sixteen-byte aligned, and the sixth eightbyte of padding
-makes it so. A program entered upon a misaligned stack faults at the first
-instruction using an aligned move, inside a function the program did not write.
-
-**The frame is built for every program**, including the ones composed by hand
-that will never read it. A contract that depended upon what the kernel guessed
-about its caller would not be one.
-
-[`LIBC.md`](LIBC.md) records the rest, including an earlier
-version of this that wrote the six zeroes explicitly and was deleted when a
-negative test showed the write could not be observed.
-
-### 10.2.1 What stands upon it since sub-task 7.6
-
-The frame above is what a program with no arguments finds, and it is still what
-such a program finds — a process the kernel creates for its own purposes has no
-vectors, and the composed programs of Phase 6 never read one.
-
-Where there *are* arguments, `ProcessLayOutArguments` writes them: the strings at
-the top of the stack, the two vectors of pointers below them in the order Section
-3.4.1 fixes, the auxiliary vector's single null entry, and the argument count at
-the address the program is entered upon. The layout is built downward, because
-the pointers must name addresses the strings already occupy; the stack pointer is
-aligned to sixteen after the frame is sized and not before, the information
-block ending wherever the last string ended; and the writes go through the direct
-map of the frames the mapping loop above already held, because the paging layer
-offers no walk of an address space that is not the active one and the space being
-filled very often is not. [`LIBC.md`](LIBC.md) holds the whole of
-it and the reasoning for each part.
-
-**This is also where a process acquires its descriptor table**, which is emptied
-at creation and is a field of the process control block rather than of the
-address space: a descriptor outlives an `execve` in every system that has one,
-and since sub-task 8.5 in this one too — Section 14. [`LIBC.md`](LIBC.md).
-### 10.1 How the kernel gets back
-
-Three ways, and this sub-task implements two of them.
-
-A program that **faults** is ended. The dispositions of sub-task 6.4 already
-classified a fault at privilege level 3 as belonging to the program rather than
-to the machine, and `ExceptionTerminateProgram` has said so since — and then
-panicked, because there was nothing to terminate and nowhere to return to. There
-is now: the program's thread is abandoned and whoever started it resumes.
-
-A program that makes a **system call** is returned to it by `SYSRET`, which is
-sub-task 6.7's path and needed nothing new here.
-
-A program that is **pre-empted** is not yet, there being no scheduler. That is
-sub-task 6.15.
-
-### 10.2 What running one proves
-
-The self-test composes a program of twenty-nine bytes, wraps it in an ELF image,
-loads it with the loader of sub-task 6.8 into an address space made by 6.9, and
-enters it. The program writes a string through a system call and then executes an
-undefined instruction, which is a fault that belongs to it.
-
-Both halves are needed. A program that only wrote might have been simulated by
-the kernel; one that only faulted might never have executed an instruction of its
-own. Together they say it ran, called, was returned to, and ran again.
-
-The trace the fault produces is the evidence, and every field of it is checked by
-eye at least once:
-
-```
-  vector 6: #UD Invalid Opcode
-  RIP 0x40101B  CS 0x2B  RFLAGS 0x202
-  RSP 0x700000000000  SS 0x23
-  RAX 0x48  RCX 0x40101B  RDX 0x48  RSI 0x402000  RDI 0x1  R11 0x202
-```
-
-`CS` of `2B` is the user code selector with a requested privilege level of 3, and
-`SS` of `23` the user data selector likewise: the program was at privilege level
-3 and not merely at an address a program would use. `RIP` is the twenty-eighth
-byte of the text, so every instruction before the fault was executed. `RSP` is
-the top of the stack the process was given. `RAX` of `48` is seventy-two, the
-length the write returned — **the system call's result, in the program's own
-register**. And `RCX` holding the return address with `R11` holding the flags is
-`SYSRET` having done exactly what sub-task 6.7 said it would.
-
-### 10.3 Verification
-
-| Property asserted | The silent failure it would catch |
-| ----------------- | --------------------------------- |
-| A second kernel thread runs, once, and the first resumes after the switch | A switch that restored the incoming thread and lost the outgoing one never reaches the line after itself |
-| The thread that resumes is the one switched away from | — |
-| A system call arrived while the program ran | Section 10.2: the program executed instructions of its own rather than merely having been loaded |
-| The program ended, and its process is marked ended | The termination path of Section 10.1 |
-| **The exit status is −6** | The vector the program faulted upon, negated. Six is the undefined instruction it executed on purpose, so this says the program reached its *last* instruction and not merely its first — and it is what caught the address space not being switched, which faulted at the entry with vector 14 instead |
-
-## 11. The four calls
-
-Until this sub-task a program could be started and could stop. It could not make
-another program, could not become another program, and could not say that it had
-finished — the only ways out of privilege level 3 being a fault and a system call
-that returned. `fork`, `execve`, `exit` and `wait` are what close that, and they
-are numbered 3 to 6 after the three calls that already existed.
-
-**They are numbered after and not among.** A number handed to a program is a
-number that must not change: `write` is call zero and is assembled as such by
-hand in the self-test of sub-task 6.10, so a renumbering to put the four in a
-tidier order would silently make every program written before this sub-task call
-something else.
-
-The four are implemented in `process.c` and not beside the dispatch table,
-because none of them is a system call in substance. Each is an operation upon the
-process table and the thread table; `syscall.c` copies a string, validates an
-address, and names one of them.
-
-## 12. The state a transition owes
-
-Two things describe the machine rather than the thread, and both had to be made
-explicit before a program could start another one. Neither was wrong before, and
-both were wrong the moment two programs existed at once — which is the shape of
-this whole sub-task's difficulty.
-
-### 12.1 The segment bases, written rather than exchanged
-
-`GS.base` holds the per-processor block inside the kernel and the program's own
-value outside it, and `SWAPGS` moves between the two by **exchanging** them.
-Which of the two `GS.base` holds therefore depends upon *how the kernel was
-entered*:
-
-| Entered by | `GS.base` within the kernel |
-| ---------- | --------------------------- |
-| `SYSCALL` | the per-processor block; the entry path exchanged |
-| an interrupt or an exception | the program's own value; the stub exchanged nothing |
-
-**The second row was corrected at sub-task 6.13.** The stub now exchanges too,
-conditionally, upon the privilege level the saved `CS` names — because from that
-sub-task the kernel itself reads `GS` on every lock, and a handler entered from
-privilege level 3 would otherwise reach for the area through a base of zero. The
-argument below is unaffected: a switch still cannot tell how the kernel was
-entered, and still must not have to. See
-[`CONCURRENCY.md`](CONCURRENCY.md) and
-[`INTERRUPTS.md`](INTERRUPTS.md).
-
-A context switch cannot tell those apart and must not have to. The thread it
-resumes may be one suspended inside a system call, and the closing `SWAPGS` of
-that path assumes the block is in `GS.base`. Resume such a thread after a child
-that ended by *faulting*, and the exchange runs the wrong way: the block is
-handed to privilege level 3, and the program's own value — zero — is left in
-`IA32_KERNEL_GS_BASE`, where the **next** `SYSCALL` exchanges it back in and the
-entry path looks for its kernel stack at address 8.
-
-That is the failure exactly, and it was produced deliberately: the negative test
-of Section 16.1 reports a supervisor read of linear address `0x8`, three
-instructions after the parent was resumed.
-
-The registers are therefore **written and not exchanged**, at both boundaries:
-`SyscallEstablishKernelGsBase` where the kernel resumes a thread, and
-`SyscallEstablishUserGsBase` where it departs for privilege level 3. Two writes
-to model-specific registers per switch and per descent is the price, and what is
-bought is that the state follows from the transition being made rather than from
-the history of the thread making it.
-
-### 12.2 The kernel stack, recorded twice
-
-`SYSCALL` performs no stack switch. The entry path therefore cannot read `rsp0`
-— it has no stack from which to reach the task state segment — and reads a field
-of the block `GS` names instead. From sub-task 6.13 that block is the
-per-processor area of [`CONCURRENCY.md`](CONCURRENCY.md); the field is
-the same field at the same offset, and nothing below changes. **Two variables
-describe one stack**, and until this sub-task only one of them followed the
-current thread.
-
-`SyscallInitialise` wrote the block's copy once, at boot, with the stack the task
-state segment was initialised with. `ThreadSetCurrent` has updated `rsp0` since
-sub-task 6.9 and did not update the other. With one program running at a time
-that was invisible: the stale stack belonged to nobody and served.
-
-It stops being invisible the moment a program's child makes a system call while
-the parent is suspended inside one, which is precisely what `wait` arranges. Both
-entries build their frames at the same addresses; the child's work overwrites the
-registers the parent's entry saved; and the parent returns by `SYSRET` through
-whatever the child left. The negative test reports a jump to `0x652000` in
-supervisor mode, with `RCX` holding `0xC0000102` — the number of the
-model-specific register the child's kernel work had most recently named.
-
-`ThreadSetCurrent` now writes both. **This is a defect of sub-task 6.7's work
-found by sub-task 6.11**, and it is recorded here rather than quietly corrected,
-because a fault that only appears when two programs exist is exactly the kind
-this project's method exists to name.
-
-## 13. `fork`
-
-A child is a second process holding the same memory by the copy-on-write
-discipline of sub-task 2.8, and one thread prepared to resume where its parent
-will. `AddressSpaceClone` is the whole of the memory half: the pages are shared,
-the writable ones protected in both hierarchies, and a reference recorded for the
-new holder, so a fork costs the paging structures and nothing else until one of
-the two writes.
-
-### 13.1 What the child inherits, and why it is not cleared
-
-The frame the entry path saved for the parent is copied into the child's thread
-with `RAX` set to zero. Three things come from it and from nowhere else: the
-address the parent will return to, which is where the child begins; the parent's
-stack pointer; and the parent's registers.
-
-The descent of Section 10 clears every register instead, and that would be wrong
-here in a way nothing would report. The System V convention entitles the code
-after a call to find `RBX`, `RBP` and `R12` to `R15` as it left them, so a child
-whose preserved registers had been zeroed would return from `fork` into a frame
-pointer of nothing and carry on. The reasoning that justifies clearing — that
-whatever stands in a register at that moment is a kernel address as often as not
-— does not reach a forked child: every value it inherits is one its parent
-already held at privilege level 3.
-
-A child therefore leaves the kernel by `ThreadResumeUser`, which restores the
-whole frame and returns by `IRETQ`. `SYSRET` cannot be used: it takes the address
-to return to from `RCX` and the flags from `R11`, which is where `SYSCALL` put
-them — and a thread reaching this routine was placed there by a context switch
-and not by a `SYSCALL`, so nothing has loaded either. `IRETQ` takes both from the
-stack, so every register of the frame is restored in the same way as every other.
-
-### 13.2 When a child runs
-
-**A child ran when its parent waited for it, from sub-task 6.11 to 8.5**, and
-that was the sub-task's one substantial departure from the call it is named
-after. The bootstrap processor had one thread of control, so a forked child was
-created `READY` and left standing; `wait` started it upon the parent's own
-thread of control and returned when it ended. Everything a program could observe
-of the *ordering* was preserved — a child ran after the fork that made it and
-before the wait that collected it — and concurrency was not. A parent that never
-waited was therefore a child that never ran, which limitation 9 recorded.
-
-**Since sub-task 8.6 a child runs beside its parent.** `ProcessFork` prepares
-the child's kernel stack for the trampoline and admits its thread to the
-bootstrap processor's run queue, and the child runs when the parent sleeps in
-`wait`, sleeps upon a pipe, or is pre-empted at privilege level 3 — whichever is
-first. Section 17 records what that required, and
-[`SCHEDULER.md`](SCHEDULER.md) the scheduler's half of it. The
-departure is closed: the ordering a program can observe is the ordering the
-standard promises, and a child of a parent that never waits runs all the same.
-
-## 14. `execve`
-
-The new program is built entire before the old one is touched: a fresh address
-space, the image loaded into it from a path through the filesystem of Phase 5,
-and only then the exchange. A loader that filled the process's own address space
-would have nothing to go back to when an image turned out to be malformed half
-way through — and an `execve` that fails must leave its caller running, a program
-told that its file does not exist being a program that carries on and says so.
-The cost is that both address spaces exist at once for as long as the load takes.
-
-**The point of no return has an order, and it is not free.** The new space is
-made active *before* the old one is released, because `AddressSpaceDestroy`
-refuses to release the space the processor is translating through — and rightly:
-releasing the frames beneath a running program's own mappings is a fault that
-arrives at some unrelated later instruction. The kernel continues to execute
-across the change because its higher half is mapped identically in both.
-
-Past that point a failure is fatal to the process rather than to the call. A user
-stack that could not be given means a process whose program is gone and whose
-caller no longer exists, so it is ended with a status saying which failure it was
-and its parent collects that as it would collect any other ending.
-
-**The refusals before that point are distinguished and not collapsed.** A path
-that leads nowhere and an image this loader will not load are both
-`SYSCALL_ENOENT`, which is a judgement — the caller can do nothing different
-about either — but a frame that could not be had is `SYSCALL_ENOMEM`. A program
-told that its file does not exist when the machine had in fact run out of memory
-would look for the fault in the one place it is not, and would be told the same
-thing however many times it looked.
-
-Upon success the call does not return. The kernel stack it arrived upon is
-abandoned where it stands, which costs nothing: the next entry from privilege
-level 3 begins at the top of that stack again.
-
-**Arguments and environment were refused until sub-task 7.6, and are now
-carried.** They were refused for want of a convention about where a program
-finds them upon its stack; the convention is the System V ABI's own and
-[`LIBC.md`](LIBC.md) holds it. What this kernel does about it is
-in two halves. `SyscallCopyUserVector` copies every string out of the caller's
-memory into a `ProcessArguments` upon the kernel stack **before**
-`ProcessExecute` is called — because the address space those strings stand in is
-about to be destroyed, and a kernel that read `argv[1]` afterwards would read
-whatever the new program has at that address. `ProcessLayOutArguments` then
-writes them onto the new stack. Both bounds are published in
-`<oxys/syscall_abi.h>` and both refusals happen before the point of no return,
-so a program that exceeds one keeps running.
-
-**The descriptors the old program held are kept, since sub-task 8.5, and were
-closed from 7.6 until then.** They are the machine's and not the process's —
-the filesystem layer has one table for all of them — and closing them was the
-safe half of IEEE Std 1003.1-2017's rule, which keeps a descriptor across
-`execve` unless it is marked close-on-exec: a descriptor kept was, until the
-shell's redirection, a descriptor nothing could have meant to keep. The
-redirection is what means to. It opens the file in the child after `fork`,
-places it at 0, 1 or 2 by `dup2`, and the program the child then becomes must
-find it there; so `execve` keeps the table, which is the process's own and the
-process the same one, and what it holds it holds until it closes or ends.
-Nothing leaks by that: `ProcessDestroy` closes what remains.
-[`LIBC.md`](LIBC.md) and [`SHELL.md`](SHELL.md).
-
-## 15. `exit` and `wait`
-
-`exit` is `ThreadTerminateCurrent` with a status the program chose, and it is a
-**fourth** way back from privilege level 3 — not one of the three Section 10.1
-named, which are the fault, the system-call return and the pre-emption that does
-not yet exist. A program could already fault its way out and be returned to by
-`SYSRET`; what it could not do was say it had finished, and the difference
-between those is a status somebody chose and a vector the processor raised.
-
-`wait` prefers a child that has already ended to one that has not. Both are
-children and either may be collected, but collecting one that has ended costs
-nothing where collecting one that has not means running it first — sleeping
-until it ends, since 8.6 — so taking the
-finished one first is what makes a parent with several children collect them as
-they finish rather than in the order the table happens to hold them.
-
-**The caller's buffer is validated before the child is run**, not afterwards.
-Running the child is what produces the status, and a status produced and then
-found to have nowhere to go would be a child collected and its outcome discarded,
-which is the one loss in this call that nothing could recover from.
-
-The identifier returned names nobody by the time the caller sees it: the slot,
-the threads and the address space are released before `wait` returns. It is
-returned rather than left to be looked up for the reason Section 6 gives.
-
-### 15.1 The copy-on-write page the kernel must write
-
-`wait` writes its status into a page that the fork has just made read-only in
-**both** hierarchies. Three things could happen there and only one of them is
-correct.
-
-The kernel could write through it. `CR0.WP` has been set since sub-task 3.4, so
-that write raises a page fault at privilege level 0, and a fault at privilege
-level 0 is a panic.
-
-The validation could refuse the address. That is what it did before this
-sub-task, and it is worse than the panic in the way that matters: the call fails
-for a reason the caller cannot see and cannot correct — correcting it would mean
-touching the page itself, which is the very thing it asked the kernel to do.
-
-The validation therefore **resolves** the fault instead, calling
-`PagingResolveCopyOnWriteFault` for a page that is marked and not writable before
-concluding that a caller may not write to it. The negative test of Section 16.1
-shows what its absence costs: the parent's `wait` returns `SYSCALL_EFAULT`
-without starting the child at all, and two children are left in the table for
-ever.
-
-### 15.2 Nesting, and the thread to return to
-
-`ThreadStart` records the thread to return to in a single variable, and until
-this sub-task cleared it upon return. A program may now start another — a parent
-that calls `wait` starts its child from within its own system call — so the
-variable is **saved and put back** rather than cleared. The chain of them lives
-upon the kernel stacks of the calls that made it, one to a stack, which is the
-shape a stack of callers takes when there is one thread of control and no
-scheduler to hold a queue.
-
-Clearing it was correct while nothing nested. The negative test shows what it
-became: the parent ends with nobody recorded to return to, `ThreadTerminateCurrent`
-refuses, and the exception path panics about a program the kernel had itself
-started.
-
-## 16. Verification
-
-Two tests, and the division is the one sub-task 6.10 used. `KernelVerifyFork`
-forks a process and examines what was made without running anything, so a failure
-there is a failure of the fork. `KernelVerifyLifecycle` runs a program that calls
-all four, where a failure could be a failure of the fork, the loader, the
-filesystem, the system-call path, the switch or the descent — every one of which
-it puts together at once.
-
-The program is twenty-nine bytes' worth of ancestor grown to about a hundred, and
-it does this:
-
-```
-    write(1, greeting, length)
-    if (fork() == 0) { execve("/prog", 0, 0); exit(99); }
-    wait(&status)
-    if (fork() == 0) { ud2 }
-    wait(&second)
-    exit(status)
-```
-
-`/prog` is a second program, composed here and written to a volume of memory
-through the filesystem before the first is run — because `execve` loads from a
-path and a path must lead to something. It writes a line of its own and exits
-with 7.
-
-**The number 7 is the whole assertion.** It is decided by a program read from a
-file, carried out of that program by `exit`, into its parent by `wait`, and out of
-its parent by `exit` — so a parent observed to end with 7 has exercised all four
-calls, and no one of them could have produced it alone. A parent ending with 99
-is an `execve` that was refused; ending with 0 is a `wait` that collected nothing.
-
-**The second child exists for one reason.** The two ways out of privilege level 3
-leave the kernel holding different segment bases, and a program whose children all
-ended by asking would exercise only one of them. This one ends by faulting, and
-the parent's next `SYSCALL` — its own `exit`, three instructions later — is what
-a mishandled `GS.base` would fail at.
-
-| Property asserted | The silent failure it would catch |
-| ----------------- | --------------------------------- |
-| A fork produces a process with a **distinct paging hierarchy** | Two programs writing over one another with every appearance of isolation |
-| The child records its parent, and is left runnable | A child nothing can find and nothing will run |
-| The child's stack stands where its parent's does | Section 13.1: a child resuming upon an address its own space does not map |
-| **The clone count rose by one** | A fork that built an empty address space and called it a copy |
-| The child's thread would **resume** rather than begin | Section 13.1: every register cleared, and a frame pointer of nothing |
-| The child would see **zero** returned from `fork` | The one value by which a child tells itself apart from its parent |
-| The child inherited its parent's `RBX` and `R12` | Section 13.1, the other half: a child that sees zero and nothing else |
-| A process with no children is told so | A `wait` that returned somebody else's child |
-| A child that cannot be started is **ended and collected** | A parent told it has no children while one stands in the table for ever, told the same thing again at every attempt |
-| A collected child no longer occupies the table, and cannot be collected twice | A slot released twice, which is an address space destroyed twice |
-| **Three programs ended, not one** | A `wait` that collected without starting: the children never ran |
-| Two forks and one execution were recorded | A child that resumed its parent's program rather than replacing it |
-| **The parent's exit status is 7** | The paragraph above. The one number that requires all four calls to be right |
-| A copy-on-write fault was resolved | Section 15.1: the pages were never shared, or the kernel refused to write to one it had itself protected |
-| Both tables return to what they held | A leak of a process, a thread or an address space per program run |
-
-## 17. The child that runs beside its parent
-
-**Implementation**: `ProcessFork`, `ProcessWait`, `ThreadStart`,
-`ThreadTerminateCurrent`, `ThreadSwitchTo` and `ThreadDestroy` in
-[`../../kernel/proc/process.c`](../../kernel/proc/process.c), with the fields
-`return_to`, `wait_channel`, `critical_depth`, `interrupts_were_enabled` and
-`adopted` of `Thread` in
-[`../../kernel/include/oxys/proc/process.h`](../../kernel/include/oxys/proc/process.h).
-The scheduler's half is [`SCHEDULER.md`](SCHEDULER.md); what it was
-all for is [`SHELL.md`](SHELL.md).
-
-The pipeline needed two programs alive at once, and this kernel had never had
-two: a child ran upon its parent's flow of control, inside the parent's `wait`,
-and the chain of who-started-whom lived upon the kernel stacks of the calls that
-made it. Four things had to change, and each is recorded by the failure it
-would otherwise have been.
-
-### 17.1 The thread to return to is the started thread's own
-
-`ThreadStart` recorded its caller in one pointer per processor, saved and put
-back around the switch, and `ThreadTerminateCurrent` switched to whatever that
-pointer held. That was the shape of a stack of callers, and it was correct
-while a program ran to its end before its starter resumed. The moment the shell
-could sleep in `wait` while a child ran, the pointer named the shell's starter —
-the boot flow — and a child that ended would have returned to it, with the
-shell asleep for ever and the boot flow resuming in the middle of `KernelRunShell`
-as though the shell had ended. The pointer is now `return_to`, a field of the
-started thread; a thread the scheduler runs has none, and
-`ThreadTerminateCurrent` takes the other path: it wakes the parent, upon the
-parent's own process as the channel, and calls `SchedulerExitCurrent`.
-`ThreadDestroy` walks the table and clears every `return_to` that named the
-thread destroyed, for the reason the per-processor pointer was cleared.
-
-### 17.2 The child is admitted at the fork, with its stack prepared
-
-`ProcessFork` admits the child's thread to the run queue, and prepares its
-kernel stack for the trampoline first. `ThreadStart` had always done the
-preparing, so a fork that admitted without it produced the first defect of the
-sub-task: the first switch into the child returned through a stack pointer
-standing at the very top of the stack, into the unmapped page above, and the
-kernel reported a page fault in the switch at an address with no stack beneath
-it. The child runs when its parent gives up the processor — `wait`, a pipe, the
-terminal — or is pre-empted at privilege level 3, and a parent that never waits
-has a child that runs all the same. Where the scheduler was never prepared — a
-local timer that could not be calibrated — the child is left standing and
-`wait` runs it as it did before, so that a machine which cannot pre-empt still
-runs programs, one at a time.
-
-### 17.3 `wait` sleeps, and a caller that cannot sleep still collects
-
-`ProcessWait` scans for a child, prefers one that has ended, and — where none
-has and the caller is a thread the scheduler can put to sleep — sleeps upon its
-own process and scans again when woken. The scan and the sleep are one masked
-section, the discipline `SCHEDULER.md` sets out. A caller with no
-thread to sleep upon is the kernel's own flow of control inside the fork
-self-test, and it takes the path `wait` always took: the child is withdrawn from
-the queue the fork put it upon — a queued thread started by a call would be
-dequeued and switched to a second time — and started by `ThreadStart`, or, where
-that cannot be done, ended with `EINVAL` and collected, as Section 15 had it.
-The self-test's assertion that a child which never ran is collected rather than
-left in the table is unchanged and passes by that path.
-
-### 17.4 The interrupt state travels with the thread
-
-A thread sleeps from inside its own masked section and is resumed by whichever
-thread pushed next, and the idle thread's push records that interrupts were
-enabled; the sleeper's pop, restoring what the processor recorded, would have
-enabled interrupts inside a system call. `ThreadSwitchTo` saves the depth and the
-flag into the outgoing thread and loads the incoming thread's.
-[`CONCURRENCY.md`](CONCURRENCY.md) holds the whole of the
-reasoning and the window it closes.
-
-### 17.5 Verification
-
-No test of this section stands alone: what asserts it is every program that
-forks now running its child beside itself, and the pipe's transfers in
-`file-check` and the shell's fifth session — twelve kibibytes and thirty-three —
-crossing intact. The fork self-test asserts the path of Section 17.3, and every
-earlier self-test of `fork`, `execve`, `exit` and `wait` passes unchanged, which
-is the assertion that the ordering a program can observe did not change when
-the concurrency beneath it did.
-
-| Property asserted | The silent failure it catches |
-| ----------------- | ----------------------------- |
-| `env-check`, `dir-check` and the shell's sessions end with the statuses they ended with at 8.5. | A child that ran too early, too late, or twice; a parent resumed with the child's stack pointer. |
-| The fork self-test collects a child that never ran, and the tables return to what they held. | A queued thread destroyed and later dequeued. |
-| A parent that forks and waits is resumed after the child ends, with the child's status. | A parent woken by nobody, or returned to the boot flow. |
-| Every self-test after the first sleep still passes. | Interrupts enabled inside a system call after a resume from idle. |
-
-## 18. Signals, process groups and `waitpid`
-
-**Implementation**: [`../../kernel/proc/signal.c`](../../kernel/proc/signal.c)
-behind [`../../kernel/include/oxys/proc/signal.h`](../../kernel/include/oxys/proc/signal.h)
-— the portable half: the pending set, the dispositions, the default actions,
-sending, stopping and continuing; and
-[`../../kernel/arch/x86_64/syscall/sigframe.c`](../../kernel/arch/x86_64/syscall/sigframe.c)
-behind [`../../kernel/include/oxys/arch/syscall/sigframe.h`](../../kernel/include/oxys/arch/syscall/sigframe.h)
-— the architecture's: delivery through the two frames a program's registers
-stand in, the frame a handler is entered upon, and `sigreturn`. `ProcessWaitFor`
-and the descriptors released at the ending in
-[`../../kernel/proc/process.c`](../../kernel/proc/process.c); the eight calls in
-[`../../kernel/arch/x86_64/syscall/syscall.c`](../../kernel/arch/x86_64/syscall/syscall.c);
-the terminal's half in [`SHELL.md`](SHELL.md). Asserted by
-[`../../kernel/test/proc/signal.c`](../../kernel/test/proc/signal.c) and
-[`../../userland/signal-check/main.c`](../../userland/signal-check/main.c).
-
-### 18.1 What a signal is, and why a sender never touches its target
-
-A signal is a bit in the target process, set by the sender and cleared by the
-target itself on its next way out of the kernel — a system call returning, or
-an interrupt taken at privilege level 3 — which is the one moment every
-register of the target stands in a frame the kernel can edit. A sender that
-reached into a target asleep upon a pipe and rewrote its frame would be
-rewriting a frame the pipe's read was still going to return through. So
-`SignalSend` sets the bit and, where the target is asleep in a call, wakes it
-by `SchedulerWakeThread`; the call re-tests its condition, finds the signal
-pending, and reports `EINTR`; and the way out delivers.
-
-Delivery, `SignalDeliver`, takes the lowest pending signal and acts by its
-disposition: ignored is nothing; the default is the action IEEE Std
-1003.1-2017, Section 2.4.3, assigns — terminate for most, ignore for SIGCHLD,
-stop for SIGSTOP, SIGTSTP, SIGTTIN and SIGTTOU, continue for SIGCONT; a
-handler is entered. An ignored signal is discarded at generation, and so is a
-SIGCHLD to a process that has not asked and a SIGCONT to one that is not
-stopped, so that a sleeping call is never woken for a signal that would do
-nothing on the way out. SIGKILL and SIGSTOP cannot be given a disposition.
-`execve` resets a handler to the default and keeps an ignore, as the standard
-has it — which is why the shell's children put SIGINT and SIGTSTP back to the
-default before they become programs.
-
-A process is one of thirty-one numbers' worth of pending bits and a
-disposition apiece; the numbers are the x86 System V and Linux ones, so that a
-person who knows `kill -9` finds it here, and a fault at privilege level 3 is
-reported as the signal its vector maps to: SIGSEGV for a page or protection
-fault, SIGILL for an invalid opcode, SIGFPE, SIGBUS and SIGTRAP for theirs.
-
-### 18.2 Stopping, continuing, and the group
-
-`SignalStopCurrent` marks the process stopped, wakes its parent's wait channel
-and sends it SIGCHLD, and sleeps upon the process's own `stop_channel` until
-`SignalContinue`. It runs upon the stopping process's own thread, from the
-delivery path — so a stop sent to a process asleep upon a pipe wakes it, ends
-its read with `EINTR`, and stops it on the way out. A stopped process is left
-asleep by everything but SIGKILL and SIGCONT; what else is sent it waits, and
-is delivered when it is continued. A stop signal discards a pending SIGCONT
-and SIGCONT a pending stop, as Section 2.4.1 requires.
-
-Every process has a group, the identifier of the process that leads it: a
-child begins in its parent's, `setpgid` moves one — a process may move itself
-or a child of its own — and `kill` with a negative identifier reaches every
-member. The terminal's foreground group is the group control-C and control-Z
-are delivered to, and the only group whose members read the terminal without
-being stopped by SIGTTIN; that stop is made inside the `read` itself, which
-tries again when the process is continued, so that a background reader
-brought to the foreground by `fg` goes on reading. The foreground group is
-cleared when its last member ends, because a foreground group naming nobody
-would stop every later reader.
-
-### 18.3 The frame a handler runs upon
-
-A handler is entered upon the program's own stack: below the 128-byte red
-zone the System V ABI reserves beneath the stack pointer, aligned as a
-function is entered, with the signal number in RDI and the restorer's address
-where a return address belongs, so that the handler's `ret` enters the
-restorer — two instructions in the C library, `sigreturn` and nothing else —
-which puts the interrupted context back. The context is every register: the
-instruction pointer, the stack pointer, the flags and the fifteen general
-registers, written into a `SignalContext` above the return address.
-
-A program's registers stand in a `SyscallFrame` while it is inside a system
-call and in a `TrapFrame` while inside an interrupt taken at privilege level
-3, and the two are laid out by two entry paths for two returns — SYSRET takes
-the instruction pointer from RCX and the flags from R11; IRETQ takes both
-from the frame. Delivery does not care which: each frame is read into one
-register set, delivery edits three of its members, and the set is written
-back. Two adapters of a dozen lines apiece, one delivery.
-
-**The flags a program hands back are masked.** `sigreturn` restores RFLAGS
-from a frame the program could have edited, and SYSRET loads RFLAGS from R11
-as it stands. Only the flags a program at privilege level 3 may alter — the
-status flags, DF and TF — are taken; IF is forced set; and the instruction
-pointer is refused above the user limit, because the range check that admits
-the frame says nothing about the target.
-
-**A call the signal interrupted is restarted where the signal entered no
-handler.** A call that slept and was woken reported `EINTR`; where delivery
-then finds the signal ignored, or stops the process and the process is
-continued, the program is not told `EINTR` for a signal it never saw: the
-instruction pointer goes back two bytes to the SYSCALL and RAX back to the
-number, and the call is made again. That is what lets `cat`, stopped by
-control-Z and continued by `fg`, go on reading. A signal that did enter a
-handler leaves `EINTR` to the program, as the standard has it without
-SA_RESTART; `sigreturn` is never restarted, its RAX being the interrupted
-program's own.
-
-### 18.4 `waitpid`, and the status a program is told
-
-`ProcessWaitFor` is `wait` with a choice: one child by identifier, any, or any
-of a group; `SYSCALL_WAIT_NO_HANG`, upon which nothing to report is 0 rather
-than a sleep; and `SYSCALL_WAIT_UNTRACED`, upon which a stopped child is
-reported — once per stop, without being collected. Limitation 13 of Section
-19 is closed. The status is an encoding at last, which limitation 11 had
-recorded as owed and as belonging with the C library that must agree with it:
-a kind in bits 8 to 15 — exited, signalled, stopped — and a number in bits 0
-to 7, the code `exit` was given or the signal. `exit_status` keeps the
-quadword, which the self-tests read, and `wait_status` is what a program is
-told.
-
-**The descriptors are released at the ending, not at the collecting.** Until
-this sub-task the two were one moment, the collecting `wait` being the only
-thing that ever ran after a child; they stopped being one the first time a
-pipeline ran in the background. `cat /bin/sh | wc -c &` left `cat` ended and
-uncollected with the pipe's write end still open, `wc` waiting for an end of
-file only that close could give, and the shell waiting for a keypress before
-it would collect anything — a background pipeline that finished only when a
-person typed the next command. `ThreadTerminateCurrent` closes what the
-process held; `ProcessDestroy` then finds nothing to close.
-
-Two things were added after the sub-task, on 2026-09-16, for `ps`: `execve`
-names the process after the program — the last component of the path — so
-that a listing names what runs and not the shell every child was forked from;
-and `procinfo` reports one slot of the table, the state taken from the thread
-where the process is neither stopped nor ended, limitation 4 of Section 19
-being why the process's own field would not do. [`SHELL.md`](SHELL.md).
-
-### 18.5 Verification, and what it found
-
-`KernelVerifySignals` asserts, upon a process that never runs, the rules a
-program can only see the consequence of; then `signal-check` asserts the rest
-from privilege level 3, with children reached on both paths — one that
-computes and never enters the kernel, reached by the timer's interrupt, and
-one asleep upon a pipe, reached by the wake and the `EINTR`.
-
-| Property asserted | The silent failure it catches |
-| ----------------- | ----------------------------- |
-| A sent signal is pending; the lowest is taken first; an ignored one, a default-ignored SIGCHLD and a SIGCONT to a running process are not made pending. | A sleeping call woken for nothing; a signal delivered out of order. |
-| SIGKILL and SIGSTOP cannot be given a disposition; a stop discards a pending SIGCONT and the reverse; an exec resets a handler and keeps an ignore. | A process that could not be killed; a `bg` undone by a control-Z typed before it; a program inheriting the shell's indifference to control-C. |
-| The vectors map to SIGSEGV, SIGILL, SIGFPE, SIGBUS and SIGTRAP; the default actions are the standard's. | `kill -9` on a fault, or a stop that terminated. |
-| `raise` enters the handler with the number; a value survives it; the handler is kept across its own invocation; `signal` reports the previous disposition. | A frame that clobbered a register; a handler reset to the default by its own use, the unreliable semantic. |
-| A computing child is ended by SIGTERM; one asleep upon a pipe by SIGINT; one with a handler ends with the code its handler let it choose. | Delivery missing on the interrupt path, or the wake missing on the sleep path; a handler's frame that could not be returned through. |
-| A write with no reader ends the writer by SIGPIPE; an invalid opcode is reported as SIGILL. | A pipeline whose head ran on after its tail had gone; a fault reported as a code. |
-| A group's two members are ended by one `kill`, collected by `waitpid` upon the group, and an emptied group is ESRCH. | A member left out of its group by the race between parent and child. |
-| A child asleep upon a pipe is stopped by SIGSTOP and reported once, is not reported ended while stopped, reads the byte after SIGCONT and ends with 7; a stopped child is ended by SIGKILL. | A stop reported twice; a byte lost across a stop; a call not restarted; a stopped process that SIGKILL could not reach. |
-| `waitpid` with NO_HANG reports 0 for a running child and ECHILD for none. | A `jobs` that waited, or a shell that could not tell "nothing yet" from "nothing". |
-| The shell's sixth session composes 130, 148 and 130 from control-C, control-Z and control-C, and the terminal's foreground group is cleared when the shell ends. | Control-C reaching the shell instead of `cat`; a control-Z lost to the shell's own group; a foreground group outliving its job. |
-
-**Two races the first run of `signal-check` showed, in the test and not the
-kernel**, each recorded rather than hidden. A child that installed a handler
-was sent SIGTERM before it had run — the parent continues after `fork` and the
-child is queued — and the default action ended it; the child now says it is
-ready through a pipe before the parent sends. And the SIGPIPE child wrote
-before the parent had closed its own read end, so a reader existed and the
-write succeeded; the read end is closed before the fork now.
-
-### 18.6 A thread launched, and a process's windows
-
-Two things the window client protocol asked of this layer, both small.
-`ThreadLaunch` hands a thread to the scheduler without waiting for it — prepared
-as a forked child is and admitted, with nothing to return to — so that the entry
-point can start the window demonstration and then the shell with neither
-waiting for the other; `ThreadStart` starts by a call and returns when the
-started thread ends, which is right for the shell and wrong for a program that
-must run beside it. A process started this way has no parent and is the orphan
-of Section 19, limitation 15, when it ends.
-
-And a process's windows are destroyed at its ending, in `ThreadTerminateCurrent`
-beside the release of its descriptors and for the same reason: what a process
-that has ended held is given back at the ending and not at the collecting.
-`ProcessDestroy` releases them as well, for a process destroyed without having
-run. [`WINDOWS.md`](WINDOWS.md).
-
-**Sub-task 9.3 gives back a third thing in the same place: the children.**
-`ProcessAdoptOrphansOf` hands every child of the ending process to `init` — the
-process the kernel was told of by `ProcessSetInit` — and wakes it where one of
-them had already ended and is waiting for a collector. `ProcessPause` arrived
-with it, suspending a caller until a signal, which is what an `init` with no
-child to `wait` upon waits in. [`INIT.md`](INIT.md) hold the
-reasoning; what belongs here is that the ending is where it happens, and that
-it is the same reason as for the descriptors and the windows.
-
-## 19. Limitations
-
-1. A program has: see Section 10.2. What has not
-   happened is pre-emption — nothing takes a processor away from a thread that
-   has not given it up — until sub-task 6.15, whose local timer does exactly that
-   for any thread the scheduler has placed upon a run queue. A program still
-   runs to completion, no program having yet been admitted to one.
-2. **The tables are searched linearly.** Sixty-four processes and a hundred and
-   twenty-eight threads a chunk, the tables growing a chunk at a time since
-   2026-09-25 ([`MEMORY-LAYOUT.md`](MEMORY-LAYOUT.md), Section 16), found by
-   walking. Nothing here is on a path that runs often, and a hash of
-   identifiers is worth writing when something is.
-3. **Closed at sub-task 8.6.** `ThreadStart`
-   records the thread to return to upon the started thread rather than in a
-   single variable, a child of `fork` is admitted to the scheduler at the fork,
-   and `wait` sleeps: two programs run at once, upon the bootstrap processor,
-   and the queue that Section 15.2's stack of callers was not is the
-   scheduler's. Section 17.
-4. **A process's state is not derived from its threads'.** A process with one
-   blocked thread and one running thread is running, and deciding that is the
-   scheduler's business at sub-task 6.15.
-5. **No priority, no scheduling class, no accounting of time.** All of them
-   belong to the scheduler and none of them can be tested before there is one.
-6. **No file descriptors.** A process has no open files. The virtual filesystem
-   of Phase 5 has an open file table of its own and joining the two is the work
-   of Phase 7. `fork` now exists and must therefore decide what a child inherits
-   the moment there is anything to inherit; presently there is nothing, and the
-   whole of what a child gets is its parent's memory and its parent's registers.
-7. **Neither table is guarded.** Both, and the current thread, become the
-   business of the lock sub-task 6.13 built. That lock exists and has not been
-   applied here: nothing runs but the boot sequence until the scheduler of
-   sub-task 6.15, which is when a table entry may be claimed upon one processor
-   while it is being read upon another.
-8. **The user stack does not grow.** Sixteen pages, mapped at creation. Growing
-   one on demand means faulting below it and deciding whether the fault is a
-   stack that wants to grow or a program that has gone wrong, which needs the
-   extent record this sub-task introduces and a policy it does not have. **The
-   heap of sub-task 7.3 does grow**, and it is the counter-example that shows why
-   the stack does not: a heap grows because a program *asks*, by a system call
-   naming exactly how far, and nothing has to guess what a fault meant.
-9. **Closed at sub-task
-   8.6**, Sections 13.2 and 17.2: a child runs beside its parent from the fork.
-   What remains of this limitation is its second half — a parent that ends
-   before waiting leaves its child in the table with a parent identifier naming
-   nobody, and the child, when it ends, wakes nobody and stays there. There is
-   no `init` to reparent an orphan to until Phase 9.
-10. **Closed at sub-task
-    7.6.** The convention it was waiting for is the System V ABI's own, and
-    [`LIBC.md`](LIBC.md) holds it: the strings at the top of the
-    new stack, the pointers below them, the argument count at the stack pointer.
-    Both vectors are accepted, bounded by
-    `SYSCALL_ARGUMENT_COUNT_MAXIMUM` and `SYSCALL_ARGUMENT_BYTES_MAXIMUM`, and
-    both bounds are published so that a program can know what it will be refused
-    against. **What replaced it was narrower until sub-task 8.5**: a child of `fork` inherited no
-    descriptor and `execve` closed every one, because sharing an open file
-    between two processes needs a reference count upon it that the filesystem
-    layer did not have. `LIBC.md` recorded it, and the
-    shell's redirection at 8.5 is what needed it: the layer counts holders since
-    then, a child inherits every descriptor, and `execve` keeps them. Section 14.
-11. **Closed at sub-task 8.7**:
-    `wait` and `waitpid` report a kind and a number — exited, signalled or
-    stopped, and the code or the signal — in the encoding of
-    `<oxys/syscall_abi.h>`, which the C library agrees with. `exit_status`
-    keeps the quadword for the self-tests. Section 18.4.
-12. **`Thread` embeds a `SyscallFrame`, so `process.h` now includes `syscall.h`.**
-    That is the honest dependency — a forked child resumes a system call — and it
-    enlarges a division already owed. `LICENSING.md` records that `syscall.h`
-    mixes the user-visible interface with the kernel's implementation and must be
-    divided before sub-task 7.2, so that an `MIT` C library may include the
-    former without the latter; `Thread` will then depend upon whichever half
-    `SyscallFrame` lands in, and it is the kernel's half.
-13. ~~**`wait` cannot name which child to wait for, and cannot decline to
-    block.**~~ **Closed at sub-task 8.7** by `waitpid`, Section 18.4: one child,
-    any, or a group; NO_HANG; and UNTRACED, which reports a stop.
-14. **A fault cannot be caught.** A fault at privilege level 3 ends the process
-    and is *reported* as the signal its vector maps to, Section 18.1, but a
-    handler for SIGSEGV is not entered by a fault: the exception path ends the
-    program directly, as it has since 6.10. Entering a handler there means
-    delivering upon the exception's frame and deciding what a handler that
-    returns to the faulting instruction should meet, which is a decision worth
-    making when something wants it.
-15. **Closed at sub-task 9.3.** A process whose
-    parent has ended is given to `init`, which collects it;
-    [`INIT.md`](INIT.md) holds the adoption and the three decisions
-    in it, and Section 18.6 below is where in this file it happens. What remains
-    is that `init` may itself be killed, and that nothing but the desktop is
-    told to stop at a shutdown — Section 7 of that document.
-16. **A signal is delivered to one thread — the process's only one.** Every
-    process has one thread, and the pending set is the process's; a second
-    thread would need the set divided, or a rule for which thread takes what.
+| Two processes get different address spaces; a child records its parent by number; a new process does not reuse an old identifier. | Programs overwriting each other; a signal to the wrong process. |
+| Two threads get different kernel stacks, each starting at its top; the page beneath is not writable and the first page of the stack is. | A system call returning into another thread; an overflow into a neighbour; a thread that faults on its first push. |
+| Making a thread current points `rsp0` at its stack; a destroyed thread is not current; destroying a process destroys its threads. | The first interrupt on someone else's stack; a pointer to a released slot. |
+| The arena and both tables return to what they held. | A leak of four pages per thread, or of a slot per program. |
+| A second kernel thread runs once and the first resumes; a program composed in memory runs at privilege level 3, makes a system call and ends with −6 by the invalid opcode it executes. | A switch that loses a thread; a program that never ran its own instructions. |
+| A fork gives a distinct hierarchy, one more clone, a child that would resume with zero and its parent's `RBX` and `R12`, its stack where its parent's is. | An empty copy; a child that cannot tell itself apart, or loses its preserved registers. |
+| A program forks, has the child `execve` a program read from a volume that exits 7, collects it, forks a child that faults, collects that, and exits 7; three programs ended, a copy-on-write fault resolved, the tables balanced. | Any one of the four calls wrong: 99 is a refused `execve`, 0 a `wait` that collected nothing, a fault at address 8 a mishandled `GS` base. |
+| A child that cannot be started is ended and collected; one is not collected twice. | A child left in the table for ever. |
+| Signals: lowest first; discarded when they would do nothing; SIGKILL and SIGSTOP not catchable; stop and continue cancel; exec resets handlers and keeps ignores; the vectors map to their signals. | A call woken for nothing; an unkillable process; a program inheriting the shell's indifference to control-C. |
+| From privilege level 3: a computing child ended by SIGTERM, a sleeping one by SIGINT, a handled one ending with its handler's code; SIGPIPE ends a writer with no reader; a group ended by one `kill` and collected by `waitpid`; a sleeping child stopped, reported once, continued, reads its byte and ends 7; NO_HANG reports 0 and ECHILD. | Delivery missing on one path; a byte lost across a stop; a call not restarted; a `jobs` that blocks. |
+| The shell composes 130, 148 and 130 from control-C, control-Z and control-C, and the foreground group clears when the shell ends. | Control-C reaching the shell instead of its job. |
+
+## Limitations
+
+1. The tables are searched linearly; nothing on them runs often enough yet to
+   want a hash.
+2. A process's state is not derived from its threads'; `procinfo` reports the
+   thread's.
+3. No priorities and no accounting of time ([`SCHEDULER.md`](SCHEDULER.md)).
+4. The process and thread tables are not yet used under their lock: user threads
+   run on the bootstrap processor only ([`CONCURRENCY.md`](CONCURRENCY.md)).
+5. The user stack does not grow; the heap does, because a program asks for it
+   by a call naming how far, and a stack fault would need guessing.
+6. A fault cannot be caught: a handler for SIGSEGV is not entered by a fault,
+   which ends the program directly.
+7. A signal is delivered to the process's one thread; a second thread would need
+   the pending set divided.
+8. `init` can itself be killed, and only the desktop is asked to stop at a
+   shutdown ([`INIT.md`](INIT.md)).
