@@ -15,7 +15,7 @@ phases build them, which is the order to read them in.
 | [`PRIVILEGE.md`](PRIVILEGE.md) | Descriptors, the TSS, `SYSCALL`, the entry path, argument validation, the call table. | 6.1, 6.7 |
 | [`FRAMEBUFFER.md`](FRAMEBUFFER.md) | The framebuffer: request, validation, write-combining, colour encoding. | 6.2 |
 | [`DRAWING.md`](DRAWING.md) | Surfaces, clipping, and the primitives. | 6.3 |
-| [`CONSOLE.md`](CONSOLE.md) | The system face and the graphical console. | 6.4 |
+| [`CONSOLE.md`](CONSOLE.md) | The 8-by-8 face, the graphical console, and the desktop's face, Inter. | 6.4, 9.9 |
 | [`FAULTSCREEN.md`](FAULTSCREEN.md) | The page drawn when the kernel stops. | 6.4 |
 | [`COMPOSITOR.md`](COMPOSITOR.md) | The back buffer, layers, damage, clip stack and blending. | 6.5, 6.6 |
 | [`EXECUTABLE.md`](EXECUTABLE.md) | The ELF64 loader. | 6.8 |

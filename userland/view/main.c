@@ -46,9 +46,9 @@
  */
 #define VIEW_BYTES_MAXIMUM (256U * 1024U)
 
-/* The face is eight pixels square, with two of leading between rows, and every
- * extent here is multiplied by the scale. */
-#define VIEW_GLYPH   8
+/* A character is SYSCALL_WINDOW_TEXT_ADVANCE units wide and eight high, with
+ * two of leading between rows, and every extent is multiplied by the scale. */
+#define VIEW_GLYPH   ((int32_t)SYSCALL_WINDOW_TEXT_ADVANCE)
 #define VIEW_PITCH   10
 
 /* The most characters one `window_text` carries, less a margin. A row wider is

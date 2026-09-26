@@ -1,20 +1,20 @@
 <!-- SPDX-FileCopyrightText: 2026 The Oxys-OS Authors -->
 <!-- SPDX-License-Identifier: CC0-1.0 -->
-# The Font and the Graphical Console
+# The Faces and the Graphical Console
 
-**Phase**: sub-task 6.4 of [`../project/PLAN.md`](../project/PLAN.md).
-**Source**: [`../../graphics/font.c`](../../graphics/font.c),
+**Phase**: sub-task 6.4 of [`../project/PLAN.md`](../project/PLAN.md); the desktop's face, 9.9.
+**Source**: [`../../graphics/font.c`](../../graphics/font.c), [`../../graphics/face.c`](../../graphics/face.c),
 [`../../graphics/console.c`](../../graphics/console.c), and their headers in
 [`../../kernel/include/oxys/gfx/`](../../kernel/include/oxys/gfx/).
 **Specifications**: ANSI X3.4-1986 (the printable range and the control
 characters).
 
-The bitmap face drawn for this project, and the console that draws the boot log
-with it on the framebuffer. The same face is the one programs draw text with
-([`SESSION.md`](SESSION.md)); the high-resolution mark and icons are separate
-([`SESSION.md`](SESSION.md)).
+The bitmap face drawn for this project, the console that draws the boot log with
+it on the framebuffer, and the desktop's face, Inter, which window titles and
+programs draw text with ([`SESSION.md`](SESSION.md)). The high-resolution mark
+and icons are separate ([`SESSION.md`](SESSION.md)).
 
-## 1. The face
+## 1. The 8-by-8 face
 
 Ninety-five glyphs, `0x20` to `0x7E`, compiled into the image.
 
@@ -117,6 +117,38 @@ Test surfaces are declared as `uint32_t` arrays: writing a `uint32_t` into a
 `uint8_t` array is undefined behaviour however well it seems to work, while the
 framebuffer mapping has no declared type and may be read back through `uint8_t`.
 
+## 4. The desktop's face
+
+The desktop draws its text in **Inter**, a typeface written elsewhere and used
+under the SIL Open Font License 1.1 ([`../../LICENSING.md`](../../LICENSING.md),
+Section 4); the boot log, the console and the fault screen keep the 8-by-8 face,
+because they draw before the desktop exists and when the machine is failing, and
+the less they depend upon the better.
+
+- **Rendered at build preparation, not parsed at boot.** [`../../tools/face.sh`](../../tools/face.sh)
+  renders the font once, with ImageMagick, into
+  [`../../fonts/inter/face.h`](../../fonts/inter/face.h), which is committed. The
+  kernel carries no font parser, and no build depends on ImageMagick.
+- **Monospaced cells of five by eight units of the scale**
+  (`SYSCALL_WINDOW_TEXT_ADVANCE` by `SYSCALL_WINDOW_TEXT_HEIGHT`), so every
+  program lays text out on a grid by multiplication. A square cell, the 8-by-8
+  face's, left Inter's narrower letters standing apart; five units is near the
+  proportion of a monospaced face. Each glyph is centred by its ink, and the few
+  wider than the cell (`W`, `M`, `m`, `w`, `@`) are narrowed to fit rather than
+  cut. The baseline is three-quarters down the cell and the size 0.82 of its
+  height, which leaves room for descenders.
+- **One byte of coverage a pixel**, drawn by `FaceDrawGlyph` in
+  [`../../graphics/face.c`](../../graphics/face.c): the paper over the cell,
+  then the ink blended at each pixel's coverage through `GraphicsBlendPixel`,
+  whose channels are mixed apart. Both window titles and `window_text` draw with
+  it.
+- **Exact tables for scales one to four** (182 KiB), where a small glyph's shape
+  is decided; **scales five to eight are sampled bilinearly** from the
+  scale-four table, since magnifying a smooth glyph stays smooth and four more
+  tables would cost half a mebibyte for sizes only a large label uses.
+- **A code outside `0x20` to `0x7E` draws a hollow box**, as the 8-by-8 face
+  does, so an unmapped character is visible.
+
 ## Verification
 
 `KernelVerifyConsole` in [`../../kernel/test/gfx/console.c`](../../kernel/test/gfx/console.c).
@@ -137,6 +169,8 @@ needs text above it (that text is written and erased again).
 | BS at the limit, and at column 0 with the limit there, does not move. | Erasing the prompt or the previous line. |
 | BS at column 0 lands after the row above's text; three erasures reach column 0. | The cursor at the display's edge, erasing far from the text. |
 | Into a full row, BS stops on its last character; erasing it returns to column 0 and then to that character. | A wrapped row treated as ended; a stray character left at the edge of the next prompt. |
+| Inter's space covers nothing at every scale; its `H` is fully covered somewhere at every scale from two, the sampled scales included; nothing is covered outside the cell, beyond scale eight or outside the codes (`KernelVerifyWindows`). | A table index off by a row or a glyph; a sampler reading past its table. |
+| A glyph drawn in a window leaves ink in the content (`KernelVerifyWindows`, `window-check`). | Text that draws nothing. |
 
 `FAULTSCREEN.md` asserts the fast paths against the slow ones. That the log is
 legible, numbers included, is judged by eye
@@ -151,7 +185,7 @@ Console: 1903 bytes replayed from before the console existed.
 ## Limitations
 
 1. ASCII only; everything else is a box.
-2. The cell is fixed at 8×8, small on a large display.
+2. The console's cell is fixed at 8×8, small on a large display.
 3. No text cursor is drawn on the console.
 4. No per-cell colour; `ConsoleSetColour` applies from then on.
 5. A scroll changes the whole screen, so a whole screen is presented.
@@ -160,3 +194,7 @@ Console: 1903 bytes replayed from before the console existed.
    after a CR shortens it. Nothing writes a CR without an LF.
 8. No lock of its own: `KernelWriteString` holds one for a whole string, which is
    the right granularity. The fault screen takes none ([`FAULTSCREEN.md`](FAULTSCREEN.md)).
+9. The desktop's face is monospaced, with no kerning or proportional spacing,
+   and at scale one (eight pixels high) it is soft.
+10. That a glyph looks right is judged by eye; the self-test asserts coverage,
+    not shape.

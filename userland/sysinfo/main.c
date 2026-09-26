@@ -31,6 +31,7 @@
 #include <time.h>
 
 #define INFO_GLYPH   8
+#define INFO_ADVANCE ((int32_t)SYSCALL_WINDOW_TEXT_ADVANCE)
 #define INFO_PITCH   12
 #define INFO_COLUMNS 42
 #define INFO_ROWS    13
@@ -63,12 +64,12 @@ static void InfoLine(int32_t row, const char *label, const char *value)
     placement.paper = INFO_PAPER;
     placement.scale = InfoScale;
 
-    placement.x = INFO_GLYPH * InfoScale;
+    placement.x = INFO_ADVANCE * InfoScale;
     placement.ink = INFO_DIM;
     (void)OxysWindowText(InfoWindow, &placement, label);
 
     (void)snprintf(text, sizeof text, "%-*s", INFO_COLUMNS - INFO_LABEL - 1, value);
-    placement.x = INFO_LABEL * INFO_GLYPH * InfoScale;
+    placement.x = INFO_LABEL * INFO_ADVANCE * InfoScale;
     placement.ink = INFO_INK;
     (void)OxysWindowText(InfoWindow, &placement, text);
 }
@@ -196,7 +197,7 @@ int main(void)
     }
 
     InfoScale = (InfoScreen.width >= 1024) ? 2 : 1;
-    geometry.width = INFO_COLUMNS * INFO_GLYPH * InfoScale;
+    geometry.width = INFO_COLUMNS * INFO_ADVANCE * InfoScale;
     geometry.height = INFO_ROWS * INFO_PITCH * InfoScale;
     geometry.x = (InfoScreen.width - geometry.width) / 2;
     geometry.y = (InfoScreen.height - geometry.height) / 3;

@@ -50,6 +50,7 @@ from the start rather than retrofitted:
 | `libc/` | The C library linked into user programs; `libc/include/` is its header root. |
 | `userland/` | The user programs: the shell, the utilities, `init`, the session and the desktop's programs. |
 | `art/` | The project owner's artwork and the palette, with the commands that convert them. |
+| `fonts/` | Third-party typefaces under their own licence, and the tables rendered from them. |
 | `etc/` | The shipped configuration staged into `/etc` on the ramdisk. |
 | `tools/` | Scripts the build and the checks run. |
 | `docs/` | The documentation, indexed by [`../README.md`](../README.md). |

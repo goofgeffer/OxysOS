@@ -56,7 +56,7 @@
  */
 
 #include <oxys/gfx/window.h>
-#include <oxys/gfx/font.h>
+#include <oxys/gfx/face.h>
 #include <oxys/gfx/graphics.h>
 #include <oxys/mm/heap.h>
 #include <oxys/kernel.h>
@@ -621,7 +621,7 @@ static void WindowDrawTitle(const Window *window, GraphicsRectangle band, uint32
     const GraphicsRectangle reach =
         GraphicsRectangleIsEmpty(leftmost) ? WindowCloseReachOf(window) : leftmost;
     int32_t x = band.x + WINDOW_TITLE_INSET;
-    const int32_t y = band.y + ((WINDOW_TITLE_HEIGHT - (FONT_HEIGHT * WINDOW_TITLE_SCALE)) / 2);
+    const int32_t y = band.y + ((WINDOW_TITLE_HEIGHT - (FACE_HEIGHT * WINDOW_TITLE_SCALE)) / 2);
 
     /*
      * The title is clipped to the band short of the leftmost control, so that
@@ -637,8 +637,8 @@ static void WindowDrawTitle(const Window *window, GraphicsRectangle band, uint32
 
     for (const char *at = window->title; *at != '\0'; ++at)
     {
-        FontDrawGlyphScaled(WindowScreen, x, y, (uint8_t)*at, ink, paper, WINDOW_TITLE_SCALE);
-        x += FONT_WIDTH * WINDOW_TITLE_SCALE;
+        FaceDrawGlyph(WindowScreen, x, y, (uint8_t)*at, ink, paper, WINDOW_TITLE_SCALE);
+        x += FACE_WIDTH * WINDOW_TITLE_SCALE;
     }
 
     (void)GraphicsPopClip(WindowScreen);
@@ -1488,16 +1488,16 @@ bool WindowDrawText(size_t identifier, int32_t x, int32_t y, const char *text, u
      */
     for (const char *character = text; *character != '\0'; ++character)
     {
-        FontDrawGlyphScaled(&window->surface, at, y, (uint8_t)*character, ink_pixel, paper_pixel,
-                            scale);
-        at += (int32_t)FONT_WIDTH * scale;
+        FaceDrawGlyph(&window->surface, at, y, (uint8_t)*character, ink_pixel, paper_pixel,
+                      scale);
+        at += (int32_t)FACE_WIDTH * scale;
         ++drawn;
     }
 
     if (drawn != 0)
     {
-        WindowInvalidate(identifier, WindowMakeRectangle(x, y, drawn * (int32_t)FONT_WIDTH * scale,
-                                                         (int32_t)FONT_HEIGHT * scale));
+        WindowInvalidate(identifier, WindowMakeRectangle(x, y, drawn * (int32_t)FACE_WIDTH * scale,
+                                                         (int32_t)FACE_HEIGHT * scale));
     }
 
     return true;

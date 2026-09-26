@@ -533,6 +533,12 @@
  * fixed buffer is a bound it can be honest about. */
 #define SYSCALL_WINDOW_TEXT_MAXIMUM 127U
 
+/* The cell each character of window_text occupies, in units of the scale: five
+ * wide and eight high, the face being monospaced so a program lays text out on
+ * a grid. */
+#define SYSCALL_WINDOW_TEXT_ADVANCE 5U
+#define SYSCALL_WINDOW_TEXT_HEIGHT  8U
+
 typedef struct SyscallWindowText
 {
     int32_t x;

@@ -39,7 +39,7 @@
  * than cut, because saving a file cut would lose its end. */
 #define NOTEPAD_BYTES (64U * 1024U)
 
-#define NOTEPAD_GLYPH 8
+#define NOTEPAD_GLYPH ((int32_t)SYSCALL_WINDOW_TEXT_ADVANCE)
 #define NOTEPAD_PITCH 10
 #define NOTEPAD_TAB   4
 #define NOTEPAD_COLUMNS_MAXIMUM 256

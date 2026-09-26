@@ -54,6 +54,7 @@
 /* The grid the window is drawn in: the system face, in cells a little taller
  * than a glyph so that rows of buttons do not touch. */
 #define SETTINGS_GLYPH   8
+#define SETTINGS_ADVANCE ((int32_t)SYSCALL_WINDOW_TEXT_ADVANCE)
 #define SETTINGS_PITCH   12
 #define SETTINGS_COLUMNS 46
 #define SETTINGS_ROWS    18
@@ -410,7 +411,7 @@ static void SettingsLabel(int32_t row, int32_t column, const char *text, uint32_
 {
     SyscallWindowText placement;
 
-    placement.x = column * SETTINGS_GLYPH * SettingsScale;
+    placement.x = column * SETTINGS_ADVANCE * SettingsScale;
     placement.y = (row * SETTINGS_PITCH * SettingsScale) +
                   (((SETTINGS_PITCH - SETTINGS_GLYPH) / 2) * SettingsScale);
     placement.ink = ink;
@@ -456,7 +457,7 @@ static int32_t SettingsButtonAt(int32_t row, int32_t column, const char *label, 
     char text[CONFIG_VALUE_MAXIMUM + 4U];
     const int32_t width = (int32_t)strlen(label) + 2;
     const uint32_t ground = chosen ? SETTINGS_CHOSEN : SETTINGS_BUTTON;
-    const int32_t cell = SETTINGS_GLYPH * SettingsScale;
+    const int32_t cell = SETTINGS_ADVANCE * SettingsScale;
     const int32_t pitch = SETTINGS_PITCH * SettingsScale;
 
     (void)snprintf(text, sizeof text, "%c%s%c", chosen ? '>' : ' ', label, chosen ? '<' : ' ');
@@ -515,7 +516,7 @@ static void SettingsBackgroundName(const char *path, char *name, size_t capacity
 
 static void SettingsDraw(void)
 {
-    const int32_t cell = SETTINGS_GLYPH * SettingsScale;
+    const int32_t cell = SETTINGS_ADVANCE * SettingsScale;
     const int32_t pitch = SETTINGS_PITCH * SettingsScale;
     int32_t row = 1;
     int32_t column = 2;
@@ -581,7 +582,7 @@ static void SettingsDraw(void)
 /* A press: the button beneath it, if any, acted upon. */
 static void SettingsPress(int32_t x, int32_t y)
 {
-    const int32_t column = x / (SETTINGS_GLYPH * SettingsScale);
+    const int32_t column = x / (SETTINGS_ADVANCE * SettingsScale);
     const int32_t row = y / (SETTINGS_PITCH * SettingsScale);
 
     for (size_t index = 0U; index < SettingsButtonCount; ++index)
@@ -644,7 +645,7 @@ int main(void)
     SettingsLoad();
 
     SettingsScale = (screen.width >= 1024) ? 2 : 1;
-    geometry.width = SETTINGS_COLUMNS * SETTINGS_GLYPH * SettingsScale;
+    geometry.width = SETTINGS_COLUMNS * SETTINGS_ADVANCE * SettingsScale;
     geometry.height = SETTINGS_ROWS * SETTINGS_PITCH * SettingsScale;
     geometry.x = (screen.width - geometry.width) / 2;
     geometry.y = (screen.height - geometry.height) / 3;

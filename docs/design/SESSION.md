@@ -61,12 +61,12 @@ asking before the real session would keep it out.
 
 ## 3. Text
 
-`window_text` draws a run of text in a window's content with **the system's one
-face** ([`CONSOLE.md`](CONSOLE.md)), which already draws every title. A face per
-program would make a system whose text does not match itself; and the face is the
-kernel's under `LGPL-3.0-or-later` while `libc/` is `MIT`, so a copy in the library
-would be a relicensing this project may not perform
-([`../../LICENSING.md`](../../LICENSING.md), Section 1). Colours are `0x00RRGGBB`,
+`window_text` draws a run of text in a window's content with **the desktop's one
+face**, Inter in cells of five by eight units of the scale ([`CONSOLE.md`](CONSOLE.md),
+Section 4), which also draws every title. A face per program would make a system
+whose text does not match itself; a program takes a character's width from
+`SYSCALL_WINDOW_TEXT_ADVANCE` rather than a number of its own. Colours are
+`0x00RRGGBB`,
 encoded as blitted pixels are; glyphs are clipped by the content, so long labels
 are cut at the edge.
 

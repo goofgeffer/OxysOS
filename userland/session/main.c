@@ -50,6 +50,10 @@
 #include <syscall.h>
 #include <time.h>
 
+/* A character's width in pixels at a scale of one; the face is monospaced, so
+ * a run of `n` characters at a scale is exactly `n * SESSION_ADVANCE * scale`. */
+#define SESSION_ADVANCE ((int32_t)SYSCALL_WINDOW_TEXT_ADVANCE)
+
 #define SESSION_CONFIGURATION "/etc/session.conf"
 
 /* What the launcher offers where the configuration offers nothing: the
@@ -481,13 +485,13 @@ static void SessionDrawRoot(void)
         }
     }
 
-    /* Centred by measurement rather than by guess: the face is eight pixels
-     * wide and every glyph of it the same, so a run of `n` characters at a
-     * scale is exactly `n * 8 * scale` across. */
+    /* Centred by measurement rather than by guess: the face is monospaced, so
+     * a run of `n` characters at a scale is `n * SESSION_ADVANCE * scale`
+     * across. */
     {
         static const char wordmark[] = "OXYS-OS";
         const int32_t scale = SessionScale * 3;
-        const int32_t width = (int32_t)(sizeof wordmark - 1U) * 8 * scale;
+        const int32_t width = (int32_t)(sizeof wordmark - 1U) * SESSION_ADVANCE * scale;
 
         SessionText(SessionRoot, centre_x - (width / 2), centre_y + (36 * SessionScale), wordmark,
                     SESSION_INK, SESSION_GROUND, scale);
@@ -564,7 +568,8 @@ static int32_t SessionNoticeWidth(void)
     const char *const notice = SessionNotice();
 
     return (notice != NULL)
-               ? (((int32_t)strlen(notice) * 8 * SessionScale) + (4 * 3 * SessionScale))
+               ? (((int32_t)strlen(notice) * SESSION_ADVANCE * SessionScale) +
+                  (4 * 3 * SessionScale))
                : 0;
 }
 
@@ -613,8 +618,8 @@ static void SessionDrawClock(void)
     text[4] = (char)('0' + (broken.tm_min % 10));
     text[5] = '\0';
 
-    SessionText(SessionClock, (width - (5 * 8 * SessionScale)) / 2, SessionPanelTextTop(), text,
-                SESSION_INK, SESSION_PANEL, SessionScale);
+    SessionText(SessionClock, (width - (5 * SESSION_ADVANCE * SessionScale)) / 2,
+                SessionPanelTextTop(), text, SESSION_INK, SESSION_PANEL, SessionScale);
 
     SessionClockRemaining = (int64_t)(60 - (now % 60)) * 1000;
 }
@@ -911,7 +916,7 @@ static void SessionDrawSymbol(int64_t window, int32_t x, int32_t y, int32_t exte
 static int32_t SessionNotificationWidth(void)
 {
     return ((3 * SESSION_NOTIFICATION_PAD_UNITS) + SESSION_NOTIFICATION_SYMBOL_UNITS +
-            ((int32_t)SESSION_NOTIFICATION_COLUMNS * 8)) *
+            ((int32_t)SESSION_NOTIFICATION_COLUMNS * SESSION_ADVANCE)) *
            SessionScale;
 }
 
@@ -1206,7 +1211,7 @@ static void SessionDrawTasks(void)
     const int32_t height = SessionPanelHeight();
     const int32_t inset = 3 * SessionScale;
     const int32_t width = SESSION_TASK_UNITS * SessionScale;
-    const size_t characters = (size_t)((width - (2 * inset)) / (8 * SessionScale));
+    const size_t characters = (size_t)((width - (2 * inset)) / (SESSION_ADVANCE * SessionScale));
     const size_t shown = SessionTasksShown();
 
     for (size_t index = 0U; index < shown; ++index)
@@ -1261,7 +1266,7 @@ static void SessionDrawPins(void)
         {
             const char letter[2] = { entry->name[0], '\0' };
 
-            SessionText(SessionPanel, x + ((height - (8 * SessionScale)) / 2),
+            SessionText(SessionPanel, x + ((height - (SESSION_ADVANCE * SessionScale)) / 2),
                         SessionPanelTextTop(), letter, SESSION_INK, SESSION_PANEL, SessionScale);
         }
 

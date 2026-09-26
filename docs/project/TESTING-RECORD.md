@@ -15,6 +15,7 @@ that was cleared that day and renumbered from 1; the date identifies the image.
 
 | Date | Where | What | Result |
 | ---- | ----- | ---- | ------ |
+| 2026-09-26 | QEMU q35, VirtualBox and Bochs | The desktop's text in Inter | Passed; the face smooth on the desktop, every self-test on all three |
 | 2026-09-26 | QEMU q35, VirtualBox and Bochs | The panel's icons without buttons | Passed; the launcher and pinned icons bare on the bar, the window list with buttons; every self-test on all three |
 | 2026-09-26 | QEMU q35, VirtualBox and Bochs | The owner's bars, buttons, pointer and two icons | Passed; buttons, icons and the pointer's halo over black under QEMU, the panel at scale one under VirtualBox; every self-test on all three |
 | 2026-09-26 | QEMU q35, VirtualBox and Bochs | Notepad and System Info | Passed; Notepad saved two lines to `/notes.txt` as typed; System Info's figures and uptime; every self-test on all three |

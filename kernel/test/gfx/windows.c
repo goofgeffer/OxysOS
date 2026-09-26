@@ -35,6 +35,7 @@
 
 #include <oxys/kernel.h>
 #include <oxys/test/verify.h>
+#include <oxys/gfx/face.h>
 #include <oxys/gfx/window.h>
 #include <oxys/gfx/graphics.h>
 
@@ -722,7 +723,7 @@ void KernelVerifyWindows(void)
         {
             for (int32_t column = 0; column < 8; ++column)
             {
-                if (GraphicsPixelAt(surface, column, row) == 0x00FFFFFFU)
+                if (GraphicsPixelAt(surface, column, row) != 0U)
                 {
                     any_ink = true;
                 }
@@ -731,6 +732,42 @@ void KernelVerifyWindows(void)
 
         KernelWindowRequire(any_ink, "the glyph drawn left no ink in the window's content");
         WindowDestroy(window);
+    }
+
+    /*
+     * The face's coverage: a space covers nothing at every scale, a capital
+     * is fully covered somewhere at every scale from two (the sampled scales
+     * included, where an index off by a row reads the next glyph or nothing),
+     * and a coordinate outside the cell or a scale out of range covers nothing.
+     */
+    {
+        bool space_clear = true;
+        bool capitals_solid = true;
+
+        for (int32_t scale = 1; scale <= 8; ++scale)
+        {
+            uint8_t most = 0U;
+
+            for (int32_t row = 0; row < FACE_HEIGHT * scale; ++row)
+            {
+                for (int32_t column = 0; column < FACE_WIDTH * scale; ++column)
+                {
+                    const uint8_t covered = FaceCoverage((uint8_t)'H', scale, column, row);
+
+                    space_clear = space_clear && (FaceCoverage((uint8_t)' ', scale, column, row) == 0U);
+                    most = (covered > most) ? covered : most;
+                }
+            }
+
+            capitals_solid = capitals_solid && ((scale == 1) || (most >= 240U));
+        }
+
+        KernelWindowRequire(space_clear, "the face's space covers a pixel");
+        KernelWindowRequire(capitals_solid, "the face's H is not solid at some scale");
+        KernelWindowRequire((FaceCoverage((uint8_t)'H', 2, 16, 0) == 0U) &&
+                                (FaceCoverage((uint8_t)'H', 9, 0, 0) == 0U) &&
+                                (FaceCoverage((uint8_t)0x7F, 2, 8, 8) == 0U),
+                            "the face covered a pixel outside its cell, scales or codes");
     }
 
     /* The manager gives the test's surface up, since sub-task 9.2: the client

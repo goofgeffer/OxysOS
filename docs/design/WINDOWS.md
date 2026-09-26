@@ -75,7 +75,7 @@ the window follows the pointer, its owner told nothing.
 order only, with no bevel or shadow. **The close control is a cross** 11 pixels
 square, two diagonals two pixels wide, the size of the minimise and full-screen
 glyphs beside it. Its reach is a
-25-pixel square. **The title** is the system face at twice its size, 16 pixels in a
+25-pixel square. **The title** is the desktop's face, Inter, at scale two, 16 pixels in a
 24-pixel band.
 
 **Colours come from [`../../art/palette.h`](../../art/palette.h)**, shared with the

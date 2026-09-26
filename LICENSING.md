@@ -25,6 +25,7 @@ intended to be used differently.
 | `Makefile`, `build_*.sh`, `boot/grub/grub.cfg`, `.gitignore`, `.gitattributes`, `.github/` | CC0 1.0 Universal, as documentation of how the work is built rather than part of it | `CC0-1.0` |
 | `etc/` — the system configuration of sub-task 9.4 | CC0 1.0 Universal, as settings a person edits rather than work that is linked into anything | `CC0-1.0` |
 | `art/` — the mark, and the bitmap generated from it | CC0 1.0 Universal, so that the kernel and the userland may both draw it | `CC0-1.0` |
+| `fonts/` — third-party typefaces and what is rendered from them (Section 4) | SIL Open Font License 1.1 | `OFL-1.1` |
 
 **The rule that decides a new directory** is what is linked, not what a subject
 is called. Code that becomes part of the kernel image is LGPL; code that is
@@ -164,10 +165,11 @@ upstream.
 
 | Work | Version | Source | Licence | Where |
 | ---- | ------- | ------ | ------- | ----- |
+| Inter, Medium weight | 4.1 | <https://github.com/rsms/inter>, release archive `Inter-4.1.zip` | `OFL-1.1`, no reserved font name | `fonts/inter/Inter-Medium.ttf`, and `fonts/inter/face.h` rendered from it |
 
-The table is empty: every file in the repository was written for this project.
-`make spdx-check` enforces Section 1 by path, so the first entry must also teach
-[`tools/spdx.sh`](tools/spdx.sh) to accept the listed files' own identifiers.
+`make spdx-check` expects `OFL-1.1` of everything under `fonts/`, the one
+directory given wholly to third-party work; a work placed elsewhere must also
+teach [`tools/spdx.sh`](tools/spdx.sh) its file's own identifier.
 
 ## 5. Limitations
 

@@ -121,6 +121,9 @@ identifier_for() {
         #     the session, which is MIT, may both draw it ---
         art/*)                   echo 'CC0-1.0'; return ;;
 
+        # --- third-party fonts, under their own licence (LICENSING.md, Section 4) ---
+        fonts/*)                 echo 'OFL-1.1'; return ;;
+
         # --- the interface a program is entitled to, which is permissive so
         #     that an MIT C library may include it; it must be tested before the
         #     kernel rule below, which would otherwise claim it ---

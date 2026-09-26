@@ -42,7 +42,7 @@
 #include <string.h>
 #include <syscall.h>
 
-#define FILES_GLYPH 8
+#define FILES_GLYPH ((int32_t)SYSCALL_WINDOW_TEXT_ADVANCE)
 #define FILES_PITCH 10
 #define FILES_CHUNK 120
 #define FILES_COLUMNS_MAXIMUM 512

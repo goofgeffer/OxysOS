@@ -98,7 +98,7 @@ LINKER_SCRIPT := linker.ld
 # it; `kernel/include/` holds the kernel's own corpus, under the kernel's
 # licence. LICENSING.md, Section 2.1, required the division. The two roots carry
 # no file of the same name, so nothing here depends upon the order.
-INCLUDE_DIRS := -Ikernel/abi -Ikernel/include -Iart
+INCLUDE_DIRS := -Ikernel/abi -Ikernel/include -Iart -Ifonts/inter
 
 # What the C library is compiled against, in addition to the two roots above. It
 # is a separate variable because only the C library's own rule uses it.
@@ -340,6 +340,7 @@ C_SOURCES := kernel/kernel.c \
              graphics/framebuffer.c \
              graphics/draw.c \
              graphics/font.c \
+             graphics/face.c \
              graphics/console.c \
              graphics/compositor.c \
              graphics/faultscreen.c \

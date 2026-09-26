@@ -129,6 +129,14 @@ and not a make target because every target is listed in
 `PROJECT_GUIDELINES.md`, Section 3, and adding one is the owner's amendment to
 make.
 
+## `face.sh` — the desktop's face, rendered from a font
+
+[`face.sh`](face.sh) renders `fonts/inter/Inter-Medium.ttf` into
+`fonts/inter/face.h`, the coverage tables the kernel draws the desktop's text
+from ([`../docs/design/CONSOLE.md`](../docs/design/CONSOLE.md), Section 4). It is
+run by hand when the font or the metrics change, and its output is committed, so
+that no build depends on ImageMagick.
+
 ## Running them
 
 ```sh

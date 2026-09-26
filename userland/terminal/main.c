@@ -49,10 +49,11 @@
  * serial line; there is one shell. */
 #define TERMINAL_SHELL "/bin/sh"
 
-/* The face is eight pixels square and every glyph of it the same, so a cell is
- * eight by the scale and a run of `n` characters is exactly `n * 8 * scale`
+/* The face is monospaced, so a cell is SYSCALL_WINDOW_TEXT_ADVANCE by eight units
+ * of the scale and a run of `n` characters is exactly `n` advances
  * across. The session measures its wordmark the same way. */
-#define TERMINAL_GLYPH 8
+#define TERMINAL_GLYPH   8
+#define TERMINAL_ADVANCE ((int32_t)SYSCALL_WINDOW_TEXT_ADVANCE)
 
 /*
  * Two pixels of leading between rows, at the scale.
@@ -183,7 +184,7 @@ static bool TerminalPaintGround(void)
  */
 static void TerminalResize(int32_t width, int32_t height)
 {
-    uint32_t columns = (uint32_t)(width / (TERMINAL_GLYPH * TerminalScale));
+    uint32_t columns = (uint32_t)(width / (TERMINAL_ADVANCE * TerminalScale));
     uint32_t rows = (uint32_t)(height / (TERMINAL_PITCH * TerminalScale));
 
     columns = (columns > TERM_COLUMNS_MAXIMUM) ? TERM_COLUMNS_MAXIMUM : columns;
@@ -207,7 +208,7 @@ static void TerminalDrawAt(uint32_t column, uint32_t row, const char *text, uint
 {
     SyscallWindowText placement;
 
-    placement.x = (int32_t)column * TERMINAL_GLYPH * TerminalScale;
+    placement.x = (int32_t)column * TERMINAL_ADVANCE * TerminalScale;
     placement.y = (int32_t)row * TERMINAL_PITCH * TerminalScale;
     placement.ink = ink;
     placement.paper = paper;
@@ -467,7 +468,7 @@ int main(void)
      */
     TerminalScale = (screen.width >= 1024) ? 2 : 1;
 
-    columns = (uint32_t)((screen.width * 3 / 4) / (TERMINAL_GLYPH * TerminalScale));
+    columns = (uint32_t)((screen.width * 3 / 4) / (TERMINAL_ADVANCE * TerminalScale));
     rows = (uint32_t)((screen.height * 3 / 5) / (TERMINAL_PITCH * TerminalScale));
 
     if (columns > TERM_COLUMNS_MAXIMUM)
@@ -488,7 +489,7 @@ int main(void)
         return EXIT_FAILURE;
     }
 
-    geometry.width = (int32_t)columns * TERMINAL_GLYPH * TerminalScale;
+    geometry.width = (int32_t)columns * TERMINAL_ADVANCE * TerminalScale;
     geometry.height = (int32_t)rows * TERMINAL_PITCH * TerminalScale;
     geometry.x = (screen.width - geometry.width) / 2;
     geometry.y = (screen.height - geometry.height) / 2;
