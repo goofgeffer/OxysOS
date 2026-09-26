@@ -417,6 +417,7 @@ static void SettingsLabel(int32_t row, int32_t column, const char *text, uint32_
     placement.ink = ink;
     placement.paper = paper;
     placement.scale = SettingsScale;
+    placement.flags = SYSCALL_WINDOW_TEXT_PROPORTIONAL;
     (void)OxysWindowText(SettingsWindow, &placement, text);
 }
 

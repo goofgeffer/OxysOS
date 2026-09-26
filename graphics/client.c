@@ -57,6 +57,10 @@
 #include <oxys/mm/heap.h>
 #include <oxys/kernel.h>
 
+_Static_assert((WINDOW_TEXT_PROPORTIONAL == SYSCALL_WINDOW_TEXT_PROPORTIONAL) &&
+                   (WINDOW_TEXT_MEASURE == SYSCALL_WINDOW_TEXT_MEASURE),
+               "window_text's flags are the window manager's");
+
 static uint64_t WindowClientCalls;
 static uint64_t WindowClientRefusals;
 static uint64_t WindowClientSleeps;
@@ -564,6 +568,7 @@ int64_t WindowClientText(uint64_t window, uint64_t placement_address, uint64_t t
     const size_t owned = WindowClientOwned(window);
     const SyscallWindowText *placement;
     char text[SYSCALL_WINDOW_TEXT_MAXIMUM + 1U];
+    int32_t width;
 
     ++WindowClientCalls;
 
@@ -581,16 +586,17 @@ int64_t WindowClientText(uint64_t window, uint64_t placement_address, uint64_t t
     }
 
     placement = (const SyscallWindowText *)(uintptr_t)placement_address;
+    width = WindowDrawText(owned, placement->x, placement->y, text, placement->ink,
+                           placement->paper, placement->scale, placement->flags);
 
-    if (!WindowDrawText(owned, placement->x, placement->y, text, placement->ink, placement->paper,
-                        placement->scale))
+    if (width < 0)
     {
         ++WindowClientRefusals;
 
         return SYSCALL_EINVAL;
     }
 
-    return SYSCALL_OK;
+    return (int64_t)width;
 }
 
 int64_t WindowClientState(uint64_t window, uint64_t action)

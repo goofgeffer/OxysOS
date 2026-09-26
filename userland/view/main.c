@@ -214,6 +214,7 @@ static void ViewDrawText(int32_t row, const char *text, int32_t count, uint32_t 
         placement.ink = ink;
         placement.paper = paper;
         placement.scale = ViewScale;
+        placement.flags = 0U;
 
         (void)OxysWindowText(ViewWindow, &placement, piece);
     }

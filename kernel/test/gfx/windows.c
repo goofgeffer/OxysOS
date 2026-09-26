@@ -710,12 +710,26 @@ void KernelVerifyWindows(void)
         bool any_ink = false;
 
         KernelWindowRequire(window != WINDOW_NONE, "a window for the text could not be made");
-        KernelWindowRequire(WindowDrawText(window, 0, 0, "A", 0x00FFFFFFU, 0U, 1),
+        KernelWindowRequire(WindowDrawText(window, 0, 0, "A", 0x00FFFFFFU, 0U, 1, 0U) == 5,
                             "text was refused a window that exists");
-        KernelWindowRequire(!WindowDrawText(window, 0, 0, "A", 0U, 0U, 0),
+        KernelWindowRequire(WindowDrawText(window, 0, 0, "A", 0U, 0U, 0, 0U) < 0,
                             "a scale of zero was accepted");
-        KernelWindowRequire(!WindowDrawText(window, 0, 0, NULL, 0U, 0U, 1),
+        KernelWindowRequire(WindowDrawText(window, 0, 0, NULL, 0U, 0U, 1, 0U) < 0,
                             "text at no address was accepted");
+        KernelWindowRequire(WindowDrawText(window, 0, 0, "A", 0U, 0U, 1, 4U) < 0,
+                            "an unknown flag of window_text was accepted");
+        {
+            const int32_t narrow = WindowDrawText(window, 0, 16, "il", 0U, 0U, 1,
+                                                  WINDOW_TEXT_MEASURE | WINDOW_TEXT_PROPORTIONAL);
+            const int32_t measured = WindowDrawText(
+                window, 0, 16, "Wide", 0U, 0U, 2, WINDOW_TEXT_MEASURE | WINDOW_TEXT_PROPORTIONAL);
+
+            KernelWindowRequire((narrow > 0) && (narrow < 10),
+                                "proportional text is not narrower than the grid for narrow letters");
+            KernelWindowRequire(WindowDrawText(window, 0, 16, "Wide", 0x00FFFFFFU, 0U, 2,
+                                               WINDOW_TEXT_PROPORTIONAL) == measured,
+                                "proportional text drew a width other than it measured");
+        }
 
         surface = WindowSurface(window);
 

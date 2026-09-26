@@ -353,6 +353,7 @@ static void NotepadRow(int32_t row, const char *text, uint32_t ink, uint32_t pap
     placement.ink = ink;
     placement.paper = paper;
     placement.scale = NotepadScale;
+    placement.flags = 0U;
     (void)OxysWindowText(NotepadWindow, &placement, text);
 }
 
@@ -438,6 +439,7 @@ static void NotepadDraw(void)
             placement.ink = NOTEPAD_PAPER;
             placement.paper = NOTEPAD_INK;
             placement.scale = NotepadScale;
+            placement.flags = 0U;
             (void)OxysWindowText(NotepadWindow, &placement, cell);
         }
 

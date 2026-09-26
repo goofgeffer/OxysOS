@@ -369,10 +369,11 @@ int main(void)
         placement.ink = 0x00FFFFFFU;
         placement.paper = 0U;
         placement.scale = 1;
+        placement.flags = 0U;
 
         WindowRequire(scratch >= 0, "a window for the text could not be made");
-        WindowRequire(OxysWindowText(scratch, &placement, "text") == 0,
-                      "text was refused a window this program holds");
+        WindowRequire(OxysWindowText(scratch, &placement, "text") == 20,
+                      "text was refused a window this program holds, or was not four cells");
 
         errno = 0;
         WindowRequire((OxysWindowText(999, &placement, "text") == -1) && (errno == EBADF),

@@ -129,9 +129,9 @@ the less they depend upon the better.
   renders the font once, with ImageMagick, into
   [`../../fonts/inter/face.h`](../../fonts/inter/face.h), which is committed. The
   kernel carries no font parser, and no build depends on ImageMagick.
-- **Monospaced cells of five by eight units of the scale**
-  (`SYSCALL_WINDOW_TEXT_ADVANCE` by `SYSCALL_WINDOW_TEXT_HEIGHT`), so every
-  program lays text out on a grid by multiplication. A square cell, the 8-by-8
+- **Grid cells of five by eight units of the scale**
+  (`SYSCALL_WINDOW_TEXT_ADVANCE` by `SYSCALL_WINDOW_TEXT_HEIGHT`), so a program
+  lays columns of text out by multiplication. A square cell, the 8-by-8
   face's, left Inter's narrower letters standing apart; five units is near the
   proportion of a monospaced face. Each glyph is centred by its ink, and the few
   wider than the cell (`W`, `M`, `m`, `w`, `@`) are narrowed to fit rather than
@@ -146,6 +146,14 @@ the less they depend upon the better.
   is decided; **scales five to eight are sampled bilinearly** from the
   scale-four table, since magnifying a smooth glyph stays smooth and four more
   tables would cost half a mebibyte for sizes only a large label uses.
+- **Proportional text** (`FaceDrawText`, titles and the flag of `window_text`)
+  moves the pen by Inter's own advance, in sixteenths of a pixel so rounding
+  does not accumulate, and places each glyph's cell so its first inked column
+  falls where the font puts the ink; both are generated with the tables. The
+  paper covers the run first and each glyph's ink is only blended, so a glyph
+  that overhangs its advance does not erase its neighbour. A glyph narrowed to
+  fit the grid's cell advances by the font's advance less what it was narrowed
+  by.
 - **A code outside `0x20` to `0x7E` draws a hollow box**, as the 8-by-8 face
   does, so an unmapped character is visible.
 
@@ -171,6 +179,7 @@ needs text above it (that text is written and erased again).
 | Into a full row, BS stops on its last character; erasing it returns to column 0 and then to that character. | A wrapped row treated as ended; a stray character left at the edge of the next prompt. |
 | Inter's space covers nothing at every scale; its `H` is fully covered somewhere at every scale from two, the sampled scales included; nothing is covered outside the cell, beyond scale eight or outside the codes (`KernelVerifyWindows`). | A table index off by a row or a glyph; a sampler reading past its table. |
 | A glyph drawn in a window leaves ink in the content (`KernelVerifyWindows`, `window-check`). | Text that draws nothing. |
+| Grid text is five units a character; proportional `il` is narrower than the grid; drawing proportional text returns the width measuring it gave; an unknown flag is refused (`KernelVerifyWindows`, `window-check`). | A measure that disagrees with the drawing, which centres every label wrongly. |
 
 `FAULTSCREEN.md` asserts the fast paths against the slow ones. That the log is
 legible, numbers included, is judged by eye
@@ -194,7 +203,7 @@ Console: 1903 bytes replayed from before the console existed.
    after a CR shortens it. Nothing writes a CR without an LF.
 8. No lock of its own: `KernelWriteString` holds one for a whole string, which is
    the right granularity. The fault screen takes none ([`FAULTSCREEN.md`](FAULTSCREEN.md)).
-9. The desktop's face is monospaced, with no kerning or proportional spacing,
-   and at scale one (eight pixels high) it is soft.
+9. Proportional text has no kerning, and W, M, m, w and @ keep the narrowing
+   the grid's cell needs in it too; at scale one (eight pixels high) text is soft.
 10. That a glyph looks right is judged by eye; the self-test asserts coverage,
     not shape.

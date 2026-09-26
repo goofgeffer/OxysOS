@@ -146,7 +146,7 @@ self-test runs. A change of state is made in the commit that causes it.
 | 9.6 | Implement a terminal emulator window hosting the Phase 8 shell. | Implemented | `KernelVerifyTerm`, `poll-check` |
 | 9.7 | Implement the utilities the desktop is not usable without: a file manager, a text viewer and a clock. `Oxys 1 Beta` was cut here: [`RELEASE-1-BETA.md`](RELEASE-1-BETA.md). | Implemented | `KernelVerifyRtc`, `KernelVerifyTime`, `signal-check` |
 | 9.8 | Implement the settings application, by which the configuration of 9.4 is edited rather than hand-written. The notifications were added with it. | Implemented | `KernelVerifyConfig`, `window-check` |
-| 9.9 | Draw the desktop's text in Inter, rendered from the font into monospaced cells, the boot log and fault screen keeping the 8-by-8 face. | Implemented | `KernelVerifyWindows`, `window-check` |
+| 9.9 | Draw the desktop's text in Inter, rendered from the font; titles and labels proportional, columns on a grid of five by eight; the boot log and fault screen keeping the 8-by-8 face. | Implemented | `KernelVerifyWindows`, `window-check` |
 
 ## Phase 10 — Cryptography and Disk Partitions
 

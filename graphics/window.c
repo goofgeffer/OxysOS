@@ -620,7 +620,7 @@ static void WindowDrawTitle(const Window *window, GraphicsRectangle band, uint32
     const GraphicsRectangle leftmost = WindowControlReachOf(window, WINDOW_CONTROL_COUNT - 1);
     const GraphicsRectangle reach =
         GraphicsRectangleIsEmpty(leftmost) ? WindowCloseReachOf(window) : leftmost;
-    int32_t x = band.x + WINDOW_TITLE_INSET;
+    const int32_t x = band.x + WINDOW_TITLE_INSET;
     const int32_t y = band.y + ((WINDOW_TITLE_HEIGHT - (FACE_HEIGHT * WINDOW_TITLE_SCALE)) / 2);
 
     /*
@@ -635,11 +635,7 @@ static void WindowDrawTitle(const Window *window, GraphicsRectangle band, uint32
         return;
     }
 
-    for (const char *at = window->title; *at != '\0'; ++at)
-    {
-        FaceDrawGlyph(WindowScreen, x, y, (uint8_t)*at, ink, paper, WINDOW_TITLE_SCALE);
-        x += FACE_WIDTH * WINDOW_TITLE_SCALE;
-    }
+    (void)FaceDrawText(WindowScreen, x, y, window->title, ink, paper, WINDOW_TITLE_SCALE, true);
 
     (void)GraphicsPopClip(WindowScreen);
 }
@@ -1458,8 +1454,8 @@ bool WindowWritePixels(size_t identifier, GraphicsRectangle area, const uint32_t
     return true;
 }
 
-bool WindowDrawText(size_t identifier, int32_t x, int32_t y, const char *text, uint32_t ink,
-                    uint32_t paper, int32_t scale)
+int32_t WindowDrawText(size_t identifier, int32_t x, int32_t y, const char *text, uint32_t ink,
+                       uint32_t paper, int32_t scale, uint32_t flags)
 {
     Window *const window = WindowAt(identifier);
     const uint32_t ink_pixel = (WindowEncode == NULL)
@@ -1472,12 +1468,18 @@ bool WindowDrawText(size_t identifier, int32_t x, int32_t y, const char *text, u
                                      : WindowEncode((uint8_t)((paper >> 16) & 0xFFU),
                                                     (uint8_t)((paper >> 8) & 0xFFU),
                                                     (uint8_t)(paper & 0xFFU));
-    int32_t at = x;
-    int32_t drawn = 0;
+    const bool proportional = (flags & WINDOW_TEXT_PROPORTIONAL) != 0U;
+    int32_t width;
 
-    if ((window == NULL) || (text == NULL) || (scale < 1) || (scale > 8))
+    if ((window == NULL) || (text == NULL) || (scale < 1) || (scale > 8) ||
+        ((flags & ~(WINDOW_TEXT_PROPORTIONAL | WINDOW_TEXT_MEASURE)) != 0U))
     {
-        return false;
+        return -1;
+    }
+
+    if ((flags & WINDOW_TEXT_MEASURE) != 0U)
+    {
+        return FaceTextWidth(text, scale, proportional);
     }
 
     /*
@@ -1486,21 +1488,17 @@ bool WindowDrawText(size_t identifier, int32_t x, int32_t y, const char *text, u
      * into the row beneath — which is what a caller drawing a label into a
      * window too narrow for it means, and is what it would see upon a screen.
      */
-    for (const char *character = text; *character != '\0'; ++character)
-    {
-        FaceDrawGlyph(&window->surface, at, y, (uint8_t)*character, ink_pixel, paper_pixel,
-                      scale);
-        at += (int32_t)FACE_WIDTH * scale;
-        ++drawn;
-    }
+    width = FaceDrawText(&window->surface, x, y, text, ink_pixel, paper_pixel, scale,
+                         proportional);
 
-    if (drawn != 0)
+    if (width != 0)
     {
-        WindowInvalidate(identifier, WindowMakeRectangle(x, y, drawn * (int32_t)FACE_WIDTH * scale,
+        /* A glyph's ink may overhang its advance by a little either side. */
+        WindowInvalidate(identifier, WindowMakeRectangle(x - scale, y, width + (2 * scale),
                                                          (int32_t)FACE_HEIGHT * scale));
     }
 
-    return true;
+    return width;
 }
 
 const char *WindowTitle(size_t identifier)

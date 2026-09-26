@@ -50,8 +50,9 @@
 #include <syscall.h>
 #include <time.h>
 
-/* A character's width in pixels at a scale of one; the face is monospaced, so
- * a run of `n` characters at a scale is exactly `n * SESSION_ADVANCE * scale`. */
+/* A character's width on the grid at a scale of one. The session's text is
+ * proportional and narrower on the whole, so a count of characters times this
+ * is a bound on its width, which is what fitting a label to a space needs. */
 #define SESSION_ADVANCE ((int32_t)SYSCALL_WINDOW_TEXT_ADVANCE)
 
 #define SESSION_CONFIGURATION "/etc/session.conf"
@@ -363,8 +364,28 @@ static void SessionText(int64_t window, int32_t x, int32_t y, const char *text, 
     placement.ink = ink;
     placement.paper = paper;
     placement.scale = scale;
+    placement.flags = SYSCALL_WINDOW_TEXT_PROPORTIONAL;
 
     (void)OxysWindowText(window, &placement, text);
+}
+
+/* The width the session's text would take, in pixels: zero if it cannot be
+ * measured, which leaves a centred label at the left rather than nowhere. */
+static int32_t SessionTextWidth(int64_t window, const char *text, int32_t scale)
+{
+    SyscallWindowText placement;
+    int64_t width;
+
+    placement.x = 0;
+    placement.y = 0;
+    placement.ink = 0U;
+    placement.paper = 0U;
+    placement.scale = scale;
+    placement.flags = SYSCALL_WINDOW_TEXT_PROPORTIONAL | SYSCALL_WINDOW_TEXT_MEASURE;
+
+    width = OxysWindowText(window, &placement, text);
+
+    return (width > 0) ? (int32_t)width : 0;
 }
 
 /*
@@ -485,13 +506,12 @@ static void SessionDrawRoot(void)
         }
     }
 
-    /* Centred by measurement rather than by guess: the face is monospaced, so
-     * a run of `n` characters at a scale is `n * SESSION_ADVANCE * scale`
-     * across. */
+    /* Centred by measurement: the text is proportional, so its width is asked
+     * of the window manager rather than computed. */
     {
         static const char wordmark[] = "OXYS-OS";
         const int32_t scale = SessionScale * 3;
-        const int32_t width = (int32_t)(sizeof wordmark - 1U) * SESSION_ADVANCE * scale;
+        const int32_t width = SessionTextWidth(SessionRoot, wordmark, scale);
 
         SessionText(SessionRoot, centre_x - (width / 2), centre_y + (36 * SessionScale), wordmark,
                     SESSION_INK, SESSION_GROUND, scale);
@@ -618,7 +638,7 @@ static void SessionDrawClock(void)
     text[4] = (char)('0' + (broken.tm_min % 10));
     text[5] = '\0';
 
-    SessionText(SessionClock, (width - (5 * SESSION_ADVANCE * SessionScale)) / 2,
+    SessionText(SessionClock, (width - SessionTextWidth(SessionClock, text, SessionScale)) / 2,
                 SessionPanelTextTop(), text, SESSION_INK, SESSION_PANEL, SessionScale);
 
     SessionClockRemaining = (int64_t)(60 - (now % 60)) * 1000;
@@ -1266,7 +1286,8 @@ static void SessionDrawPins(void)
         {
             const char letter[2] = { entry->name[0], '\0' };
 
-            SessionText(SessionPanel, x + ((height - (SESSION_ADVANCE * SessionScale)) / 2),
+            SessionText(SessionPanel,
+                        x + ((height - SessionTextWidth(SessionPanel, letter, SessionScale)) / 2),
                         SessionPanelTextTop(), letter, SESSION_INK, SESSION_PANEL, SessionScale);
         }
 

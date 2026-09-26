@@ -11,6 +11,7 @@ row.
 
 | Date | Phase | Change | Commit |
 | ---- | ----- | ------ | ------ |
+| 2026-09-26 | Phase 9 | Titles and labels in proportional Inter; `window_text` gains proportional and measuring flags and returns the width | `pending` |
 | 2026-09-26 | Phase 9 | Sub-task 9.9: the desktop's text in Inter, rendered into monospaced cells of five by eight; boot log keeps 8-by-8 | `bf5c871` |
 | 2026-09-26 | — | `PROJECT_GUIDELINES.md` amended at the owner's direction: third-party work permitted anywhere, licence permitting | `00509e7` |
 | 2026-09-26 | Phase 10 | Disk partitions planned as sub-tasks 10.7 to 10.11 of Phase 10, and accounts noted as the direction after them; nothing implemented | `58783f5` |

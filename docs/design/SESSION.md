@@ -62,13 +62,17 @@ asking before the real session would keep it out.
 ## 3. Text
 
 `window_text` draws a run of text in a window's content with **the desktop's one
-face**, Inter in cells of five by eight units of the scale ([`CONSOLE.md`](CONSOLE.md),
-Section 4), which also draws every title. A face per program would make a system
-whose text does not match itself; a program takes a character's width from
-`SYSCALL_WINDOW_TEXT_ADVANCE` rather than a number of its own. Colours are
-`0x00RRGGBB`,
-encoded as blitted pixels are; glyphs are clipped by the content, so long labels
-are cut at the edge.
+face**, Inter ([`CONSOLE.md`](CONSOLE.md), Section 4), which also draws every
+title, and returns the run's width in pixels. A face per program would make a
+system whose text does not match itself. The placement's flags choose the
+layout: **`SYSCALL_WINDOW_TEXT_PROPORTIONAL`** spaces the text by the font's own
+advances, for labels, the panel, the clock, notifications, Settings and System
+Info; without it the text stands on the grid of `SYSCALL_WINDOW_TEXT_ADVANCE`,
+for the terminal, the editor, Files and the viewer, whose columns must align.
+**`SYSCALL_WINDOW_TEXT_MEASURE`** draws nothing and returns the width, which is
+how the session centres the clock and the wordmark. An unknown flag is `EINVAL`.
+Colours are `0x00RRGGBB`, encoded as blitted pixels are; glyphs are clipped by the
+content, so long labels are cut at the edge.
 
 ## 4. The root
 

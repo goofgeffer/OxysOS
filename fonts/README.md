@@ -18,7 +18,7 @@ source: the kernel includes a coverage table generated from a font.
 | Path | Description |
 | ---- | ----------- |
 | [`inter/Inter-Medium.ttf`](inter/Inter-Medium.ttf) | Inter 4.1, Medium weight, from the release archive `Inter-4.1.zip` of <https://github.com/rsms/inter> (SHA-256 of the archive `9883fdd4a49d4fb66bd8177ba6625ef9a64aa45899767dde3d36aa425756b11e`). The source `tools/face.sh` renders. Its tag is in `Inter-Medium.ttf.license`. |
-| [`inter/face.h`](inter/face.h) | The desktop's face: the font rendered by [`../tools/face.sh`](../tools/face.sh) into cells of five by eight units at scales one to four, one byte of coverage to a pixel. Generated; regenerate it rather than editing it. Included only by `graphics/face.c`. |
+| [`inter/face.h`](inter/face.h) | The desktop's face: the font rendered by [`../tools/face.sh`](../tools/face.sh) into cells of five by eight units at scales one to four, one byte of coverage to a pixel, with each glyph's proportional advance and offset. Generated; regenerate it rather than editing it. Included only by `graphics/face.c`. |
 
 ## Licence
 

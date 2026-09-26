@@ -400,11 +400,11 @@
  *                                      ends. Claiming it twice is not an error.
  *   window_text(window, placement, text)
  *                                      Draws `text` into a window's content
- *                                      with the system face, at the placement's
- *                                      position, colours and scale. The face is
- *                                      the one the window manager draws titles
- *                                      with, and there is exactly one of it;
- *                                      docs/design/SESSION.md.
+ *                                      with the desktop's face, at the
+ *                                      placement's position, colours, scale and
+ *                                      flags, and returns the width of the run
+ *                                      in pixels. The face is the one titles
+ *                                      are drawn with; docs/design/SESSION.md.
  */
 #define SYSCALL_WINDOW_SESSION 37U
 #define SYSCALL_WINDOW_TEXT    38U
@@ -533,9 +533,9 @@
  * fixed buffer is a bound it can be honest about. */
 #define SYSCALL_WINDOW_TEXT_MAXIMUM 127U
 
-/* The cell each character of window_text occupies, in units of the scale: five
- * wide and eight high, the face being monospaced so a program lays text out on
- * a grid. */
+/* The cell each character of window_text occupies on the grid, in units of the
+ * scale: five wide and eight high, so a program lays grid text out by
+ * multiplication. Proportional text is eight high and as wide as it measures. */
 #define SYSCALL_WINDOW_TEXT_ADVANCE 5U
 #define SYSCALL_WINDOW_TEXT_HEIGHT  8U
 
@@ -546,7 +546,15 @@ typedef struct SyscallWindowText
     uint32_t ink;
     uint32_t paper;
     int32_t scale;
+    uint32_t flags; /* SYSCALL_WINDOW_TEXT_PROPORTIONAL, _MEASURE, or zero for the grid. */
 } SyscallWindowText;
+
+/* window_text's flags. PROPORTIONAL spaces the text by the font's own advances,
+ * for labels and titles; without it the text stands on the grid, for anything
+ * aligned in columns. MEASURE draws nothing and returns the width alone, so a
+ * program can centre or fit a label before drawing it. */
+#define SYSCALL_WINDOW_TEXT_PROPORTIONAL 1U
+#define SYSCALL_WINDOW_TEXT_MEASURE      2U
 
 #define SYSCALL_POWER_HALT   1U
 #define SYSCALL_POWER_REBOOT 2U

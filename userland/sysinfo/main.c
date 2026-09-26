@@ -63,6 +63,7 @@ static void InfoLine(int32_t row, const char *label, const char *value)
     placement.y = (row * INFO_PITCH * InfoScale) + (((INFO_PITCH - INFO_GLYPH) / 2) * InfoScale);
     placement.paper = INFO_PAPER;
     placement.scale = InfoScale;
+    placement.flags = SYSCALL_WINDOW_TEXT_PROPORTIONAL;
 
     placement.x = INFO_ADVANCE * InfoScale;
     placement.ink = INFO_DIM;

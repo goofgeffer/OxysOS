@@ -213,6 +213,7 @@ static void TerminalDrawAt(uint32_t column, uint32_t row, const char *text, uint
     placement.ink = ink;
     placement.paper = paper;
     placement.scale = TerminalScale;
+    placement.flags = 0U;
 
     (void)OxysWindowText(TerminalWindow, &placement, text);
 }

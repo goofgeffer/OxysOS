@@ -308,7 +308,7 @@ void WindowAnnounceNotification(void);
 uint64_t WindowSession(void);
 
 /*
- * Draws text into a window's content with the system face, of sub-task 9.5:
+ * Draws text into a window's content with the desktop's face (sub-task 9.5):
  * `text` at (x, y) in the content's coordinates, each glyph enlarged by
  * `scale`, in the two colours given — which are a client's 0x00RRGGBB and are
  * encoded here as a blitted pixel is. The region drawn is marked as changed.
@@ -316,16 +316,20 @@ uint64_t WindowSession(void);
  * It exists because the face is a system resource and there is exactly one of
  * it: the window manager already draws every title with it, and a system in
  * which each program carries its own face is a system whose text does not match
- * itself. The face is also the kernel's under the kernel's licence and `libc/`
- * is under another, so a copy in the library would be a relicensing this
- * project may not perform; docs/design/SESSION.md.
+ * itself; docs/design/SESSION.md.
  *
- * Returns false where the window does not exist or the text is unreadable.
- * Characters the face does not cover are drawn as nothing rather than refused,
+ * Returns the width of the run in pixels, or -1 where the window does not
+ * exist, the text is null, the scale is outside 1 to 8 or a flag is unknown.
+ * WINDOW_TEXT_PROPORTIONAL spaces it by the font's advances; without it the
+ * text stands on the grid of FACE_WIDTH. WINDOW_TEXT_MEASURE draws nothing.
+ * Characters the face does not cover are drawn as a box rather than refused,
  * a label with one odd character in it being a label a person can still read.
  */
-bool WindowDrawText(size_t window, int32_t x, int32_t y, const char *text, uint32_t ink,
-                    uint32_t paper, int32_t scale);
+#define WINDOW_TEXT_PROPORTIONAL 1U
+#define WINDOW_TEXT_MEASURE      2U
+
+int32_t WindowDrawText(size_t window, int32_t x, int32_t y, const char *text, uint32_t ink,
+                       uint32_t paper, int32_t scale, uint32_t flags);
 
 /*
  * Destroys a window, giving its content back to the heap, marking where it

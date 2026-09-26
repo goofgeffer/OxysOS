@@ -2,9 +2,9 @@
 /* SPDX-License-Identifier: LGPL-3.0-or-later */
 /*
  * File: kernel/include/oxys/gfx/face.h
- * Purpose: The desktop's face: Inter, drawn smoothly into monospaced cells of
- *          five by eight units of the scale.
- * Key functions: FaceCoverage, FaceDrawGlyph.
+ * Purpose: The desktop's face: Inter, drawn smoothly on a grid of five by
+ *          eight units of the scale, or proportionally by its own advances.
+ * Key functions: FaceCoverage, FaceDrawGlyph, FaceTextWidth, FaceDrawText.
  * References:
  *   - docs/design/CONSOLE.md: the two faces, and why the boot log and the
  *     fault screen keep the 8-by-8 one.
@@ -39,5 +39,22 @@ uint8_t FaceCoverage(uint8_t code, int32_t scale, int32_t column, int32_t row);
  */
 void FaceDrawGlyph(GraphicsSurface *surface, int32_t x, int32_t y, uint8_t code, uint32_t ink,
                    uint32_t paper, int32_t scale);
+
+/*
+ * The width in pixels of a run of text at a scale: on the grid, FACE_WIDTH
+ * times the scale a character; proportionally, the sum of Inter's own
+ * advances, rounded up. Zero for a scale out of range or a null text.
+ */
+int32_t FaceTextWidth(const char *text, int32_t scale, bool proportional);
+
+/*
+ * Draws a run of text with its top-left at (x, y) and returns its width, as
+ * FaceTextWidth gives it. On the grid each character fills its cell; in
+ * proportional text the paper covers the run's width and the full height, and
+ * each glyph's ink is blended where the font's advances put it, so neighbours
+ * whose ink overhangs do not erase one another.
+ */
+int32_t FaceDrawText(GraphicsSurface *surface, int32_t x, int32_t y, const char *text,
+                     uint32_t ink, uint32_t paper, int32_t scale, bool proportional);
 
 #endif /* OXYS_GFX_FACE_H */
