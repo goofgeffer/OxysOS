@@ -3,7 +3,7 @@
 # The Settings Application and the Notifications
 
 **Phase**: sub-task 9.8 of [`../project/PLAN.md`](../project/PLAN.md), which
-closes Phase 9; the notifications were added with it on 2026-09-25.
+closes Phase 9, and the notifications.
 **Source**: [`../../userland/settings/main.c`](../../userland/settings/main.c);
 [`../../libc/config/edit.c`](../../libc/config/edit.c);
 the notifications in [`../../graphics/client.c`](../../graphics/client.c) and
@@ -43,8 +43,6 @@ The session reads its configuration again before showing that notice, so the
 new background and pins are on the screen when the notice appears. The size is
 the exception: the session makes its panel and clock that size as it starts, so
 a new size is used when the desktop next starts, and a second notice says so.
-Until 2026-09-25 it also set the window demonstration's colour, in
-`/etc/desktop.conf`; both went with the demonstration.
 
 **What it does not edit.** `/etc/system.conf` lists the services `init`
 starts, and a service removed by a stray press is a machine that does not start
@@ -111,10 +109,10 @@ early to make room: a column up the screen would cover the windows a person is
 working in. Each is a panel-layer window, so nothing a program does covers it,
 and it touches neither edge the window manager reserves rows for.
 
-**The symbols are the project owner's**, since 2026-09-25: `notify-information`,
+**The symbols are the project owner's**: `notify-information`,
 `notify-success` and `notify-error` of `/share/icons`, read once as the session
 starts and averaged down to the symbol's square. Warnings take the information
-symbol, at the owner's request; the kind still decides nothing else. **Where a
+symbol; the kind still decides nothing else. **Where a
 symbol cannot be read, the session draws one**: a disc of the kind's colour and a
 white glyph of strokes, each pixel sampled four times to soften its edges. So the
 notice saying an icon is missing never goes without its own symbol.
@@ -126,8 +124,8 @@ clock and every notice are aged by that, and the alarm is asked for at the
 soonest of them. The interval timer's ticks are not used: the ABI does not say
 how long a tick is, and the alarm counts milliseconds. The time passed is
 settled before a new notice joins, or the notice would be aged by time that
-passed before it existed. That was the first version's defect: a notice
-arriving late in a long wait vanished at once.
+passed before it existed, and one arriving late in a long wait would vanish at
+once.
 
 ## 3. `notify`
 
@@ -142,14 +140,11 @@ it knows it was not shown as typed.
 | `window-check`: any program may post; a program not holding the session is refused `notification` with `EPERM`; a kind, a flag or a text beyond the bound is `EINVAL`; the session takes what was posted, kind, text and sender as posted; an empty ring is 0. | Another program reading the session's notices; a notice silently cut or mangled. |
 | `KernelVerifyConfig`: five edits compared byte for byte with the text each should give (a value changed with its indentation kept, the second block of a list, a key new to its block, a key removed, a block made); the refusals leave the text unchanged; an edited text parses to what was edited. | A comment lost or another line touched by Save, which would still parse; a half-made edit. |
 
-A negative test was run: with `notification` not checking the session,
-`window-check` failed on both of its assertions about it.
-
-What only looking establishes, done under QEMU on 2026-09-25: the four symbols
+What only looking establishes, and was judged by eye: the four symbols
 and the stacking; each notice gone five seconds after it appeared; the settings
 window's layout; and Save changing the background and the pins while the window
-stood, with `Settings saved.` shown. `/etc/session.conf` and
-`/etc/desktop.conf` were then read back from the shell, and no file was left
+stood, with `Settings saved.` shown, and `/etc/session.conf` read back from the
+shell with no file left
 beside them.
 
 ## Limitations

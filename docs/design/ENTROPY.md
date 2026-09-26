@@ -112,24 +112,17 @@ will need one.
 | A repeated delta is credited exactly C − 1 times; the run past the cutoff is one failure; a delta that moves again is credited at once. | A stopped counter credited forever, or a working one never credited again. |
 | Where the processor has `RDSEED` or `RDRAND`, eight draws succeed and are not all one value; the counter advances; the system's pool holds jitter. | A generator returning a constant, as some processors' `RDRAND` has done. |
 
-**Negative test**: with the cutoff multiplied a thousandfold, the self-test failed
-on the two repetition assertions.
+**Every path is exercised by a processor model QEMU offers**: `-cpu qemu64` has
+neither instruction and seeds from jitter alone; `-cpu qemu64,+rdrand` seeds
+from 2048 values of `RDRAND`; `-cpu max`, like VirtualBox upon a recent host,
+from four values of `RDSEED`.
 
-**Every path was booted** under QEMU on 2026-09-25. With `-cpu qemu64`, which has
-neither instruction, jitter credited 256 bits from 513 samples. With
-`-cpu qemu64,+rdrand`, 2048 values of `RDRAND` credited 256 bits and jitter 255
-more. With `-cpu max`, four values of `RDSEED` credited 256 bits and jitter 255
-more. No run failed the health test. VirtualBox passed the host's `RDSEED` through and
-seeded as `-cpu max` did.
-
-**Bochs is the caution.** It has neither instruction, and its jitter passed the
-test and was credited 256 bits from 513 samples. But Bochs's counter is
-expected to advance with the instructions it emulates rather than with time,
-so the deltas there vary because the work's memory pattern varies, which is
-deterministic. The Repetition Count Test catches a source that has stopped,
-not one that moves predictably. That is limitation 2, seen in practice: the
-credit is an assumption, and under an emulator that counts instructions it is
-wrong.
+**Bochs is the caution.** It has neither instruction, and its jitter passes the
+test and is credited the full target. But its counter is expected to advance
+with the instructions it emulates rather than with time, so the deltas there
+vary because the work's memory pattern varies, which is deterministic. The
+Repetition Count Test catches a source that has stopped, not one that moves
+predictably; that is limitation 2.
 
 What cannot be asserted is that the pool is unpredictable. No test of a
 process's output establishes that; the credits are an argument, made above, and

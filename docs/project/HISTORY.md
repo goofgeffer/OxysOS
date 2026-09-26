@@ -13,17 +13,17 @@ row.
 | ---- | ----- | ------ | ------ |
 | 2026-09-26 | Phase 10 | Disk partitions planned as sub-tasks 10.7 to 10.11 of Phase 10, and accounts noted as the direction after them; nothing implemented | `58783f5` |
 | 2026-09-26 | Phase 10 | The buttons taken from behind the launcher's and the pinned programs' icons, at the owner's request; the icons' spacing restored | `38fbb4f` |
-| 2026-09-26 | Phase 10 | The project owner's interface art: the bars' colour, buttons in their style on the panel and in Settings, their pointer with a halo, and icons for Notepad and System Info | `2e61dcc` |
-| 2026-09-26 | Phase 10 | Notepad, a text editor in a window; System Info, with a `sysinfo` call for its figures, in place of the window demonstration, which is removed with `/etc/desktop.conf`; `init` falls back to the session; the documents corrected | `cb2bb59` |
-| 2026-09-25 | Phase 10 | Sub-task 10.1, which opens Phase 10: the entropy pool in `crypto/`, seeded at boot from `RDSEED`, `RDRAND` and the jitter of the time-stamp counter, with the jitter held to the repetition count test of NIST SP 800-90B | `128c721` |
+| 2026-09-26 | Phase 10 | The project owner's interface art: bar colour, buttons on the panel and in Settings, a pointer with a halo, Notepad and System Info icons | `2e61dcc` |
+| 2026-09-26 | Phase 10 | Notepad; System Info with a `sysinfo` call, replacing the window demonstration and `/etc/desktop.conf`; `init` falls back to the session | `cb2bb59` |
+| 2026-09-25 | Phase 10 | Sub-task 10.1: the entropy pool in `crypto/`, seeded from `RDSEED`, `RDRAND` and timer jitter held to the SP 800-90B repetition count test | `128c721` |
 | 2026-09-25 | Phase 9 | The hole of the settings icon made transparent, by a second flood from its centre recorded in `art/README.md` | `9588cd0` |
-| 2026-09-25 | Phase 9 | The project owner's new Files, Terminal and start icons, a Settings icon, and notification symbols (warnings use the information one); every icon converted at 96 pixels, twice the launcher's slot, and `ICON_EXTENT_MAXIMUM` raised to 96 | `076c3b7` |
-| 2026-09-25 | Phase 9 | Sub-task 9.8, which closes Phase 9: the settings application, editing `/etc` in place with `OxysConfigEdit`; and notifications at the bottom right, posted by any program through `notify` and shown by the session, with `init` and the session posting their own and a `notify` command | `9faf894` |
-| 2026-09-25 | Phase 9 | The launcher's button shows the project owner's start icon, in a square like the pinned programs, where it showed `OXYS`; three bars where the icon cannot be read | `0fc868b` |
+| 2026-09-25 | Phase 9 | New Files, Terminal, start and Settings icons and notification symbols, all converted at 96 pixels; `ICON_EXTENT_MAXIMUM` raised to 96 | `076c3b7` |
+| 2026-09-25 | Phase 9 | Sub-task 9.8, closing Phase 9: the settings application with `OxysConfigEdit`; notifications through `notify`, and a `notify` command | `9faf894` |
+| 2026-09-25 | Phase 9 | The launcher's button shows the project owner's start icon in place of `OXYS`; three bars where the icon cannot be read | `0fc868b` |
 | 2026-09-25 | Phase 9 | The close control drawn as a cross, the size of the minimise and full-screen glyphs, where it was a disc | `d19a474` |
 | 2026-09-25 | All | Reference tables: every system call with its wrapper and every error code in `PRIVILEGE.md`, the capacity limits in `ARCHITECTURE.md`; no prose changed | `33a4d6c` |
 | 2026-09-25 | Phase 9 | `KernelMain` reduced to a driver of ten boot phases, one file each in `kernel/init/`, moved without reordering; `kernel.c` from 2,638 lines to 798 | `06bf6b2` |
-| 2026-09-25 | Phase 9 | The process, thread, filesystem node, open-file and pipe tables grow from the heap in chunks that never move, the first static; `procinfo` is walked until `EINVAL` and `SYSCALL_PROCESS_CAPACITY` is withdrawn | `ce354fa` |
+| 2026-09-25 | Phase 9 | The process, thread, node, open-file and pipe tables grow in chunks that never move; `procinfo` walked to `EINVAL` | `ce354fa` |
 | 2026-09-24 | Phase 9 | `Oxys 1 Beta` cut: the version string `1-beta`, the release notes, the release record | `f224263` |
 | 2026-09-24 | Phase 9 | The pinned icons evenly spaced: one visible gap after the launcher's name, between icons and before the window list | `141ac8b` |
 | 2026-09-24 | Phase 9 | The panel moves to the foot of the screen with Terminal and Files pinned beside the launcher; the clock in a box at the top right | `e53fd5f` |
@@ -77,7 +77,7 @@ row.
 | 2026-09-13 | — | Numbering restarts at 1, and the retirement directive is removed | `c73539b` |
 | 2026-09-13 | — | The build register cleared and recording suspended until the alpha | `dc5e9e1` |
 | 2026-09-13 | Phase 7 | Sub-task 7.5: `crt0`, the termination functions of §7.22.4, `libc/user.ld`, and the same library sources compiled a second time into an archive | `1c02fbf` |
-| 2026-09-13 | Phase 7 | Sub-task 7.4: the buffered stream of ISO/IEC 9899:2011 §7.21 and the formatted conversion above it — `FILE` incomplete, `stdout` line buffered and `stderr` unbuffered | `f11c4ca` |
+| 2026-09-13 | Phase 7 | Sub-task 7.4: the buffered stream of ISO/IEC 9899:2011 §7.21 and formatted conversion; `stdout` line buffered, `stderr` unbuffered | `f11c4ca` |
 | 2026-09-13 | — | The register given an archive, so that a row can be more than a description of a missing thing | `ae99b0a` |
 | 2026-09-12 | — | The architecture boundary given a check, and the claim it rested on corrected | `a496a56` |
 | 2026-09-12 | — | The two fault-screen boot entries withdrawn | `f605407` |
@@ -91,7 +91,7 @@ row.
 | 2026-09-11 | — | The build register, and `PROJECT_GUIDELINES.md`, Section 3, amended to admit it | `3c0490b` |
 | 2026-09-11 | — | Two claims the corpus made about VirtualBox and Bochs, corrected by running them | `3c0490b` |
 | 2026-09-11 | Phase 6 | The scheduler self-test's wait was bounded in yields and is now bounded in time | `d102108` |
-| 2026-09-11 | Phase 7 | Sub-task 7.2: a wrapper for each of the seven calls the kernel numbers, the `SYSCALL` instruction beneath them in a NASM translation unit, the `errno` of ISO/IEC 9899 | `3c0490b` |
+| 2026-09-11 | Phase 7 | Sub-task 7.2: a wrapper for each of the seven calls, `SYSCALL` beneath them in NASM, and the `errno` of ISO/IEC 9899 | `3c0490b` |
 | 2026-09-10 | — | `tinycc` recorded as a compiler candidate the project owner has assented to | `4acd02a` |
 | 2026-09-10 | Phase 7 | Sub-task 7.1, which opens Phase 7: the nineteen functions of ISO/IEC 9899:2011, Section 7.24, that need no locale and no `errno` | `fa5c1e3` |
 | 2026-09-10 | — | `PROJECT_GUIDELINES.md`, Section 3's list of build targets brought current, and made self-enforcing | `b371ee0` |
@@ -117,7 +117,7 @@ row.
 | 2026-09-07 | All | The repository licensed, at the project owner's decision: the kernel `LGPL-3.0-or-later`, the userland `MIT`, the documentation `CC0-1.0` | `907bba2` |
 | 2026-09-07 | All | A second compiler adopted as an independent judge, and the first thing it found corrected | `71fec28` |
 | 2026-09-07 | Phase 1 | Sub-task 1.12 closed | `d77ade8` |
-| 2026-09-07 | Phase 4 | The machine every storage fault was reported from identified precisely, at the project owner's correction: an HP Laptop 14-dq0052dx — Intel Celeron N4120, four cores | `1dd970e` |
+| 2026-09-07 | Phase 4 | The machine the storage faults came from identified, at the owner's correction: an HP 14-dq0052dx, Intel Celeron N4120 | `1dd970e` |
 | 2026-09-07 | All | `PLAN.md` refactored into a roadmap | `889342d` |
 | 2026-09-07 | All | The three files next largest after `kernel/fs/ext2.c` divided likewise, at the project owner's direction and by the rule that sub-task's division established | `bc5078f` |
 | 2026-09-07 | All | A review of the documentation and then of the code, at the project owner's direction, with no new sub-task begun | `9c3c148` |
@@ -177,7 +177,7 @@ row.
 | 2026-08-30 | Phase 2 | Sub-task 2.6: per-frame reference counting over a 255 KiB table | `ed48893` |
 | 2026-08-30 | Phase 2 | Sub-task 2.5: the kernel virtual address allocator over the 32 TiB arena, and a slab heap above it | `cfe5bad` |
 | 2026-08-30 | Phase 2 | Sub-task 2.4: the direct physical map at `0xFFFF800000000000` with 2 MiB pages | `aff2abc` |
-| 2026-08-30 | Phase 2 | Sub-task 2.3: the permanent kernel paging hierarchy constructed and activated, the text and read-only data mapped read-only, and the low identity mapping removed | `d4c98ba` |
+| 2026-08-30 | Phase 2 | Sub-task 2.3: the permanent kernel paging hierarchy built and activated, text and read-only data mapped read-only, identity map removed | `d4c98ba` |
 | 2026-08-30 | Phase 2 | Sub-task 2.2: the bitmap physical frame allocator. 131,039 frames governed under QEMU with 512 MiB, of which 288 are reserved | `b098c95` |
 | 2026-08-30 | Phase 2 | Sub-task 2.1: the Multiboot2 information structure parsed into the boot-protocol-neutral `BootInformation` description | `7c379e5` |
 | 2026-08-30 | Phase 1 | `PROJECT_GUIDELINES.md` amended at the project owner's request by the addition of Section 10, requiring directory-level documentation | `d97fa4d` |

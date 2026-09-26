@@ -270,12 +270,8 @@ as the root at every boot ([`INITRD.md`](INITRD.md)), and
    withdrawn by naming `/sub/`.
 8. Nothing is mounted from the command line; the placement of Section 4.2 is
    fixed.
-9. ~~Fixed tables: 4 filesystem types, 4 mounts, 64 nodes, 32 open files, 8
-   pipes.~~ **Closed on 2026-09-25**: the node, open-file and pipe tables grow
-   from the heap in chunks, the first static so that a diagnostic can still be
-   written with the heap exhausted
-   ([`../design/MEMORY-LAYOUT.md`](../design/MEMORY-LAYOUT.md), Section 16). The
-   4 filesystem types and 4 mounts stay fixed: nothing adds either at run time.
+9. The 4 filesystem types and 4 mounts are fixed tables; the node, open-file
+   and pipe tables grow ([`../design/MEMORY-LAYOUT.md`](../design/MEMORY-LAYOUT.md)).
 10. No lock. The mount, node and file tables need one, and node references must
     be atomic, before user threads leave the bootstrap processor
     ([`../design/CONCURRENCY.md`](../design/CONCURRENCY.md)).

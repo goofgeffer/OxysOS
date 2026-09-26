@@ -70,7 +70,7 @@ kilobytes. A parser that called `malloc` could fail for a second reason at the
 moment the machine can least report it. The bounds are 64 settings, 8 recorded
 faults (more are counted) and 4 KiB of text.
 
-**Editing, since 2026-09-25**, is `edit.c`'s `OxysConfigEdit`, for the settings
+**Editing** is `edit.c`'s `OxysConfigEdit`, for the settings
 application: one key of one block set or removed within the text of a file, every
 other line left as written. It edits the text and not the parsed settings because
 the shipped files are mostly comments, which a file written back from its settings
@@ -92,9 +92,6 @@ and the file in the source are the same, and git shows changes to it.
 | `system.conf` | `/bin/init`, at start | `[system]` `banner`; one `[service]` per supervised program. |
 | `session.conf` | `/bin/session`, at start and at every opening of the launcher | `[session]` `scale`, `background`; one `[launch]` per launcher entry. |
 
-`desktop.conf`, which the window demonstration read its scale and accent
-from, was removed with it on 2026-09-25: nothing else read it.
-
 **`[service]`** ([`INIT.md`](INIT.md)):
 
 | Key | Meaning | If absent |
@@ -110,11 +107,9 @@ five times in a row is given up on, and `init` says so. If `system.conf` cannot 
 read at all, `init` reports it and starts its one built-in service rather than
 leaving a bare screen.
 
-**`[desktop]`** was `desktop.conf`'s one section, read by the window
-demonstration, and went with it on 2026-09-25. Its two lessons stand in the
-session's file: every key has a default, so a missing or faulty file leaves the
-desktop as it was with faults on the serial line; and a colour named by a word
-(`system`) rather than copied as numbers stays right when the system's colour
+**Every key has a default**, so a missing or faulty file leaves the desktop as
+it was, with the faults on the serial line; and a colour is named by a word
+where the system has one, so that it stays right when the system's colour
 changes.
 
 **`[session]` and `[launch]`** are [`SESSION.md`](SESSION.md): the scale, the

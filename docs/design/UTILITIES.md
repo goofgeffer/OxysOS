@@ -82,8 +82,8 @@ system does not have.
 
 ## 4. Notepad, `/bin/notepad`
 
-**Added on 2026-09-25** at the project owner's request: a text editor in a
-window, for a person at the desktop as `micro` is for a person at the shell.
+A text editor in a window, for a person at the desktop as `micro` is for a person
+at the shell.
 
 **The keys.** Printable characters are typed where the cursor stands; Enter
 breaks the line; Backspace and Delete remove; Tab types four spaces. The arrows,
@@ -108,13 +108,11 @@ a notification, `Saved notes.txt.` or an error.
 says so on the bottom row, and a second, with nothing typed between, discards
 them.
 
-Its icon, a pencil, is the project owner's, since 2026-09-26.
+Its icon, a pencil, is the project owner's.
 
 ## 5. System Info, `/bin/sysinfo`
 
-**Added on 2026-09-25** in place of the window demonstration, which the project
-owner asked to be removed, with an icon of the project owner's, a window of text since 2026-09-26 (the
-demonstration's window around the mark before that). A window of what the machine
+A window, with the project owner's icon of a window of text, of what the machine
 is and is doing:
 
 | Row | From |

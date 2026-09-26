@@ -74,7 +74,7 @@ the window follows the pointer, its owner told nothing.
 **Flat.** A band, a one-pixel border, a title, controls; depth is the stacking
 order only, with no bevel or shadow. **The close control is a cross** 11 pixels
 square, two diagonals two pixels wide, the size of the minimise and full-screen
-glyphs beside it; it was a disc until 2026-09-25. Its reach is a
+glyphs beside it. Its reach is a
 25-pixel square. **The title** is the system face at twice its size, 16 pixels in a
 24-pixel band.
 
@@ -190,12 +190,8 @@ the manager's structure can change without the ABI moving.
   with no thread to sleep on is refused with `ENOTSUP`. A program waiting on its
   window and a pipe together uses `poll` ([`TERMINAL.md`](TERMINAL.md)).
 
-**The window demonstration**, `/bin/windows`, was the first client of the
-protocol, from sub-task 9.2: an *Oxys* window showing the mark, a *Pointer*
-window whose disc followed the pointer, and a *Keys* window drawing a tile per
-character. It was removed on 2026-09-25 at the project owner's request, and
-Notepad and System Info took its place in the launcher
-([`UTILITIES.md`](UTILITIES.md)); `window-check` is what asserts the protocol.
+**The protocol's clients** are the session and the desktop's programs
+([`UTILITIES.md`](UTILITIES.md)); `window-check` asserts the protocol itself.
 
 ## Verification
 

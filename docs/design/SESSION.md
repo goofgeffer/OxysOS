@@ -141,18 +141,17 @@ by what is drawn: the same gap stands between each two buttons, and between the
 last and the window list.
 
 **The launcher's button** is a square of the same kind, holding
-`/share/icons/start.oxi`, the project owner's list of three dots and lines, since
-2026-09-25; until then it held the name `OXYS`. It is read once, when the
-session starts. Where it cannot be read the button draws three bars instead and
+`/share/icons/start.oxi`, the project owner's list of three dots and lines. It is
+read once, when the session starts. Where it cannot be read the button draws
+three bars instead and
 the session says so on the standard error, so the button every program is reached
 through is never an empty square.
 
-**The list of windows is buttons of the project owner's**, since 2026-09-26: a
+**The list of windows is buttons of the project owner's**: a
 yellow within an olive edge a unit wide, from their drawing of one
 ([`../../art/palette.h`](../../art/palette.h)), the window holding the focus in
 the quiet colour within the same edge. The launcher and the pinned programs are
-their icons on the bar with nothing behind them: for a day they had the same
-buttons, and the owner had them removed. The bar itself is their orange.
+their icons on the bar with nothing behind them. The bar itself is their orange.
 
 **The launcher** is a second window **in the panel layer**, so nothing a program
 does can cover it. It opens upward from the launcher's button, above the bar, and
@@ -181,7 +180,7 @@ redrawn when the root receives `WINDOW_EVENT_WINDOWS`; `window_create` and
 `window_destroy` wake sleepers, so a new window is listed at once. There is no
 polling.
 
-**Notifications** stand above the bar at the right, since 2026-09-25: small
+**Notifications** stand above the bar at the right: small
 panel-layer windows, each the owner's symbol for its kind and a line or three of text,
 for five seconds or until pressed, at most three at once. The session takes them
 from the kernel when its root is sent `WINDOW_EVENT_NOTIFY`, posts its own the same
@@ -201,7 +200,7 @@ version 2): magic, version, width, height, a reserved byte, then one 32-bit
 little-endian pixel per position, `0xTTRRGGBB`, where `TT` is transparency (0
 opaque, 0xFF fully transparent: `ICON_NOTHING` is `0xFF000000`). Uncompressed and
 readable with `xxd`. Up to `ICON_EXTENT_MAXIMUM` (96) square; the shipped ones are
-96, twice the slot at scale two since 2026-09-25, and averaged down to it,
+96, twice the slot at scale two, and averaged down to it,
 so drawn one to one only at scale four. Version 1 (transparency only
 0 or 0xFF) is still read; a version-1 reader would take partial transparency for
 colour, hence the new number.
