@@ -556,6 +556,59 @@ static void VerifyShellExpansion(void)
                            "a variable not holding a number, or a malformed expression, expanded");
     }
 
+    /*
+     * Parentheses are bounded by a count and not by the stack: thirty-two one
+     * within another evaluate, and thirty-three, or two hundred as a line
+     * holds, are refused by name without the evaluator descending further.
+     * Before the bound, two hundred ran the shell off its stack.
+     */
+    {
+        static char nested[512];
+        const size_t depths[3] = { 32U, 33U, 200U };
+
+        for (size_t which = 0U; which < 3U; ++which)
+        {
+            char out[LINE_CAPACITY];
+            size_t at = 0U;
+            bool expanded;
+
+            nested[at++] = '$';
+            nested[at++] = '(';
+            nested[at++] = '(';
+
+            for (size_t level = 0U; level < depths[which]; ++level)
+            {
+                nested[at++] = '(';
+            }
+
+            nested[at++] = '7';
+
+            for (size_t level = 0U; level < depths[which]; ++level)
+            {
+                nested[at++] = ')';
+            }
+
+            nested[at++] = ')';
+            nested[at++] = ')';
+            nested[at] = '\0';
+
+            expanded = ShellExpandWord(nested, out, sizeof out, VerifyShellLookup, NULL);
+
+            if (which == 0U)
+            {
+                VerifyShellRequire(expanded && (strcmp(out, "7") == 0),
+                                   "thirty-two parentheses one within another did not evaluate");
+            }
+            else
+            {
+                VerifyShellRequire(!expanded && (ShellArithmeticFault() != NULL) &&
+                                       (strcmp(ShellArithmeticFault(),
+                                               "parentheses are nested too deeply") == 0),
+                                   "parentheses past the bound were not refused by name");
+            }
+        }
+    }
+
     /* The tokeniser keeps an expression's blanks and operator characters in
      * its word, and a line ending inside one continues. */
     {

@@ -145,6 +145,10 @@ rule 7) and after it is a word.
   (`sh: arithmetic: division by zero.`) and fail the command. **A branch not
   taken is parsed and not evaluated**: `&&`, `||` and `?:` neither assign nor
   divide in the side they skip, so `$((n != 0 && 10 / n))` guards a division.
+- **Parentheses nest at most 32 deep**, counted as they open; past that the
+  expression is refused by name (`parentheses are nested too deeply`) before
+  the evaluator descends further. Each level is a descent through every level
+  of precedence, and a line of two hundred ran the shell off its stack.
 
 ## 5. The working directory
 
@@ -322,7 +326,7 @@ the programs `line-check`, `dir-check`, `env-check`, `file-check` and
 | Quote removal: single quotes literal, backslash within double quotes only before `$` `` ` `` `"` `\` and newline, adjacent parts joined. | `'\n'` becoming a newline. |
 | The parse of lists, pipelines and redirections; continuations; unexpected tokens at their position; compound commands refused by name; two commands of twenty words read back whole and apart. | An empty pipeline run silently; a program called `if`; one command's words running into the next's in the line's pool. |
 | Expansion: the longest name, `$?`, unset as empty, quoting respected, values with quotes passed through; assignments before and after the name. | `$HOMEx` expanding `$HOME`; a value closing a quote the person opened. |
-| Arithmetic: C's precedence and parentheses, division toward zero, shifts, comparisons, logicals, unaries and `?:`; variables with and without `$`, unset as zero; three bases of constant; within a word, within double quotes and nested; division by zero refused by name, a non-number and a malformed expression refused; `$((2 < 3))` one word, an unclosed one incomplete; an assignment sets the variable, and the branch `&&` skips neither assigns nor divides. | `2 + 3 * 4` as 20; `$((2 < 3))` read as a redirection; a guarded division refused; a crash on `/ 0`. |
+| Arithmetic: C's precedence and parentheses, division toward zero, shifts, comparisons, logicals, unaries and `?:`; variables with and without `$`, unset as zero; three bases of constant; within a word, within double quotes and nested; division by zero refused by name, a non-number and a malformed expression refused; `$((2 < 3))` one word, an unclosed one incomplete; an assignment sets the variable, and the branch `&&` skips neither assigns nor divides; thirty-two parentheses one within another evaluate, and thirty-three or two hundred are refused by name. | `2 + 3 * 4` as 20; `$((2 < 3))` read as a redirection; a guarded division refused; a crash on `/ 0`; a nest of parentheses running the shell off its stack. |
 | `dir-check`: the root at start; `chdir` and `getcwd` agree and `open` follows; paths canonicalised; `ENOENT`, `ENOTDIR`, `ERANGE` and `ENAMETOOLONG`; a child inherits and does not affect the parent. | A working directory `open` ignores; a child that starts at the root. |
 | `env-check` receives its arguments and exported variables only; exit statuses of a program, a failure and a name not found; a parent's stack survives a child's `execve`. | Quotes reaching a program; an unexported variable leaking. |
 | `file-check`: writes advance, append and truncate, shared positions through `dup2`, a closed 2 reverting, inheritance; pipes carry twelve kibibytes through a page intact, end at the last writer, refuse the wrong direction, and are `EPIPE` with no reader. | A duplicate closed from under another; a pipe that loses or duplicates bytes, or never ends. |

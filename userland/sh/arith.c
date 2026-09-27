@@ -51,7 +51,19 @@ typedef struct ShellArith
     ShellLookup lookup;
     void *context;
     const char *fault;
+    size_t depth; /* Parentheses open around the current position. */
 } ShellArith;
+
+/*
+ * The most parentheses one within another. Each costs a descent through every
+ * level of precedence, a dozen frames, and without a bound a line of nested
+ * parentheses — two hundred fit within one — ran the shell off the end of its
+ * stack: a page fault, and a person at the serial console left with no shell.
+ * Past the bound the expression is refused by name and nothing more is entered.
+ * Thirty-two is far past any expression a person writes, and within the stack
+ * with a wide margin.
+ */
+#define SHELL_ARITH_DEPTH_MAXIMUM 32U
 
 static const char *ShellArithFaultText;
 
@@ -348,7 +360,18 @@ static long ShellArithPrimary(ShellArith *arith, bool evaluate)
 
     if (ShellArithAccept(arith, "("))
     {
+        if (arith->depth >= SHELL_ARITH_DEPTH_MAXIMUM)
+        {
+            /* Refused here, before the descent: every caller above returns
+             * with the fault recorded, and nothing nested further is read. */
+            (void)ShellArithFail(arith, "parentheses are nested too deeply");
+
+            return 0;
+        }
+
+        ++arith->depth;
         value = ShellArithExpression(arith, evaluate);
+        --arith->depth;
 
         if (!ShellArithAccept(arith, ")"))
         {
@@ -630,6 +653,7 @@ bool ShellArithmetic(const char *expression, long *value, ShellLookup lookup, vo
     arith.lookup = lookup;
     arith.context = context;
     arith.fault = NULL;
+    arith.depth = 0U;
 
     ShellArithSkipBlanks(&arith);
 

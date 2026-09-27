@@ -15,6 +15,7 @@ that was cleared that day and renumbered from 1; the date identifies the image.
 
 | Date | Where | What | Result |
 | ---- | ----- | ---- | ------ |
+| 2026-09-27 | QEMU q35, VirtualBox and Bochs | Nested parentheses bounded | Passed; under QEMU two hundred nested parentheses, which before ended the shell with a page fault, refused by name, thirty-two evaluated, thirty-three refused; every self-test on all three; negative test caught |
 | 2026-09-27 | QEMU q35, VirtualBox and Bochs | The bar as a row of icons | Passed; under QEMU Terminal and Files open in their pinned places, Settings, System Info and the viewer after them, the focused one underlined across; a press focused and then minimised Terminal; an icon file placed for the viewer shown on the bar and in the launcher; every self-test on all three; negative test caught |
 | 2026-09-27 | QEMU q35, VirtualBox and Bochs | The window list without buttons | Passed; under QEMU two titles on the bar with no box; every self-test on all three |
 | 2026-09-27 | QEMU q35, VirtualBox and Bochs | Desktop names with no label | Passed; under QEMU the name upon the rose itself; every self-test on all three; negative test caught |
