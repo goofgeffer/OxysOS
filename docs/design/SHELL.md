@@ -324,7 +324,7 @@ the programs `line-check`, `dir-check`, `env-check`, `file-check` and
    splitting or pathname expansion.
 5. A redirection on a built-in outside a pipeline is named and not performed.
 6. The environment and argument vectors are bounded at sixteen strings, and a
-   process at sixteen descriptors.
+   process at 1024 descriptors.
 7. No SIGTTOU, `wait` built-in, `%%` or `%string` job names, `disown` or
    `suspend`; control-C at the prompt does not clear the line.
 8. The working directory is a lexical path; symbolic links in it are not

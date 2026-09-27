@@ -289,10 +289,17 @@ address spaces; `fork` is one clone and one thread ([`PROCESS.md`](PROCESS.md)).
 
 ## 14. The growing table
 
-The process, thread, filesystem node, open-file and pipe tables are growing
-tables (`kernel/include/oxys/mm/table.h`, `kernel/mm/table.c`): a directory of up
-to 256 chunks, the first a static array and each further one a zeroed heap
+The process, thread, filesystem node, open-file, pipe, filesystem type, mount,
+block device, window and PCI function tables are growing tables
+(`kernel/include/oxys/mm/table.h`, `kernel/mm/table.c`): a directory of up to
+256 chunks, the first a static array and each further one a zeroed heap
 allocation taken when a claim finds every slot in use.
+
+A process's descriptor table is not one of them. It is an array of numbers into
+the open-file table that nothing holds a pointer into, so it is held as sixteen
+slots within the process and moved whole into a doubled heap array when full,
+up to `SYSCALL_DESCRIPTOR_LIMIT`; the grown array is given back when the process
+ends, since a process is reused and its sixteen are all a new one needs.
 
 | Table | Chunk constant | Entries per chunk |
 | ----- | -------------- | ----------------- |
@@ -301,6 +308,11 @@ allocation taken when a claim finds every slot in use.
 | Filesystem nodes | `VFS_NODE_CHUNK` | 64 |
 | Open files | `VFS_FILE_CHUNK` | 32 |
 | Pipes | `VFS_PIPE_CHUNK` | 8 |
+| Filesystem types | `VFS_FILESYSTEM_CHUNK` | 4 |
+| Mounts | `VFS_MOUNT_CHUNK` | 4 |
+| Block devices | `BLOCK_DEVICE_CHUNK` | 8 |
+| Windows, and their stack | `WINDOW_CHUNK` | 16 |
+| PCI functions | `PCI_FUNCTION_CHUNK` | 64 |
 
 - **Chunks never move and are never freed**, because run queues, wait channels,
   per-processor areas and open files hold pointers into these tables; a

@@ -2142,7 +2142,7 @@ static int64_t SyscallDoDuplicate(uint64_t from, uint64_t to)
         return SYSCALL_EINVAL;
     }
 
-    if ((from >= PROCESS_DESCRIPTOR_CAPACITY) || (to >= PROCESS_DESCRIPTOR_CAPACITY))
+    if ((from >= PROCESS_DESCRIPTOR_LIMIT) || (to >= PROCESS_DESCRIPTOR_LIMIT))
     {
         return SYSCALL_EBADF;
     }

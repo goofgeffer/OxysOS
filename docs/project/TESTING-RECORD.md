@@ -15,6 +15,7 @@ that was cleared that day and renumbered from 1; the date identifies the image.
 
 | Date | Where | What | Result |
 | ---- | ----- | ---- | ------ |
+| 2026-09-27 | QEMU q35, VirtualBox and Bochs | Kernel tables grown | Passed; eighteen System Info windows open at once under QEMU; descriptors filled to 1024 by `file-check`; every self-test on all three; one VirtualBox hang in `init-check`, the rerun passed |
 | 2026-09-27 | QEMU q35, VirtualBox and Bochs | Userland lists grown in the heap | Passed; 25 added launcher entries all offered by Settings in two columns and by the launcher in two, a pin saved to a 4174-byte file; every self-test on all three |
 | 2026-09-26 | QEMU q35, VirtualBox and Bochs | The settings buttons sized to their labels | Passed; each button fits its label at both scales, and presses under QEMU chose Small, Cliff and a pin; every self-test on all three |
 | 2026-09-26 | QEMU q35, VirtualBox and Bochs | Proportional titles and labels | Passed; proportional labels, grid terminal; every self-test on all three |

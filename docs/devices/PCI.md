@@ -85,7 +85,9 @@ interrupt line and pin; and the six base address registers.
   where bits 2–1 give the width (value 2: the next register holds the upper 32
   bits) and bit 3 marks prefetchable. An address still carrying these bits is off
   by up to fifteen, or is a port read as memory: hardware that is nearly right.
-- **The table holds 64 functions**, and any beyond are counted and reported.
+- **The table grows** from a static chunk of 64 functions, since drivers hold a
+  pointer to theirs and its chunks never move; a function is counted and
+  reported as discarded only where the heap refuses a chunk.
 
 ## Verification
 
@@ -126,5 +128,4 @@ PCI: 6 functions upon 1 buses, 0 beyond the table.
    filled is believed. Deriving it needs the ACPI routing tables.
 4. Mechanism one only. The memory-mapped PCI Express mechanism needs the ACPI
    MCFG table.
-5. At most 64 functions.
-6. Enumeration happens once; no hot plug.
+5. Enumeration happens once; no hot plug.

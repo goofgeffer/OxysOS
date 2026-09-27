@@ -291,7 +291,8 @@ Every path-taking call validates its arguments and calls the filesystem layer
   whether its first byte was readable, so the caller is told which of two things
   it can fix.
 
-**A process holds sixteen descriptors** (`PROCESS_DESCRIPTOR_CAPACITY`), each
+**A process holds sixteen descriptors inline**, grown in the heap as it opens
+more up to `SYSCALL_DESCRIPTOR_LIMIT` (1024), a ceiling on its share; each
 naming an open file of the layer's one machine-wide table. The indirection keeps
 one program from naming another's file by number and bounds its share. **The
 free value is not zero**, zero being a valid open file: a table cleared by
@@ -389,7 +390,7 @@ compiled `startup-check`. The conversions were also compared with the host's
 6. `abort` does not raise SIGABRT; `sigaction`'s mask, flags and `siginfo`, and
    `alarm` and `sleep`, are absent.
 7. Argument and environment vectors are bounded at sixteen strings and two
-   kibibytes, and a process at sixteen descriptors.
+   kibibytes, and a process at 1024 descriptors.
 8. Not assertable here: a growth undone part way (nothing makes `FrameAllocate`
    fail on demand), a heap page arriving unzeroed, the segments' permissions as
    mapped, the width `_start` moves, the magnitude of the most negative value, and

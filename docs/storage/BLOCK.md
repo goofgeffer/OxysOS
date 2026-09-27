@@ -42,6 +42,11 @@ rather than in every driver, is most of the reason the layer exists.
   working; a single figure would show a healthy machine accumulating errors
   until the number is ignored ([`DISK.md`](DISK.md)).
 
+**The registry grows**: eight slots static, and more from the heap in chunks
+that never move, so a driver's handle to its device stays good while more are
+registered. A registration is refused for want of a slot only where the heap
+cannot supply a chunk.
+
 ## 3. Withdrawal
 
 `BlockUnregister` frees a device's slot. The layer does not know which caches
@@ -86,13 +91,12 @@ The fourteen refusals are the ones the test provokes.
 
 ## Limitations
 
-1. At most eight devices.
-2. The buffer cache holds 512-byte blocks only; a device of another block size
+1. The buffer cache holds 512-byte blocks only; a device of another block size
    is reachable through this layer but not cached.
-3. No partitions: a device is the whole medium. This is why `/home` cannot yet
+2. No partitions: a device is the whole medium. This is why `/home` cannot yet
    persist ([`PERSIST.md`](PERSIST.md)). Planned as sub-task 10.7.
-4. No ordering or barriers; requests are issued as they arrive.
-5. No lock. User threads run only on the bootstrap processor, and application
+3. No ordering or barriers; requests are issued as they arrive.
+4. No lock. User threads run only on the bootstrap processor, and application
    processors reach no block device; widening that affinity requires a lock on
    the device table ([`../design/CONCURRENCY.md`](../design/CONCURRENCY.md)).
-6. Synchronous only: a request returns when it completes.
+5. Synchronous only: a request returns when it completes.

@@ -440,9 +440,9 @@ bool VfsSync(void)
 {
     bool outcome = true;
 
-    for (size_t index = 0U; index < VFS_MOUNT_CAPACITY; ++index)
+    for (size_t index = 0U; index < GrowingTableCapacity(&VfsMounts); ++index)
     {
-        VfsMount *const mount = &VfsMounts[index];
+        VfsMount *const mount = VfsMountSlot(index);
 
         if (mount->mounted && (mount->operations->sync != NULL))
         {

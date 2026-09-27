@@ -59,6 +59,7 @@
 #include <oxys/gfx/face.h>
 #include <oxys/gfx/graphics.h>
 #include <oxys/mm/heap.h>
+#include <oxys/mm/table.h>
 #include <oxys/kernel.h>
 
 /* The close control: a cross of WINDOW_GLYPH_HALF, centred this far in from the
@@ -145,11 +146,39 @@ static GraphicsSurface *WindowScreen;
 static WindowPalette WindowColours;
 static WindowEncodeFunction WindowEncode;
 
-static Window WindowTable[WINDOW_CAPACITY];
+/*
+ * The windows, in a growing table: the first WINDOW_CHUNK static, more taken
+ * from the heap in chunks that never move as windows are made. A window's
+ * number is its index, and a pointer to it is good for as long as it exists.
+ * The table grows only as windows are created, which is a system call and so
+ * upon the bootstrap processor, where growth is permitted
+ * (kernel/include/oxys/mm/table.h). A zeroed entry is not in use.
+ */
+static Window WindowFirst[WINDOW_CHUNK];
+static GrowingTable WindowSlots =
+    GROWING_TABLE_INITIALISER("windows", Window, WindowFirst, WINDOW_CHUNK);
 
-/* The stack: identifiers, bottom first. */
-static size_t WindowStack[WINDOW_CAPACITY];
+/* The stack: identifiers, bottom first, in a growing table of its own, grown
+ * to the windows' capacity before a window is placed in it. */
+static size_t WindowStackFirst[WINDOW_CHUNK];
+static GrowingTable WindowStackSlots =
+    GROWING_TABLE_INITIALISER("window stack", size_t, WindowStackFirst, WINDOW_CHUNK);
 static size_t WindowStackCount;
+
+static Window *WindowSlot(size_t index)
+{
+    return (Window *)GrowingTableAt(&WindowSlots, index);
+}
+
+static size_t *WindowStackSlot(size_t index)
+{
+    return (size_t *)GrowingTableAt(&WindowStackSlots, index);
+}
+
+size_t WindowManagerCapacity(void)
+{
+    return GrowingTableCapacity(&WindowSlots);
+}
 
 static size_t WindowFocused;
 
@@ -204,12 +233,12 @@ static GraphicsRectangle WindowEmptyRectangle(void)
 
 static Window *WindowAt(size_t window)
 {
-    if (!WindowActive || (window >= WINDOW_CAPACITY) || !WindowTable[window].in_use)
+    if (!WindowActive || (window >= WindowManagerCapacity()) || !WindowSlot(window)->in_use)
     {
         return NULL;
     }
 
-    return &WindowTable[window];
+    return WindowSlot(window);
 }
 
 /*
@@ -416,7 +445,7 @@ static void WindowEnqueueKind(size_t window, WindowEventKind kind)
  */
 static void WindowNotifyRootsOf(WindowEventKind kind)
 {
-    for (size_t identifier = 0U; identifier < WINDOW_CAPACITY; ++identifier)
+    for (size_t identifier = 0U; identifier < WindowManagerCapacity(); ++identifier)
     {
         const Window *const root = WindowAt(identifier);
         bool waiting = false;
@@ -491,7 +520,7 @@ static size_t WindowStackPositionOf(size_t window)
 {
     for (size_t position = 0U; position < WindowStackCount; ++position)
     {
-        if (WindowStack[position] == window)
+        if (*WindowStackSlot(position) == window)
         {
             return position;
         }
@@ -511,7 +540,7 @@ static void WindowStackRemove(size_t window)
 
     for (size_t index = position; index + 1U < WindowStackCount; ++index)
     {
-        WindowStack[index] = WindowStack[index + 1U];
+        *WindowStackSlot(index) = *WindowStackSlot(index + 1U);
     }
 
     --WindowStackCount;
@@ -529,12 +558,12 @@ static void WindowStackRemove(size_t window)
  */
 static void WindowStackInsert(size_t window)
 {
-    const WindowLayer layer = WindowTable[window].layer;
+    const WindowLayer layer = WindowSlot(window)->layer;
     size_t position = WindowStackCount;
 
     for (size_t index = 0U; index < WindowStackCount; ++index)
     {
-        if (WindowTable[WindowStack[index]].layer > layer)
+        if (WindowSlot(*WindowStackSlot(index))->layer > layer)
         {
             position = index;
             break;
@@ -543,10 +572,10 @@ static void WindowStackInsert(size_t window)
 
     for (size_t index = WindowStackCount; index > position; --index)
     {
-        WindowStack[index] = WindowStack[index - 1U];
+        *WindowStackSlot(index) = *WindowStackSlot(index - 1U);
     }
 
-    WindowStack[position] = window;
+    *WindowStackSlot(position) = window;
     ++WindowStackCount;
 }
 
@@ -562,10 +591,10 @@ static size_t WindowTopmostFocusable(void)
 {
     for (size_t position = WindowStackCount; position != 0U; --position)
     {
-        const size_t identifier = WindowStack[position - 1U];
+        const size_t identifier = *WindowStackSlot(position - 1U);
 
-        if ((WindowTable[identifier].layer == WINDOW_LAYER_NORMAL) &&
-            !WindowTable[identifier].minimised)
+        if ((WindowSlot(identifier)->layer == WINDOW_LAYER_NORMAL) &&
+            !WindowSlot(identifier)->minimised)
         {
             return identifier;
         }
@@ -594,19 +623,19 @@ static void WindowTransferFocus(size_t window)
     if (WindowAt(previous) != NULL)
     {
         WindowEnqueueKind(previous, WINDOW_EVENT_FOCUS_OUT);
-        WindowDamageAdd(WindowTitleBandOf(&WindowTable[previous]));
+        WindowDamageAdd(WindowTitleBandOf(WindowSlot(previous)));
     }
 
     if (WindowAt(window) != NULL)
     {
         WindowEnqueueKind(window, WINDOW_EVENT_FOCUS_IN);
-        WindowDamageAdd(WindowTitleBandOf(&WindowTable[window]));
+        WindowDamageAdd(WindowTitleBandOf(WindowSlot(window)));
     }
 
     /* The list of windows marks the one holding the focus, so a passing
      * between ordinary windows is a change to it. */
-    if (((WindowAt(previous) != NULL) && (WindowTable[previous].layer == WINDOW_LAYER_NORMAL)) ||
-        ((WindowAt(window) != NULL) && (WindowTable[window].layer == WINDOW_LAYER_NORMAL)))
+    if (((WindowAt(previous) != NULL) && (WindowSlot(previous)->layer == WINDOW_LAYER_NORMAL)) ||
+        ((WindowAt(window) != NULL) && (WindowSlot(window)->layer == WINDOW_LAYER_NORMAL)))
     {
         WindowNotifyRoots();
     }
@@ -728,7 +757,7 @@ static void WindowDrawClose(GraphicsRectangle reach, uint32_t ink)
 
 static void WindowDrawFrame(size_t identifier)
 {
-    const Window *const window = &WindowTable[identifier];
+    const Window *const window = WindowSlot(identifier);
     const GraphicsRectangle frame = WindowFrameOf(window);
     const GraphicsRectangle band = WindowTitleBandOf(window);
     const GraphicsRectangle content = WindowContentOf(window);
@@ -763,13 +792,13 @@ static void WindowDrawFrame(size_t identifier)
  * leaks nothing. */
 static void WindowReleaseAll(void)
 {
-    for (size_t index = 0U; index < WINDOW_CAPACITY; ++index)
+    for (size_t index = 0U; index < WindowManagerCapacity(); ++index)
     {
-        if (WindowTable[index].in_use)
+        if (WindowSlot(index)->in_use)
         {
-            KernelFree(WindowTable[index].pixels);
-            WindowTable[index].in_use = false;
-            WindowTable[index].pixels = NULL;
+            KernelFree(WindowSlot(index)->pixels);
+            WindowSlot(index)->in_use = false;
+            WindowSlot(index)->pixels = NULL;
         }
     }
 
@@ -841,12 +870,26 @@ size_t WindowCreate(int32_t x, int32_t y, int32_t width, int32_t height, const c
         return WINDOW_NONE;
     }
 
-    for (size_t index = 0U; index < WINDOW_CAPACITY; ++index)
+    /* A free slot, the table grown by a chunk where every one is taken; and
+     * the stack grown to match first, since placing a window in it cannot
+     * fail. Where either cannot grow, the window is refused as when its
+     * pixels cannot be had. */
+    for (size_t index = 0U;
+         (index < WindowManagerCapacity()) || GrowingTableGrow(&WindowSlots); ++index)
     {
-        if (!WindowTable[index].in_use)
+        if (!WindowSlot(index)->in_use)
         {
             identifier = index;
             break;
+        }
+    }
+
+    while ((identifier != WINDOW_NONE) &&
+           (GrowingTableCapacity(&WindowStackSlots) < WindowManagerCapacity()))
+    {
+        if (!GrowingTableGrow(&WindowStackSlots))
+        {
+            identifier = WINDOW_NONE;
         }
     }
 
@@ -855,7 +898,7 @@ size_t WindowCreate(int32_t x, int32_t y, int32_t width, int32_t height, const c
         return WINDOW_NONE;
     }
 
-    window = &WindowTable[identifier];
+    window = WindowSlot(identifier);
     row_bytes = (size_t)width * WindowScreen->bytes_per_pixel;
     window->pixels = KernelAllocate(row_bytes * (size_t)height);
 
@@ -1039,9 +1082,9 @@ size_t WindowDestroyOwnedBy(uint64_t owner)
         return 0U;
     }
 
-    for (size_t index = 0U; index < WINDOW_CAPACITY; ++index)
+    for (size_t index = 0U; index < WindowManagerCapacity(); ++index)
     {
-        if (WindowTable[index].in_use && (WindowTable[index].owner == owner))
+        if (WindowSlot(index)->in_use && (WindowSlot(index)->owner == owner))
         {
             WindowDestroy(index);
             ++destroyed;
@@ -1071,7 +1114,7 @@ void WindowRaise(size_t identifier)
         const size_t position = WindowStackPositionOf(identifier);
 
         if ((position == WINDOW_NONE) || (position + 1U == WindowStackCount) ||
-            (WindowTable[WindowStack[position + 1U]].layer > window->layer))
+            (WindowSlot(*WindowStackSlot(position + 1U))->layer > window->layer))
         {
             return;
         }
@@ -1142,7 +1185,7 @@ GraphicsRectangle WindowManagerWorkArea(void)
      * opening above the bar, so a window made full while it was open does not
      * leave a hole the height of the launcher.
      */
-    for (size_t identifier = 0U; identifier < WINDOW_CAPACITY; ++identifier)
+    for (size_t identifier = 0U; identifier < WindowManagerCapacity(); ++identifier)
     {
         const Window *const window = WindowAt(identifier);
 
@@ -1185,7 +1228,7 @@ GraphicsRectangle WindowManagerWorkArea(void)
 static bool WindowResizeContent(size_t identifier, int32_t x, int32_t y, int32_t width,
                                 int32_t height)
 {
-    Window *const window = &WindowTable[identifier];
+    Window *const window = WindowSlot(identifier);
     const size_t row_bytes = (size_t)width * WindowScreen->bytes_per_pixel;
     GraphicsSurface surface;
     WindowEvent event;
@@ -1606,7 +1649,7 @@ static void WindowBeginPress(int32_t x, int32_t y, uint8_t button, uint8_t butto
         return;
     }
 
-    window = &WindowTable[identifier];
+    window = WindowSlot(identifier);
 
     /*
      * A press upon the root raises nothing and focuses nothing: it is beneath
@@ -1798,10 +1841,10 @@ GraphicsRectangle WindowManagerCompose(void)
 
     for (size_t position = 0U; position < WindowStackCount; ++position)
     {
-        const size_t identifier = WindowStack[position];
-        const GraphicsRectangle frame = WindowFrameOf(&WindowTable[identifier]);
+        const size_t identifier = *WindowStackSlot(position);
+        const GraphicsRectangle frame = WindowFrameOf(WindowSlot(identifier));
 
-        if (!WindowTable[identifier].minimised &&
+        if (!WindowSlot(identifier)->minimised &&
             !GraphicsRectangleIsEmpty(GraphicsRectangleIntersect(frame, composed)))
         {
             WindowDrawFrame(identifier);
@@ -1837,10 +1880,10 @@ size_t WindowManagerWindowAt(int32_t x, int32_t y)
      * person sees there. */
     for (size_t position = WindowStackCount; position != 0U; --position)
     {
-        const size_t identifier = WindowStack[position - 1U];
+        const size_t identifier = *WindowStackSlot(position - 1U);
 
-        if (!WindowTable[identifier].minimised &&
-            GraphicsRectangleContains(WindowFrameOf(&WindowTable[identifier]), x, y))
+        if (!WindowSlot(identifier)->minimised &&
+            GraphicsRectangleContains(WindowFrameOf(WindowSlot(identifier)), x, y))
         {
             return identifier;
         }
@@ -1861,7 +1904,7 @@ size_t WindowManagerGrabbed(void)
 
 size_t WindowManagerStackAt(size_t position)
 {
-    return (position < WindowStackCount) ? WindowStack[position] : WINDOW_NONE;
+    return (position < WindowStackCount) ? *WindowStackSlot(position) : WINDOW_NONE;
 }
 
 size_t WindowManagerCount(void)
@@ -1919,12 +1962,12 @@ void WindowManagerReport(void)
 
     for (size_t position = 0U; position < WindowStackCount; ++position)
     {
-        const Window *const window = &WindowTable[WindowStack[position]];
+        const Window *const window = WindowSlot(*WindowStackSlot(position));
 
         KernelWriteString("  ");
         KernelWriteDecimal(position);
         KernelWriteString(": window ");
-        KernelWriteDecimal(WindowStack[position]);
+        KernelWriteDecimal(*WindowStackSlot(position));
         KernelWriteString(" \"");
         KernelWriteString(window->title);
         KernelWriteString("\" at ");

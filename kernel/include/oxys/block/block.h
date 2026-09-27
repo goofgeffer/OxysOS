@@ -21,8 +21,10 @@
 
 #include <oxys/types.h>
 
-/* The number of devices that may be registered at once. */
-#define BLOCK_DEVICE_CAPACITY 8U
+/* The devices the registry holds before it first grows; it grows by as many
+ * again from the heap whenever every slot is taken, so devices are bounded by
+ * memory. */
+#define BLOCK_DEVICE_CHUNK 8U
 
 /* The greatest length of a device name, excluding its terminator. */
 #define BLOCK_NAME_MAXIMUM 15U

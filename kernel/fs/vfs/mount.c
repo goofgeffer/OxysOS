@@ -33,14 +33,14 @@
 
 void VfsInitialise(void)
 {
-    for (size_t index = 0U; index < VFS_FILESYSTEM_CAPACITY; ++index)
+    for (size_t index = 0U; index < GrowingTableCapacity(&VfsFilesystems); ++index)
     {
-        VfsFilesystems[index] = (VfsFilesystem){ 0 };
+        *VfsFilesystemSlot(index) = (VfsFilesystem){ 0 };
     }
 
-    for (size_t index = 0U; index < VFS_MOUNT_CAPACITY; ++index)
+    for (size_t index = 0U; index < GrowingTableCapacity(&VfsMounts); ++index)
     {
-        VfsMounts[index] = (VfsMount){ 0 };
+        *VfsMountSlot(index) = (VfsMount){ 0 };
     }
 
     for (size_t index = 0U; index < GrowingTableCapacity(&VfsNodeSlots); ++index)
@@ -59,9 +59,9 @@ void VfsInitialise(void)
 
 VfsFilesystem *VfsFindFilesystem(const char *name)
 {
-    for (size_t index = 0U; index < VFS_FILESYSTEM_CAPACITY; ++index)
+    for (size_t index = 0U; index < GrowingTableCapacity(&VfsFilesystems); ++index)
     {
-        VfsFilesystem *const filesystem = &VfsFilesystems[index];
+        VfsFilesystem *const filesystem = VfsFilesystemSlot(index);
 
         if (filesystem->registered &&
             VfsSameString(filesystem->name, name, VFS_TYPE_NAME_MAXIMUM + 1U))
@@ -108,11 +108,13 @@ bool VfsRegisterFilesystem(const char *name, const VfsFilesystemOperations *oper
         return VfsRefuse(VFS_ERROR_EXISTS, "a filesystem of that name is registered already");
     }
 
-    for (size_t index = 0U; index < VFS_FILESYSTEM_CAPACITY; ++index)
+    for (size_t index = 0U;
+         (index < GrowingTableCapacity(&VfsFilesystems)) || GrowingTableGrow(&VfsFilesystems);
+         ++index)
     {
-        if (!VfsFilesystems[index].registered)
+        if (!VfsFilesystemSlot(index)->registered)
         {
-            available = &VfsFilesystems[index];
+            available = VfsFilesystemSlot(index);
             break;
         }
     }
@@ -136,21 +138,21 @@ bool VfsRegisterFilesystem(const char *name, const VfsFilesystemOperations *oper
 
 VfsMount *VfsMountAt(size_t index)
 {
-    if ((index >= VFS_MOUNT_CAPACITY) || (!VfsMounts[index].mounted))
+    if ((index >= GrowingTableCapacity(&VfsMounts)) || (!VfsMountSlot(index)->mounted))
     {
         return NULL;
     }
 
-    return &VfsMounts[index];
+    return VfsMountSlot(index);
 }
 
 size_t VfsMountCount(void)
 {
     size_t count = 0U;
 
-    for (size_t index = 0U; index < VFS_MOUNT_CAPACITY; ++index)
+    for (size_t index = 0U; index < GrowingTableCapacity(&VfsMounts); ++index)
     {
-        if (VfsMounts[index].mounted)
+        if (VfsMountSlot(index)->mounted)
         {
             ++count;
         }
@@ -169,9 +171,9 @@ bool VfsRootIsMounted(void)
  * to what the other had taken. */
 static bool VfsDeviceIsMounted(const BlockDevice *device)
 {
-    for (size_t index = 0U; index < VFS_MOUNT_CAPACITY; ++index)
+    for (size_t index = 0U; index < GrowingTableCapacity(&VfsMounts); ++index)
     {
-        if (VfsMounts[index].mounted && (VfsMounts[index].device == device))
+        if (VfsMountSlot(index)->mounted && (VfsMountSlot(index)->device == device))
         {
             return true;
         }
@@ -219,11 +221,12 @@ bool VfsMountVolume(const char *device_name, const char *point, const char *type
         return VfsRefuse(VFS_ERROR_BUSY, "the device is mounted already");
     }
 
-    for (size_t index = 0U; index < VFS_MOUNT_CAPACITY; ++index)
+    for (size_t index = 0U;
+         (index < GrowingTableCapacity(&VfsMounts)) || GrowingTableGrow(&VfsMounts); ++index)
     {
-        if (!VfsMounts[index].mounted)
+        if (!VfsMountSlot(index)->mounted)
         {
-            mount = &VfsMounts[index];
+            mount = VfsMountSlot(index);
             break;
         }
     }
@@ -373,9 +376,9 @@ bool VfsMountIsBusy(const VfsMount *mount)
 
     /* A volume mounted within this one is held by its own mount, whose covered
      * node belongs to this mount. */
-    for (size_t index = 0U; index < VFS_MOUNT_CAPACITY; ++index)
+    for (size_t index = 0U; index < GrowingTableCapacity(&VfsMounts); ++index)
     {
-        const VfsMount *const other = &VfsMounts[index];
+        const VfsMount *const other = VfsMountSlot(index);
 
         if (other->mounted && (other != mount) && (other->covered != NULL) &&
             (other->covered->mount == mount))
@@ -397,12 +400,12 @@ bool VfsUnmount(const char *point)
         return false;
     }
 
-    for (size_t index = 0U; index < VFS_MOUNT_CAPACITY; ++index)
+    for (size_t index = 0U; index < GrowingTableCapacity(&VfsMounts); ++index)
     {
-        if (VfsMounts[index].mounted &&
-            VfsSameString(VfsMounts[index].point, point, VFS_PATH_MAXIMUM + 1U))
+        if (VfsMountSlot(index)->mounted &&
+            VfsSameString(VfsMountSlot(index)->point, point, VFS_PATH_MAXIMUM + 1U))
         {
-            mount = &VfsMounts[index];
+            mount = VfsMountSlot(index);
             break;
         }
     }

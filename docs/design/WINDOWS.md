@@ -34,7 +34,12 @@ recognises a window.
   half done.
 - **Every coordinate an owner sees is its content's own.** While a button binds the
   pointer, positions may lie outside the content (negative or beyond its extent).
-- **At most `WINDOW_CAPACITY` (16) windows**; a seventeenth is refused.
+- **Windows are held in a growing table** of `WINDOW_CHUNK` (16) at a time, so
+  their number is bounded by memory; a window is refused only when its pixels or
+  a chunk of the table cannot be had, and each window's pixels come from the
+  heap in any case. The event queue stays bounded (below): it is back-pressure
+  upon a program not reading, and a queue that grew would let such a program
+  take the heap.
 - Titles are cut at `WINDOW_TITLE_CAPACITY` (31) characters and clipped short of the
   controls.
 
@@ -214,7 +219,7 @@ wrong.
 | The close control delivers one close event and destroys and binds nothing. | The manager discarding an unsaved file. |
 | Moves off the top-left and bottom-right are held at the confining positions. | A window lost off screen. |
 | Destroying the focus holder passes focus down and says so; destroying the last leaves none, and a key is discarded and counted. | Keys into a queue nobody drains. |
-| Sixteen windows are accepted and a seventeenth refused; content below 16 pixels is refused; every window made is released. | A table overrun; a test leaving the table full. |
+| Twenty windows are accepted, past the first chunk of sixteen, and the table has grown; content below 16 pixels is refused; every window made is released. | A table that refuses past its chunk, or grows without the stack; a test leaving the table full. |
 | A queue holds 32 and drops the newest beyond, counting it. | A release with no press. |
 | The root is told once, however many changes happened. | Notices filling the root's queue and dropping a press. |
 | The panel takes the focus neither when made nor when pressed, and still receives the press. | Typing into nowhere after the launcher closes. |

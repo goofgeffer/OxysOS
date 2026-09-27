@@ -464,7 +464,7 @@ static void KernelUtilitiesDescriptors(void)
 {
     Process *const process = ProcessCreate("descriptors", NULL);
     const size_t open_before = VfsOpenFileCount();
-    int64_t descriptors[PROCESS_DESCRIPTOR_CAPACITY];
+    static int64_t descriptors[PROCESS_DESCRIPTOR_LIMIT];
     size_t adopted = 0U;
     int file;
 
@@ -480,7 +480,7 @@ static void KernelUtilitiesDescriptors(void)
      * Every slot is free and none of them names filesystem descriptor 0, which
      * is the property a table cleared with memset would not have.
      */
-    for (size_t index = 0U; index < PROCESS_DESCRIPTOR_CAPACITY; ++index)
+    for (size_t index = 0U; index < process->descriptor_capacity; ++index)
     {
         if (process->descriptors[index] != PROCESS_DESCRIPTOR_FREE)
         {
@@ -499,15 +499,17 @@ static void KernelUtilitiesDescriptors(void)
     KernelUtilitiesRequire(ProcessDescriptorFile(process, -1) == VFS_NO_DESCRIPTOR,
                            "a negative descriptor was translated rather than refused");
     KernelUtilitiesRequire(
-        ProcessDescriptorFile(process, (int64_t)PROCESS_DESCRIPTOR_CAPACITY) ==
+        ProcessDescriptorFile(process, (int64_t)process->descriptor_capacity) ==
             VFS_NO_DESCRIPTOR,
         "a descriptor beyond the table was translated rather than refused");
 
     /*
      * The table is filled by opening the same file repeatedly. The filesystem
      * layer permits it — two descriptors upon one file have positions of their
-     * own — and it is the only way to exhaust a table of sixteen upon a volume
-     * this small.
+     * own — and it is the only way to exhaust a table upon a volume this small.
+     * The table grows past its inline slots as it fills, and is refused only
+     * at PROCESS_DESCRIPTOR_LIMIT, the ceiling that keeps one process from
+     * taking the machine's whole open-file table.
      */
     for (;;)
     {
@@ -547,7 +549,7 @@ static void KernelUtilitiesDescriptors(void)
         descriptors[adopted] = number;
         ++adopted;
 
-        if (adopted > PROCESS_DESCRIPTOR_CAPACITY)
+        if (adopted > PROCESS_DESCRIPTOR_LIMIT)
         {
             KernelUtilitiesRequire(false, "the descriptor table accepted more than it "
                                           "holds");
@@ -556,8 +558,11 @@ static void KernelUtilitiesDescriptors(void)
     }
 
     KernelUtilitiesRequire(
-        adopted == (PROCESS_DESCRIPTOR_CAPACITY - SYSCALL_DESCRIPTOR_FIRST),
-        "the table did not hold every slot above the standard three");
+        adopted == (PROCESS_DESCRIPTOR_LIMIT - SYSCALL_DESCRIPTOR_FIRST),
+        "the table did not grow to hold every slot above the standard three up to "
+        "its limit");
+    KernelUtilitiesRequire(process->descriptor_capacity == PROCESS_DESCRIPTOR_LIMIT,
+                           "the table grew past its limit, or was refused short of it");
 
     /* One is released explicitly, and releasing it twice is a refusal and not a
      * second close of a number that may since have been reused. */

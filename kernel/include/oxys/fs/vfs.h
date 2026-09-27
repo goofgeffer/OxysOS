@@ -48,14 +48,14 @@
  *
  * Every one of these is a bound upon this kernel and not upon any format. They
  * are stated together so that the storage the layer occupies is legible in one
- * place. The filesystems and mounts are fixed arrays. The nodes and the open
- * files are growing tables (kernel/include/oxys/mm/table.h) whose first chunk
- * is static, so that a file can still be opened when the heap is exhausted —
- * the moment something most needs to write an error to one — and the heap is
- * asked only for the load beyond it. The two CHUNK values are not limits.
+ * place. The filesystem types, mounts, nodes and open files are growing tables
+ * (kernel/include/oxys/mm/table.h) whose first chunk is static, so that a
+ * file can still be opened when the heap is exhausted — the moment something
+ * most needs to write an error to one — and the heap is asked only for the
+ * load beyond it. The CHUNK values are not limits.
  */
-#define VFS_FILESYSTEM_CAPACITY 4U
-#define VFS_MOUNT_CAPACITY      4U
+#define VFS_FILESYSTEM_CHUNK    4U
+#define VFS_MOUNT_CHUNK         4U
 #define VFS_NODE_CHUNK          64U
 #define VFS_FILE_CHUNK          32U
 
@@ -445,7 +445,7 @@ bool VfsUnmount(const char *point);
  */
 bool VfsMountRoot(const char *type, bool read_only);
 
-/* The mount at an index below VFS_MOUNT_CAPACITY, or null where none stands. */
+/* The mount at an index, or null where none stands or the index is past the table. */
 VfsMount *VfsMountAt(size_t index);
 
 /* The number of mounts standing, and whether a root mount exists. */

@@ -64,8 +64,13 @@
  * otherwise allocated.
  * ------------------------------------------------------------------------- */
 
-VfsFilesystem VfsFilesystems[VFS_FILESYSTEM_CAPACITY];
-VfsMount VfsMounts[VFS_MOUNT_CAPACITY];
+static VfsFilesystem VfsFilesystemFirstChunk[VFS_FILESYSTEM_CHUNK];
+static VfsMount VfsMountFirstChunk[VFS_MOUNT_CHUNK];
+
+GrowingTable VfsFilesystems = GROWING_TABLE_INITIALISER(
+    "vfs filesystem types", VfsFilesystem, VfsFilesystemFirstChunk, VFS_FILESYSTEM_CHUNK);
+GrowingTable VfsMounts =
+    GROWING_TABLE_INITIALISER("vfs mounts", VfsMount, VfsMountFirstChunk, VFS_MOUNT_CHUNK);
 
 static VfsNode VfsNodeFirstChunk[VFS_NODE_CHUNK];
 static VfsFile VfsFileFirstChunk[VFS_FILE_CHUNK];
@@ -311,9 +316,9 @@ void VfsReport(void)
         KernelWriteDecimal(VfsMountCount());
         KernelWriteString(" mount(s).\n");
 
-        for (size_t index = 0U; index < VFS_MOUNT_CAPACITY; ++index)
+        for (size_t index = 0U; index < GrowingTableCapacity(&VfsMounts); ++index)
         {
-            const VfsMount *const mount = &VfsMounts[index];
+            const VfsMount *const mount = VfsMountSlot(index);
 
             if (!mount->mounted)
             {

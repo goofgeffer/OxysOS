@@ -339,7 +339,8 @@ static void FileRefusals(void)
 }
 
 /*
- * The table is filled, and the refusal when it is full is EMFILE.
+ * The table is filled to SYSCALL_DESCRIPTOR_LIMIT, growing as it goes, and the
+ * refusal when it is full is EMFILE.
  *
  * Every descriptor is closed again afterwards. A program that left them open
  * would cost the machine descriptors it holds for the whole system, and the
@@ -348,7 +349,7 @@ static void FileRefusals(void)
  */
 static void FileExhaustion(void)
 {
-    int64_t held[64];
+    static int64_t held[SYSCALL_DESCRIPTOR_LIMIT];
     int count = 0;
 
     for (;;)
@@ -374,6 +375,13 @@ static void FileExhaustion(void)
     }
 
     FileRequire(count > 0, "no descriptor could be opened at all");
+
+    /* The table grows as it fills, so the refusal comes at the published
+     * limit and not at the sixteen held within a process: the last number
+     * given out is the limit's last, descriptors being given lowest first. */
+    FileRequire(count > 16, "the descriptor table did not grow past its first sixteen");
+    FileRequire((count > 0) && (held[count - 1] == (SYSCALL_DESCRIPTOR_LIMIT - 1)),
+                "the descriptor table was refused short of its limit, or past it");
 
     for (int index = 0; index < count; ++index)
     {

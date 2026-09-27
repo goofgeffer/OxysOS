@@ -27,7 +27,7 @@ above it.
       VfsOpen, VfsRead, VfsResolve, VfsMountVolume, VfsPipeCreate, ...
    +------------------------ kernel/fs/vfs/ ---------------------------+
    |  mount table      node table       open file table     pipes      |
-   |  4 mounts         64 a chunk       32 a chunk          8 a chunk  |
+   |  4 a chunk        64 a chunk       32 a chunk          8 a chunk  |
    |  one tree         one identity     one position each   one page   |
    |                   grown from the heap, first chunk static          |
    +------------------------------+------------------------------------+
@@ -270,8 +270,6 @@ as the root at every boot ([`INITRD.md`](INITRD.md)), and
    withdrawn by naming `/sub/`.
 8. Nothing is mounted from the command line; the placement of Section 4.2 is
    fixed.
-9. The 4 filesystem types and 4 mounts are fixed tables; the node, open-file
-   and pipe tables grow ([`../design/MEMORY-LAYOUT.md`](../design/MEMORY-LAYOUT.md)).
-10. No lock. The mount, node and file tables need one, and node references must
-    be atomic, before user threads leave the bootstrap processor
-    ([`../design/CONCURRENCY.md`](../design/CONCURRENCY.md)).
+9. No lock. The mount, node and file tables need one, and node references must
+   be atomic, before user threads leave the bootstrap processor
+   ([`../design/CONCURRENCY.md`](../design/CONCURRENCY.md)).

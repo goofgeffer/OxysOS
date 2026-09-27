@@ -386,13 +386,18 @@ void KernelVerifyWindows(void)
                             "a key with no window to take it was not counted as discarded");
     }
 
-    /* --- The table is bounded, and the queue is bounded. --- */
+    /* --- The table grows past its first chunk, and the queue is bounded. ---
+     *
+     * More windows than the first chunk holds: every one is made, the table
+     * has grown, and every one is given back. A table that refused past its
+     * chunk, or that grew without placing the window in the stack, fails here
+     * rather than at a person's seventeenth window. */
 
     {
-        size_t made[WINDOW_CAPACITY];
+        size_t made[WINDOW_CHUNK + 4U];
         size_t count = 0U;
 
-        for (size_t index = 0U; index < WINDOW_CAPACITY; ++index)
+        for (size_t index = 0U; index < (WINDOW_CHUNK + 4U); ++index)
         {
             made[index] = WindowCreate(0, 0, 16, 16, "n", WINDOW_LAYER_NORMAL);
 
@@ -402,14 +407,16 @@ void KernelVerifyWindows(void)
             }
         }
 
-        KernelWindowRequire(count == WINDOW_CAPACITY,
-                            "the table did not take as many windows as its capacity");
-        KernelWindowRequire(WindowCreate(0, 0, 16, 16, "over", WINDOW_LAYER_NORMAL) == WINDOW_NONE,
-                            "the table took a window beyond its capacity");
+        KernelWindowRequire(count == (WINDOW_CHUNK + 4U),
+                            "the table did not grow to take windows past its first chunk");
+        KernelWindowRequire(WindowManagerCapacity() >= (2U * WINDOW_CHUNK),
+                            "the table took windows past its chunk without growing");
+        KernelWindowRequire(WindowManagerCount() == (WINDOW_CHUNK + 4U),
+                            "a window made past the first chunk is not counted");
         KernelWindowRequire(WindowCreate(0, 0, 8, 8, "small", WINDOW_LAYER_NORMAL) == WINDOW_NONE,
                             "a window below the least extent was made");
 
-        for (size_t index = 0U; index < WINDOW_CAPACITY; ++index)
+        for (size_t index = 0U; index < (WINDOW_CHUNK + 4U); ++index)
         {
             WindowDestroy(made[index]);
         }

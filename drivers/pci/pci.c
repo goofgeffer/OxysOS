@@ -33,15 +33,16 @@
 #include <oxys/dev/pci.h>
 #include <oxys/kernel.h>
 #include <oxys/dev/io.h>
+#include <oxys/mm/table.h>
 
 /*
- * The number of functions recorded. Sixty-four is far beyond what the machines
- * this kernel runs upon present — the QEMU q35 board offers fewer than a dozen —
- * and the array is static because the enumeration is performed once, at a point
- * where a fixed bound is a plainer statement of the limit than an allocation
- * that could fail.
+ * The functions recorded, in a growing table: PCI_FUNCTION_CHUNK static, more
+ * from the heap in chunks that never move, since drivers keep a pointer to
+ * their function. Enumeration runs after the heap is made, upon the bootstrap
+ * processor, so a machine presenting more than the static chunk has every
+ * function recorded; only a heap that refuses a chunk discards one, counted.
  */
-#define PCI_FUNCTION_CAPACITY 64U
+#define PCI_FUNCTION_CHUNK 64U
 
 /* Bit 31 of CONFIG_ADDRESS, which enables the translation of accesses to data. */
 #define PCI_CONFIG_ENABLE UINT32_C(0x80000000)
@@ -61,7 +62,14 @@
 #define PCI_BAR_IO_MASK     UINT32_C(0xFFFFFFFC)
 
 /* The functions recorded by the enumeration, and how many were recorded. */
-static PciFunction PciFunctions[PCI_FUNCTION_CAPACITY];
+static PciFunction PciFunctionsFirst[PCI_FUNCTION_CHUNK];
+static GrowingTable PciFunctions =
+    GROWING_TABLE_INITIALISER("PCI functions", PciFunction, PciFunctionsFirst, PCI_FUNCTION_CHUNK);
+
+static PciFunction *PciSlot(size_t index)
+{
+    return (PciFunction *)GrowingTableAt(&PciFunctions, index);
+}
 static size_t PciFunctionsRecorded;
 
 /* Accounting. */
@@ -202,13 +210,14 @@ static void PciRecordFunction(PciAddress address, uint16_t vendor_id, uint8_t he
 {
     PciFunction *entry;
 
-    if (PciFunctionsRecorded >= PCI_FUNCTION_CAPACITY)
+    if ((PciFunctionsRecorded >= GrowingTableCapacity(&PciFunctions)) &&
+        !GrowingTableGrow(&PciFunctions))
     {
         ++PciDiscarded;
         return;
     }
 
-    entry = &PciFunctions[PciFunctionsRecorded];
+    entry = PciSlot(PciFunctionsRecorded);
     ++PciFunctionsRecorded;
 
     entry->address = address;
@@ -362,7 +371,7 @@ size_t PciFunctionCount(void)
 
 const PciFunction *PciFunctionAt(size_t index)
 {
-    return (index < PciFunctionsRecorded) ? &PciFunctions[index] : NULL;
+    return (index < PciFunctionsRecorded) ? PciSlot(index) : NULL;
 }
 
 const PciFunction *PciFindByClass(uint8_t class_code, uint8_t subclass, size_t from,
@@ -370,7 +379,7 @@ const PciFunction *PciFindByClass(uint8_t class_code, uint8_t subclass, size_t f
 {
     for (size_t index = from; index < PciFunctionsRecorded; ++index)
     {
-        const PciFunction *const entry = &PciFunctions[index];
+        const PciFunction *const entry = PciSlot(index);
 
         if ((class_code != 0xFFU) && (entry->class_code != class_code))
         {
@@ -397,10 +406,10 @@ const PciFunction *PciFindByIdentifier(uint16_t vendor_id, uint16_t device_id)
 {
     for (size_t index = 0U; index < PciFunctionsRecorded; ++index)
     {
-        if ((PciFunctions[index].vendor_id == vendor_id) &&
-            (PciFunctions[index].device_id == device_id))
+        if ((PciSlot(index)->vendor_id == vendor_id) &&
+            (PciSlot(index)->device_id == device_id))
         {
-            return &PciFunctions[index];
+            return PciSlot(index);
         }
     }
 
@@ -581,7 +590,7 @@ void PciReport(void)
 
     for (size_t index = 0U; index < PciFunctionsRecorded; ++index)
     {
-        const PciFunction *const entry = &PciFunctions[index];
+        const PciFunction *const entry = PciSlot(index);
 
         KernelWriteString("  ");
         KernelWriteDecimal((uint64_t)entry->address.bus);

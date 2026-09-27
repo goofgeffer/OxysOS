@@ -42,7 +42,8 @@
  *          SYSCALL_OPEN_DIRECTORY, SYSCALL_NAME_MAXIMUM, SyscallEntryType,
  *          SyscallDirectoryEntry, SYSCALL_DESCRIPTOR_INPUT,
  *          SYSCALL_DESCRIPTOR_OUTPUT, SYSCALL_DESCRIPTOR_ERROR,
- *          SYSCALL_DESCRIPTOR_FIRST, SYSCALL_ARGUMENT_COUNT_MAXIMUM,
+ *          SYSCALL_DESCRIPTOR_FIRST, SYSCALL_DESCRIPTOR_LIMIT,
+ *          SYSCALL_ARGUMENT_COUNT_MAXIMUM,
  *          SYSCALL_ARGUMENT_BYTES_MAXIMUM, SYSCALL_NOTIFY, SYSCALL_NOTIFICATION,
  *          SYSCALL_NOTIFY_* kinds, SyscallNotification, SYSCALL_SYSINFO,
  *          SyscallSystemInformation.
@@ -895,6 +896,13 @@ typedef struct SyscallProcessInformation
 #define SYSCALL_DESCRIPTOR_OUTPUT 1
 #define SYSCALL_DESCRIPTOR_ERROR  2
 #define SYSCALL_DESCRIPTOR_FIRST  3
+
+/* The most descriptors a process may hold, the standard three included, as
+ * POSIX publishes OPEN_MAX: the numbers are 0 to one less than this. A
+ * process's table grows toward it as files are opened, and `open` past it is
+ * EMFILE. It is a ceiling on one process's share of the machine's open files,
+ * not a size anything is allocated at. */
+#define SYSCALL_DESCRIPTOR_LIMIT  1024
 
 /*
  * The greatest length of one name within a directory, excluding its terminator.

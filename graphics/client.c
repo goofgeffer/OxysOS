@@ -86,7 +86,7 @@ static size_t WindowClientOwned(uint64_t window)
 {
     const uint64_t caller = WindowClientCaller();
 
-    if ((window >= WINDOW_CAPACITY) || !WindowExists((size_t)window) || (caller == 0U) ||
+    if ((window >= WindowManagerCapacity()) || !WindowExists((size_t)window) || (caller == 0U) ||
         (WindowOwner((size_t)window) != caller))
     {
         ++WindowClientRefusals;
@@ -357,9 +357,11 @@ static size_t WindowClientReadAny(uint64_t caller, WindowEvent *event, bool *own
 {
     *owns_any = false;
 
-    for (size_t step = 1U; step <= WINDOW_CAPACITY; ++step)
+    const size_t slots = WindowManagerCapacity();
+
+    for (size_t step = 1U; step <= slots; ++step)
     {
-        const size_t index = (WindowClientLastServed + step) % WINDOW_CAPACITY;
+        const size_t index = (WindowClientLastServed + step) % slots;
 
         if (!WindowExists(index) || (WindowOwner(index) != caller))
         {
@@ -618,7 +620,7 @@ int64_t WindowClientState(uint64_t window, uint64_t action)
      * that a program asking about a window it does not hold learns EBADF and
      * nothing about what kind of window the number names.
      */
-    if ((window >= WINDOW_CAPACITY) || !WindowExists((size_t)window) ||
+    if ((window >= WindowManagerCapacity()) || !WindowExists((size_t)window) ||
         ((WindowOwner((size_t)window) != caller) && (WindowSession() != caller)))
     {
         ++WindowClientRefusals;
@@ -706,7 +708,9 @@ int64_t WindowClientList(uint64_t entries_address, uint64_t capacity)
         return SYSCALL_EPERM;
     }
 
-    if ((capacity > WINDOW_CAPACITY) ||
+    /* A capacity so large its size in bytes would overflow is refused before
+     * the product below is taken; any other is checked as written. */
+    if ((capacity > (UINT64_MAX / sizeof *destination)) ||
         ((capacity != 0U) &&
          !SyscallUserRangeIsWritable(entries_address, capacity * (uint64_t)sizeof *destination)))
     {
@@ -717,7 +721,7 @@ int64_t WindowClientList(uint64_t entries_address, uint64_t capacity)
 
     destination = (SyscallWindowEntry *)(uintptr_t)entries_address;
 
-    for (size_t identifier = 0U; identifier < WINDOW_CAPACITY; ++identifier)
+    for (size_t identifier = 0U; identifier < WindowManagerCapacity(); ++identifier)
     {
         if (!WindowExists(identifier) || (WindowLayerOf(identifier) != WINDOW_LAYER_NORMAL))
         {
@@ -897,7 +901,7 @@ bool WindowClientHasEvent(uint64_t caller)
         return false;
     }
 
-    for (size_t index = 0U; index < WINDOW_CAPACITY; ++index)
+    for (size_t index = 0U; index < WindowManagerCapacity(); ++index)
     {
         if (WindowExists(index) && (WindowOwner(index) == caller) &&
             (WindowEventsQueued(index) > 0U))
@@ -918,7 +922,7 @@ bool WindowClientOwnsAny(uint64_t caller)
         return false;
     }
 
-    for (size_t index = 0U; index < WINDOW_CAPACITY; ++index)
+    for (size_t index = 0U; index < WindowManagerCapacity(); ++index)
     {
         if (WindowExists(index) && (WindowOwner(index) == caller))
         {

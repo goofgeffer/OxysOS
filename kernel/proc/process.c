@@ -75,6 +75,7 @@
 #include <oxys/proc/process.h>
 #include <oxys/arch/mm/addrspace.h>
 #include <oxys/kernel.h>
+#include <oxys/mm/heap.h>
 #include <oxys/mm/memory.h>
 #include <oxys/arch/mm/paging.h>
 #include <oxys/mm/pmm.h>
@@ -406,7 +407,10 @@ static Process *ProcessAllocate(const char *name, const Process *parent,
          * has no reference count upon an open file to make that safe.
          * docs/design/PROCESS.md.
          */
-        for (size_t slot = 0U; slot < PROCESS_DESCRIPTOR_CAPACITY; ++slot)
+        process->descriptors = process->descriptors_inline;
+        process->descriptor_capacity = PROCESS_DESCRIPTOR_INLINE;
+
+        for (size_t slot = 0U; slot < PROCESS_DESCRIPTOR_INLINE; ++slot)
         {
             process->descriptors[slot] = PROCESS_DESCRIPTOR_FREE;
         }
@@ -1910,14 +1914,66 @@ uint64_t ProcessCreateUserStack(Process *process, const ProcessArguments *argume
 
 /* ------------------------------------------- the descriptors of sub-task 7.6 */
 
+/*
+ * Makes room in a process's table for `wanted` slots: doubled into the heap,
+ * the new slots free, the old table given back unless it was the inline one.
+ * False, and the table as it was, past PROCESS_DESCRIPTOR_LIMIT or where the
+ * heap refuses. Only system calls grow a table, and they run upon the
+ * bootstrap processor, which is the only one the heap may be called from.
+ */
+static bool ProcessGrowDescriptors(Process *process, size_t wanted)
+{
+    size_t capacity = process->descriptor_capacity;
+    int *grown;
+
+    if (wanted <= capacity)
+    {
+        return true;
+    }
+
+    if (wanted > PROCESS_DESCRIPTOR_LIMIT)
+    {
+        return false;
+    }
+
+    while (capacity < wanted)
+    {
+        capacity *= 2U;
+    }
+
+    capacity = (capacity > PROCESS_DESCRIPTOR_LIMIT) ? PROCESS_DESCRIPTOR_LIMIT : capacity;
+    grown = KernelAllocate(capacity * sizeof *grown);
+
+    if (grown == NULL)
+    {
+        return false;
+    }
+
+    for (size_t index = 0U; index < capacity; ++index)
+    {
+        grown[index] = (index < process->descriptor_capacity) ? process->descriptors[index]
+                                                              : PROCESS_DESCRIPTOR_FREE;
+    }
+
+    if (process->descriptors != process->descriptors_inline)
+    {
+        KernelFree(process->descriptors);
+    }
+
+    process->descriptors = grown;
+    process->descriptor_capacity = capacity;
+
+    return true;
+}
+
 void ProcessCloseDescriptors(Process *process)
 {
-    if (process == NULL)
+    if ((process == NULL) || (process->descriptors == NULL))
     {
         return;
     }
 
-    for (size_t index = 0U; index < PROCESS_DESCRIPTOR_CAPACITY; ++index)
+    for (size_t index = 0U; index < process->descriptor_capacity; ++index)
     {
         if (process->descriptors[index] != PROCESS_DESCRIPTOR_FREE)
         {
@@ -1925,10 +1981,21 @@ void ProcessCloseDescriptors(Process *process)
             process->descriptors[index] = PROCESS_DESCRIPTOR_FREE;
         }
     }
+
+    /* A grown table is given back with the files: a process that has ended
+     * holds nothing, and the inline table is all a slot reused needs. */
+    if (process->descriptors != process->descriptors_inline)
+    {
+        KernelFree(process->descriptors);
+        process->descriptors = process->descriptors_inline;
+        process->descriptor_capacity = PROCESS_DESCRIPTOR_INLINE;
+    }
 }
 
 int64_t ProcessAdoptDescriptor(Process *process, int file)
 {
+    size_t index;
+
     if ((process == NULL) || !process->used || (file == VFS_NO_DESCRIPTOR))
     {
         return SYSCALL_EINVAL;
@@ -1938,19 +2005,25 @@ int64_t ProcessAdoptDescriptor(Process *process, int file)
      * The search begins at SYSCALL_DESCRIPTOR_FIRST and not at zero. The three
      * below it name the diagnostic path, and a program handed descriptor 1 for a
      * file it opened would then write to that file every time it called printf.
+     * Where every slot is taken the table grows, and the first new slot is the
+     * lowest free one, as POSIX requires of `open`.
      */
-    for (size_t index = SYSCALL_DESCRIPTOR_FIRST; index < PROCESS_DESCRIPTOR_CAPACITY;
-         ++index)
+    for (index = SYSCALL_DESCRIPTOR_FIRST; index < process->descriptor_capacity; ++index)
     {
         if (process->descriptors[index] == PROCESS_DESCRIPTOR_FREE)
         {
-            process->descriptors[index] = file;
-
-            return (int64_t)index;
+            break;
         }
     }
 
-    return SYSCALL_EMFILE;
+    if ((index == process->descriptor_capacity) && !ProcessGrowDescriptors(process, index + 1U))
+    {
+        return SYSCALL_EMFILE;
+    }
+
+    process->descriptors[index] = file;
+
+    return (int64_t)index;
 }
 
 int ProcessDescriptorFile(const Process *process, int64_t descriptor)
@@ -1960,7 +2033,7 @@ int ProcessDescriptorFile(const Process *process, int64_t descriptor)
         return VFS_NO_DESCRIPTOR;
     }
 
-    if ((descriptor < 0) || (descriptor >= (int64_t)PROCESS_DESCRIPTOR_CAPACITY))
+    if ((descriptor < 0) || (descriptor >= (int64_t)process->descriptor_capacity))
     {
         return VFS_NO_DESCRIPTOR;
     }
@@ -1987,8 +2060,8 @@ int64_t ProcessPlaceDescriptor(Process *process, int64_t from, int64_t to)
     int file;
 
     if ((process == NULL) || !process->used || (from < 0) || (to < 0) ||
-        (from >= (int64_t)PROCESS_DESCRIPTOR_CAPACITY) ||
-        (to >= (int64_t)PROCESS_DESCRIPTOR_CAPACITY))
+        (from >= (int64_t)process->descriptor_capacity) ||
+        (to >= (int64_t)PROCESS_DESCRIPTOR_LIMIT))
     {
         return SYSCALL_EBADF;
     }
@@ -1996,6 +2069,13 @@ int64_t ProcessPlaceDescriptor(Process *process, int64_t from, int64_t to)
     if (from == to)
     {
         return SYSCALL_OK;
+    }
+
+    /* A number past the table, but within the limit, is made room for, as
+     * POSIX's `dup2` places a descriptor at any number the process may hold. */
+    if (!ProcessGrowDescriptors(process, (size_t)to + 1U))
+    {
+        return SYSCALL_ENOMEM;
     }
 
     file = process->descriptors[from];
@@ -2117,8 +2197,20 @@ Process *ProcessFork(Process *parent, const SyscallFrame *frame)
      * this sub-task a child inherited nothing, the filesystem layer having no
      * count of holders and a shared file closed by either being closed for
      * both; docs/design/PROCESS.md records the interval.
+     *
+     * The child's table is grown to its parent's first: a descriptor the
+     * parent holds past the inline slots is one the child must hold at the
+     * same number, and a fork that could not give it that is refused whole
+     * rather than made with a descriptor missing.
      */
-    for (size_t index = 0U; index < PROCESS_DESCRIPTOR_CAPACITY; ++index)
+    if (!ProcessGrowDescriptors(child, parent->descriptor_capacity))
+    {
+        ProcessDestroy(child);
+
+        return NULL;
+    }
+
+    for (size_t index = 0U; index < parent->descriptor_capacity; ++index)
     {
         const int file = parent->descriptors[index];
 

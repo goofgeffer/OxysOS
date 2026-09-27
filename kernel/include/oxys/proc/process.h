@@ -194,17 +194,23 @@ typedef struct ProcessArguments
 } ProcessArguments;
 
 /*
- * How many descriptors a process may hold open at once, of sub-task 7.6.
+ * The descriptors a process holds open, of sub-task 7.6.
  *
  * The first three are the standard ones of <oxys/syscall_abi.h> and are never
  * given out by `open`; they name the diagnostic path and are not entries in the
- * filesystem layer's own table. So a process may hold this many less three open
- * files, and the bound is small on purpose: the filesystem layer's open-file
- * table is the whole machine's and grows from the one heap, and a process
- * permitted to take without bound could exhaust that heap and starve every
- * other process of the ability to open anything at all.
+ * filesystem layer's own table.
+ *
+ * A process's table holds PROCESS_DESCRIPTOR_INLINE within the process, so one
+ * that opens a few files never allocates, and grows in the heap when every slot
+ * is taken, doubling. The growth has a ceiling, PROCESS_DESCRIPTOR_LIMIT, which
+ * is a policy and not a size: the filesystem layer's open-file table is the
+ * whole machine's and grows from the one heap, and a process permitted to take
+ * without bound could exhaust that heap and starve every other process of the
+ * ability to open anything at all. It is SYSCALL_DESCRIPTOR_LIMIT, 1024, the
+ * soft limit POSIX systems commonly give RLIMIT_NOFILE.
  */
-#define PROCESS_DESCRIPTOR_CAPACITY 16U
+#define PROCESS_DESCRIPTOR_INLINE 16U
+#define PROCESS_DESCRIPTOR_LIMIT  ((size_t)SYSCALL_DESCRIPTOR_LIMIT)
 
 /* What a descriptor slot holds when nothing is open upon it. It is not zero:
  * zero is a valid descriptor of the filesystem layer, and a table cleared to
@@ -499,7 +505,9 @@ struct Process
      * are left free rather than filled with a sentinel so that exactly one rule
      * governs the table: an entry is a filesystem descriptor or it is nothing.
      */
-    int descriptors[PROCESS_DESCRIPTOR_CAPACITY];
+    int descriptors_inline[PROCESS_DESCRIPTOR_INLINE];
+    int *descriptors;           /* descriptors_inline, or a larger table. */
+    size_t descriptor_capacity; /* The slots `descriptors` has. */
 
     Thread *threads[PROCESS_THREAD_MAXIMUM];
     size_t thread_count;

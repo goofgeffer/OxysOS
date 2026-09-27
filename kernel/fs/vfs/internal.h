@@ -95,12 +95,23 @@ typedef struct VfsFile
  * filesystems' private descriptions — a superblock, an inode — are otherwise
  * allocated.
  */
-extern VfsFilesystem VfsFilesystems[VFS_FILESYSTEM_CAPACITY];
-extern VfsMount VfsMounts[VFS_MOUNT_CAPACITY];
+extern GrowingTable VfsFilesystems;
+extern GrowingTable VfsMounts;
 extern GrowingTable VfsNodeSlots;
 extern GrowingTable VfsFileSlots;
 
 /* The node or open file at an index, or null beyond the table. */
+/* The filesystem type or mount at an index, or null beyond the table. */
+static inline VfsFilesystem *VfsFilesystemSlot(size_t index)
+{
+    return (VfsFilesystem *)GrowingTableAt(&VfsFilesystems, index);
+}
+
+static inline VfsMount *VfsMountSlot(size_t index)
+{
+    return (VfsMount *)GrowingTableAt(&VfsMounts, index);
+}
+
 static inline VfsNode *VfsNodeSlot(size_t index)
 {
     return (VfsNode *)GrowingTableAt(&VfsNodeSlots, index);

@@ -31,9 +31,19 @@
 
 #include <oxys/block/block.h>
 #include <oxys/kernel.h>
+#include <oxys/mm/table.h>
 
-/* The registry. A slot is occupied while its registered flag is set. */
-static BlockDevice BlockDevices[BLOCK_DEVICE_CAPACITY];
+/* The registry, a growing table: BLOCK_DEVICE_CHUNK slots static, more from
+ * the heap in chunks that never move, so a driver's handle stays good. A slot
+ * is occupied while its registered flag is set, and a zeroed one is not. */
+static BlockDevice BlockDevicesFirst[BLOCK_DEVICE_CHUNK];
+static GrowingTable BlockDevices =
+    GROWING_TABLE_INITIALISER("block devices", BlockDevice, BlockDevicesFirst, BLOCK_DEVICE_CHUNK);
+
+static BlockDevice *BlockSlot(size_t index)
+{
+    return (BlockDevice *)GrowingTableAt(&BlockDevices, index);
+}
 
 /* Accounting across every device, retained when a device is withdrawn. */
 static uint64_t BlockReads;
@@ -131,11 +141,12 @@ BlockDevice *BlockRegister(const char *name, const BlockOperations *operations, 
         return NULL;
     }
 
-    for (size_t index = 0U; index < BLOCK_DEVICE_CAPACITY; ++index)
+    for (size_t index = 0U;
+         (index < GrowingTableCapacity(&BlockDevices)) || GrowingTableGrow(&BlockDevices); ++index)
     {
-        if (!BlockDevices[index].registered)
+        if (!BlockSlot(index)->registered)
         {
-            device = &BlockDevices[index];
+            device = BlockSlot(index);
             break;
         }
     }
@@ -274,9 +285,9 @@ size_t BlockDeviceCount(void)
 {
     size_t count = 0U;
 
-    for (size_t index = 0U; index < BLOCK_DEVICE_CAPACITY; ++index)
+    for (size_t index = 0U; index < GrowingTableCapacity(&BlockDevices); ++index)
     {
-        if (BlockDevices[index].registered)
+        if (BlockSlot(index)->registered)
         {
             ++count;
         }
@@ -289,16 +300,16 @@ BlockDevice *BlockDeviceAt(size_t index)
 {
     size_t seen = 0U;
 
-    for (size_t position = 0U; position < BLOCK_DEVICE_CAPACITY; ++position)
+    for (size_t position = 0U; position < GrowingTableCapacity(&BlockDevices); ++position)
     {
-        if (!BlockDevices[position].registered)
+        if (!BlockSlot(position)->registered)
         {
             continue;
         }
 
         if (seen == index)
         {
-            return &BlockDevices[position];
+            return BlockSlot(position);
         }
 
         ++seen;
@@ -314,11 +325,11 @@ BlockDevice *BlockFindByName(const char *name)
         return NULL;
     }
 
-    for (size_t index = 0U; index < BLOCK_DEVICE_CAPACITY; ++index)
+    for (size_t index = 0U; index < GrowingTableCapacity(&BlockDevices); ++index)
     {
-        if (BlockDevices[index].registered && BlockNamesMatch(BlockDevices[index].name, name))
+        if (BlockSlot(index)->registered && BlockNamesMatch(BlockSlot(index)->name, name))
         {
-            return &BlockDevices[index];
+            return BlockSlot(index);
         }
     }
 
@@ -352,7 +363,7 @@ void BlockReport(void)
     KernelWriteString("Block layer: ");
     KernelWriteDecimal((uint64_t)count);
     KernelWriteString(" devices registered of ");
-    KernelWriteDecimal((uint64_t)BLOCK_DEVICE_CAPACITY);
+    KernelWriteDecimal((uint64_t)GrowingTableCapacity(&BlockDevices));
     KernelWriteString(".\n");
 
     for (size_t index = 0U; index < count; ++index)

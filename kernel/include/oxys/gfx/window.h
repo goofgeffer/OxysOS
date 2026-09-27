@@ -6,7 +6,7 @@
  *          one screen surface, the order they stack in, the one of them that
  *          holds the keyboard, and the routing of every key and every movement
  *          of the mouse to the window it belongs to.
- * Key definitions: WINDOW_CAPACITY, WINDOW_NONE, WindowEvent, WindowEventKind,
+ * Key definitions: WINDOW_CHUNK, WindowManagerCapacity, WINDOW_NONE, WindowEvent, WindowEventKind,
  *          WindowLayer, WindowManagerInitialise, WindowCreate, WindowDestroy,
  *          WindowRaise, WindowSetSession, WindowSession, WindowDrawText,
  *          WindowFocus, WindowMove, WindowSurface, WindowInvalidate,
@@ -94,15 +94,15 @@
 #include <oxys/dev/mouse.h>
 
 /*
- * How many windows may exist at once.
- *
- * Sixteen, and a fixed table with a refusal beyond it, for the reason the
- * compositor's layer table is fixed: the manager must be honest about a bound
- * rather than grow until an allocation fails somewhere nothing expects it to.
- * The desktop of sub-task 9.5 and the utilities of 9.7 are a handful of windows;
- * a program that opens sixteen has a defect this bound turns into a refusal.
+ * How many windows the table holds before it first grows. It grows by as many
+ * again whenever every slot is taken, so windows are bounded by memory: each
+ * window's pixels already come from the heap, and a creation that cannot have
+ * them, or a chunk of the table, is refused as one that cannot have either
+ * always was. WindowManagerCapacity is how many slots there are now.
  */
-#define WINDOW_CAPACITY 16U
+#define WINDOW_CHUNK 16U
+
+size_t WindowManagerCapacity(void);
 
 /* The value WindowCreate returns when it cannot make a window, and the value
  * WindowManagerWindowAt and WindowManagerFocused return when there is none. */
