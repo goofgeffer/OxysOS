@@ -167,8 +167,8 @@ The conversion is one command, recorded here rather than made a rule of the
 `Makefile` — for the reason `logo.h`'s is: a build rule would put ImageMagick in
 the path of every build, and an icon changes when somebody draws one, not when
 somebody builds. `E` is the extent; ninety-six, since 2026-09-25 at the project
-owner's request, is twice the launcher's slot of
-twenty-four units at the scale of two, so every place an icon is drawn is an
+owner's request, is more than twice the launcher's slot of
+twenty units at the scale of two, so every place an icon is drawn is an
 average of several of its pixels. It was forty-eight.
 
 ```sh

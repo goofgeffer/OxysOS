@@ -11,6 +11,7 @@ row.
 
 | Date | Phase | Change | Commit |
 | ---- | ----- | ------ | ------ |
+| 2026-09-27 | Phase 9 | The launcher's icons twenty units square, from twenty-four | `pending` |
 | 2026-09-27 | Phase 9 | `init-check` signals only once its parent is seen asleep in `pause`, ending the VirtualBox boot hang | `cc15f88` |
 | 2026-09-27 | Phase 9 | A gap of six units between a launcher entry's icon and its name | `e306ecd` |
 | 2026-09-27 | Phase 9 | Files draws the owner's file picture for every file and folder picture for every folder | `049e06a` |

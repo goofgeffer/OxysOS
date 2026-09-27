@@ -120,10 +120,11 @@
 #define SESSION_CLOCK_SHARE 5
 
 /* The icon slot within a row: its extent in units, and the margin before it.
- * An icon of any extent is fitted to the slot, SessionDrawIcon; one drawn at
- * twice the units, as the shipped icons are, is drawn one to one at a scale of
- * two. ICON_EXTENT_MAXIMUM is what the library will hold at all. */
-#define SESSION_ICON_UNITS  24
+ * An icon of any extent is fitted to the slot, SessionDrawIcon, the shipped
+ * ones of ninety-six pixels by averaging. Twenty units since 2026-09-27, at
+ * the project owner's request, in a row of 28; it was 24. ICON_EXTENT_MAXIMUM
+ * is what the library will hold at all. */
+#define SESSION_ICON_UNITS  20
 #define SESSION_ICON_MARGIN 2
 
 /* The space between a launcher entry's icon and its name, in units, of
