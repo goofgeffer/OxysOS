@@ -164,7 +164,7 @@ A process owns windows through system calls (numbers in
 | `window_event` | Takes one event, from one window or `SYSCALL_WINDOW_ANY`, optionally waiting. |
 | `window_screen` | Reports the screen's size. |
 | `window_state` | Minimise, restore, full, not full. |
-| `window_list` | Lists ordinary windows (the session only). |
+| `window_list` | Lists ordinary windows (the session only): each one's number, flags, title and owner's program name. |
 
 `window_session` and `window_text` are [`SESSION.md`](SESSION.md); `notify` and
 `notification`, and the `WINDOW_EVENT_NOTIFY` a root is sent when one is posted
@@ -247,7 +247,7 @@ injects a key.
 | The wait ends with the injected key, after exactly one sleep. | A wait returning at once, or never. |
 | The window left standing is gone at the program's end, before `ProcessDestroy`; the kernel's own survives. | A window outliving its owner. |
 | `window_state` on its own window does all four actions; an unknown action is `EINVAL`, a dead number `EBADF`. | The call acting on others' windows. |
-| `window_list` is `EPERM` without the session. | Every program reading every title. |
+| `window_list` is `EPERM` without the session; held, it names a window of the caller's with its title and the caller's program as owner. | Every program reading every title; a bar that gives a window another program's icon, or finds a pinned program open that is not. |
 | A call from no process is `EBADF`; no open file or child is left; the hand ran and saw the program sleep. | A pass from a test that never slept. |
 
 With the ownership check removed, the kernel's own window can be destroyed by the

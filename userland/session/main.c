@@ -147,17 +147,6 @@
 /* The launcher's entries are as many as the file has, grown in the heap. */
 
 /*
- * The list of windows upon the panel, of 2026-09-23: one button per ordinary
- * window, in units of the scale, beginning after the launcher's name. It is
- * what brings a minimised window back — nothing else can, the window being
- * neither drawn nor hit — and so it lists every window and not only the
- * minimised ones, a list that changed its length whenever a window was hidden
- * being a list a person could not learn the places of.
- */
-#define SESSION_TASK_UNITS   72
-#define SESSION_TASK_GAP     2
-
-/*
  * The background, of 2026-09-23: the file `/etc/session.conf` names, read once
  * at start into this buffer, which the parsed image points into for as long as
  * the session runs. A mebibyte holds the photograph that ships, some 760 KiB,
@@ -631,19 +620,6 @@ static int32_t SessionPanelTextTop(void)
 static int32_t SessionClockWidth(void)
 {
     return SESSION_CLOCK_UNITS * SessionScale;
-}
-
-/* How many launcher entries are pinned to the panel. */
-static size_t SessionPinnedCount(void)
-{
-    size_t count = 0U;
-
-    for (size_t index = 0U; index < SessionEntryCount; ++index)
-    {
-        count += SessionEntries[index].pinned ? 1U : 0U;
-    }
-
-    return count;
 }
 
 /*
@@ -1250,14 +1226,11 @@ static void SessionKeepTime(void)
     }
 }
 
-static void SessionDrawTasks(void);
-
-
 /*
- * Where the pinned programs begin upon the panel, and how far apart they
- * stand: a square the panel's height each. The distances are those that leave
- * SESSION_BAR_GAP units between what is drawn — the launcher's icon and the
- * first pinned icon, one icon and the next — each icon's inset counted in.
+ * Where the bar's icons begin, and how far apart they stand: a square the
+ * panel's height each. The distances are those that leave SESSION_BAR_GAP
+ * units between what is drawn — the launcher's icon and the first of the row,
+ * one icon and the next — each icon's inset counted in.
  */
 static int32_t SessionPinLeft(void)
 {
@@ -1269,106 +1242,260 @@ static int32_t SessionPinStride(void)
     return SessionPanelHeight() + ((SESSION_BAR_GAP - (2 * SESSION_PIN_INSET)) * SessionScale);
 }
 
-/* Where the list of windows begins upon the panel: SESSION_BAR_GAP units after
- * the last icon, or after the launcher's icon where nothing is pinned. */
-static int32_t SessionTaskLeft(void)
+/* The last component of a path: the name a program's process takes, which is
+ * what a window's owner is reported by. */
+static const char *SessionProgramOf(const char *path)
 {
-    const size_t pinned = SessionPinnedCount();
+    const char *last = path;
 
-    if (pinned == 0U)
+    for (const char *at = path; *at != '\0'; ++at)
     {
-        return SessionPanelHeight() + ((SESSION_BAR_GAP - SESSION_PIN_INSET) * SessionScale);
+        if ((*at == '/') && (at[1] != '\0'))
+        {
+            last = at + 1;
+        }
     }
 
-    return SessionPinLeft() + ((int32_t)pinned * SessionPanelHeight()) +
-           ((int32_t)(pinned - 1U) * (SESSION_BAR_GAP - (2 * SESSION_PIN_INSET)) * SessionScale) +
-           ((SESSION_BAR_GAP - SESSION_PIN_INSET) * SessionScale);
-}
-
-/* How wide one of the list's buttons is with the gap after it. */
-static int32_t SessionTaskStride(void)
-{
-    return (SESSION_TASK_UNITS + SESSION_TASK_GAP) * SessionScale;
-}
-
-/* How many buttons fit upon the panel: a list longer than the screen is cut
- * at its edge, before the notice, rather than drawn over it. */
-static size_t SessionTasksShown(void)
-{
-    const int32_t room = SessionScreen.width - SessionTaskLeft() - SessionNoticeWidth();
-    const int32_t fit = (room > 0) ? ((room + (SESSION_TASK_GAP * SessionScale)) /
-                                      SessionTaskStride())
-                                   : 0;
-
-    return ((size_t)fit < SessionTaskCount) ? (size_t)fit : SessionTaskCount;
+    return last;
 }
 
 /*
- * The list of windows: each title upon the bar itself, with no button behind
- * it, a minimised one dimmed, and every title cut to its place rather than run
- * past it.
+ * The icon of a program no launcher entry pictures: `/share/icons/<name>.oxi`,
+ * read once and kept, or none. It is how a program the shipped file does not
+ * name — a third party's — is drawn with its own icon, by placing one file.
+ * The table is grown in the heap and may move, so what this returns is used at
+ * once and not kept.
  */
-static void SessionDrawTasks(void)
+typedef struct SessionProgramIcon
 {
-    const int32_t inset = 3 * SessionScale;
-    const int32_t width = SESSION_TASK_UNITS * SessionScale;
-    const size_t characters = (size_t)((width - (2 * inset)) / (SESSION_ADVANCE * SessionScale));
-    const size_t shown = SessionTasksShown();
+    char program[SYSCALL_PROCESS_NAME_MAXIMUM + 1U];
+    bool has_picture;
+    OxysIcon picture;
+} SessionProgramIcon;
 
-    for (size_t index = 0U; index < shown; ++index)
+static SessionProgramIcon *SessionProgramIcons;
+static size_t SessionProgramIconCount;
+static size_t SessionProgramIconCapacity;
+
+static const OxysIcon *SessionIconOfProgram(const char *program)
+{
+    char path[SYSCALL_PATH_MAXIMUM + 1U];
+    SessionProgramIcon *grown;
+    SessionProgramIcon *slot;
+
+    if ((program == NULL) || (program[0] == '\0'))
     {
-        const SyscallWindowEntry *const task = &SessionTasks[index];
-        const int32_t x = SessionTaskLeft() + ((int32_t)index * SessionTaskStride());
-        const bool minimised = (task->flags & SYSCALL_WINDOW_ENTRY_MINIMISED) != 0U;
-        char title[SYSCALL_WINDOW_TITLE_MAXIMUM + 1U];
-        size_t length = 0U;
-
-        while ((task->title[length] != '\0') && (length < characters) &&
-               (length < SYSCALL_WINDOW_TITLE_MAXIMUM))
-        {
-            title[length] = task->title[length];
-            ++length;
-        }
-
-        title[length] = '\0';
-
-        SessionText(SessionPanel, x + inset, SessionPanelTextTop(), title,
-                    minimised ? SESSION_DIM : SESSION_INK, SESSION_PANEL, SessionScale);
+        return NULL;
     }
+
+    for (size_t index = 0U; index < SessionProgramIconCount; ++index)
+    {
+        if (strcmp(SessionProgramIcons[index].program, program) == 0)
+        {
+            return SessionProgramIcons[index].has_picture ? &SessionProgramIcons[index].picture
+                                                          : NULL;
+        }
+    }
+
+    grown = SessionGrow(SessionProgramIcons, &SessionProgramIconCapacity,
+                        SessionProgramIconCount + 1U, sizeof *grown);
+
+    if (grown == NULL)
+    {
+        return NULL;
+    }
+
+    SessionProgramIcons = grown;
+    slot = &SessionProgramIcons[SessionProgramIconCount++];
+    SessionCopy(slot->program, SYSCALL_PROCESS_NAME_MAXIMUM, program);
+    (void)snprintf(path, sizeof path, "/share/icons/%s.oxi", program);
+    slot->has_picture = OxysIconRead(&slot->picture, path);
+
+    return slot->has_picture ? &slot->picture : NULL;
 }
 
-/* The pinned programs: each entry marked `pin = yes`, its icon in a square
- * the panel's height, or its name's first letter where it has no icon. */
-static void SessionDrawPins(void)
+/*
+ * The bar's row of icons, of 2026-09-27, after the fashion the project owner
+ * asked for: every pinned entry in its place, and every open window whose
+ * program is not pinned after them, each as an icon. An open program is
+ * underlined — dark brown upon its pinned place, brown where it stands only
+ * because it is open — and the one holding the focus underlined across its
+ * whole square, the others by a short stroke at its middle.
+ */
+typedef struct SessionSlot
 {
-    const int32_t height = SessionPanelHeight();
-    const int32_t inset = SESSION_PIN_INSET * SessionScale;
-    int32_t x = SessionPinLeft();
+    size_t entry;   /* The launcher entry it is, or SessionEntryCount. */
+    size_t task;    /* The window it acts upon, or SessionTaskCount for none. */
+    bool pinned;
+    bool focused;
+} SessionSlot;
+
+#define SESSION_UNDERLINE_PINNED OXYS_RGB(0x5AU, 0x38U, 0x10U) /* Dark brown. */
+#define SESSION_UNDERLINE_OPEN   OXYS_RGB(0x96U, 0x62U, 0x28U) /* Brown. */
+
+static SessionSlot *SessionSlots;
+static size_t SessionSlotCount;
+static size_t SessionSlotCapacity;
+
+/* Whether a window is its program's: the owner's name is the program's last
+ * path component, which is the entry's `run`'s. */
+static bool SessionTaskIsEntry(const SyscallWindowEntry *task, const SessionEntry *entry)
+{
+    return (task->program[0] != '\0') && (strcmp(task->program, SessionProgramOf(entry->run)) == 0);
+}
+
+static bool SessionAddSlot(size_t entry, size_t task, bool pinned, bool focused)
+{
+    SessionSlot *const grown =
+        SessionGrow(SessionSlots, &SessionSlotCapacity, SessionSlotCount + 1U, sizeof *grown);
+
+    if (grown == NULL)
+    {
+        return false;
+    }
+
+    SessionSlots = grown;
+    SessionSlots[SessionSlotCount].entry = entry;
+    SessionSlots[SessionSlotCount].task = task;
+    SessionSlots[SessionSlotCount].pinned = pinned;
+    SessionSlots[SessionSlotCount].focused = focused;
+    ++SessionSlotCount;
+
+    return true;
+}
+
+/*
+ * Builds the row from the entries and the list of windows. A pinned program
+ * with several windows is one place, which acts upon the first of them, or the
+ * one holding the focus; a program not pinned has a place for each window.
+ */
+static void SessionBuildSlots(void)
+{
+    SessionSlotCount = 0U;
 
     for (size_t index = 0U; index < SessionEntryCount; ++index)
     {
-        const SessionEntry *const entry = &SessionEntries[index];
+        size_t task = SessionTaskCount;
+        bool focused = false;
 
-        if (!entry->pinned)
+        if (!SessionEntries[index].pinned)
         {
             continue;
         }
 
-        if (entry->has_picture)
+        for (size_t window = 0U; window < SessionTaskCount; ++window)
         {
-            SessionDrawIcon(SessionPanel, x + inset, inset, height - (2 * inset), &entry->picture,
+            const SyscallWindowEntry *const candidate = &SessionTasks[window];
+            const bool holds = ((candidate->flags & SYSCALL_WINDOW_ENTRY_FOCUSED) != 0U) &&
+                               ((candidate->flags & SYSCALL_WINDOW_ENTRY_MINIMISED) == 0U);
+
+            if (!SessionTaskIsEntry(candidate, &SessionEntries[index]))
+            {
+                continue;
+            }
+
+            if ((task == SessionTaskCount) || holds)
+            {
+                task = window;
+            }
+
+            focused = focused || holds;
+        }
+
+        if (!SessionAddSlot(index, task, true, focused))
+        {
+            return;
+        }
+    }
+
+    for (size_t window = 0U; window < SessionTaskCount; ++window)
+    {
+        const SyscallWindowEntry *const task = &SessionTasks[window];
+        size_t entry = SessionEntryCount;
+        bool pinned = false;
+
+        for (size_t index = 0U; index < SessionEntryCount; ++index)
+        {
+            if (SessionTaskIsEntry(task, &SessionEntries[index]))
+            {
+                pinned = pinned || SessionEntries[index].pinned;
+                entry = (entry == SessionEntryCount) ? index : entry;
+            }
+        }
+
+        if (!pinned &&
+            !SessionAddSlot(entry, window, false,
+                            ((task->flags & SYSCALL_WINDOW_ENTRY_FOCUSED) != 0U) &&
+                                ((task->flags & SYSCALL_WINDOW_ENTRY_MINIMISED) == 0U)))
+        {
+            return;
+        }
+    }
+}
+
+/* How many places fit upon the bar before the notice at its right: a row
+ * longer than the screen is cut at its edge rather than drawn over it. */
+static size_t SessionSlotsShown(void)
+{
+    const int32_t room = SessionScreen.width - SessionPinLeft() - SessionNoticeWidth();
+    const int32_t fit = (room > 0) ? ((room + SessionPinStride() - SessionPanelHeight()) /
+                                      SessionPinStride())
+                                   : 0;
+
+    return ((size_t)fit < SessionSlotCount) ? (size_t)fit : SessionSlotCount;
+}
+
+/*
+ * Draws the row: each place's icon — its entry's, or its program's own file,
+ * or the first letter of its name or title where there is neither — and the
+ * underline of an open program at the square's foot.
+ */
+static void SessionDrawSlots(void)
+{
+    const int32_t height = SessionPanelHeight();
+    const int32_t inset = SESSION_PIN_INSET * SessionScale;
+    const int32_t thickness = SessionScale + 1;
+    const size_t shown = SessionSlotsShown();
+
+    for (size_t index = 0U; index < shown; ++index)
+    {
+        const SessionSlot *const slot = &SessionSlots[index];
+        const SessionEntry *const entry =
+            (slot->entry < SessionEntryCount) ? &SessionEntries[slot->entry] : NULL;
+        const SyscallWindowEntry *const task =
+            (slot->task < SessionTaskCount) ? &SessionTasks[slot->task] : NULL;
+        const int32_t x = SessionPinLeft() + ((int32_t)index * SessionPinStride());
+        const OxysIcon *icon = ((entry != NULL) && entry->has_picture) ? &entry->picture : NULL;
+
+        if ((icon == NULL) && (task != NULL))
+        {
+            icon = SessionIconOfProgram(task->program);
+        }
+
+        if (icon != NULL)
+        {
+            SessionDrawIcon(SessionPanel, x + inset, inset, height - (2 * inset), icon,
                             SESSION_PANEL);
         }
         else
         {
-            const char letter[2] = { entry->name[0], '\0' };
+            const char letter[2] = { (entry != NULL) ? entry->name[0]
+                                     : (task != NULL) ? task->title[0]
+                                                      : '?',
+                                     '\0' };
 
             SessionText(SessionPanel,
                         x + ((height - SessionTextWidth(SessionPanel, letter, SessionScale)) / 2),
                         SessionPanelTextTop(), letter, SESSION_INK, SESSION_PANEL, SessionScale);
         }
 
-        x += SessionPinStride();
+        if (task != NULL)
+        {
+            const int32_t across = slot->focused ? (height - (2 * inset)) : (height / 3);
+
+            SessionFill(SessionPanel, x + ((height - across) / 2), height - thickness - 1, across,
+                        thickness, slot->pinned ? SESSION_UNDERLINE_PINNED : SESSION_UNDERLINE_OPEN);
+        }
     }
 }
 
@@ -1406,8 +1533,8 @@ static void SessionDrawPanel(bool open)
      * happens to be the same colour standing over it. */
     SessionFill(SessionPanel, 0, 0, SessionScreen.width, 1, SESSION_GROUND);
 
-    SessionDrawPins();
-    SessionDrawTasks();
+    SessionBuildSlots();
+    SessionDrawSlots();
 
     /* The notice that something shipped stands in for what the person's file
      * names, at the panel's right: upon a desktop it is the one place a person
@@ -2007,6 +2134,11 @@ static void SessionLoadEntries(void)
 
     SessionEntryCount = 0U;
 
+    /* The programs' own icons are looked for again with the entries', at
+     * every reading: an icon placed for a program after it was first looked
+     * for is found at the next opening of the launcher. */
+    SessionProgramIconCount = 0U;
+
     for (size_t index = 0U; index < blocks; ++index)
     {
         const char *const run = OxysConfigValue(&SessionConfig, "launch", index, "run");
@@ -2077,6 +2209,17 @@ static void SessionLoadEntries(void)
                     SessionSay(SYSCALL_NOTIFY_WARNING, text);
                 }
             }
+        }
+        else
+        {
+            /* An entry that names no icon is drawn with its program's own,
+             * `/share/icons/<program>.oxi`, where one is there: a third
+             * party's program is given its icon by placing one file. Silent
+             * where there is none, the key being optional. */
+            char path[SYSCALL_PATH_MAXIMUM + 1U];
+
+            (void)snprintf(path, sizeof path, "/share/icons/%s.oxi", SessionProgramOf(run));
+            entry->has_picture = OxysIconRead(&entry->picture, path);
         }
 
         ++SessionEntryCount;
@@ -2232,53 +2375,42 @@ static void SessionHandlePress(const SyscallWindowEvent *event)
                 SessionOpenMenu();
             }
         }
-        else if ((event->x >= SessionPinLeft()) && (event->x < SessionTaskLeft()))
-        {
-            /* A pinned program: the press starts it, as the launcher's row
-             * for it would. */
-            const int32_t offset = event->x - SessionPinLeft();
-            const size_t chosen = (size_t)(offset / SessionPinStride());
-            size_t seen = 0U;
-
-            SessionCloseMenu();
-
-            if ((offset % SessionPinStride()) < SessionPanelHeight())
-            {
-                for (size_t index = 0U; index < SessionEntryCount; ++index)
-                {
-                    if (SessionEntries[index].pinned && (seen++ == chosen))
-                    {
-                        SessionLaunch(SessionEntries[index].run);
-                        break;
-                    }
-                }
-            }
-        }
         else
         {
-            const int32_t offset = event->x - SessionTaskLeft();
-            const size_t index = (offset >= 0) ? (size_t)(offset / SessionTaskStride())
-                                               : SessionTaskCount;
+            /*
+             * A place upon the bar. One that stands for an open window
+             * restores it — shown, raised and focused — unless it already
+             * holds the focus, in which case it is minimised, as a person
+             * expects of a taskbar; a pinned program with no window open is
+             * started. The press upon the panel did not take the focus, which
+             * is what lets the row still say who holds it.
+             */
+            const int32_t offset = event->x - SessionPinLeft();
+            const size_t chosen = (offset >= 0) ? (size_t)(offset / SessionPinStride())
+                                                : SessionSlotCount;
 
             SessionCloseMenu();
+            SessionBuildSlots();
 
-            /*
-             * A button restores its window — shown, raised and focused — unless
-             * that window already holds the focus, in which case it is
-             * minimised: the one button does both, as a person expects of a
-             * list of windows. The press upon the panel did not take the
-             * focus, which is what lets the list still say who holds it.
-             */
-            if ((index < SessionTasksShown()) &&
-                ((offset % SessionTaskStride()) < (SESSION_TASK_UNITS * SessionScale)))
+            if ((chosen < SessionSlotsShown()) &&
+                ((offset % SessionPinStride()) < SessionPanelHeight()))
             {
-                const SyscallWindowEntry *const task = &SessionTasks[index];
-                const bool focused = (task->flags & SYSCALL_WINDOW_ENTRY_FOCUSED) != 0U;
-                const bool minimised = (task->flags & SYSCALL_WINDOW_ENTRY_MINIMISED) != 0U;
+                const SessionSlot *const slot = &SessionSlots[chosen];
 
-                (void)OxysWindowState((int64_t)task->window,
-                                      (focused && !minimised) ? SYSCALL_WINDOW_STATE_MINIMISE
-                                                              : SYSCALL_WINDOW_STATE_RESTORE);
+                if (slot->task < SessionTaskCount)
+                {
+                    const SyscallWindowEntry *const task = &SessionTasks[slot->task];
+                    const bool focused = (task->flags & SYSCALL_WINDOW_ENTRY_FOCUSED) != 0U;
+                    const bool minimised = (task->flags & SYSCALL_WINDOW_ENTRY_MINIMISED) != 0U;
+
+                    (void)OxysWindowState((int64_t)task->window,
+                                          (focused && !minimised) ? SYSCALL_WINDOW_STATE_MINIMISE
+                                                                  : SYSCALL_WINDOW_STATE_RESTORE);
+                }
+                else if (slot->entry < SessionEntryCount)
+                {
+                    SessionLaunch(SessionEntries[slot->entry].run);
+                }
             }
         }
 

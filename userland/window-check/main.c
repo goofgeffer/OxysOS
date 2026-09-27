@@ -346,10 +346,12 @@ int main(void)
         for (int64_t index = 0; (index < count) && (index < 16); ++index)
         {
             listed = listed || ((entries[index].window == (uint32_t)window) &&
-                                (strcmp(entries[index].title, "state") == 0));
+                                (strcmp(entries[index].title, "state") == 0) &&
+                                (strcmp(entries[index].program, "window-check") == 0));
         }
 
-        WindowRequire(listed, "the session's list did not name a window this program holds");
+        WindowRequire(listed, "the session's list did not name a window this program holds, "
+                              "with this program as its owner");
         WindowRequire(OxysWindowDestroy(window) == 0, "the states' window could not be destroyed");
     }
     /*

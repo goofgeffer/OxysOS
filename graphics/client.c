@@ -748,6 +748,23 @@ int64_t WindowClientList(uint64_t entries_address, uint64_t capacity)
             }
 
             entry->title[length] = '\0';
+
+            /* The owner's program, by its process's name; empty where the
+             * owner is gone, which a window outliving its owner briefly is. */
+            {
+                const Process *const owner = ProcessById(WindowOwner(identifier));
+
+                length = 0U;
+
+                while ((owner != NULL) && (owner->name[length] != '\0') &&
+                       (length < SYSCALL_PROCESS_NAME_MAXIMUM))
+                {
+                    entry->program[length] = owner->name[length];
+                    ++length;
+                }
+
+                entry->program[length] = '\0';
+            }
         }
 
         ++count;

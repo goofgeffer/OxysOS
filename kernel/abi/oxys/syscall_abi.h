@@ -597,6 +597,10 @@ typedef struct SyscallWindowRectangle
 #define SYSCALL_WINDOW_STATE_FULL      3U
 #define SYSCALL_WINDOW_STATE_NOT_FULL  4U
 
+/* The longest name a process has, its program's: `procinfo` and `window_list`
+ * report it. */
+#define SYSCALL_PROCESS_NAME_MAXIMUM 31U
+
 /* One window, as window_list reports it. */
 #define SYSCALL_WINDOW_ENTRY_MINIMISED 0x01U
 #define SYSCALL_WINDOW_ENTRY_FOCUSED   0x02U
@@ -607,6 +611,13 @@ typedef struct SyscallWindowEntry
     uint32_t window;
     uint32_t flags;
     char title[SYSCALL_WINDOW_TITLE_MAXIMUM + 1U];
+
+    /* The program that owns the window: its process's name, the last
+     * component of the path it was executed from, as `procinfo` gives it; or
+     * empty where the owner has gone. It is how the session gives a window
+     * its program's icon and finds a pinned program open, a title being the
+     * program's to choose and naming nothing reliably. Since 2026-09-27. */
+    char program[SYSCALL_PROCESS_NAME_MAXIMUM + 1U];
 } SyscallWindowEntry;
 
 /* The buttons of a pointer event, as bits. */
@@ -703,8 +714,9 @@ typedef struct SyscallSystemInformation
 
 /* What `procinfo` reports of one process. The state is one of
  * SYSCALL_PROCESS_STATE_*, and the name is what the process was created as —
- * the program's name where `execve` replaced it. */
-#define SYSCALL_PROCESS_NAME_MAXIMUM 31U
+ * the program's name where `execve` replaced it, at most
+ * SYSCALL_PROCESS_NAME_MAXIMUM characters, which is defined with the window list
+ * above, whose entries carry it too. */
 
 #define SYSCALL_PROCESS_STATE_READY   1U
 #define SYSCALL_PROCESS_STATE_RUNNING 2U

@@ -142,12 +142,28 @@ rows of a panel against the top or bottom edge free of windows made full, so
 neither the box nor the bar covers a full window's controls
 ([`WINDOWS.md`](WINDOWS.md)).
 
-**The pinned programs** are the launcher entries marked `pin = yes`: a square
-button the bar's height each, right of the launcher's button, showing the entry's
-icon (or its name's first letter where it has none). One press starts it, as its
-launcher row would. The shipped file pins Terminal and Files. The row is spaced
-by what is drawn: the same gap stands between each two buttons, and between the
-last and the window list.
+**The bar's row of icons**, right of the launcher's button, is the pinned
+programs — the launcher entries marked `pin = yes`, which the shipped file makes
+Terminal and Files — and after them every open window whose program is not
+pinned, each a square the bar's height, the same gap between each two. A
+window's program is its owner's process name, which `window_list` reports; a
+window belongs to an entry whose `run` ends in that name.
+
+- **An open program is underlined** at its square's foot: dark brown upon a
+  pinned program's own place, brown upon a place it has only because it is
+  open. The one holding the focus is underlined across its square, the others
+  by a short stroke at its middle. A pinned program with several windows is one
+  place; a program not pinned has a place for each window.
+- **A press** upon a place with a window restores it (shown, raised, focused),
+  or minimises it where it already holds the focus; upon a pinned program with
+  no window it starts the program. The press does not take the focus, which is
+  what lets the row still say who holds it.
+- **Each place's icon** is its entry's; or, for a program no entry pictures,
+  `/share/icons/<program>.oxi`, read once and again at every opening of the
+  launcher, so that a third party's program is given its icon by placing one
+  file; or, where there is none, the first letter of its name or title.
+- **The row is cut at the bar's edge**, before the notice at its right, rather
+  than drawn over it.
 
 **The desktop's icons**, of 2026-09-27, are the launcher entries marked
 `desktop = yes`, drawn upon the root from the top left, down a column and then
@@ -184,7 +200,10 @@ and the list of windows are drawn on the bar itself, the project owner's orange
 does can cover it. It opens upward from the launcher's button, above the bar, and
 touches neither edge of the screen. It is created when opened and destroyed when
 closed. Its entries are the `[launch]` blocks of `/etc/session.conf` (`run`,
-`name`, optional `icon`, `pin` and `desktop`; [`CONFIG.md`](CONFIG.md)).
+`name`, optional `icon`, `pin` and `desktop`; [`CONFIG.md`](CONFIG.md)). An
+entry naming no `icon` is drawn with `/share/icons/<program>.oxi` where that file
+is there, the program being the last component of its `run`, so a third party's
+program needs no line of the file to have its picture.
 
 - **Reread at every opening**, so an edit shows at the next press: entries, icons,
   and the background (redrawn only when its path changed). The scale is read at
@@ -198,13 +217,11 @@ closed. Its entries are the `[launch]` blocks of `/etc/session.conf` (`run`,
 - **Started programs are not waited for**; the session reaps with `waitpid` and
   `WNOHANG` on `SIGCHLD`, since `init` adopts orphans only when a parent ends.
 
-**The window list** is a place per ordinary window, in the order of their numbers,
-every window listed so places stay put. A press restores its window (show, raise,
-focus), or minimises it if it already holds the focus. Each is its title on the
-bar, a minimised window's dimmed, and titles are cut to their place. The list is fetched with `window_list` (the session's alone) and
-redrawn when the root receives `WINDOW_EVENT_WINDOWS`; `window_create` and
-`window_destroy` wake sleepers, so a new window is listed at once. There is no
-polling.
+**The windows the row shows** are fetched with `window_list` (the session's
+alone), in the order of their numbers so places stay put, each with its title,
+its flags and its owner's program, and the row is redrawn when the root receives
+`WINDOW_EVENT_WINDOWS`; `window_create` and `window_destroy` wake sleepers, so a
+new window is shown at once. There is no polling.
 
 **Notifications** stand above the bar at the right: small
 panel-layer windows, each the owner's symbol for its kind and a line or three of text,
@@ -278,7 +295,7 @@ the shipped defaults offer a launcher ([`CONFIG.md`](CONFIG.md)). The fallback, 
 rereading and the list are observed by operating the desktop
 ([`../project/TESTING-GRAPHICS.md`](../project/TESTING-GRAPHICS.md)): the desktop
 with nothing running; the launcher opening, closing and starting a program; a window
-dragged down sliding **under** the bar; a pinned icon starting its program; a window made full between the clock's box and the bar; minimised windows restored from the list; the desktop's icons over a photograph and over the ground, changed by Settings' Save, and one pressed starting its program.
+dragged down sliding **under** the bar; a pinned icon starting its program; a window made full between the clock's box and the bar; a pinned program open underlined dark brown in its place and one not pinned added after the pins underlined brown, the focused one across its square; a press on an open place focusing then minimising its window; a program with an icon file of its own shown with it on the bar and in the launcher; the desktop's icons over a photograph and over the ground, changed by Settings' Save, and one pressed starting its program.
 
 ## Limitations
 
@@ -293,8 +310,9 @@ dragged down sliding **under** the bar; a pinned icon starting its program; a wi
 8. The background has no transparency or palette. A photograph compresses only
    once softened and reduced in colour, which bands a little; its edges are cut
    with no choice of where.
-9. The window list shows as many windows as the panel's width allows, with no
-   icons (it does not know a window's program) and titles simply cut.
+9. The bar's row shows as many places as its width allows; a pinned program with
+   several windows acts upon one of them, and a program with no icon of its own
+   is its first letter.
 10. The desktop's icons are placed in the order of the launcher's entries and
     cannot be moved by hand; one is started by a single press, as a pinned
     program is, and there is no selection of one before it is started.
