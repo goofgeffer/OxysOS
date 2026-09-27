@@ -352,20 +352,19 @@ regenerates it and fails if what is here differs.*
 
 | | |
 | --- | --- |
-| Builds recorded | 66 |
-| Verified | 55 passed, 11 not |
+| Builds recorded | 67 |
+| Verified | 56 passed, 11 not |
 | Compilers | gcc |
 | Environments | Bochs, QEMU, QEMU q35, QEMU q35,  VirtualBox,  Bochs, VirtualBox |
 | First | 2026-09-17T01:34Z |
-| Latest | 2026-09-27T18:01Z |
+| Latest | 2026-09-27T18:04Z |
 
 ## The last 20 builds
 
-The remaining 46 are in [`builds.tsv`](builds.tsv), which is the record.
+The remaining 47 are in [`builds.tsv`](builds.tsv), which is the record.
 
 | # | Date (UTC) | Commit | Compiler | Kernel | ISO | Result | Environments | Note |
 | - | ---------- | ------ | -------- | ------ | --- | ------ | ------------ | ---- |
-| 47 | 2026-09-27T00:39Z | `260e09a` | gcc 13.2.0 | 3990144 | 13316096 | passed (80 assertions) | QEMU q35;VirtualBox;Bochs | Settings buttons sized to their labels |
 | 48 | 2026-09-27T01:24Z | `1137633` | gcc 13.2.0 | 3998232 | 13324288 | passed (80 assertions) | QEMU q35;VirtualBox;Bochs | Userland lists grown in the heap |
 | 49 | 2026-09-27T01:47Z | `2a812b8` | gcc 13.2.0 | 4064768 | 13389824 | passed (80 assertions) | QEMU q35;VirtualBox;Bochs | Kernel tables grown; descriptors to 1024 |
 | 50 | 2026-09-27T02:21Z | `049e06a` | gcc 13.2.0 | 4064768 | 13389824 | passed (80 assertions) | QEMU q35;VirtualBox;Bochs | File and folder pictures in Files |
@@ -385,5 +384,6 @@ The remaining 46 are in [`builds.tsv`](builds.tsv), which is the record.
 | 64 | 2026-09-27T17:55Z | `2033d9d` | gcc 13.2.0 | 4118304 | 13443072 | passed (80 assertions) | QEMU q35;VirtualBox;Bochs | Smaller pointer |
 | 65 | 2026-09-27T18:00Z | `ef618f0` | gcc 13.2.0 | 4121896 | 13447168 | passed (80 assertions) | QEMU q35;VirtualBox;Bochs | Desktop names with no label |
 | 66 | 2026-09-27T18:01Z | `ef618f0` *(modified)* | gcc 13.2.0 | 4121848 | 13447168 | failed | QEMU q35 | Negative: ef618f0 with transparent text drawn with its paper; self-test fails |
+| 67 | 2026-09-27T18:04Z | `3233859` | gcc 13.2.0 | 4121896 | 13447168 | passed (80 assertions) | QEMU q35;VirtualBox;Bochs | Window list without buttons |
 
 <!-- END GENERATED -->
