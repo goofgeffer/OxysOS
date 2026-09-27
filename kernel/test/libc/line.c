@@ -494,7 +494,7 @@ static Thread *VerifyLineBoot;
 static bool VerifyLineRun(int64_t *status)
 {
     const uint64_t length = (uint64_t)(KernelProgramLineCheckEnd - KernelProgramLineCheckBegin);
-    ProcessArguments arguments;
+    static ProcessArguments arguments; /* Some nine kibibytes: not a stack local. */
     Process *process;
     Thread *thread;
     ElfImage loaded;

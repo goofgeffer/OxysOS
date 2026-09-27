@@ -311,8 +311,8 @@ in the constant's header, which is the authority.
 | Path through a system call, bytes | fixed | 255 | `SYSCALL_PATH_MAXIMUM`, `abi/oxys/syscall_abi.h` |
 | Name of one component, bytes | fixed | 255 | `VFS_NAME_MAXIMUM`, `fs/vfs.h` |
 | Symbolic links followed in one path | fixed | 8 | `VFS_SYMLINK_DEPTH_MAXIMUM`, `fs/vfs.h` |
-| Arguments to `execve`, and environment strings, each | fixed | 16 | `SYSCALL_ARGUMENT_COUNT_MAXIMUM`, `abi/oxys/syscall_abi.h` |
-| Bytes of both vectors to `execve` | fixed | 2048 | `SYSCALL_ARGUMENT_BYTES_MAXIMUM`, `abi/oxys/syscall_abi.h` |
+| Arguments to `execve`, and environment strings, each | fixed | 128 | `SYSCALL_ARGUMENT_COUNT_MAXIMUM`, `abi/oxys/syscall_abi.h` |
+| Bytes of both vectors to `execve` | fixed | 8192 | `SYSCALL_ARGUMENT_BYTES_MAXIMUM`, `abi/oxys/syscall_abi.h` |
 | Entries in one `poll` | fixed | 8 | `SYSCALL_POLL_MAXIMUM`, `abi/oxys/syscall_abi.h` |
 | Notifications waiting in the kernel; the oldest dropped | fixed | 8 | `SYSCALL_NOTIFICATION_QUEUE`, `abi/oxys/syscall_abi.h` |
 | Text of one notification, bytes | fixed | 63 | `SYSCALL_NOTIFICATION_TEXT_MAXIMUM`, `abi/oxys/syscall_abi.h` |

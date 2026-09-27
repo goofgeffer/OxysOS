@@ -70,6 +70,7 @@ typedef struct ShellParser
 {
     const ShellTokens *tokens;
     size_t at;
+    ShellList *list; /* Whose word pool the commands are drawn into. */
 } ShellParser;
 
 static const ShellToken *ShellPeek(const ShellParser *parser)
@@ -134,6 +135,7 @@ static bool ShellDescriptorOf(const ShellToken *token, int *descriptor)
  */
 static ShellParseStatus ShellParseSimpleCommand(ShellParser *parser, ShellCommand *command)
 {
+    command->word = &parser->list->words[parser->list->word_used];
     command->word_count = 0U;
     command->redirection_count = 0U;
     command->assignment_count = 0U;
@@ -170,12 +172,16 @@ static ShellParseStatus ShellParseSimpleCommand(ShellParser *parser, ShellComman
                 return SHELL_PARSE_UNSUPPORTED;
             }
 
-            if (command->word_count >= SHELL_WORD_MAXIMUM)
+            /* The pool is as large as the tokens a line may have, so this
+             * cannot refuse a word the tokeniser accepted; it is kept so that a
+             * change to either bound refuses rather than writes past the pool. */
+            if (parser->list->word_used >= SHELL_TOKEN_MAXIMUM)
             {
                 return SHELL_PARSE_TOO_MANY_WORDS;
             }
 
-            command->word[command->word_count++] = token->text;
+            parser->list->words[parser->list->word_used++] = token->text;
+            ++command->word_count;
             ShellAdvance(parser);
             continue;
         }
@@ -420,6 +426,8 @@ ShellParseStatus ShellParse(const ShellTokens *tokens, ShellList *list, size_t *
 
     parser.tokens = tokens;
     parser.at = 0U;
+    parser.list = list;
+    list->word_used = 0U;
     list->pipeline_count = 0U;
 
     if (tokens->token[0].kind == SHELL_TOKEN_END)

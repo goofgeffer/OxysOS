@@ -377,10 +377,34 @@ static void VerifyShellParser(void)
     VerifyShellRequire(VerifyShellParseLine("x 1<<-y", &offending) == SHELL_PARSE_UNSUPPORTED,
                        "an io_number before a here-document was not refused as unsupported");
 
+    /* A command has as many words as its line holds, drawn from one pool for
+     * the line: two commands of twenty words each, past the sixteen that
+     * bounded a command until 2026-09-27, each read back whole and apart —
+     * the second's first word where the first's run ends would be a pool
+     * whose runs overlap. */
+    {
+        const ShellCommand *first;
+        const ShellCommand *second;
+
+        VerifyShellRequire(
+            (VerifyShellParseLine("k 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 | "
+                                  "w 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19",
+                                  &offending) == SHELL_PARSE_OK) &&
+                (VerifyShellList.pipeline[0].command_count == 2U),
+            "two commands of twenty words were not parsed");
+
+        first = &VerifyShellList.pipeline[0].command[0];
+        second = &VerifyShellList.pipeline[0].command[1];
+
+        VerifyShellRequire((first->word_count == 20U) && (second->word_count == 20U) &&
+                               VerifyShellWordIs(first->word[0], "k") &&
+                               VerifyShellWordIs(first->word[19], "19") &&
+                               VerifyShellWordIs(second->word[0], "w") &&
+                               VerifyShellWordIs(second->word[19], "19"),
+                           "the words of two long commands ran into one another");
+    }
+
     /* The bounds, each by name. */
-    VerifyShellRequire(VerifyShellParseLine("a b c d e f g h i j k l m n o p q", &offending) ==
-                           SHELL_PARSE_TOO_MANY_WORDS,
-                       "seventeen words were not refused as too many");
     VerifyShellRequire(VerifyShellParseLine("a >1 >2 >3 >4 >5 >6 >7 >8 >9", &offending) ==
                            SHELL_PARSE_TOO_MANY_REDIRECTIONS,
                        "nine redirections were not refused as too many");
@@ -933,7 +957,7 @@ static Thread *VerifyShellBoot;
 static bool VerifyShellRun(int64_t *status)
 {
     const uint64_t length = (uint64_t)(KernelProgramShellEnd - KernelProgramShellBegin);
-    ProcessArguments arguments;
+    static ProcessArguments arguments; /* Some nine kibibytes: not a stack local. */
     Process *process;
     Thread *thread;
     ElfImage loaded;

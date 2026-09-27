@@ -55,7 +55,7 @@ static bool VerifyDirectoryRun(int64_t *status)
 {
     const uint64_t length = (uint64_t)(KernelProgramDirCheckEnd - KernelProgramDirCheckBegin);
     static const char name[] = "dir-check";
-    ProcessArguments arguments;
+    static ProcessArguments arguments; /* Some nine kibibytes: not a stack local. */
     Process *process;
     Thread *thread;
     ElfImage loaded;

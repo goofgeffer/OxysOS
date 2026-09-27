@@ -205,12 +205,15 @@ static const char *ShellLookupParameter(void *context, const char *name)
 }
 
 /*
- * The expanded words of one command, and the vector built over them. The
- * words are bounded by the parser and each expansion by LINE_CAPACITY, so the
- * storage is fixed, for the reason everything else in this program is.
+ * The expanded words of one command, laid end to end, and the vector built over
+ * them. A command has at most as many words as its line has tokens, and the
+ * words together at most what `execve` accepts, since a longer vector could
+ * not be given to a program; so the storage is fixed, for the reason
+ * everything else in this program is, and no bound of its own on the count of
+ * words stands before `execve`'s.
  */
-static char ShellArguments[SHELL_WORD_MAXIMUM][LINE_CAPACITY];
-static char *ShellArgumentVector[SHELL_WORD_MAXIMUM + 1U];
+static char ShellArgumentText[SYSCALL_ARGUMENT_BYTES_MAXIMUM];
+static char *ShellArgumentVector[SHELL_TOKEN_MAXIMUM + 1U];
 static char ShellAssignmentText[LINE_CAPACITY];
 
 /* Applies one assignment word to the shell's variables, after expanding its
@@ -276,17 +279,27 @@ static int ShellRunCommand(const ShellCommand *command, bool *exit_requested, bo
         return 0;
     }
 
-    for (size_t index = 0U; index < command->word_count; ++index)
     {
-        if (!ShellExpandWord(command->word[index], ShellArguments[index],
-                             sizeof ShellArguments[index], ShellLookupParameter, NULL))
+        size_t used = 0U;
+
+        for (size_t index = 0U; index < command->word_count; ++index)
         {
-            (void)fprintf(stderr, "sh: a word could not be expanded.\n");
+            char *const at = &ShellArgumentText[used];
 
-            return 1;
+            if ((used >= sizeof ShellArgumentText) ||
+                !ShellExpandWord(command->word[index], at, sizeof ShellArgumentText - used,
+                                 ShellLookupParameter, NULL))
+            {
+                (void)fprintf(stderr, "sh: a word could not be expanded, or the words of one "
+                                      "command are longer than %u bytes.\n",
+                              (unsigned)sizeof ShellArgumentText);
+
+                return 1;
+            }
+
+            used += strlen(at) + 1U;
+            ShellArgumentVector[argc++] = at;
         }
-
-        ShellArgumentVector[argc++] = ShellArguments[index];
     }
 
     ShellArgumentVector[argc] = NULL;

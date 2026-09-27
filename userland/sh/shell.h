@@ -11,7 +11,7 @@
  *          ShellRedirectionKind, ShellCommand, ShellPipeline, ShellList,
  *          ShellSeparator, ShellParseStatus, ShellTokenise, ShellParse,
  *          ShellUnquote, ShellParseStatusName, SHELL_TOKEN_MAXIMUM,
- *          SHELL_TEXT_MAXIMUM, SHELL_WORD_MAXIMUM, SHELL_REDIRECTION_MAXIMUM,
+ *          SHELL_TEXT_MAXIMUM, SHELL_REDIRECTION_MAXIMUM,
  *          SHELL_COMMAND_MAXIMUM, SHELL_PIPELINE_MAXIMUM — and, of sub-task
  *          8.3, ShellLookup, ShellExpandWord, ShellIsName,
  *          ShellIsAssignmentWord, ShellVariableSet, ShellVariableGet,
@@ -67,7 +67,8 @@
  */
 #define SHELL_TOKEN_MAXIMUM       128U
 #define SHELL_TEXT_MAXIMUM        1536U
-#define SHELL_WORD_MAXIMUM        16U  /* Words of one command: SYSCALL_ARGUMENT_COUNT_MAXIMUM. */
+/* A command has as many words as its line has tokens: they are drawn from one
+ * pool per line, ShellList's `words`, so no command has a bound of its own. */
 #define SHELL_REDIRECTION_MAXIMUM 8U   /* Redirections of one command. */
 #define SHELL_COMMAND_MAXIMUM     8U   /* Commands of one pipeline. */
 #define SHELL_PIPELINE_MAXIMUM    16U  /* Pipelines of one list. */
@@ -146,7 +147,7 @@ typedef struct ShellRedirection
  * and its redirections in order. Section 2.9.1. */
 typedef struct ShellCommand
 {
-    const char *word[SHELL_WORD_MAXIMUM];
+    const char **word;  /* Its first word within the line's pool, ShellList.words. */
     size_t word_count;
     ShellRedirection redirection[SHELL_REDIRECTION_MAXIMUM];
     size_t redirection_count;
@@ -199,6 +200,13 @@ typedef struct ShellPipeline
 typedef struct ShellList
 {
     ShellPipeline pipeline[SHELL_PIPELINE_MAXIMUM];
+
+    /* Every word of the line, each command's in a run of its own, which its
+     * `word` names: a line has no more words than tokens, so the pool is never
+     * what refuses one. A list is parsed into and read in place, never copied,
+     * so the commands' pointers into it stay good. */
+    const char *words[SHELL_TOKEN_MAXIMUM];
+    size_t word_used;
     size_t pipeline_count;
 } ShellList;
 

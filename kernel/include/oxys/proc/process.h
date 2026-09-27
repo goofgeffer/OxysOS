@@ -161,10 +161,11 @@
  * replacement would read whatever the new program has at that address, which is
  * a fault if it is lucky and the new program's own data if it is not.
  *
- * The bounds are <oxys/syscall_abi.h>'s, restated as sizes here, and they are
- * what makes this structure something a kernel stack can hold: sixteen strings
- * and two kibibytes of them is about two and a half kibibytes in total, against
- * a kernel stack of THREAD_KERNEL_STACK_PAGES pages.
+ * The bounds are <oxys/syscall_abi.h>'s, restated as sizes here. At 128 strings
+ * and eight kibibytes this structure is some nine kibibytes, more than half a
+ * kernel stack of THREAD_KERNEL_STACK_PAGES pages, so `execve` holds it in the
+ * heap (Process.exec_arguments), and the self-tests that build one hold it in
+ * static storage. It is never a local of a thread's kernel stack.
  */
 #define PROCESS_ARGUMENT_COUNT_MAXIMUM SYSCALL_ARGUMENT_COUNT_MAXIMUM
 #define PROCESS_ARGUMENT_BYTES_MAXIMUM SYSCALL_ARGUMENT_BYTES_MAXIMUM
@@ -508,6 +509,12 @@ struct Process
     int descriptors_inline[PROCESS_DESCRIPTOR_INLINE];
     int *descriptors;           /* descriptors_inline, or a larger table. */
     size_t descriptor_capacity; /* The slots `descriptors` has. */
+
+    /* The heap copy of `execve`'s vectors while the call runs: made by the
+     * system call, given back by ProcessExecute once the new stack holds the
+     * strings, or by the call itself when it fails, or by ProcessDestroy where
+     * a failure past the point of no return ends the process first. */
+    ProcessArguments *exec_arguments;
 
     Thread *threads[PROCESS_THREAD_MAXIMUM];
     size_t thread_count;

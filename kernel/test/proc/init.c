@@ -113,7 +113,7 @@ static bool VerifyInitRun(int64_t *status)
 {
     const uint64_t length = (uint64_t)(KernelProgramInitCheckEnd - KernelProgramInitCheckBegin);
     static const char name[] = "init-check";
-    ProcessArguments arguments;
+    static ProcessArguments arguments; /* Some nine kibibytes: not a stack local. */
     Process *process;
     Thread *thread;
     ElfImage loaded;

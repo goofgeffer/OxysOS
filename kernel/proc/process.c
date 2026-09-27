@@ -462,6 +462,14 @@ void ProcessDestroy(Process *process)
     ProcessCloseDescriptors(process);
     WindowClientReleaseProcess(process->id);
 
+    /* A heap copy of `execve`'s vectors still held: the call failed past the
+     * point of no return and ended the process before it could give it back. */
+    if (process->exec_arguments != NULL)
+    {
+        KernelFree(process->exec_arguments);
+        process->exec_arguments = NULL;
+    }
+
     AddressSpaceDestroy(&process->space);
 
     process->used = false;
@@ -2367,6 +2375,14 @@ int64_t ProcessExecute(Process *process, const char *path,
      */
 
     stack = ProcessCreateUserStack(process, arguments);
+
+    /* The strings stand upon the new stack now, so a heap copy `execve` made is
+     * given back here: past this line the call does not return to free it. */
+    if ((arguments != NULL) && (process->exec_arguments == arguments))
+    {
+        KernelFree(process->exec_arguments);
+        process->exec_arguments = NULL;
+    }
 
     if (stack == 0U)
     {

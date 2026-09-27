@@ -44,6 +44,7 @@
 #include <oxys/arch/cpu/msr.h>
 #include <oxys/arch/cpu/gdt.h>
 #include <oxys/kernel.h>
+#include <oxys/mm/heap.h>
 #include <oxys/mm/memory.h>
 #include <oxys/arch/mm/paging.h>
 #include <oxys/dev/pit.h>
@@ -904,12 +905,21 @@ static int64_t SyscallCopyUserVector(uint64_t vector, ProcessArguments *argument
     }
 }
 
+/*
+ * `execve`. The vectors are copied into the heap, not onto this thread's
+ * kernel stack: at SYSCALL_ARGUMENT_COUNT_MAXIMUM strings and
+ * SYSCALL_ARGUMENT_BYTES_MAXIMUM bytes the copy is more than half the stack.
+ * The copy is the process's `exec_arguments` while the call runs, so that
+ * whichever path ends it gives it back: ProcessExecute once the new stack holds
+ * the strings, this function where the call is refused, and ProcessDestroy
+ * where a failure past the point of no return ends the process.
+ */
 static int64_t SyscallDoExecve(uint64_t path_address, uint64_t argument_vector,
                                uint64_t environment_vector)
 {
     Process *const process = ProcessCurrent();
     char path[SYSCALL_PATH_MAXIMUM + 1U];
-    ProcessArguments arguments;
+    ProcessArguments *arguments;
     int64_t copied;
 
     if (process == NULL)
@@ -917,39 +927,33 @@ static int64_t SyscallDoExecve(uint64_t path_address, uint64_t argument_vector,
         return SYSCALL_EINVAL;
     }
 
-    arguments.storage_used = 0U;
+    arguments = KernelAllocate(sizeof *arguments);
 
-    copied = SyscallCopyUserVector(argument_vector, &arguments, arguments.argument,
-                                   &arguments.argument_count);
-
-    if (copied != SYSCALL_OK)
+    if (arguments == NULL)
     {
-        if (copied == SYSCALL_EFAULT)
-        {
-            ++SyscallFaults;
-        }
-
-        return copied;
+        return SYSCALL_ENOMEM;
     }
 
-    copied = SyscallCopyUserVector(environment_vector, &arguments, arguments.environment,
-                                   &arguments.environment_count);
+    arguments->storage_used = 0U;
+    process->exec_arguments = arguments;
 
-    if (copied != SYSCALL_OK)
+    copied = SyscallCopyUserVector(argument_vector, arguments, arguments->argument,
+                                   &arguments->argument_count);
+
+    if (copied == SYSCALL_OK)
     {
-        if (copied == SYSCALL_EFAULT)
-        {
-            ++SyscallFaults;
-        }
-
-        return copied;
+        copied = SyscallCopyUserVector(environment_vector, arguments, arguments->environment,
+                                       &arguments->environment_count);
     }
 
-    copied = SyscallCopyUserPath(path_address, path, sizeof path);
-
-    if (copied != SYSCALL_OK)
+    if (copied == SYSCALL_EFAULT)
     {
-        return copied;
+        ++SyscallFaults;
+    }
+
+    if (copied == SYSCALL_OK)
+    {
+        copied = SyscallCopyUserPath(path_address, path, sizeof path);
     }
 
     /*
@@ -959,7 +963,18 @@ static int64_t SyscallDoExecve(uint64_t path_address, uint64_t argument_vector,
      * told that its file does not exist, when the machine had in fact run out of
      * memory, would look for the fault in the one place it is not.
      */
-    return ProcessExecute(process, path, &arguments);
+    if (copied == SYSCALL_OK)
+    {
+        copied = ProcessExecute(process, path, arguments);
+    }
+
+    if (process->exec_arguments != NULL)
+    {
+        KernelFree(process->exec_arguments);
+        process->exec_arguments = NULL;
+    }
+
+    return copied;
 }
 
 /* Ends the calling program. Does not return; the result exists so that the

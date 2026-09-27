@@ -187,7 +187,7 @@ static bool KernelUtilitiesArguments(ProcessArguments *arguments,
 static bool KernelUtilitiesRun(const char *name, const uint8_t *image, uint64_t length,
                                const char *const *strings, int64_t *status)
 {
-    ProcessArguments arguments;
+    static ProcessArguments arguments; /* Some nine kibibytes: not a stack local. */
     Process *process;
     Thread *thread;
     ElfImage loaded;

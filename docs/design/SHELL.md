@@ -104,10 +104,11 @@ forms, each cited at its code.
   what was quoted: `"$HOME"` expands and `'$HOME'` does not.
 - **The parse is flat**: a list of pipelines, each with the condition before it
   and the separator after it, which is all a left-to-right shell needs.
-- **Nothing allocates.** Every bound is in `shell.h` (sixteen words to a command,
-  the argument vector's own bound; eight redirections; eight commands to a
-  pipeline; sixteen pipelines to a line; 128 tokens), and a line beyond one is
-  refused naming which.
+- **Nothing allocates.** Every bound is in `shell.h` (eight redirections; eight
+  commands to a pipeline; sixteen pipelines to a line; 128 tokens), and a line
+  beyond one is refused naming which. A command has as many words as its line
+  has tokens, drawn from one pool for the line, and so as many as `execve`
+  accepts.
 - **An unfinished line continues**: an open quote, a trailing `|`, `&&`, `||`
   or a redirection without a target prompts `> ` and the whole is parsed again
   with the next line joined, rather than resuming, which would be a second parser
@@ -186,7 +187,7 @@ otherwise each directory of `PATH` is tried in turn, `/bin` if `PATH` is unset
   127 (Section 2.8.2).
 - **The environment** is one `NAME=value` per exported variable, built before the
   fork and laid on the new stack by `execve`; `getenv` reads it. The kernel's
-  vector bound of sixteen strings applies.
+  vector bound of 128 strings applies.
 - **A program is given** its arguments with quotes removed and expansions made,
   `argv[0]` as typed, the environment, the working directory, and every
   descriptor the shell holds, with 0, 1 and 2 the terminal and the diagnostic
@@ -304,7 +305,7 @@ the programs `line-check`, `dir-check`, `env-check`, `file-check` and
 | A session read through descriptor 0 edits five lines correctly and consumes exactly its bytes. | A reader that reads ahead or leaves bytes behind. |
 | Tokens and their columns; every operator longest first; `io_number` only when adjacent; quotes kept; comments; incomplete lines; the bounds refused, not overrun. | `>>` read as two `>`, emptying a file. |
 | Quote removal: single quotes literal, backslash within double quotes only before `$` `` ` `` `"` `\` and newline, adjacent parts joined. | `'\n'` becoming a newline. |
-| The parse of lists, pipelines and redirections; continuations; unexpected tokens at their position; compound commands refused by name. | An empty pipeline run silently; a program called `if`. |
+| The parse of lists, pipelines and redirections; continuations; unexpected tokens at their position; compound commands refused by name; two commands of twenty words read back whole and apart. | An empty pipeline run silently; a program called `if`; one command's words running into the next's in the line's pool. |
 | Expansion: the longest name, `$?`, unset as empty, quoting respected, values with quotes passed through; assignments before and after the name. | `$HOMEx` expanding `$HOME`; a value closing a quote the person opened. |
 | `dir-check`: the root at start; `chdir` and `getcwd` agree and `open` follows; paths canonicalised; `ENOENT`, `ENOTDIR`, `ERANGE` and `ENAMETOOLONG`; a child inherits and does not affect the parent. | A working directory `open` ignores; a child that starts at the root. |
 | `env-check` receives its arguments and exported variables only; exit statuses of a program, a failure and a name not found; a parent's stack survives a child's `execve`. | Quotes reaching a program; an unexported variable leaking. |
@@ -323,7 +324,7 @@ the programs `line-check`, `dir-check`, `env-check`, `file-check` and
    parameters, `${NAME:-word}`, tilde, command substitution, arithmetic, field
    splitting or pathname expansion.
 5. A redirection on a built-in outside a pipeline is named and not performed.
-6. The environment and argument vectors are bounded at sixteen strings, and a
+6. The environment and argument vectors are bounded at 128 strings, and a
    process at 1024 descriptors.
 7. No SIGTTOU, `wait` built-in, `%%` or `%string` job names, `disown` or
    `suspend`; control-C at the prompt does not clear the line.

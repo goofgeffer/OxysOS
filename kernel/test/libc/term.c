@@ -384,7 +384,7 @@ static bool VerifyTermRun(int64_t *status)
 {
     const uint64_t length = (uint64_t)(KernelProgramPollCheckEnd - KernelProgramPollCheckBegin);
     static const char name[] = "poll-check";
-    ProcessArguments arguments;
+    static ProcessArguments arguments; /* Some nine kibibytes: not a stack local. */
     Process *process;
     Thread *thread;
     ElfImage loaded;

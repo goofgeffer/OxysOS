@@ -153,7 +153,7 @@ static bool VerifySignalsRun(int64_t *status)
     const uint64_t length =
         (uint64_t)(KernelProgramSignalCheckEnd - KernelProgramSignalCheckBegin);
     static const char name[] = "signal-check";
-    ProcessArguments arguments;
+    static ProcessArguments arguments; /* Some nine kibibytes: not a stack local. */
     Process *process;
     Thread *thread;
     ElfImage loaded;

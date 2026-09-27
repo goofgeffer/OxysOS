@@ -967,14 +967,18 @@ typedef struct SyscallDirectoryEntry
  * Both bounds are the program's to know before it calls, for the reason
  * SYSCALL_PATH_MAXIMUM is. The kernel copies every string out of the caller's
  * memory *before* it destroys the address space they stand in, so the copy needs
- * a bound and the bound is the kernel's stack.
+ * a bound; it is made into the heap, not the kernel's stack, so the bound is
+ * one a person at the shell does not meet. 128 is as many words as a line of
+ * the shell can hold (its tokens), so a command is never refused for its
+ * count of words before it is refused for its length. It was 16 until
+ * 2026-09-27, which refused `kill %1 … %20`.
  *
  * The count bounds each vector separately and the byte count bounds the two
  * together, terminators included. A program that exceeds either is refused with
  * EINVAL and keeps running, which is what an `execve` that fails must do.
  */
-#define SYSCALL_ARGUMENT_COUNT_MAXIMUM 16U
-#define SYSCALL_ARGUMENT_BYTES_MAXIMUM 2048U
+#define SYSCALL_ARGUMENT_COUNT_MAXIMUM 128U
+#define SYSCALL_ARGUMENT_BYTES_MAXIMUM 8192U
 
 /*
  * The greatest length of a path a caller may name, excluding its terminator.

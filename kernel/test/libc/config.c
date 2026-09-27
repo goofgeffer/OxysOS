@@ -390,7 +390,7 @@ static bool VerifyConfigRun(int64_t *status)
     const uint64_t length =
         (uint64_t)(KernelProgramConfigCheckEnd - KernelProgramConfigCheckBegin);
     static const char name[] = "config-check";
-    ProcessArguments arguments;
+    static ProcessArguments arguments; /* Some nine kibibytes: not a stack local. */
     Process *process;
     Thread *thread;
     ElfImage loaded;

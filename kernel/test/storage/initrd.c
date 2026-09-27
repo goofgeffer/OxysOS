@@ -440,7 +440,7 @@ static bool KernelInitrdArguments(ProcessArguments *arguments,
 static void KernelInitrdExecute(const char *path, const char *const *strings,
                                 int64_t expected)
 {
-    ProcessArguments arguments;
+    static ProcessArguments arguments; /* Some nine kibibytes: not a stack local. */
     Process *process;
     Thread *thread;
     Thread *boot;

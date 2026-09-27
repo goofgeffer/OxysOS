@@ -245,9 +245,9 @@ downward, strings first so the pointers name fixed addresses, padding computed
 after sizing, eightbytes written a byte at a time because two stack pages need
 not be adjacent frames, and through the direct map because the space being
 filled is often not the active one. `execve` copies both vectors into the
-kernel first, as offsets rather than pointers, bounded at sixteen strings and two
-kibibytes together, before it destroys the space they stand in; a refusal comes
-before that point, so a refused program keeps running.
+kernel first, into the heap and as offsets rather than pointers, bounded at 128
+strings and eight kibibytes together, before it destroys the space they stand
+in; a refusal comes before that point, so a refused program keeps running.
 
 **`crt0.asm`** clears `%rbp` so a debugger's walk stops, passes `argc`, `argv`
 and `envp` to `main`, records `envp` for `getenv`, aligns the stack again (free,
@@ -389,7 +389,7 @@ compiled `startup-check`. The conversions were also compared with the host's
    system; `brk` maps eagerly.
 6. `abort` does not raise SIGABRT; `sigaction`'s mask, flags and `siginfo`, and
    `alarm` and `sleep`, are absent.
-7. Argument and environment vectors are bounded at sixteen strings and two
+7. Argument and environment vectors are bounded at 128 strings and eight
    kibibytes, and a process at 1024 descriptors.
 8. Not assertable here: a growth undone part way (nothing makes `FrameAllocate`
    fail on demand), a heap page arriving unzeroed, the segments' permissions as
