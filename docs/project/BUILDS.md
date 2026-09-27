@@ -352,21 +352,19 @@ regenerates it and fails if what is here differs.*
 
 | | |
 | --- | --- |
-| Builds recorded | 67 |
-| Verified | 56 passed, 11 not |
+| Builds recorded | 69 |
+| Verified | 57 passed, 12 not |
 | Compilers | gcc |
 | Environments | Bochs, QEMU, QEMU q35, QEMU q35,  VirtualBox,  Bochs, VirtualBox |
 | First | 2026-09-17T01:34Z |
-| Latest | 2026-09-27T18:04Z |
+| Latest | 2026-09-27T18:15Z |
 
 ## The last 20 builds
 
-The remaining 47 are in [`builds.tsv`](builds.tsv), which is the record.
+The remaining 49 are in [`builds.tsv`](builds.tsv), which is the record.
 
 | # | Date (UTC) | Commit | Compiler | Kernel | ISO | Result | Environments | Note |
 | - | ---------- | ------ | -------- | ------ | --- | ------ | ------------ | ---- |
-| 48 | 2026-09-27T01:24Z | `1137633` | gcc 13.2.0 | 3998232 | 13324288 | passed (80 assertions) | QEMU q35;VirtualBox;Bochs | Userland lists grown in the heap |
-| 49 | 2026-09-27T01:47Z | `2a812b8` | gcc 13.2.0 | 4064768 | 13389824 | passed (80 assertions) | QEMU q35;VirtualBox;Bochs | Kernel tables grown; descriptors to 1024 |
 | 50 | 2026-09-27T02:21Z | `049e06a` | gcc 13.2.0 | 4064768 | 13389824 | passed (80 assertions) | QEMU q35;VirtualBox;Bochs | File and folder pictures in Files |
 | 51 | 2026-09-27T02:57Z | `e306ecd` | gcc 13.2.0 | 4064768 | 13389824 | passed (80 assertions) | QEMU q35;VirtualBox;Bochs | Launcher gap between icon and name |
 | 52 | 2026-09-27T03:27Z | `cc15f88` | gcc 13.2.0 | 4064768 | 13389824 | passed (80 assertions) | QEMU q35;VirtualBox;Bochs | init-check waits for its parent to sleep |
@@ -385,5 +383,7 @@ The remaining 47 are in [`builds.tsv`](builds.tsv), which is the record.
 | 65 | 2026-09-27T18:00Z | `ef618f0` | gcc 13.2.0 | 4121896 | 13447168 | passed (80 assertions) | QEMU q35;VirtualBox;Bochs | Desktop names with no label |
 | 66 | 2026-09-27T18:01Z | `ef618f0` *(modified)* | gcc 13.2.0 | 4121848 | 13447168 | failed | QEMU q35 | Negative: ef618f0 with transparent text drawn with its paper; self-test fails |
 | 67 | 2026-09-27T18:04Z | `3233859` | gcc 13.2.0 | 4121896 | 13447168 | passed (80 assertions) | QEMU q35;VirtualBox;Bochs | Window list without buttons |
+| 68 | 2026-09-27T18:14Z | `9cde12b` | gcc 13.2.0 | 4122096 | 13447168 | passed (80 assertions) | QEMU q35;VirtualBox;Bochs | Bar as a row of icons, open programs underlined |
+| 69 | 2026-09-27T18:15Z | `9cde12b` *(modified)* | gcc 13.2.0 | 4122072 | 13447168 | failed | QEMU q35 | Negative: 9cde12b with window_list naming no owner; window-check fails |
 
 <!-- END GENERATED -->

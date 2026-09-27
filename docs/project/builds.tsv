@@ -85,3 +85,5 @@ number	date	commit	dirty	compiler	cc_version	kernel	iso	result	assertions	enviro
 65	2026-09-27T18:00Z	ef618f0	no	gcc	13.2.0	4121896	13447168	passed	80	QEMU q35;VirtualBox;Bochs	-	Desktop names with no label
 66	2026-09-27T18:01Z	ef618f0	yes	gcc	13.2.0	4121848	13447168	failed	-	QEMU q35	-	Negative: ef618f0 with transparent text drawn with its paper; self-test fails
 67	2026-09-27T18:04Z	3233859	no	gcc	13.2.0	4121896	13447168	passed	80	QEMU q35;VirtualBox;Bochs	-	Window list without buttons
+68	2026-09-27T18:14Z	9cde12b	no	gcc	13.2.0	4122096	13447168	passed	80	QEMU q35;VirtualBox;Bochs	-	Bar as a row of icons, open programs underlined
+69	2026-09-27T18:15Z	9cde12b	yes	gcc	13.2.0	4122072	13447168	failed	-	QEMU q35	-	Negative: 9cde12b with window_list naming no owner; window-check fails
