@@ -59,6 +59,9 @@
 #define SETTINGS_COLUMNS 46
 #define SETTINGS_ROWS    18
 
+/* The space between a button's edge and its label, in units of the scale. */
+#define SETTINGS_MARGIN  4
+
 #define SETTINGS_PAPER OXYS_RGB(OXYS_PAPER_RED, OXYS_PAPER_GREEN, OXYS_PAPER_BLUE)
 #define SETTINGS_INK   OXYS_RGB(OXYS_INK_RED, OXYS_INK_GREEN, OXYS_INK_BLUE)
 #define SETTINGS_DIM   OXYS_RGB(OXYS_DIM_RED, OXYS_DIM_GREEN, OXYS_DIM_BLUE)
@@ -381,8 +384,9 @@ static void SettingsSave(void)
 
 /* ------------------------------------------------------------- drawing */
 
-/* A button: its row, its first column, its width in columns, what it does, and
- * the one of several it is. */
+/* A button: its row, its left edge and width in pixels, what it does, and the
+ * one of several it is. Pixels and not columns, because its label is
+ * proportional and a column is not a width any label has. */
 typedef enum SettingsAction
 {
     SETTINGS_BACKGROUND,
@@ -396,7 +400,7 @@ typedef enum SettingsAction
 typedef struct SettingsButton
 {
     int32_t row;
-    int32_t column;
+    int32_t x;
     int32_t width;
     SettingsAction action;
     size_t which;
@@ -406,19 +410,30 @@ typedef struct SettingsButton
 static SettingsButton SettingsButtons[SETTINGS_BUTTONS_MAXIMUM];
 static size_t SettingsButtonCount;
 
-static void SettingsLabel(int32_t row, int32_t column, const char *text, uint32_t ink,
-                          uint32_t paper)
+/* Draws, or with SYSCALL_WINDOW_TEXT_MEASURE only measures, a proportional run
+ * at `x` pixels on `row`; its width in pixels, or 0. */
+static int32_t SettingsTextRun(int32_t row, int32_t x, const char *text, uint32_t ink,
+                               uint32_t paper, uint32_t flags)
 {
     SyscallWindowText placement;
+    int64_t width;
 
-    placement.x = column * SETTINGS_ADVANCE * SettingsScale;
+    placement.x = x;
     placement.y = (row * SETTINGS_PITCH * SettingsScale) +
                   (((SETTINGS_PITCH - SETTINGS_GLYPH) / 2) * SettingsScale);
     placement.ink = ink;
     placement.paper = paper;
     placement.scale = SettingsScale;
-    placement.flags = SYSCALL_WINDOW_TEXT_PROPORTIONAL;
-    (void)OxysWindowText(SettingsWindow, &placement, text);
+    placement.flags = SYSCALL_WINDOW_TEXT_PROPORTIONAL | flags;
+    width = OxysWindowText(SettingsWindow, &placement, text);
+
+    return (width > 0) ? (int32_t)width : 0;
+}
+
+static void SettingsLabel(int32_t row, int32_t column, const char *text, uint32_t ink,
+                          uint32_t paper)
+{
+    (void)SettingsTextRun(row, column * SETTINGS_ADVANCE * SettingsScale, text, ink, paper, 0U);
 }
 
 static void SettingsFill(int32_t x, int32_t y, int32_t width, int32_t height, uint32_t colour)
@@ -451,27 +466,54 @@ static void SettingsFill(int32_t x, int32_t y, int32_t width, int32_t height, ui
 /* Draws a button, in the project owner's style since 2026-09-26, and records
  * where it stands. A chosen one is drawn in the quiet colour with its label
  * marked, so that what is chosen is plain even to a person who cannot tell
- * the two colours apart. */
-static int32_t SettingsButtonAt(int32_t row, int32_t column, const char *label, bool chosen,
+ * the two colours apart.
+ *
+ * It is as wide as its label measures, with a margin either side, and returns
+ * where the next button along begins, in pixels. The width is the marked
+ * label's whether the button is chosen or not: a button that widened when
+ * pressed would push the buttons beside it along, and the next press would
+ * land on a different one than the pointer was over when the person aimed. */
+static int32_t SettingsButtonAt(int32_t row, int32_t x, const char *label, bool chosen,
                                 SettingsAction action, size_t which)
 {
-    char text[CONFIG_VALUE_MAXIMUM + 4U];
-    const int32_t width = (int32_t)strlen(label) + 2;
+    char marked[CONFIG_VALUE_MAXIMUM + 4U];
     const uint32_t ground = chosen ? SETTINGS_CHOSEN : SETTINGS_BUTTON;
     const int32_t cell = SETTINGS_ADVANCE * SettingsScale;
     const int32_t pitch = SETTINGS_PITCH * SettingsScale;
+    const int32_t margin = SETTINGS_MARGIN * SettingsScale;
+    int32_t text;
+    int32_t width;
 
-    (void)snprintf(text, sizeof text, "%c%s%c", chosen ? '>' : ' ', label, chosen ? '<' : ' ');
-    SettingsFill(column * cell, (row * pitch) + SettingsScale, width * cell,
-                 pitch - (2 * SettingsScale), ground);
-    SettingsLabel(row, column, text, SETTINGS_INK, ground);
+    (void)snprintf(marked, sizeof marked, ">%s<", label);
+    text = SettingsTextRun(row, 0, marked, 0U, 0U, SYSCALL_WINDOW_TEXT_MEASURE);
 
-    /* The edge of the owner's button, a unit wide, drawn last: the label's
-     * paper begins at the button's left and would cover it. */
+    if (text == 0)
     {
-        const int32_t left = column * cell;
+        /* Not measured: the grid's width, which is wider than the run. */
+        text = ((int32_t)strlen(marked)) * cell;
+    }
+
+    width = text + (2 * margin);
+    SettingsFill(x, (row * pitch) + SettingsScale, width, pitch - (2 * SettingsScale), ground);
+
+    if (chosen)
+    {
+        (void)SettingsTextRun(row, x + margin, marked, SETTINGS_INK, ground, 0U);
+    }
+    else
+    {
+        const int32_t plain = SettingsTextRun(row, 0, label, 0U, 0U, SYSCALL_WINDOW_TEXT_MEASURE);
+
+        (void)SettingsTextRun(row, x + ((plain > 0) ? ((width - plain) / 2) : margin), label,
+                              SETTINGS_INK, ground, 0U);
+    }
+
+    /* The edge of the owner's button, a unit wide, drawn last: a glyph's ink
+     * may overhang its run and would otherwise cross it. */
+    {
+        const int32_t left = x;
         const int32_t top = (row * pitch) + SettingsScale;
-        const int32_t across = width * cell;
+        const int32_t across = width;
         const int32_t down = pitch - (2 * SettingsScale);
 
         SettingsFill(left, top, across, SettingsScale, SETTINGS_EDGE);
@@ -485,13 +527,13 @@ static int32_t SettingsButtonAt(int32_t row, int32_t column, const char *label, 
         SettingsButton *const button = &SettingsButtons[SettingsButtonCount++];
 
         button->row = row;
-        button->column = column;
+        button->x = x;
         button->width = width;
         button->action = action;
         button->which = which;
     }
 
-    return column + width + 1;
+    return x + width + cell;
 }
 
 /* The name a background is offered under: its file's name without the
@@ -520,7 +562,7 @@ static void SettingsDraw(void)
     const int32_t cell = SETTINGS_ADVANCE * SettingsScale;
     const int32_t pitch = SETTINGS_PITCH * SettingsScale;
     int32_t row = 1;
-    int32_t column = 2;
+    int32_t x = 2 * cell;
     bool known = SettingsNow.background[0] == '\0';
 
     SettingsButtonCount = 0U;
@@ -535,10 +577,10 @@ static void SettingsDraw(void)
 
         known = known || chosen;
         SettingsBackgroundName(SettingsBackgrounds[index], name, sizeof name - 1U);
-        column = SettingsButtonAt(row, column, name, chosen, SETTINGS_BACKGROUND, index);
+        x = SettingsButtonAt(row, x, name, chosen, SETTINGS_BACKGROUND, index);
     }
 
-    (void)SettingsButtonAt(row, column, "None", SettingsNow.background[0] == '\0',
+    (void)SettingsButtonAt(row, x, "None", SettingsNow.background[0] == '\0',
                            SETTINGS_NO_BACKGROUND, 0U);
 
     /* A path of the person's own, which none of the buttons names, is kept
@@ -553,11 +595,11 @@ static void SettingsDraw(void)
 
     row += 3;
     SettingsLabel(row++, 1, "Size of the desktop", SETTINGS_INK, SETTINGS_PAPER);
-    column = 2;
+    x = 2 * cell;
 
     for (size_t index = 0U; index < SETTINGS_SCALES; ++index)
     {
-        column = SettingsButtonAt(row, column, SettingsScaleNames[index],
+        x = SettingsButtonAt(row, x, SettingsScaleNames[index],
                                   SettingsNow.scale == index, SETTINGS_SCALE, index);
     }
 
@@ -570,28 +612,26 @@ static void SettingsDraw(void)
 
         (void)snprintf(label, sizeof label, "[%c] %s", SettingsNow.pinned[index] ? 'x' : ' ',
                        SettingsEntryNames[index]);
-        (void)SettingsButtonAt(row++, 2, label, false, SETTINGS_PIN, index);
+        (void)SettingsButtonAt(row++, 2 * cell, label, false, SETTINGS_PIN, index);
     }
 
 
     row = SETTINGS_ROWS - 3;
-    column = SettingsButtonAt(row, 2, "Save", false, SETTINGS_SAVE, 0U);
-    (void)SettingsButtonAt(row, column, "Revert", false, SETTINGS_REVERT, 0U);
+    x = SettingsButtonAt(row, 2 * cell, "Save", false, SETTINGS_SAVE, 0U);
+    (void)SettingsButtonAt(row, x, "Revert", false, SETTINGS_REVERT, 0U);
     SettingsLabel(row + 1, 2, SettingsStatus, SETTINGS_DIM, SETTINGS_PAPER);
 }
 
 /* A press: the button beneath it, if any, acted upon. */
 static void SettingsPress(int32_t x, int32_t y)
 {
-    const int32_t column = x / (SETTINGS_ADVANCE * SettingsScale);
     const int32_t row = y / (SETTINGS_PITCH * SettingsScale);
 
     for (size_t index = 0U; index < SettingsButtonCount; ++index)
     {
         const SettingsButton *const button = &SettingsButtons[index];
 
-        if ((row != button->row) || (column < button->column) ||
-            (column >= (button->column + button->width)))
+        if ((row != button->row) || (x < button->x) || (x >= (button->x + button->width)))
         {
             continue;
         }

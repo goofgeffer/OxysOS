@@ -15,6 +15,7 @@ that was cleared that day and renumbered from 1; the date identifies the image.
 
 | Date | Where | What | Result |
 | ---- | ----- | ---- | ------ |
+| 2026-09-26 | QEMU q35, VirtualBox and Bochs | The settings buttons sized to their labels | Passed; each button fits its label at both scales, and presses under QEMU chose Small, Cliff and a pin; every self-test on all three |
 | 2026-09-26 | QEMU q35, VirtualBox and Bochs | Proportional titles and labels | Passed; proportional labels, grid terminal; every self-test on all three |
 | 2026-09-26 | QEMU q35, VirtualBox and Bochs | The desktop's text in Inter | Passed; the face smooth on the desktop, every self-test on all three |
 | 2026-09-26 | QEMU q35, VirtualBox and Bochs | The panel's icons without buttons | Passed; the launcher and pinned icons bare on the bar, the window list with buttons; every self-test on all three |

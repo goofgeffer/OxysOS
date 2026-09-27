@@ -50,6 +50,15 @@ its desktop; `micro` edits it, with every line in view. Launcher entries are
 not added or removed here: an entry is a program's path and a name, which are
 typed rather than chosen.
 
+**Each button is as wide as its label measures**, by `window_text`'s
+`SYSCALL_WINDOW_TEXT_MEASURE`, with a margin of four units either side, and a
+press is matched against that width in pixels. The labels are proportional, so
+a width counted in grid columns would leave a short label in a long button and
+cut a long one at its edge. A choice is marked `>Rose<`, and every button of a
+row is as wide as its marked label whether chosen or not: a button that widened
+when chosen would push its neighbours along, and the next press would land on
+a button the person had not aimed at.
+
 A background path of the person's own, which no button names, is kept until
 another is chosen and shown as `Now:` beneath the buttons. An accent the four
 buttons do not name is likewise left alone.
