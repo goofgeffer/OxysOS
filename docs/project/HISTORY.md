@@ -11,6 +11,7 @@ row.
 
 | Date | Phase | Change | Commit |
 | ---- | ----- | ------ | ------ |
+| 2026-09-27 | Phase 9 | Icons on the desktop: launcher entries marked `desktop = yes`, chosen in Settings; Files alone as shipped | `pending` |
 | 2026-09-27 | Phase 8 | Arithmetic expansion, `$((expression))`, in the shell | `813adff` |
 | 2026-09-27 | Phase 8 | A command takes as many words as its line holds; `execve` takes 128 strings and 8 KiB, copied into the heap | `1a50409` |
 | 2026-09-27 | Phase 9 | The clock's box sixty-four units wide, 128 pixels at the scale of two | `3649aa4` |

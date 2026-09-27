@@ -100,6 +100,8 @@ static SettingsChoice SettingsRead;
 static SettingsName *SettingsEntryNames;
 static bool *SettingsPinnedNow;
 static bool *SettingsPinnedRead;
+static bool *SettingsDesktopNow;  /* `desktop = yes`, of 2026-09-27. */
+static bool *SettingsDesktopRead;
 static size_t SettingsEntryCount;
 static size_t SettingsEntryCapacity;
 
@@ -175,17 +177,30 @@ static void *SettingsGrow(void *array, size_t *capacity, size_t wanted, size_t s
     return grown;
 }
 
-/* Room for `wanted` launcher entries: their names and both sets of pins, all
- * of one capacity, so that the three are grown together or not at all. */
+/* Grows one of the entries' flags to `wanted`, from the capacity they share. */
+static bool SettingsGrowFlags(bool **flags, size_t wanted)
+{
+    size_t capacity = SettingsEntryCapacity;
+    bool *const grown = SettingsGrow(*flags, &capacity, wanted, sizeof(bool));
+
+    if (grown == NULL)
+    {
+        return false;
+    }
+
+    *flags = grown;
+
+    return true;
+}
+
+/* Room for `wanted` launcher entries: their names, their pins and whether they
+ * stand on the desktop, each as chosen and as read, all of one capacity, so
+ * that they are grown together or the capacity is not raised. */
 static bool SettingsReserveEntries(size_t wanted)
 {
     size_t names = SettingsEntryCapacity;
-    size_t now = SettingsEntryCapacity;
-    size_t read = SettingsEntryCapacity;
     SettingsName *const grown_names =
         SettingsGrow(SettingsEntryNames, &names, wanted, sizeof(SettingsName));
-    bool *grown_now;
-    bool *grown_read;
 
     if (grown_names == NULL)
     {
@@ -193,22 +208,15 @@ static bool SettingsReserveEntries(size_t wanted)
     }
 
     SettingsEntryNames = grown_names;
-    grown_now = SettingsGrow(SettingsPinnedNow, &now, wanted, sizeof(bool));
 
-    if (grown_now == NULL)
+    if (!SettingsGrowFlags(&SettingsPinnedNow, wanted) ||
+        !SettingsGrowFlags(&SettingsPinnedRead, wanted) ||
+        !SettingsGrowFlags(&SettingsDesktopNow, wanted) ||
+        !SettingsGrowFlags(&SettingsDesktopRead, wanted))
     {
         return false;
     }
 
-    SettingsPinnedNow = grown_now;
-    grown_read = SettingsGrow(SettingsPinnedRead, &read, wanted, sizeof(bool));
-
-    if (grown_read == NULL)
-    {
-        return false;
-    }
-
-    SettingsPinnedRead = grown_read;
     SettingsEntryCapacity = names;
 
     return true;
@@ -331,6 +339,9 @@ static void SettingsLoad(void)
             SettingsPinnedNow[index] =
                 OxysConfigBoolean(&SettingsConfig, "launch", index, "pin", false);
             SettingsPinnedRead[index] = SettingsPinnedNow[index];
+            SettingsDesktopNow[index] =
+                OxysConfigBoolean(&SettingsConfig, "launch", index, "desktop", false);
+            SettingsDesktopRead[index] = SettingsDesktopNow[index];
         }
     }
 
@@ -501,7 +512,9 @@ static void SettingsSave(void)
     if ((strcmp(SettingsNow.background, SettingsRead.background) != 0) ||
         (SettingsNow.scale != SettingsRead.scale) ||
         ((SettingsEntryCount > 0U) &&
-         (memcmp(SettingsPinnedNow, SettingsPinnedRead, SettingsEntryCount * sizeof(bool)) != 0)))
+         ((memcmp(SettingsPinnedNow, SettingsPinnedRead, SettingsEntryCount * sizeof(bool)) != 0) ||
+          (memcmp(SettingsDesktopNow, SettingsDesktopRead, SettingsEntryCount * sizeof(bool)) !=
+           0))))
     {
         int64_t read = SettingsStart(SETTINGS_SESSION, "session.conf");
         size_t length = (read >= 0) ? (size_t)read : 0U;
@@ -516,7 +529,9 @@ static void SettingsSave(void)
         for (size_t index = 0U; saved && (index < SettingsEntryCount); ++index)
         {
             saved = SettingsEdit(&length, "launch", index, "pin",
-                                 SettingsPinnedNow[index] ? "yes" : NULL);
+                                 SettingsPinnedNow[index] ? "yes" : NULL) &&
+                    SettingsEdit(&length, "launch", index, "desktop",
+                                 SettingsDesktopNow[index] ? "yes" : NULL);
         }
 
         saved = saved && SettingsWriteFile(SETTINGS_SESSION, length);
@@ -556,6 +571,7 @@ static void SettingsSave(void)
     if (SettingsEntryCount > 0U)
     {
         (void)memcpy(SettingsPinnedRead, SettingsPinnedNow, SettingsEntryCount * sizeof(bool));
+        (void)memcpy(SettingsDesktopRead, SettingsDesktopNow, SettingsEntryCount * sizeof(bool));
     }
 }
 
@@ -570,6 +586,7 @@ typedef enum SettingsAction
     SETTINGS_NO_BACKGROUND,
     SETTINGS_SCALE,
     SETTINGS_PIN,
+    SETTINGS_DESKTOP,
     SETTINGS_SAVE,
     SETTINGS_REVERT
 } SettingsAction;
@@ -764,6 +781,45 @@ static void SettingsBackgroundName(const char *path, char *name, size_t capacity
     }
 }
 
+/*
+ * Lays out, and while SettingsPainting draws, one toggle per launcher entry
+ * from `first` down, `[x] Name` where `chosen` is set: `down` to a column, a
+ * further column beginning a cell past the widest button of the one before,
+ * the window widening to hold them. Returns the rows it used.
+ */
+static int32_t SettingsDrawToggles(int32_t first, size_t down, const bool *chosen,
+                                   SettingsAction action)
+{
+    const int32_t cell = SETTINGS_ADVANCE * SettingsScale;
+    const int32_t before = SettingsRightmost;
+    int32_t left = 2 * cell;
+    int32_t widest = left;
+
+    SettingsWrapping = false;
+
+    for (size_t index = 0U; index < SettingsEntryCount; ++index)
+    {
+        char label[CONFIG_VALUE_MAXIMUM + 8U];
+        int32_t at = first + (int32_t)(index % down);
+
+        if ((index > 0U) && ((index % down) == 0U))
+        {
+            left = widest + cell;
+        }
+
+        (void)snprintf(label, sizeof label, "[%c] %s", chosen[index] ? 'x' : ' ',
+                       SettingsEntryNames[index]);
+        SettingsRightmost = left;
+        (void)SettingsButtonAt(&at, left, label, false, action, index);
+        widest = (SettingsRightmost > widest) ? SettingsRightmost : widest;
+    }
+
+    SettingsRightmost = (widest > before) ? widest : before;
+    SettingsWrapping = true;
+
+    return (int32_t)((SettingsEntryCount < down) ? SettingsEntryCount : down);
+}
+
 /* Lays the window out and, while SettingsPainting, draws it; the rows it
  * needed. The rows below the pins follow the last of them, so the window is as
  * tall as the launcher entries make it and never less than it always was. */
@@ -815,46 +871,27 @@ static int32_t SettingsDraw(void)
     }
 
     row += 2;
-    SettingsLabel(row++, 1, "Pinned beside the launcher", SETTINGS_INK, SETTINGS_PAPER);
 
     /*
-     * The pins stand in a column, and in further columns to its right when the
-     * screen has not the rows for them all: a window taller than the screen
-     * would have Save and Revert cut from its foot, and the settings could be
-     * chosen but never saved. Each column begins a cell past the widest button
-     * of the one before, and the window is widened to hold them.
+     * Two lists of toggles, one for every launcher entry: pinned beside the
+     * launcher, and, since 2026-09-27, standing on the desktop. Each stands in
+     * a column, and in further columns to its right when the screen has not
+     * the rows for it: a window taller than the screen would have Save and
+     * Revert cut from its foot, and the settings could be chosen but never
+     * saved. The two share the rows there are, each taking at most half, so
+     * that the second's heading is never pushed past them either.
      */
     {
-        const int32_t first = row;
-        const int32_t before = SettingsRightmost;
         const int32_t fits = (SettingsScreen.height / pitch) - SETTINGS_ROWS_KEPT;
         const int32_t below = 4; /* A blank row, Save, the status and a margin. */
-        const size_t down = ((fits - first - below) > 1) ? (size_t)(fits - first - below) : 1U;
-        int32_t left = 2 * cell;
-        int32_t widest = left;
+        const int32_t spare = fits - row - 3 - below; /* Less two headings and a blank row. */
+        const size_t down = ((spare / 2) > 1) ? (size_t)(spare / 2) : 1U;
 
-        SettingsWrapping = false;
-
-        for (size_t index = 0U; index < SettingsEntryCount; ++index)
-        {
-            char label[CONFIG_VALUE_MAXIMUM + 8U];
-            int32_t at = first + (int32_t)(index % down);
-
-            if ((index > 0U) && ((index % down) == 0U))
-            {
-                left = widest + cell;
-            }
-
-            (void)snprintf(label, sizeof label, "[%c] %s", SettingsPinnedNow[index] ? 'x' : ' ',
-                           SettingsEntryNames[index]);
-            SettingsRightmost = left;
-            (void)SettingsButtonAt(&at, left, label, false, SETTINGS_PIN, index);
-            widest = (SettingsRightmost > widest) ? SettingsRightmost : widest;
-        }
-
-        row = first + (int32_t)((SettingsEntryCount < down) ? SettingsEntryCount : down);
-        SettingsRightmost = (widest > before) ? widest : before;
-        SettingsWrapping = true;
+        SettingsLabel(row++, 1, "Pinned beside the launcher", SETTINGS_INK, SETTINGS_PAPER);
+        row += SettingsDrawToggles(row, down, SettingsPinnedNow, SETTINGS_PIN);
+        ++row;
+        SettingsLabel(row++, 1, "On the desktop", SETTINGS_INK, SETTINGS_PAPER);
+        row += SettingsDrawToggles(row, down, SettingsDesktopNow, SETTINGS_DESKTOP);
     }
 
     row = ((row + 1) > (SETTINGS_ROWS_LEAST - 3)) ? (row + 1) : (SETTINGS_ROWS_LEAST - 3);
@@ -897,6 +934,9 @@ static void SettingsPress(int32_t x, int32_t y)
             break;
         case SETTINGS_PIN:
             SettingsPinnedNow[button->which] = !SettingsPinnedNow[button->which];
+            break;
+        case SETTINGS_DESKTOP:
+            SettingsDesktopNow[button->which] = !SettingsDesktopNow[button->which];
             break;
         case SETTINGS_SAVE:
             SettingsSave();

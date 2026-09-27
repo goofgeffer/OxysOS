@@ -145,6 +145,26 @@ launcher row would. The shipped file pins Terminal and Files. The row is spaced
 by what is drawn: the same gap stands between each two buttons, and between the
 last and the window list.
 
+**The desktop's icons**, of 2026-09-27, are the launcher entries marked
+`desktop = yes`, drawn upon the root from the top left, down a column and then
+across: each the entry's icon at the launcher's size, twenty units, centred in
+a cell sixty units wide and forty-four high, with its name beneath on a label of
+the bar's colour, cut with `..` to the cell. One press upon the icon or the name
+starts it, as a pinned program does. The shipped file puts Files there alone.
+
+- **The icons are mixed into the background**, band by band as it is drawn, each
+  pixel composed upon the photograph's pixel beneath it; a picture composed upon
+  one colour would stand in a square of it. Upon the plain ground they are
+  composed upon the ground.
+- **The names stand on labels** because `window_text` lays its paper under the
+  run: a paper of the bar's colour reads as a label upon any background, where
+  one matched to a photograph would be a stripe cut out of it.
+- **The root is drawn again when what it shows changes**: after a save by
+  Settings, as for the background, and at an opening of the launcher where a
+  digest of the entries marked `desktop` differs from what was last drawn, so
+  that a hand edit of the file shows without a redraw at every opening.
+- **A cell past the screen's right edge** is not drawn and cannot be pressed.
+
 **The launcher's button** is a square of the same kind, holding
 `/share/icons/start.oxi`, the project owner's list of three dots and lines. It is
 read once, when the session starts. Where it cannot be read the button draws
@@ -162,7 +182,7 @@ their icons on the bar with nothing behind them. The bar itself is their orange.
 does can cover it. It opens upward from the launcher's button, above the bar, and
 touches neither edge of the screen. It is created when opened and destroyed when
 closed. Its entries are the `[launch]` blocks of `/etc/session.conf` (`run`,
-`name`, optional `icon` and `pin`; [`CONFIG.md`](CONFIG.md)).
+`name`, optional `icon`, `pin` and `desktop`; [`CONFIG.md`](CONFIG.md)).
 
 - **Reread at every opening**, so an edit shows at the next press: entries, icons,
   and the background (redrawn only when its path changed). The scale is read at
@@ -257,7 +277,7 @@ the shipped defaults offer a launcher ([`CONFIG.md`](CONFIG.md)). The fallback, 
 rereading and the list are observed by operating the desktop
 ([`../project/TESTING-GRAPHICS.md`](../project/TESTING-GRAPHICS.md)): the desktop
 with nothing running; the launcher opening, closing and starting a program; a window
-dragged down sliding **under** the bar; a pinned icon starting its program; a window made full between the clock's box and the bar; minimised windows restored from the list.
+dragged down sliding **under** the bar; a pinned icon starting its program; a window made full between the clock's box and the bar; minimised windows restored from the list; the desktop's icons over a photograph and over the ground, changed by Settings' Save, and one pressed starting its program.
 
 ## Limitations
 
@@ -274,3 +294,6 @@ dragged down sliding **under** the bar; a pinned icon starting its program; a wi
    with no choice of where.
 9. The window list shows as many windows as the panel's width allows, with no
    icons (it does not know a window's program) and titles simply cut.
+10. The desktop's icons are placed in the order of the launcher's entries and
+    cannot be moved by hand; one is started by a single press, as a pinned
+    program is, and there is no selection of one before it is started.

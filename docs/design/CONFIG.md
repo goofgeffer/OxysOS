@@ -121,8 +121,9 @@ where the system has one, so that it stays right when the system's colour
 changes.
 
 **`[session]` and `[launch]`** are [`SESSION.md`](SESSION.md): the scale, the
-background picture, and each launcher entry's `run`, `name`, `icon` and `pin` (whether it
-also stands upon the bar beside the launcher).
+background picture, and each launcher entry's `run`, `name`, `icon`, `pin`
+(whether it also stands upon the bar beside the launcher) and `desktop` (whether
+it also stands upon the desktop).
 
 ## Verification
 

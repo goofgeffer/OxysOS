@@ -15,6 +15,7 @@ that was cleared that day and renumbered from 1; the date identifies the image.
 
 | Date | Where | What | Result |
 | ---- | ----- | ---- | ------ |
+| 2026-09-27 | QEMU q35, VirtualBox and Bochs | Icons on the desktop | Passed; under QEMU Files at the top left over the rose, pressed to open; Terminal and Notepad added by Settings and drawn at Save; over the plain ground, Notepad pressed to open; under VirtualBox at half scale; every self-test on all three; negative test caught |
 | 2026-09-27 | QEMU q35, VirtualBox and Bochs | Arithmetic expansion | Passed; at the serial shell under QEMU precedence, variables, assignment, `?:`, bases, a division by zero named and a continued line; `$((6 * 7))` under VirtualBox; every self-test on all three; negative test caught |
 | 2026-09-27 | QEMU q35, VirtualBox and Bochs | Commands past sixteen words | Passed; `kill %1 … %20` ended twenty windows at once, `/bin/echo` received 120 arguments intact, 130 words refused as too many tokens; every self-test on all three |
 | 2026-09-27 | QEMU q35, VirtualBox and Bochs | The clock's box at 128 pixels | Passed; 128 pixels under QEMU and 64 under VirtualBox, the time centred; every self-test on all three |

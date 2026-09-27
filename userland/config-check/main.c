@@ -224,10 +224,25 @@ int main(void)
     ConfigRequire(OxysConfigCount(&Config, "launch") >= 1U,
                   "/share/defaults/etc/session.conf offers the launcher nothing to start");
 
-    for (size_t index = 0U; index < OxysConfigCount(&Config, "launch"); ++index)
     {
-        ConfigRequire(OxysConfigValue(&Config, "launch", index, "run") != NULL,
-                      "a launcher entry in /etc/session.conf has no run");
+        bool files_on_desktop = false;
+
+        for (size_t index = 0U; index < OxysConfigCount(&Config, "launch"); ++index)
+        {
+            const char *const run = OxysConfigValue(&Config, "launch", index, "run");
+
+            ConfigRequire(run != NULL, "a launcher entry in /etc/session.conf has no run");
+
+            /* The desktop shows Files as shipped, by the key the session reads:
+             * a key renamed in one and not the other is an empty desktop with
+             * every other test passing. */
+            files_on_desktop = files_on_desktop ||
+                               ((run != NULL) && (strcmp(run, "/bin/files") == 0) &&
+                                OxysConfigBoolean(&Config, "launch", index, "desktop", false));
+        }
+
+        ConfigRequire(files_on_desktop,
+                      "/share/defaults/etc/session.conf does not put Files on the desktop");
     }
 
     /*

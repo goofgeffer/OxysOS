@@ -22,6 +22,7 @@ makes of their desktop:
 | The background: each file of `/share/backgrounds`, or none | `/etc/session.conf`, `[session]` `background` |
 | The size of the desktop: automatic, small or large | `/etc/session.conf`, `[session]` `scale` |
 | Which launcher entries are pinned beside the launcher | `/etc/session.conf`, each `[launch]` block's `pin` |
+| Which launcher entries stand on the desktop | `/etc/session.conf`, each `[launch]` block's `desktop` |
 
 **Nothing is written until Save.** A press changes what is shown as chosen, and
 Save writes it. Were every press an edit of `/etc`, a person trying the
@@ -33,7 +34,7 @@ comments explaining each key. Written back from the parsed settings, a file
 would keep the settings and lose all of that, so the first Save would leave
 `/etc` unable to explain itself. `OxysConfigEdit` changes the one line that
 changes and nothing else ([`CONFIG.md`](CONFIG.md)). A choice turned off
-(`pin`, or no background) removes its line.
+(`pin`, `desktop`, or no background) removes its line.
 
 **Save writes as `micro` does:** into a file beside the one edited, which takes
 the name only once it is whole. A failure part way leaves the file as it was.
@@ -62,9 +63,12 @@ a button the person had not aimed at.
 **Every background and launcher entry has a button**, however many there are:
 the lists, the buttons and the text Save edits are grown in the heap. Background
 buttons wrap to a new row at the window's right margin, and the window is as
-tall as its rows, never shorter than before. Where the screen has not the rows
-for every pin, the pins go on in further columns and the window widens, so
-Save and Revert are never cut from its foot. A window cannot be resized by its
+tall as its rows, never shorter than before. Each launcher entry has two
+toggles, one in the list of pins and one in the list of what stands on the
+desktop; the two lists share the screen's rows, each taking at most half, and
+where a list has not the rows for every entry it goes on in further columns and
+the window widens, so the second list's heading and Save and Revert are never
+cut from its foot. A window cannot be resized by its
 program and labels are measured through a window, so the layout is counted in a
 first window and the window made again at the counted height before anything is
 drawn; Revert does the same when the file has gained or lost entries. A list

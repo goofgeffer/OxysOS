@@ -5,7 +5,7 @@
  * Purpose: The session of sub-task 9.5: the program that claims the display,
  *          paints the desktop root beneath every window, holds the panel above
  *          them, and starts the programs a person chooses from its launcher.
- * Key functions: main, SessionClaim, SessionDrawRoot, SessionDrawPanel,
+ * Key functions: main, SessionClaim, SessionDrawRoot, SessionDesktopDraw, SessionDrawPanel,
  *          SessionOpenLauncher, SessionLaunch, SessionHandlePress,
  *          SessionReapChildren, SessionDrawBackground, SessionDrawTasks,
  *          SessionRefreshTasks, SessionDrawClock.
@@ -199,6 +199,10 @@ typedef struct SessionEntry
      */
     OxysIcon picture;
     bool has_picture;
+
+    /* Whether the entry stands upon the desktop, `desktop = yes` in its block,
+     * of 2026-09-27: an icon with its name beneath, at the top left. */
+    bool desktop;
 
     /* Whether the entry also stands upon the panel beside the launcher,
      * `pin = yes` in its block. */
@@ -431,6 +435,27 @@ static int32_t SessionTextWidth(int64_t window, const char *text, int32_t scale)
 }
 
 /*
+ * The desktop's icons, of 2026-09-27: the launcher entries marked `desktop =
+ * yes`, each its icon at the launcher's size with its name beneath, in columns
+ * from the top left, down and then across. Drawn with the root; defined after
+ * SessionDrawIcon, below. In units of the scale.
+ */
+#define SESSION_DESK_MARGIN      8  /* From the screen's top left to the first cell. */
+#define SESSION_DESK_CELL_WIDTH  60 /* A cell: its icon centred, its name beneath. */
+#define SESSION_DESK_CELL_HEIGHT 44
+#define SESSION_DESK_LABEL_GAP   3  /* Between the icon and its name's label. */
+#define SESSION_DESK_LABEL_PAD   2  /* About the name within its label. */
+
+/* A digest of what the desktop shows, and of what it showed when last drawn,
+ * so that a file read again redraws the root only where the icons changed. */
+static uint32_t SessionDesktopSignature;
+static uint32_t SessionDesktopDrawn;
+
+static void SessionDesktopOverlay(int32_t first, int32_t rows, int32_t width);
+static void SessionDesktopDraw(bool over_background);
+static size_t SessionDesktopAt(int32_t x, int32_t y);
+
+/*
  * The background, scaled to cover the screen and composed a band of rows at a
  * time. False where it cannot be begun, upon which the root falls back to the
  * ground and the mark rather than being left undrawn.
@@ -462,6 +487,11 @@ static bool SessionDrawBackground(void)
         area.y = first;
         area.width = width;
         area.height = rows;
+
+        /* The desktop's icons are mixed into the band before it is carried
+         * across, over the photograph's own pixels: a picture composed upon one
+         * colour would stand in a square of it. */
+        SessionDesktopOverlay(first, rows, width);
 
         if (OxysWindowBlit(SessionRoot, &area, SessionBand) != 0)
         {
@@ -498,6 +528,8 @@ static void SessionDrawRoot(void)
      */
     if (SessionHasBackground && SessionDrawBackground())
     {
+        SessionDesktopDraw(true);
+
         return;
     }
 
@@ -558,6 +590,8 @@ static void SessionDrawRoot(void)
         SessionText(SessionRoot, centre_x - (width / 2), centre_y + (36 * SessionScale), wordmark,
                     SESSION_INK, SESSION_GROUND, scale);
     }
+
+    SessionDesktopDraw(false);
 }
 
 /*
@@ -1455,6 +1489,221 @@ static void SessionDrawIcon(int64_t window, int32_t x, int32_t y, int32_t slot,
     (void)OxysWindowBlit(window, &area, SessionTile);
 }
 
+/* ------------------------------------------------------- the desktop */
+
+/* How many cells stand in one column: as many as fit above the panel. */
+static size_t SessionDesktopRows(void)
+{
+    const int32_t cell = SESSION_DESK_CELL_HEIGHT * SessionScale;
+    const int32_t room = SessionPanelTop() - (SESSION_DESK_MARGIN * SessionScale);
+
+    return ((room / cell) > 0) ? (size_t)(room / cell) : 1U;
+}
+
+/*
+ * The top left of the `nth` cell, down a column and then across. False for a
+ * cell past the screen's right edge: an entry the screen has no room for is
+ * not drawn and cannot be pressed, rather than drawn over the edge.
+ */
+static bool SessionDesktopCell(size_t nth, int32_t *x, int32_t *y)
+{
+    const size_t rows = SessionDesktopRows();
+    const int32_t width = SESSION_DESK_CELL_WIDTH * SessionScale;
+
+    *x = (SESSION_DESK_MARGIN * SessionScale) + ((int32_t)(nth / rows) * width);
+    *y = (SESSION_DESK_MARGIN * SessionScale) +
+         ((int32_t)(nth % rows) * SESSION_DESK_CELL_HEIGHT * SessionScale);
+
+    return (*x + width) <= SessionScreen.width;
+}
+
+/* Where a cell's icon stands, and how large it is: the launcher's size,
+ * centred across the cell at its top. */
+static int32_t SessionDesktopIconExtent(void)
+{
+    return SESSION_ICON_UNITS * SessionScale;
+}
+
+static int32_t SessionDesktopIconLeft(int32_t cell_x)
+{
+    return cell_x + (((SESSION_DESK_CELL_WIDTH - SESSION_ICON_UNITS) / 2) * SessionScale);
+}
+
+/* The height of a cell's icon and label together, which is what a press is
+ * matched against: the space beneath the label belongs to no entry. */
+static int32_t SessionDesktopTileHeight(void)
+{
+    return (SESSION_ICON_UNITS + SESSION_DESK_LABEL_GAP + 8 + (2 * SESSION_DESK_LABEL_PAD)) *
+           SessionScale;
+}
+
+/*
+ * Mixes the desktop's icons into a band of the background, rows `first` to
+ * `first + rows` of a band `width` wide, before it is carried across. Every
+ * pixel of an icon is composed upon the photograph's pixel beneath it, so
+ * the icon's transparency shows the picture and not a square of one colour.
+ */
+static void SessionDesktopOverlay(int32_t first, int32_t rows, int32_t width)
+{
+    const int32_t extent = SessionDesktopIconExtent();
+    size_t nth = 0U;
+
+    for (size_t index = 0U; index < SessionEntryCount; ++index)
+    {
+        const SessionEntry *const entry = &SessionEntries[index];
+        int32_t x;
+        int32_t y;
+
+        if (!entry->desktop)
+        {
+            continue;
+        }
+
+        if (!SessionDesktopCell(nth++, &x, &y) || !entry->has_picture)
+        {
+            continue;
+        }
+
+        x = SessionDesktopIconLeft(x);
+
+        for (int32_t row = (y > first) ? y : first; (row < (y + extent)) && (row < (first + rows));
+             ++row)
+        {
+            for (int32_t column = 0; (column < extent) && ((x + column) < width); ++column)
+            {
+                uint32_t *const pixel = &SessionBand[((row - first) * width) + x + column];
+
+                *pixel = OxysIconCompose(&entry->picture, (uint32_t)column, (uint32_t)(row - y),
+                                         (uint32_t)extent, *pixel);
+            }
+        }
+    }
+}
+
+/*
+ * The name beneath an icon, cut to its cell with `..` where it is longer, in
+ * a label of the panel's colour: the text is drawn upon a paper of one colour,
+ * and a paper that is the panel's reads as a label upon any background rather
+ * than as a stripe cut out of the photograph.
+ */
+static void SessionDesktopLabel(int32_t cell_x, int32_t cell_y, const char *name)
+{
+    const int32_t pad = SESSION_DESK_LABEL_PAD * SessionScale;
+    const int32_t room = (SESSION_DESK_CELL_WIDTH - 2) * SessionScale - (2 * pad);
+    char text[CONFIG_VALUE_MAXIMUM + 1U];
+    size_t length = 0U;
+    int32_t width;
+
+    while ((name[length] != '\0') && (length < CONFIG_VALUE_MAXIMUM))
+    {
+        text[length] = name[length];
+        ++length;
+    }
+
+    text[length] = '\0';
+    width = SessionTextWidth(SessionRoot, text, SessionScale);
+
+    while ((width > room) && (length > 2U))
+    {
+        --length;
+        text[length - 2U] = '.';
+        text[length - 1U] = '.';
+        text[length] = '\0';
+        width = SessionTextWidth(SessionRoot, text, SessionScale);
+    }
+
+    {
+        const int32_t label_width = width + (2 * pad);
+        const int32_t label_x =
+            cell_x + (((SESSION_DESK_CELL_WIDTH * SessionScale) - label_width) / 2);
+        const int32_t label_y =
+            cell_y + ((SESSION_ICON_UNITS + SESSION_DESK_LABEL_GAP) * SessionScale);
+
+        SessionFill(SessionRoot, label_x, label_y, label_width, (8 * SessionScale) + (2 * pad),
+                    SESSION_PANEL);
+        SessionText(SessionRoot, label_x + pad, label_y + pad, text, SESSION_INK, SESSION_PANEL,
+                    SessionScale);
+    }
+}
+
+/*
+ * Draws the desktop's icons and their names upon the root. Over a background
+ * the icons were mixed into it already, SessionDesktopOverlay; upon the plain
+ * ground they are composed upon the ground's colour here. An entry with no
+ * icon stands as its name's first letter in a square of the panel's colour,
+ * as a pinned one does.
+ */
+static void SessionDesktopDraw(bool over_background)
+{
+    const int32_t extent = SessionDesktopIconExtent();
+    size_t nth = 0U;
+
+    for (size_t index = 0U; index < SessionEntryCount; ++index)
+    {
+        const SessionEntry *const entry = &SessionEntries[index];
+        int32_t x;
+        int32_t y;
+
+        if (!entry->desktop)
+        {
+            continue;
+        }
+
+        if (!SessionDesktopCell(nth++, &x, &y))
+        {
+            continue;
+        }
+
+        if (!entry->has_picture)
+        {
+            const char letter[2] = { entry->name[0], '\0' };
+            const int32_t left = SessionDesktopIconLeft(x);
+
+            SessionFill(SessionRoot, left, y, extent, extent, SESSION_PANEL);
+            SessionText(SessionRoot,
+                        left + ((extent - SessionTextWidth(SessionRoot, letter, SessionScale)) / 2),
+                        y + ((extent - (8 * SessionScale)) / 2), letter, SESSION_INK,
+                        SESSION_PANEL, SessionScale);
+        }
+        else if (!over_background)
+        {
+            SessionDrawIcon(SessionRoot, SessionDesktopIconLeft(x), y, extent, &entry->picture,
+                            SESSION_GROUND);
+        }
+
+        SessionDesktopLabel(x, y, entry->name);
+    }
+
+    SessionDesktopDrawn = SessionDesktopSignature;
+}
+
+/* The entry whose icon or name stands at (x, y) of the root, or
+ * SessionEntryCount where none does. */
+static size_t SessionDesktopAt(int32_t x, int32_t y)
+{
+    size_t nth = 0U;
+
+    for (size_t index = 0U; index < SessionEntryCount; ++index)
+    {
+        int32_t cell_x;
+        int32_t cell_y;
+
+        if (!SessionEntries[index].desktop)
+        {
+            continue;
+        }
+
+        if (SessionDesktopCell(nth++, &cell_x, &cell_y) && (x >= cell_x) &&
+            (x < (cell_x + (SESSION_DESK_CELL_WIDTH * SessionScale))) && (y >= cell_y) &&
+            (y < (cell_y + SessionDesktopTileHeight())))
+        {
+            return index;
+        }
+    }
+
+    return SessionEntryCount;
+}
+
 /*
  * The rows of one column of the launcher: every entry, or as many as stand
  * between the panel and the top of the screen, the rest going into further
@@ -1795,6 +2044,7 @@ static void SessionLoadEntries(void)
         SessionCopy(entry->run, CONFIG_VALUE_MAXIMUM, run);
         SessionCopy(entry->name, CONFIG_VALUE_MAXIMUM, (name != NULL) ? name : run);
         entry->pinned = OxysConfigBoolean(&SessionConfig, "launch", index, "pin", false);
+        entry->desktop = OxysConfigBoolean(&SessionConfig, "launch", index, "desktop", false);
 
         /*
          * **An icon that cannot be read costs the icon and not the entry.** A
@@ -1833,6 +2083,46 @@ static void SessionLoadEntries(void)
 
         ++SessionEntryCount;
     }
+}
+
+/*
+ * Takes the digest of the entries the desktop shows — their names and
+ * programs, in order — and says whether it differs from what the root last
+ * drew. An FNV-1a of the text: the question is only whether anything changed,
+ * and a change that happened to keep the digest would cost a redraw at the
+ * next opening of the launcher, not a wrong one.
+ */
+static bool SessionDesktopChanged(void)
+{
+    uint32_t digest = UINT32_C(2166136261);
+
+    for (size_t index = 0U; index < SessionEntryCount; ++index)
+    {
+        const SessionEntry *const entry = &SessionEntries[index];
+
+        if (!entry->desktop)
+        {
+            continue;
+        }
+
+        for (const char *text = entry->name; *text != '\0'; ++text)
+        {
+            digest = (digest ^ (uint8_t)*text) * UINT32_C(16777619);
+        }
+
+        digest = (digest ^ 0xFFU) * UINT32_C(16777619);
+
+        for (const char *text = entry->run; *text != '\0'; ++text)
+        {
+            digest = (digest ^ (uint8_t)*text) * UINT32_C(16777619);
+        }
+
+        digest = (digest ^ 0xFEU) * UINT32_C(16777619);
+    }
+
+    SessionDesktopSignature = digest;
+
+    return SessionDesktopSignature != SessionDesktopDrawn;
 }
 
 /*
@@ -1905,7 +2195,7 @@ static bool SessionReadConfiguration(bool starting)
             redraw = SessionLoadBackground();
             SessionUsingDefaults = defaults;
 
-            return redraw;
+            return SessionDesktopChanged() || redraw;
         }
 
         SessionEntries = grown;
@@ -1915,6 +2205,7 @@ static bool SessionReadConfiguration(bool starting)
         SessionCopy(entry->run, CONFIG_VALUE_MAXIMUM, SESSION_FALLBACK_RUN);
         entry->has_picture = OxysIconRead(&entry->picture, SESSION_FALLBACK_ICON);
         entry->pinned = false;
+        entry->desktop = false;
         SessionEntryCount = 1U;
     }
 
@@ -1923,7 +2214,7 @@ static bool SessionReadConfiguration(bool starting)
     redraw = SessionLoadBackground();
     SessionUsingDefaults = defaults;
 
-    return redraw;
+    return SessionDesktopChanged() || redraw;
 }
 
 /* ------------------------------------------------------------ the loop */
@@ -2022,6 +2313,18 @@ static void SessionHandlePress(const SyscallWindowEvent *event)
     if ((event->window == (uint32_t)SessionRoot) || (event->window == (uint32_t)SessionClock))
     {
         SessionCloseMenu();
+
+        /* A press upon a desktop icon or its name starts the entry, once, as
+         * a pinned icon upon the panel does. */
+        if (event->window == (uint32_t)SessionRoot)
+        {
+            const size_t chosen = SessionDesktopAt(event->x, event->y);
+
+            if (chosen < SessionEntryCount)
+            {
+                SessionLaunch(SessionEntries[chosen].run);
+            }
+        }
     }
 }
 
