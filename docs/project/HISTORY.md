@@ -11,7 +11,7 @@ row.
 
 | Date | Phase | Change | Commit |
 | ---- | ----- | ------ | ------ |
-| 2026-09-27 | — | Kernel tables grown: windows, block devices, mounts, filesystem types and PCI functions on the growing table; per-process descriptors inline to 16 and grown to `SYSCALL_DESCRIPTOR_LIMIT` (1024) | `pending` |
+| 2026-09-27 | — | Kernel tables grown: windows, block devices, mounts, filesystem types and PCI functions on the growing table; per-process descriptors inline to 16 and grown to `SYSCALL_DESCRIPTOR_LIMIT` (1024) | `2a812b8` |
 | 2026-09-27 | Phase 9 | Userland lists grown in the heap: configuration settings and text, Settings, the launcher and window list, `init`'s services, Files, the viewer, `micro`, shell jobs | `1137633` |
 | 2026-09-26 | Phase 9 | The settings buttons sized to their proportional labels, and pressed by pixel | `260e09a` |
 | 2026-09-26 | Phase 9 | Titles and labels in proportional Inter; `window_text` gains proportional and measuring flags and returns the width | `e478bff` |
