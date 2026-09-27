@@ -182,6 +182,9 @@ void KernelVerifyUserland(void)
      */
     KernelVerifyShell();
 
+    /* The calculator's arithmetic and keys, which need nothing above. */
+    KernelVerifyCalculator();
+
     /*
      * Sub-task 9.3: `init` — the adoption of orphans, and the power and pause
      * calls it rests upon, asserted last of all and before the real `init` is

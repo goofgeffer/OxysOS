@@ -19,7 +19,7 @@
  *          KernelVerifyShootdown, KernelVerifyApplicationProcessors,
  *          KernelVerifyScheduler, KernelVerifyString, KernelVerifyWrappers,
  *          KernelVerifyHeap, KernelVerifyStdio, KernelVerifyStartup,
- *          KernelVerifyUtilities, KernelVerifyLine, KernelVerifyShell,
+ *          KernelVerifyUtilities, KernelVerifyLine, KernelVerifyShell, KernelVerifyCalculator,
  *          KernelVerifyTerminal, KernelVerifyWindows, KernelVerifyCircle,
  *          KernelVerifyClients, KernelVerifyInit, KernelVerifyConfig, KernelVerifyTerm,
  *          KernelVerifyIcon, KernelVerifyMark, KernelVerifyImage, KernelVerifyRtc,
@@ -422,6 +422,10 @@ void KernelVerifyLine(void);
  * the editor that one asserts.
  */
 void KernelVerifyShell(void);
+
+/* The calculator of 2026-09-27: its arithmetic in fixed point and its keys,
+ * asserted upon userland/calculator/engine.c, which calls nothing. */
+void KernelVerifyCalculator(void);
 
 /* Phases 3 and 4: the remaining devices. */
 void KernelVerifyPit(void);

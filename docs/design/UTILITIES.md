@@ -1,6 +1,6 @@
 <!-- SPDX-FileCopyrightText: 2026 The Oxys-OS Authors -->
 <!-- SPDX-License-Identifier: CC0-1.0 -->
-# The Desktop Utilities: File Manager, Text Viewer, Clock, Notepad, System Info
+# The Desktop Utilities: File Manager, Text Viewer, Clock, Notepad, System Info, Calculator
 
 **Phase**: sub-task 9.7 of [`../project/PLAN.md`](../project/PLAN.md), at which
 `Oxys 1 Beta` is fixed.
@@ -8,7 +8,9 @@
 [`../../userland/view/main.c`](../../userland/view/main.c),
 [`../../userland/date/main.c`](../../userland/date/main.c),
 [`../../userland/notepad/main.c`](../../userland/notepad/main.c),
-[`../../userland/sysinfo/main.c`](../../userland/sysinfo/main.c); the clock in
+[`../../userland/sysinfo/main.c`](../../userland/sysinfo/main.c),
+[`../../userland/calculator/main.c`](../../userland/calculator/main.c) and
+[`../../userland/calculator/engine.c`](../../userland/calculator/engine.c); the clock in
 [`../../userland/session/main.c`](../../userland/session/main.c).
 **Specifications**: ISO/IEC 9899:2011, Section 7.27 (`<time.h>`); IEEE Std
 1003.1-2017, `alarm()`, `date`, `fork()`. The appearance is judged against
@@ -134,10 +136,54 @@ already show.
 ends the wait for an event with `EINTR`, so the uptime advances with no thread
 and no polling.
 
+## 6. The calculator, `/bin/calculator`
+
+A window with a display and a grid of twenty buttons, in the project owner's
+button style: the digits, `.`, `+`, `-`, `x`, `/`, `=`, `C` which clears, `+/-`
+which changes the sign, `%` which divides the number shown by a hundred, and
+`<-` which takes back the last digit typed. It is a desk calculator: operators
+are taken left to right as they are pressed, with no precedence, so `2 + 3 x 4
+=` is 20; `=` after an operator takes the number shown as its operand, so
+`5 + =` is 10.
+
+- **The keyboard is the same keys**: the digits and operators, `*` or `x`,
+  Enter for `=`, Backspace for `<-`, and `c` or Escape for `C`. A press and a
+  key both become one character given to `CalcKey`, so the two cannot disagree.
+- **Numbers are fixed point**, a signed 64-bit count of millionths: six places
+  after the point and twelve before it. Every program here is built without the
+  floating-point unit, whose state the kernel does not save across a switch.
+  So 0.1 + 0.2 is 0.3 exactly; a quotient is carried to six places and the last
+  rounded half away from zero; a product is formed in parts so that no step
+  leaves 64 bits.
+- **A result past twelve digits is `Overflow`**, and a division by zero
+  `Cannot divide by zero`, shown in place of the number until the next key,
+  never a wrapped number shown as if it were right. A thirteenth digit before
+  the point, or a seventh after it, is not taken.
+- **The number is shown as typed** while it is typed, `3.` and `3.50`, and a
+  result without trailing zeros. A number too wide for the display at twice the
+  scale is drawn at the scale, so it is shown whole.
+- **The arithmetic is apart from the window**:
+  [`../../userland/calculator/engine.c`](../../userland/calculator/engine.c)
+  calls nothing, and is compiled into the kernel image as the shell's grammar
+  is, so `KernelVerifyCalculator` asserts the code the calculator ships.
+
+The launcher offers it with no icon of its own: it stands as its letter until
+`/share/icons/calculator.oxi` is drawn ([`SESSION.md`](SESSION.md)).
+
 ## Verification
 
 The programs are drawing and choice and have no self-test of their own, save
-the `sysinfo` call beneath System Info, which `window-check` asserts.
+the `sysinfo` call beneath System Info, which `window-check` asserts, and the
+calculator's arithmetic and keys, which `KernelVerifyCalculator`
+([`../../kernel/test/calculator/engine.c`](../../kernel/test/calculator/engine.c))
+asserts:
+
+| Asserted | The failure it would catch |
+| -------- | -------------------------- |
+| 0.1 + 0.2 is 0.3; 7 / 2 is 3.5, 1 / 3 and 2 / 3 carried to six places and rounded; products' signs and sizes, 999999 x 999999 included. | Floating-point error; a truncated or wrongly rounded place; a product that left 64 bits. |
+| A sum or a product past twelve digits is `Overflow`, a division by zero refused by name. | A wrapped number shown as a result. |
+| Values written with no trailing zeros and no point where there is none. | `3.500000` or `12.` on the display. |
+| Keys as pressed: `12+7=`, `7/2=`, `.1+.2=`, `2+3*4=` as 20, `5+=` as 10, `3.50` as typed, backspace, the sign into a sum, percent, a thirteenth digit refused, a division by zero shown and cleared by the next key. | A calculator that disagrees with the one on a desk. |
 What they stand on is asserted in [`../devices/TIME.md`](../devices/TIME.md):
 the clock's decoding, the date arithmetic, `gmtime`, and the alarm at privilege
 level 3. The checks a person performs are in
@@ -151,6 +197,7 @@ level 3. The checks a person performs are in
 | The panel's clock matches the host's minute and turns by itself. | An alarm that is not re-armed. |
 | Notepad types, moves, and saves two lines with Control-S to a path asked for, which `cat` then shows as typed, and a notification says so. | A save that writes nothing, or writes the wrong bytes. |
 | System Info shows the version, two processors under QEMU, memory free less than memory, and an uptime that advances by itself. | Figures read from the wrong counter; an alarm not re-armed. |
+| The calculator opens from the launcher; pressing `12+7=` shows 19, and typing `7/2` and Enter shows 3.5. | Buttons or keys not reaching the arithmetic. |
 
 ## Limitations
 
@@ -164,3 +211,6 @@ level 3. The checks a person performs are in
    wrap long lines; it scrolls sideways instead.
 7. System Info names no processor model and no disk: there is no call for
    either.
+8. The calculator has no memory keys, no square root and no precedence of
+   operators, and numbers are bounded at twelve digits before the point and six
+   after it.
