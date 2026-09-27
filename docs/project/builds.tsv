@@ -89,3 +89,5 @@ number	date	commit	dirty	compiler	cc_version	kernel	iso	result	assertions	enviro
 69	2026-09-27T18:15Z	9cde12b	yes	gcc	13.2.0	4122072	13447168	failed	-	QEMU q35	-	Negative: 9cde12b with window_list naming no owner; window-check fails
 70	2026-09-27T22:02Z	fb0beab	no	gcc	13.2.0	4124456	13449216	passed	80	QEMU q35;VirtualBox;Bochs	-	Nested parentheses bounded in arithmetic
 71	2026-09-27T22:03Z	fb0beab	yes	gcc	13.2.0	4124456	13449216	did-not-boot	-	QEMU q35	-	Negative: fb0beab with the parenthesis bound lifted; self-test fails
+72	2026-09-27T22:18Z	3dd3576	no	gcc	13.2.0	4158488	13484032	passed	81	QEMU q35;VirtualBox;Bochs	-	Calculator
+73	2026-09-27T22:18Z	3dd3576	yes	gcc	13.2.0	4158464	13484032	failed	-	QEMU q35	-	Negative: 3dd3576 with the quotient's rounding removed; calculator self-test fails

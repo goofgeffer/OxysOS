@@ -352,21 +352,19 @@ regenerates it and fails if what is here differs.*
 
 | | |
 | --- | --- |
-| Builds recorded | 71 |
-| Verified | 58 passed, 13 not |
+| Builds recorded | 73 |
+| Verified | 59 passed, 14 not |
 | Compilers | gcc |
 | Environments | Bochs, QEMU, QEMU q35, QEMU q35,  VirtualBox,  Bochs, VirtualBox |
 | First | 2026-09-17T01:34Z |
-| Latest | 2026-09-27T22:03Z |
+| Latest | 2026-09-27T22:18Z |
 
 ## The last 20 builds
 
-The remaining 51 are in [`builds.tsv`](builds.tsv), which is the record.
+The remaining 53 are in [`builds.tsv`](builds.tsv), which is the record.
 
 | # | Date (UTC) | Commit | Compiler | Kernel | ISO | Result | Environments | Note |
 | - | ---------- | ------ | -------- | ------ | --- | ------ | ------------ | ---- |
-| 52 | 2026-09-27T03:27Z | `cc15f88` | gcc 13.2.0 | 4064768 | 13389824 | passed (80 assertions) | QEMU q35;VirtualBox;Bochs | init-check waits for its parent to sleep |
-| 53 | 2026-09-27T03:27Z | `cc15f88` *(modified)* | gcc 13.2.0 | 4064768 | 13389824 | passed (80 assertions) | QEMU q35 | Negative: cc15f88 with its parent delayed 40M iterations before pause; passes |
 | 54 | 2026-09-27T03:28Z | `cc15f88` *(modified)* | gcc 13.2.0 | 4064768 | 13389824 | did-not-boot | QEMU q35 | Negative: the old init-check with its parent delayed 40M before pause; hangs at its first line |
 | 55 | 2026-09-27T03:36Z | `ee657a4` | gcc 13.2.0 | 4064768 | 13389824 | passed (80 assertions) | QEMU q35;VirtualBox;Bochs | Launcher icons twenty units |
 | 56 | 2026-09-27T04:07Z | `40cd2c6` | gcc 13.2.0 | 4064768 | 13389824 | passed (80 assertions) | QEMU q35;VirtualBox;Bochs | Clock box fitted to its time |
@@ -385,5 +383,7 @@ The remaining 51 are in [`builds.tsv`](builds.tsv), which is the record.
 | 69 | 2026-09-27T18:15Z | `9cde12b` *(modified)* | gcc 13.2.0 | 4122072 | 13447168 | failed | QEMU q35 | Negative: 9cde12b with window_list naming no owner; window-check fails |
 | 70 | 2026-09-27T22:02Z | `fb0beab` | gcc 13.2.0 | 4124456 | 13449216 | passed (80 assertions) | QEMU q35;VirtualBox;Bochs | Nested parentheses bounded in arithmetic |
 | 71 | 2026-09-27T22:03Z | `fb0beab` *(modified)* | gcc 13.2.0 | 4124456 | 13449216 | did-not-boot | QEMU q35 | Negative: fb0beab with the parenthesis bound lifted; self-test fails |
+| 72 | 2026-09-27T22:18Z | `3dd3576` | gcc 13.2.0 | 4158488 | 13484032 | passed (81 assertions) | QEMU q35;VirtualBox;Bochs | Calculator |
+| 73 | 2026-09-27T22:18Z | `3dd3576` *(modified)* | gcc 13.2.0 | 4158464 | 13484032 | failed | QEMU q35 | Negative: 3dd3576 with the quotient's rounding removed; calculator self-test fails |
 
 <!-- END GENERATED -->
