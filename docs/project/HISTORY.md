@@ -11,6 +11,7 @@ row.
 
 | Date | Phase | Change | Commit |
 | ---- | ----- | ------ | ------ |
+| 2026-09-27 | Phase 9 | The calculator's icon, the project owner's | `pending` |
 | 2026-09-27 | Phase 9 | A calculator, `/bin/calculator`, in fixed point, with its arithmetic and keys asserted by `KernelVerifyCalculator` | `3dd3576` |
 | 2026-09-27 | Phase 8 | Arithmetic refuses parentheses nested past 32, which ran the shell off its stack | `fb0beab` |
 | 2026-09-27 | Phase 9 | The bar as a row of icons: pinned programs underlined dark brown when open, other open windows added after them underlined brown; `window_list` names each window's program; icons from `/share/icons/<program>.oxi` | `9cde12b` |

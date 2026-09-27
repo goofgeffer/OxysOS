@@ -167,8 +167,7 @@ are taken left to right as they are pressed, with no precedence, so `2 + 3 x 4
   calls nothing, and is compiled into the kernel image as the shell's grammar
   is, so `KernelVerifyCalculator` asserts the code the calculator ships.
 
-The launcher offers it with no icon of its own: it stands as its letter until
-`/share/icons/calculator.oxi` is drawn ([`SESSION.md`](SESSION.md)).
+Its icon, a grey calculator with orange keys, is the project owner's.
 
 ## Verification
 

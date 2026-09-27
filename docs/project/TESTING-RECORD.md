@@ -15,6 +15,7 @@ that was cleared that day and renumbered from 1; the date identifies the image.
 
 | Date | Where | What | Result |
 | ---- | ----- | ---- | ------ |
+| 2026-09-27 | QEMU q35, VirtualBox and Bochs | The calculator's icon | Passed; under QEMU in the launcher and on the bar; every self-test on all three |
 | 2026-09-27 | QEMU q35, VirtualBox and Bochs | The calculator | Passed; under QEMU opened from the launcher, `12+7=` pressed showing 19 and `7/2` typed showing 3.5; the calculator self-test and every other on all three; negative test caught |
 | 2026-09-27 | QEMU q35, VirtualBox and Bochs | Nested parentheses bounded | Passed; under QEMU two hundred nested parentheses, which before ended the shell with a page fault, refused by name, thirty-two evaluated, thirty-three refused; every self-test on all three; negative test caught |
 | 2026-09-27 | QEMU q35, VirtualBox and Bochs | The bar as a row of icons | Passed; under QEMU Terminal and Files open in their pinned places, Settings, System Info and the viewer after them, the focused one underlined across; a press focused and then minimised Terminal; an icon file placed for the viewer shown on the bar and in the launcher; every self-test on all three; negative test caught |
