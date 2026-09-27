@@ -53,6 +53,22 @@ The toolchain is not placed upon the default `PATH`.
 build system, the flags and their justifications, and the workflow that runs the
 same verification upon GitHub.
 
+## System requirements
+
+| | Minimum | Recommended |
+| - | ------- | ----------- |
+| Processor | One x86-64 processor | One or two |
+| Memory | 48 MiB | 128 MiB |
+| Disk | None: the system runs from its ISO in memory | A small disk, only to keep `/etc` across a restart |
+
+Measured under QEMU at 1280 by 800 with the desktop's six programs and ten more
+windows open, which use about 34 MiB: below 48 MiB programs are refused for
+want of memory, and below 24 MiB the desktop cannot run. Each window made full
+takes about 4 MiB more, which is what the recommendation leaves room for.
+Programs run upon the first processor alone, so a second does not yet make the
+desktop faster. Memory up to 4 GiB was used whole. The measurement is in
+[`docs/project/TESTING-RECORD.md`](docs/project/TESTING-RECORD.md).
+
 ## Licensing
 
 Three licences apply, one to each kind of thing here.
