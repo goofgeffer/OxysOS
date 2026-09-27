@@ -352,20 +352,19 @@ regenerates it and fails if what is here differs.*
 
 | | |
 | --- | --- |
-| Builds recorded | 50 |
-| Verified | 43 passed, 7 not |
+| Builds recorded | 51 |
+| Verified | 44 passed, 7 not |
 | Compilers | gcc |
 | Environments | Bochs, QEMU, QEMU q35, QEMU q35,  VirtualBox,  Bochs, VirtualBox |
 | First | 2026-09-17T01:34Z |
-| Latest | 2026-09-27T02:21Z |
+| Latest | 2026-09-27T02:57Z |
 
 ## The last 20 builds
 
-The remaining 30 are in [`builds.tsv`](builds.tsv), which is the record.
+The remaining 31 are in [`builds.tsv`](builds.tsv), which is the record.
 
 | # | Date (UTC) | Commit | Compiler | Kernel | ISO | Result | Environments | Note |
 | - | ---------- | ------ | -------- | ------ | --- | ------ | ------------ | ---- |
-| 31 | 2026-09-25T01:45Z | `e53fd5f` | gcc 13.2.0 | 3719144 | 13043712 | passed (78 assertions) |  | Panel at the foot, pinned programs, clock box at top right |
 | 32 | 2026-09-25T01:53Z | `141ac8b` | gcc 13.2.0 | 3719144 | 13043712 | passed (78 assertions) |  | Pinned icons evenly spaced |
 | 33 | 2026-09-25T02:14Z | `f224263` | gcc 13.2.0 | 3719144 | 13043712 | passed (78 assertions) | QEMU;VirtualBox;Bochs | Oxys 1 Beta: the release image, cut after sub-task 9.7; booted to the desktop under QEMU, VirtualBox and Bochs |
 | 34 | 2026-09-25T21:03Z | `ce354fa` | gcc 13.2.0 | 3768960 | 13094912 | passed (79 assertions) | QEMU q35, VirtualBox, Bochs | Growing process, thread, node, open-file and pipe tables |
@@ -385,5 +384,6 @@ The remaining 30 are in [`builds.tsv`](builds.tsv), which is the record.
 | 48 | 2026-09-27T01:24Z | `1137633` | gcc 13.2.0 | 3998232 | 13324288 | passed (80 assertions) | QEMU q35;VirtualBox;Bochs | Userland lists grown in the heap |
 | 49 | 2026-09-27T01:47Z | `2a812b8` | gcc 13.2.0 | 4064768 | 13389824 | passed (80 assertions) | QEMU q35;VirtualBox;Bochs | Kernel tables grown; descriptors to 1024 |
 | 50 | 2026-09-27T02:21Z | `049e06a` | gcc 13.2.0 | 4064768 | 13389824 | passed (80 assertions) | QEMU q35;VirtualBox;Bochs | File and folder pictures in Files |
+| 51 | 2026-09-27T02:57Z | `e306ecd` | gcc 13.2.0 | 4064768 | 13389824 | passed (80 assertions) | QEMU q35;VirtualBox;Bochs | Launcher gap between icon and name |
 
 <!-- END GENERATED -->
