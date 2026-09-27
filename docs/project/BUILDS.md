@@ -352,20 +352,19 @@ regenerates it and fails if what is here differs.*
 
 | | |
 | --- | --- |
-| Builds recorded | 63 |
-| Verified | 53 passed, 10 not |
+| Builds recorded | 64 |
+| Verified | 54 passed, 10 not |
 | Compilers | gcc |
 | Environments | Bochs, QEMU, QEMU q35, QEMU q35,  VirtualBox,  Bochs, VirtualBox |
 | First | 2026-09-17T01:34Z |
-| Latest | 2026-09-27T17:49Z |
+| Latest | 2026-09-27T17:55Z |
 
 ## The last 20 builds
 
-The remaining 43 are in [`builds.tsv`](builds.tsv), which is the record.
+The remaining 44 are in [`builds.tsv`](builds.tsv), which is the record.
 
 | # | Date (UTC) | Commit | Compiler | Kernel | ISO | Result | Environments | Note |
 | - | ---------- | ------ | -------- | ------ | --- | ------ | ------------ | ---- |
-| 44 | 2026-09-26T17:42Z | `38fbb4f` | gcc 13.2.0 | 3859840 | 13185024 | passed (80 assertions) | QEMU q35, VirtualBox, Bochs | The panel's icons without buttons |
 | 45 | 2026-09-26T19:39Z | `bf5c871` *(modified)* | gcc 13.2.0 | 3984272 | 13309952 | passed (80 assertions) |  |  |
 | 46 | 2026-09-26T19:50Z | `e478bff` *(modified)* | gcc 13.2.0 | 3990144 | 13316096 | passed (80 assertions) |  |  |
 | 47 | 2026-09-27T00:39Z | `260e09a` | gcc 13.2.0 | 3990144 | 13316096 | passed (80 assertions) | QEMU q35;VirtualBox;Bochs | Settings buttons sized to their labels |
@@ -385,5 +384,6 @@ The remaining 43 are in [`builds.tsv`](builds.tsv), which is the record.
 | 61 | 2026-09-27T17:34Z | `f69d142` | gcc 13.2.0 | 4119360 | 13445120 | passed (80 assertions) | QEMU q35 | Rebuild of 813adff (arithmetic expansion) for the archive; build 59's own image was overwritten by the negative test |
 | 62 | 2026-09-27T17:49Z | `e827a72` | gcc 13.2.0 | 4119360 | 13445120 | passed (80 assertions) | QEMU q35;VirtualBox;Bochs | Icons on the desktop |
 | 63 | 2026-09-27T17:49Z | `e827a72` *(modified)* | gcc 13.2.0 | 4119360 | 13445120 | failed | QEMU q35 | Negative: e827a72 with desktop = yes removed from the shipped session.conf; config-check fails |
+| 64 | 2026-09-27T17:55Z | `2033d9d` | gcc 13.2.0 | 4118304 | 13443072 | passed (80 assertions) | QEMU q35;VirtualBox;Bochs | Smaller pointer |
 
 <!-- END GENERATED -->

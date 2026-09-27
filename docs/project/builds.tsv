@@ -81,3 +81,4 @@ number	date	commit	dirty	compiler	cc_version	kernel	iso	result	assertions	enviro
 61	2026-09-27T17:34Z	f69d142	no	gcc	13.2.0	4119360	13445120	passed	80	QEMU q35	4c412f5922a53d41ec20d464017da272dbaac292b5a5153be6c881de64c4ba87	Rebuild of 813adff (arithmetic expansion) for the archive; build 59's own image was overwritten by the negative test
 62	2026-09-27T17:49Z	e827a72	no	gcc	13.2.0	4119360	13445120	passed	80	QEMU q35;VirtualBox;Bochs	-	Icons on the desktop
 63	2026-09-27T17:49Z	e827a72	yes	gcc	13.2.0	4119360	13445120	failed	-	QEMU q35	-	Negative: e827a72 with desktop = yes removed from the shipped session.conf; config-check fails
+64	2026-09-27T17:55Z	2033d9d	no	gcc	13.2.0	4118304	13443072	passed	80	QEMU q35;VirtualBox;Bochs	-	Smaller pointer
