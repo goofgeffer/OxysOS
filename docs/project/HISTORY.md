@@ -11,6 +11,7 @@ row.
 
 | Date | Phase | Change | Commit |
 | ---- | ----- | ------ | ------ |
+| 2026-09-27 | Phase 9 | The clock's box sixty-four units wide, 128 pixels at the scale of two | `pending` |
 | 2026-09-27 | Phase 9 | The clock's box as wide as its time and a margin, from a fifth of the screen | `40cd2c6` |
 | 2026-09-27 | Phase 9 | The launcher's icons twenty units square, from twenty-four | `ee657a4` |
 | 2026-09-27 | Phase 9 | `init-check` signals only once its parent is seen asleep in `pause`, ending the VirtualBox boot hang | `cc15f88` |

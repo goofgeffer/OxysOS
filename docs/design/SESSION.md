@@ -132,10 +132,11 @@ pinned icons are recognisable. The session has no fill across the protocol, so
 the bar is a tile blitted in bands.
 
 **The clock** stands apart, in a panel-layer box of its own at the top right,
-as wide as the widest `HH:MM` with ten units either side and the bar's height,
-the time centred ([`UTILITIES.md`](UTILITIES.md)). The window manager keeps the rows of a panel
-against the top or bottom edge free of windows made full, so neither the box nor
-the bar covers a full window's controls ([`WINDOWS.md`](WINDOWS.md)).
+sixty-four units wide, 128 pixels at the scale of two, and the bar's height,
+the time centred ([`UTILITIES.md`](UTILITIES.md)). The window manager keeps the
+rows of a panel against the top or bottom edge free of windows made full, so
+neither the box nor the bar covers a full window's controls
+([`WINDOWS.md`](WINDOWS.md)).
 
 **The pinned programs** are the launcher entries marked `pin = yes`: a square
 button the bar's height each, right of the launcher's button, showing the entry's

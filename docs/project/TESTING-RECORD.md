@@ -15,6 +15,7 @@ that was cleared that day and renumbered from 1; the date identifies the image.
 
 | Date | Where | What | Result |
 | ---- | ----- | ---- | ------ |
+| 2026-09-27 | QEMU q35, VirtualBox and Bochs | The clock's box at 128 pixels | Passed; 128 pixels under QEMU and 64 under VirtualBox, the time centred; every self-test on all three |
 | 2026-09-27 | QEMU q35, VirtualBox and Bochs | The clock's box fitted to its time | Passed; about 80 pixels under QEMU and 40 under VirtualBox, the time centred; every self-test on all three |
 | 2026-09-27 | QEMU q35, VirtualBox and Bochs | Smaller launcher icons | Passed; under QEMU the icons at forty pixels, centred, names clear; every self-test under QEMU and Bochs; VirtualBox passed two of three, the third failing the known serial loopback |
 | 2026-09-27 | QEMU q35, VirtualBox and Bochs | The `init-check` hang | Passed; the old test with its parent delayed hung under QEMU for 120 s and the fixed one passed; VirtualBox passed 10 of 10 boots, against 0 hangs in 8 before the kernel tables grew and 3 in 13 after; every self-test under QEMU and Bochs |
