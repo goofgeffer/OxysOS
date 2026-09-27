@@ -15,6 +15,7 @@ that was cleared that day and renumbered from 1; the date identifies the image.
 
 | Date | Where | What | Result |
 | ---- | ----- | ---- | ------ |
+| 2026-09-27 | QEMU q35 | Memory and processors needed | 16 MiB: no desktop (no compositor); 18 MiB: kernel panic out of frames under load; 24 MiB: desktop, but out of memory after two programs; 32 MiB: six of sixteen programs; 48 MiB and up: all sixteen, about 34 MiB used; 2 and 4 GiB wholly used; one and four processors boot as two, in about 7.5 s |
 | 2026-09-27 | QEMU q35, VirtualBox and Bochs | The calculator's icon | Passed; under QEMU in the launcher and on the bar; every self-test on all three |
 | 2026-09-27 | QEMU q35, VirtualBox and Bochs | The calculator | Passed; under QEMU opened from the launcher, `12+7=` pressed showing 19 and `7/2` typed showing 3.5; the calculator self-test and every other on all three; negative test caught |
 | 2026-09-27 | QEMU q35, VirtualBox and Bochs | Nested parentheses bounded | Passed; under QEMU two hundred nested parentheses, which before ended the shell with a page fault, refused by name, thirty-two evaluated, thirty-three refused; every self-test on all three; negative test caught |
