@@ -65,3 +65,4 @@ number	date	commit	dirty	compiler	cc_version	kernel	iso	result	assertions	enviro
 45	2026-09-26T19:39Z	bf5c871	yes	gcc	13.2.0	3984272	13309952	passed	80		-	
 46	2026-09-26T19:50Z	e478bff	yes	gcc	13.2.0	3990144	13316096	passed	80		-	
 47	2026-09-27T00:39Z	260e09a	no	gcc	13.2.0	3990144	13316096	passed	80	QEMU q35;VirtualBox;Bochs	-	Settings buttons sized to their labels
+48	2026-09-27T01:24Z	1137633	no	gcc	13.2.0	3998232	13324288	passed	80	QEMU q35;VirtualBox;Bochs	-	Userland lists grown in the heap

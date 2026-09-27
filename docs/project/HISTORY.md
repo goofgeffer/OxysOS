@@ -11,7 +11,7 @@ row.
 
 | Date | Phase | Change | Commit |
 | ---- | ----- | ------ | ------ |
-| 2026-09-27 | Phase 9 | Userland lists grown in the heap: configuration settings and text, Settings, the launcher and window list, `init`'s services, Files, the viewer, `micro`, shell jobs | `pending` |
+| 2026-09-27 | Phase 9 | Userland lists grown in the heap: configuration settings and text, Settings, the launcher and window list, `init`'s services, Files, the viewer, `micro`, shell jobs | `1137633` |
 | 2026-09-26 | Phase 9 | The settings buttons sized to their proportional labels, and pressed by pixel | `260e09a` |
 | 2026-09-26 | Phase 9 | Titles and labels in proportional Inter; `window_text` gains proportional and measuring flags and returns the width | `e478bff` |
 | 2026-09-26 | Phase 9 | Sub-task 9.9: the desktop's text in Inter, rendered into monospaced cells of five by eight; boot log keeps 8-by-8 | `bf5c871` |
