@@ -134,7 +134,7 @@ at privilege level 3 for the two calls.
 | With `init` set, both of a parent's children are reparented to it. | An orphan nobody can collect. |
 | `init` does not adopt its own children. | A `waitpid` that never ends. |
 | `power` from any other process is `EPERM`, for every action value. | **Any program stopping the machine** (with the check removed, the self-test's own program halts the boot). |
-| `pause` returns `EINTR` when a signal arrives, and the signal is delivered. | An `init` that spins, or never wakes. |
+| `pause` returns `EINTR` when a signal arrives while it sleeps, and the signal is delivered; the child signals only once `procinfo` shows the parent blocked. | An `init` that spins, or never wakes; a test that hangs when its signal lands before `pause`. |
 | `init-check` left no open file or child, and ended itself. | A pass from a program that never ran. |
 
 The test runs **last**, after the shell's sessions: run before them, on Bochs, its

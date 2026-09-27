@@ -44,6 +44,36 @@ static void InitRecord(int signal)
     InitSignalSeen = signal;
 }
 
+/*
+ * Returns once the process `id` is blocked, by walking the process table with
+ * `procinfo` until its slot says so. Bounded, so that a parent which never
+ * sleeps — the defect this program exists to find — ends in the assertion
+ * after `pause` failing rather than in a child that spins forever.
+ */
+static void InitAwaitSleep(int64_t id)
+{
+    for (long attempt = 0; attempt < 1000000L; ++attempt)
+    {
+        SyscallProcessInformation information;
+        int64_t result = 0;
+
+        for (uint64_t index = 0U; result >= 0; ++index)
+        {
+            result = OxysProcessInformation(index, &information);
+
+            if ((result == 1) && ((int64_t)information.id == id))
+            {
+                if (information.state == SYSCALL_PROCESS_STATE_BLOCKED)
+                {
+                    return;
+                }
+
+                break;
+            }
+        }
+    }
+}
+
 int main(void)
 {
     (void)printf("init-check: power and pause, from privilege level 3.\n");
@@ -68,11 +98,17 @@ int main(void)
      * A child sends the signal, rather than the parent to itself, because a
      * signal a process sends itself is delivered on the way out of `kill` —
      * before `pause` is reached — and `pause` would then sleep for a signal
-     * already gone. A child cannot run until its parent sleeps or is
-     * pre-empted, so the parent reaches the sleep in `pause` first; the child
-     * then spins briefly, to cover the pre-emption, and sends the signal,
-     * which wakes the parent with the signal arriving while it slept — the
-     * case `pause` exists for.
+     * already gone.
+     *
+     * **The child waits until it sees its parent asleep**, by `procinfo`,
+     * before it sends. Until 2026-09-27 it spun a fixed while instead, on the
+     * reasoning that a child cannot run until its parent sleeps or is
+     * pre-empted. A pre-emption between `fork` and `pause` let the child finish
+     * its spin and signal first: the handler ran as the parent resumed, and
+     * `pause` then slept forever for a signal already delivered. Under
+     * VirtualBox that hung the boot at this program's first line in about a
+     * third of boots; a delay placed before `pause` reproduces it under QEMU.
+     * The parent blocks nowhere between the two calls, so BLOCKED is `pause`.
      */
     {
         const int64_t self = OxysGetProcessId();
@@ -80,10 +116,7 @@ int main(void)
 
         if (child == 0)
         {
-            for (volatile long spin = 0; spin < 4000000L; ++spin)
-            {
-            }
-
+            InitAwaitSleep(self);
             (void)OxysKill(self, SIGTERM);
             OxysExit(0);
         }
