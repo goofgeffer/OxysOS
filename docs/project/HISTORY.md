@@ -11,6 +11,7 @@ row.
 
 | Date | Phase | Change | Commit |
 | ---- | ----- | ------ | ------ |
+| 2026-09-27 | Phase 9 | The pointer eighteen pixels high, from twenty-two | `pending` |
 | 2026-09-27 | Phase 9 | Icons on the desktop: launcher entries marked `desktop = yes`, chosen in Settings; Files alone as shipped | `e827a72` |
 | 2026-09-27 | Phase 8 | Arithmetic expansion, `$((expression))`, in the shell | `813adff` |
 | 2026-09-27 | Phase 8 | A command takes as many words as its line holds; `execve` takes 128 strings and 8 KiB, copied into the heap | `1a50409` |

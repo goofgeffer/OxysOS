@@ -122,13 +122,13 @@ thing has to agree with it about either colour.
 ## `pointer.h` — how it is generated
 
 The command, recorded here for the reason `logo.h`'s is. The arrow is reduced to
-twenty-two pixels high with a box filter, so each pixel's coverage is the share
+eighteen pixels high with a box filter, so each pixel's coverage is the share
 of the drawing beneath it. A pixel of border is added on every side, and the
 halo is the arrow dilated by one pixel in every direction less the arrow, so it
 follows the drawing's own edge.
 
 ```sh
-convert art/pointer.png -alpha extract -trim +repage -filter box -resize x22 body.png
+convert art/pointer.png -alpha extract -trim +repage -filter box -resize x18 body.png
 convert body.png -bordercolor black -border 1 padded.png
 convert padded.png -morphology Dilate Square:1 dilated.png
 convert dilated.png padded.png -compose minus_src -composite halo.png
@@ -136,7 +136,7 @@ convert padded.png -depth 8 gray:body.raw
 convert halo.png   -depth 8 gray:halo.raw
 ```
 
-Each raw file is 384 bytes, sixteen to a row. `xxd -p -c 16` turns each into
+Each raw file is 260 bytes, thirteen to a row. `xxd -p -c 13` turns each into
 the rows of `PointerBody` and `PointerHalo`. The tip lands at (1, 1),
 `POINTER_HOT_X` and `POINTER_HOT_Y`, because of the border.
 
