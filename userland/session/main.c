@@ -389,17 +389,6 @@ static void SessionFill(int64_t window, int32_t x, int32_t y, int32_t width, int
     }
 }
 
-/* A button as the project owner drew one, since 2026-09-26: `fill` within an
- * edge of SESSION_BUTTON_EDGE a unit wide. */
-static void SessionDrawButton(int64_t window, int32_t x, int32_t y, int32_t width,
-                              int32_t height, uint32_t fill)
-{
-    const int32_t edge = SessionScale;
-
-    SessionFill(window, x, y, width, height, SESSION_BUTTON_EDGE);
-    SessionFill(window, x + edge, y + edge, width - (2 * edge), height - (2 * edge), fill);
-}
-
 static void SessionText(int64_t window, int32_t x, int32_t y, const char *text, uint32_t ink,
                         uint32_t paper, int32_t scale)
 {
@@ -1315,13 +1304,12 @@ static size_t SessionTasksShown(void)
 }
 
 /*
- * The list's buttons: the window holding the focus drawn upon the quiet colour
- * the open launcher is, a minimised one with its title dimmed, and every title
- * cut to the button rather than run past it.
+ * The list of windows: each title upon the bar itself, with no button behind
+ * it, a minimised one dimmed, and every title cut to its place rather than run
+ * past it.
  */
 static void SessionDrawTasks(void)
 {
-    const int32_t height = SessionPanelHeight();
     const int32_t inset = 3 * SessionScale;
     const int32_t width = SESSION_TASK_UNITS * SessionScale;
     const size_t characters = (size_t)((width - (2 * inset)) / (SESSION_ADVANCE * SessionScale));
@@ -1331,10 +1319,7 @@ static void SessionDrawTasks(void)
     {
         const SyscallWindowEntry *const task = &SessionTasks[index];
         const int32_t x = SessionTaskLeft() + ((int32_t)index * SessionTaskStride());
-        const bool focused = (task->flags & SYSCALL_WINDOW_ENTRY_FOCUSED) != 0U;
         const bool minimised = (task->flags & SYSCALL_WINDOW_ENTRY_MINIMISED) != 0U;
-        const uint32_t paper = focused ? SESSION_QUIET : SESSION_BUTTON;
-        const int32_t button = SESSION_BUTTON_INSET * SessionScale;
         char title[SYSCALL_WINDOW_TITLE_MAXIMUM + 1U];
         size_t length = 0U;
 
@@ -1347,9 +1332,8 @@ static void SessionDrawTasks(void)
 
         title[length] = '\0';
 
-        SessionDrawButton(SessionPanel, x, button, width, height - (2 * button), paper);
         SessionText(SessionPanel, x + inset, SessionPanelTextTop(), title,
-                    minimised ? SESSION_DIM : SESSION_INK, paper, SessionScale);
+                    minimised ? SESSION_DIM : SESSION_INK, SESSION_PANEL, SessionScale);
     }
 }
 

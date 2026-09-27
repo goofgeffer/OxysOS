@@ -176,11 +176,9 @@ three bars instead and
 the session says so on the standard error, so the button every program is reached
 through is never an empty square.
 
-**The list of windows is buttons of the project owner's**: a
-yellow within an olive edge a unit wide, from their drawing of one
-([`../../art/palette.h`](../../art/palette.h)), the window holding the focus in
-the quiet colour within the same edge. The launcher and the pinned programs are
-their icons on the bar with nothing behind them. The bar itself is their orange.
+**Nothing on the bar stands on a button**: the launcher, the pinned programs
+and the list of windows are drawn on the bar itself, the project owner's orange
+([`../../art/palette.h`](../../art/palette.h)).
 
 **The launcher** is a second window **in the panel layer**, so nothing a program
 does can cover it. It opens upward from the launcher's button, above the bar, and
@@ -200,11 +198,10 @@ closed. Its entries are the `[launch]` blocks of `/etc/session.conf` (`run`,
 - **Started programs are not waited for**; the session reaps with `waitpid` and
   `WNOHANG` on `SIGCHLD`, since `init` adopts orphans only when a parent ends.
 
-**The window list** is a button per ordinary window, in the order of their numbers,
+**The window list** is a place per ordinary window, in the order of their numbers,
 every window listed so places stay put. A press restores its window (show, raise,
-focus), or minimises it if it already holds the focus. The focused window's button
-is drawn in the quiet colour, a minimised window's title dimmed, and titles are cut
-to the button. The list is fetched with `window_list` (the session's alone) and
+focus), or minimises it if it already holds the focus. Each is its title on the
+bar, a minimised window's dimmed, and titles are cut to their place. The list is fetched with `window_list` (the session's alone) and
 redrawn when the root receives `WINDOW_EVENT_WINDOWS`; `window_create` and
 `window_destroy` wake sleepers, so a new window is listed at once. There is no
 polling.

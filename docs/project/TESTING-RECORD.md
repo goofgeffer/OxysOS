@@ -15,6 +15,7 @@ that was cleared that day and renumbered from 1; the date identifies the image.
 
 | Date | Where | What | Result |
 | ---- | ----- | ---- | ------ |
+| 2026-09-27 | QEMU q35, VirtualBox and Bochs | The window list without buttons | Passed; under QEMU two titles on the bar with no box; every self-test on all three |
 | 2026-09-27 | QEMU q35, VirtualBox and Bochs | Desktop names with no label | Passed; under QEMU the name upon the rose itself; every self-test on all three; negative test caught |
 | 2026-09-27 | QEMU q35, VirtualBox and Bochs | The smaller pointer | Passed; under QEMU the arrow thirteen by twenty with its halo; every self-test on all three |
 | 2026-09-27 | QEMU q35, VirtualBox and Bochs | Icons on the desktop | Passed; under QEMU Files at the top left over the rose, pressed to open; Terminal and Notepad added by Settings and drawn at Save; over the plain ground, Notepad pressed to open; under VirtualBox at half scale; every self-test on all three; negative test caught |
