@@ -11,7 +11,7 @@ row.
 
 | Date | Phase | Change | Commit |
 | ---- | ----- | ------ | ------ |
-| 2026-09-27 | Phase 9 | `init-check` signals only once its parent is seen asleep in `pause`, ending the VirtualBox boot hang | `pending` |
+| 2026-09-27 | Phase 9 | `init-check` signals only once its parent is seen asleep in `pause`, ending the VirtualBox boot hang | `cc15f88` |
 | 2026-09-27 | Phase 9 | A gap of six units between a launcher entry's icon and its name | `e306ecd` |
 | 2026-09-27 | Phase 9 | Files draws the owner's file picture for every file and folder picture for every folder | `049e06a` |
 | 2026-09-27 | — | Kernel tables grown: windows, block devices, mounts, filesystem types and PCI functions on the growing table; per-process descriptors inline to 16 and grown to `SYSCALL_DESCRIPTOR_LIMIT` (1024) | `2a812b8` |

@@ -352,22 +352,19 @@ regenerates it and fails if what is here differs.*
 
 | | |
 | --- | --- |
-| Builds recorded | 51 |
-| Verified | 44 passed, 7 not |
+| Builds recorded | 54 |
+| Verified | 46 passed, 8 not |
 | Compilers | gcc |
 | Environments | Bochs, QEMU, QEMU q35, QEMU q35,  VirtualBox,  Bochs, VirtualBox |
 | First | 2026-09-17T01:34Z |
-| Latest | 2026-09-27T02:57Z |
+| Latest | 2026-09-27T03:28Z |
 
 ## The last 20 builds
 
-The remaining 31 are in [`builds.tsv`](builds.tsv), which is the record.
+The remaining 34 are in [`builds.tsv`](builds.tsv), which is the record.
 
 | # | Date (UTC) | Commit | Compiler | Kernel | ISO | Result | Environments | Note |
 | - | ---------- | ------ | -------- | ------ | --- | ------ | ------------ | ---- |
-| 32 | 2026-09-25T01:53Z | `141ac8b` | gcc 13.2.0 | 3719144 | 13043712 | passed (78 assertions) |  | Pinned icons evenly spaced |
-| 33 | 2026-09-25T02:14Z | `f224263` | gcc 13.2.0 | 3719144 | 13043712 | passed (78 assertions) | QEMU;VirtualBox;Bochs | Oxys 1 Beta: the release image, cut after sub-task 9.7; booted to the desktop under QEMU, VirtualBox and Bochs |
-| 34 | 2026-09-25T21:03Z | `ce354fa` | gcc 13.2.0 | 3768960 | 13094912 | passed (79 assertions) | QEMU q35, VirtualBox, Bochs | Growing process, thread, node, open-file and pipe tables |
 | 35 | 2026-09-25T21:12Z | `06bf6b2` | gcc 13.2.0 | 3783712 | 13109248 | passed (79 assertions) | QEMU q35, VirtualBox, Bochs | The boot divided into phases in kernel/init/ |
 | 36 | 2026-09-25T21:22Z | `d19a474` | gcc 13.2.0 | 3784248 | 13109248 | passed (79 assertions) | QEMU q35, VirtualBox, Bochs | The close control as a cross |
 | 37 | 2026-09-25T21:59Z | `0fc868b` | gcc 13.2.0 | 3784248 | 13109248 | passed (79 assertions) | QEMU q35, VirtualBox, Bochs | The start icon on the launcher's button |
@@ -385,5 +382,8 @@ The remaining 31 are in [`builds.tsv`](builds.tsv), which is the record.
 | 49 | 2026-09-27T01:47Z | `2a812b8` | gcc 13.2.0 | 4064768 | 13389824 | passed (80 assertions) | QEMU q35;VirtualBox;Bochs | Kernel tables grown; descriptors to 1024 |
 | 50 | 2026-09-27T02:21Z | `049e06a` | gcc 13.2.0 | 4064768 | 13389824 | passed (80 assertions) | QEMU q35;VirtualBox;Bochs | File and folder pictures in Files |
 | 51 | 2026-09-27T02:57Z | `e306ecd` | gcc 13.2.0 | 4064768 | 13389824 | passed (80 assertions) | QEMU q35;VirtualBox;Bochs | Launcher gap between icon and name |
+| 52 | 2026-09-27T03:27Z | `cc15f88` | gcc 13.2.0 | 4064768 | 13389824 | passed (80 assertions) | QEMU q35;VirtualBox;Bochs | init-check waits for its parent to sleep |
+| 53 | 2026-09-27T03:27Z | `cc15f88` *(modified)* | gcc 13.2.0 | 4064768 | 13389824 | passed (80 assertions) | QEMU q35 | Negative: cc15f88 with its parent delayed 40M iterations before pause; passes |
+| 54 | 2026-09-27T03:28Z | `cc15f88` *(modified)* | gcc 13.2.0 | 4064768 | 13389824 | did-not-boot | QEMU q35 | Negative: the old init-check with its parent delayed 40M before pause; hangs at its first line |
 
 <!-- END GENERATED -->
