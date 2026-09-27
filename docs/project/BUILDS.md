@@ -352,21 +352,19 @@ regenerates it and fails if what is here differs.*
 
 | | |
 | --- | --- |
-| Builds recorded | 61 |
-| Verified | 52 passed, 9 not |
+| Builds recorded | 63 |
+| Verified | 53 passed, 10 not |
 | Compilers | gcc |
 | Environments | Bochs, QEMU, QEMU q35, QEMU q35,  VirtualBox,  Bochs, VirtualBox |
 | First | 2026-09-17T01:34Z |
-| Latest | 2026-09-27T17:34Z |
+| Latest | 2026-09-27T17:49Z |
 
 ## The last 20 builds
 
-The remaining 41 are in [`builds.tsv`](builds.tsv), which is the record.
+The remaining 43 are in [`builds.tsv`](builds.tsv), which is the record.
 
 | # | Date (UTC) | Commit | Compiler | Kernel | ISO | Result | Environments | Note |
 | - | ---------- | ------ | -------- | ------ | --- | ------ | ------------ | ---- |
-| 42 | 2026-09-26T16:33Z | `cb2bb59` | gcc 13.2.0 | 3854096 | 13178880 | passed (80 assertions) | QEMU q35, VirtualBox, Bochs | Notepad and System Info; the window demonstration removed |
-| 43 | 2026-09-26T17:32Z | `2e61dcc` | gcc 13.2.0 | 3859840 | 13185024 | passed (80 assertions) | QEMU q35, VirtualBox, Bochs | The owner's bars, buttons, pointer and icons |
 | 44 | 2026-09-26T17:42Z | `38fbb4f` | gcc 13.2.0 | 3859840 | 13185024 | passed (80 assertions) | QEMU q35, VirtualBox, Bochs | The panel's icons without buttons |
 | 45 | 2026-09-26T19:39Z | `bf5c871` *(modified)* | gcc 13.2.0 | 3984272 | 13309952 | passed (80 assertions) |  |  |
 | 46 | 2026-09-26T19:50Z | `e478bff` *(modified)* | gcc 13.2.0 | 3990144 | 13316096 | passed (80 assertions) |  |  |
@@ -385,5 +383,7 @@ The remaining 41 are in [`builds.tsv`](builds.tsv), which is the record.
 | 59 | 2026-09-27T17:09Z | `813adff` | gcc 13.2.0 | 4119360 | 13445120 | passed (80 assertions) | QEMU q35;VirtualBox;Bochs | Arithmetic expansion |
 | 60 | 2026-09-27T17:09Z | `813adff` *(modified)* | gcc 13.2.0 | 4118968 | 13445120 | failed | QEMU q35 | Negative: 813adff with the tokeniser's $(( recognition disabled; self-test fails |
 | 61 | 2026-09-27T17:34Z | `f69d142` | gcc 13.2.0 | 4119360 | 13445120 | passed (80 assertions) | QEMU q35 | Rebuild of 813adff (arithmetic expansion) for the archive; build 59's own image was overwritten by the negative test |
+| 62 | 2026-09-27T17:49Z | `e827a72` | gcc 13.2.0 | 4119360 | 13445120 | passed (80 assertions) | QEMU q35;VirtualBox;Bochs | Icons on the desktop |
+| 63 | 2026-09-27T17:49Z | `e827a72` *(modified)* | gcc 13.2.0 | 4119360 | 13445120 | failed | QEMU q35 | Negative: e827a72 with desktop = yes removed from the shipped session.conf; config-check fails |
 
 <!-- END GENERATED -->
