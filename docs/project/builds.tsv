@@ -87,3 +87,5 @@ number	date	commit	dirty	compiler	cc_version	kernel	iso	result	assertions	enviro
 67	2026-09-27T18:04Z	3233859	no	gcc	13.2.0	4121896	13447168	passed	80	QEMU q35;VirtualBox;Bochs	-	Window list without buttons
 68	2026-09-27T18:14Z	9cde12b	no	gcc	13.2.0	4122096	13447168	passed	80	QEMU q35;VirtualBox;Bochs	-	Bar as a row of icons, open programs underlined
 69	2026-09-27T18:15Z	9cde12b	yes	gcc	13.2.0	4122072	13447168	failed	-	QEMU q35	-	Negative: 9cde12b with window_list naming no owner; window-check fails
+70	2026-09-27T22:02Z	fb0beab	no	gcc	13.2.0	4124456	13449216	passed	80	QEMU q35;VirtualBox;Bochs	-	Nested parentheses bounded in arithmetic
+71	2026-09-27T22:03Z	fb0beab	yes	gcc	13.2.0	4124456	13449216	did-not-boot	-	QEMU q35	-	Negative: fb0beab with the parenthesis bound lifted; self-test fails

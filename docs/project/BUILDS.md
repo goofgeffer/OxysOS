@@ -352,21 +352,19 @@ regenerates it and fails if what is here differs.*
 
 | | |
 | --- | --- |
-| Builds recorded | 69 |
-| Verified | 57 passed, 12 not |
+| Builds recorded | 71 |
+| Verified | 58 passed, 13 not |
 | Compilers | gcc |
 | Environments | Bochs, QEMU, QEMU q35, QEMU q35,  VirtualBox,  Bochs, VirtualBox |
 | First | 2026-09-17T01:34Z |
-| Latest | 2026-09-27T18:15Z |
+| Latest | 2026-09-27T22:03Z |
 
 ## The last 20 builds
 
-The remaining 49 are in [`builds.tsv`](builds.tsv), which is the record.
+The remaining 51 are in [`builds.tsv`](builds.tsv), which is the record.
 
 | # | Date (UTC) | Commit | Compiler | Kernel | ISO | Result | Environments | Note |
 | - | ---------- | ------ | -------- | ------ | --- | ------ | ------------ | ---- |
-| 50 | 2026-09-27T02:21Z | `049e06a` | gcc 13.2.0 | 4064768 | 13389824 | passed (80 assertions) | QEMU q35;VirtualBox;Bochs | File and folder pictures in Files |
-| 51 | 2026-09-27T02:57Z | `e306ecd` | gcc 13.2.0 | 4064768 | 13389824 | passed (80 assertions) | QEMU q35;VirtualBox;Bochs | Launcher gap between icon and name |
 | 52 | 2026-09-27T03:27Z | `cc15f88` | gcc 13.2.0 | 4064768 | 13389824 | passed (80 assertions) | QEMU q35;VirtualBox;Bochs | init-check waits for its parent to sleep |
 | 53 | 2026-09-27T03:27Z | `cc15f88` *(modified)* | gcc 13.2.0 | 4064768 | 13389824 | passed (80 assertions) | QEMU q35 | Negative: cc15f88 with its parent delayed 40M iterations before pause; passes |
 | 54 | 2026-09-27T03:28Z | `cc15f88` *(modified)* | gcc 13.2.0 | 4064768 | 13389824 | did-not-boot | QEMU q35 | Negative: the old init-check with its parent delayed 40M before pause; hangs at its first line |
@@ -385,5 +383,7 @@ The remaining 49 are in [`builds.tsv`](builds.tsv), which is the record.
 | 67 | 2026-09-27T18:04Z | `3233859` | gcc 13.2.0 | 4121896 | 13447168 | passed (80 assertions) | QEMU q35;VirtualBox;Bochs | Window list without buttons |
 | 68 | 2026-09-27T18:14Z | `9cde12b` | gcc 13.2.0 | 4122096 | 13447168 | passed (80 assertions) | QEMU q35;VirtualBox;Bochs | Bar as a row of icons, open programs underlined |
 | 69 | 2026-09-27T18:15Z | `9cde12b` *(modified)* | gcc 13.2.0 | 4122072 | 13447168 | failed | QEMU q35 | Negative: 9cde12b with window_list naming no owner; window-check fails |
+| 70 | 2026-09-27T22:02Z | `fb0beab` | gcc 13.2.0 | 4124456 | 13449216 | passed (80 assertions) | QEMU q35;VirtualBox;Bochs | Nested parentheses bounded in arithmetic |
+| 71 | 2026-09-27T22:03Z | `fb0beab` *(modified)* | gcc 13.2.0 | 4124456 | 13449216 | did-not-boot | QEMU q35 | Negative: fb0beab with the parenthesis bound lifted; self-test fails |
 
 <!-- END GENERATED -->
