@@ -226,7 +226,14 @@ static bool ShellApplyAssignment(const char *word)
     if (!ShellExpandWord(&word[name_length + 1U], ShellAssignmentText, sizeof ShellAssignmentText,
                          ShellLookupParameter, NULL))
     {
-        (void)fprintf(stderr, "sh: an assignment's value could not be expanded.\n");
+        if (ShellArithmeticFault() != NULL)
+        {
+            (void)fprintf(stderr, "sh: arithmetic: %s.\n", ShellArithmeticFault());
+        }
+        else
+        {
+            (void)fprintf(stderr, "sh: an assignment's value could not be expanded.\n");
+        }
 
         return false;
     }
@@ -290,6 +297,13 @@ static int ShellRunCommand(const ShellCommand *command, bool *exit_requested, bo
                 !ShellExpandWord(command->word[index], at, sizeof ShellArgumentText - used,
                                  ShellLookupParameter, NULL))
             {
+                if (ShellArithmeticFault() != NULL)
+                {
+                    (void)fprintf(stderr, "sh: arithmetic: %s.\n", ShellArithmeticFault());
+
+                    return 1;
+                }
+
                 (void)fprintf(stderr, "sh: a word could not be expanded, or the words of one "
                                       "command are longer than %u bytes.\n",
                               (unsigned)sizeof ShellArgumentText);

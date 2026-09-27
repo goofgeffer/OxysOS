@@ -432,6 +432,8 @@ static const char *VerifyShellLookup(void *context, const char *name)
     if (strcmp(name, "EMPTY") == 0) { return ""; }
     if (strcmp(name, "Q") == 0) { return "it's \"quoted\""; }
     if (strcmp(name, "?") == 0) { return "3"; }
+    if (strcmp(name, "N") == 0) { return "7"; }
+    if (strcmp(name, "NEG") == 0) { return "-3"; }
 
     return NULL;
 }
@@ -514,6 +516,60 @@ static void VerifyShellExpansion(void)
     VerifyShellRequire(VerifyShellExpandsTo("a'b'\"c$HOME\"d", "abc/bind"),
                        "quote removal and expansion did not compose");
 
+    /*
+     * Arithmetic expansion, of 2026-09-27: Section 2.6.4. Each operator level
+     * is reached, a variable is read with and without `$`, the constants of
+     * three bases are read, and division truncates toward zero as C's does.
+     */
+    VerifyShellRequire(VerifyShellExpandsTo("$((2 + 3 * 4))", "14") &&
+                           VerifyShellExpandsTo("$(( (2 + 3) * 4 ))", "20"),
+                       "arithmetic did not keep C's precedence, or its parentheses");
+    VerifyShellRequire(VerifyShellExpandsTo("$((-7 / 2))", "-3") &&
+                           VerifyShellExpandsTo("$((-7 % 2))", "-1"),
+                       "division did not truncate toward zero");
+    VerifyShellRequire(VerifyShellExpandsTo("$((1 << 4 | 1))", "17") &&
+                           VerifyShellExpandsTo("$((5 > 3 && 2 < 1))", "0") &&
+                           VerifyShellExpandsTo("$((!0 + ~0))", "0") &&
+                           VerifyShellExpandsTo("$((3 > 2 ? 10 : 20))", "10"),
+                       "a shift, a comparison, a logical, a unary or the conditional was wrong");
+    VerifyShellRequire(VerifyShellExpandsTo("$((N * 2))", "14") &&
+                           VerifyShellExpandsTo("$(($N + NEG))", "4") &&
+                           VerifyShellExpandsTo("$((UNSET + 1))", "1"),
+                       "a variable in an expression was not read as its number, or unset as zero");
+    VerifyShellRequire(VerifyShellExpandsTo("$((0x1F + 010))", "39"),
+                       "a hexadecimal or an octal constant was misread");
+    VerifyShellRequire(VerifyShellExpandsTo("a$((1+1))b", "a2b") &&
+                           VerifyShellExpandsTo("\"$((1+1))\"", "2") &&
+                           VerifyShellExpandsTo("$(( $((2*3)) + 1 ))", "7"),
+                       "arithmetic within a word, within double quotes, or nested did not expand");
+    {
+        char out[LINE_CAPACITY];
+
+        VerifyShellRequire(!ShellExpandWord("$((1 / 0))", out, sizeof out, VerifyShellLookup, NULL) &&
+                               (ShellArithmeticFault() != NULL) &&
+                               (strcmp(ShellArithmeticFault(), "division by zero") == 0),
+                           "a division by zero was not refused by name");
+        VerifyShellRequire(!ShellExpandWord("$((HOME + 1))", out, sizeof out, VerifyShellLookup,
+                                            NULL) &&
+                               !ShellExpandWord("$((1 +))", out, sizeof out, VerifyShellLookup,
+                                                NULL),
+                           "a variable not holding a number, or a malformed expression, expanded");
+    }
+
+    /* The tokeniser keeps an expression's blanks and operator characters in
+     * its word, and a line ending inside one continues. */
+    {
+        size_t offending = 0U;
+
+        VerifyShellRequire(
+            (VerifyShellParseLine("echo $((2 < 3))", &offending) == SHELL_PARSE_OK) &&
+                (VerifyShellList.pipeline[0].command[0].word_count == 2U) &&
+                VerifyShellWordIs(VerifyShellList.pipeline[0].command[0].word[1], "$((2 < 3))"),
+            "an arithmetic expansion was split, or read as a redirection");
+    }
+    VerifyShellRequire(ShellTokenise("echo $((1 +", &VerifyShellTokens) == SHELL_PARSE_INCOMPLETE,
+                       "a line ending inside an arithmetic expansion was not incomplete");
+
     /* The variable table: set, get, export, and the two refusals. */
     ShellVariablesInitialise();
     VerifyShellRequire(ShellVariableSet("PATH", "/bin") && (strcmp(ShellVariableGet("PATH"), "/bin") == 0),
@@ -529,6 +585,19 @@ static void VerifyShellExpansion(void)
                        "exporting an unset name did not create an empty exported variable");
     VerifyShellRequire(!ShellVariableSet("1bad", "x"), "a name beginning with a digit was set");
     VerifyShellRequire(ShellVariableCount() == 2U, "the table does not hold the two variables set");
+
+    /* An assignment in an expression sets the shell's variable, and one in the
+     * branch `&&` does not take neither sets it nor has its division refused:
+     * `$((n != 0 && 10 / n))` is how a person guards a division. */
+    VerifyShellRequire(VerifyShellExpandsTo("$((z = 6 * 7))", "42") &&
+                           (ShellVariableGet("z") != NULL) &&
+                           (strcmp(ShellVariableGet("z"), "42") == 0),
+                       "an assignment in an expression did not set the variable");
+    VerifyShellRequire(VerifyShellExpandsTo("$((0 && (w = 1)))", "0") &&
+                           (ShellVariableGet("w") == NULL) &&
+                           VerifyShellExpandsTo("$((0 && 1 / 0))", "0"),
+                       "the branch && does not take was evaluated");
+    (void)ShellVariableUnset("z");
 
     {
         char big[SHELL_VALUE_MAXIMUM + 2U];

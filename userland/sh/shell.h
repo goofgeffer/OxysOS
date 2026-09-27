@@ -13,7 +13,7 @@
  *          ShellUnquote, ShellParseStatusName, SHELL_TOKEN_MAXIMUM,
  *          SHELL_TEXT_MAXIMUM, SHELL_REDIRECTION_MAXIMUM,
  *          SHELL_COMMAND_MAXIMUM, SHELL_PIPELINE_MAXIMUM — and, of sub-task
- *          8.3, ShellLookup, ShellExpandWord, ShellIsName,
+ *          8.3, ShellLookup, ShellExpandWord, ShellArithmetic, ShellIsName,
  *          ShellIsAssignmentWord, ShellVariableSet, ShellVariableGet,
  *          ShellVariableExport, ShellVariableIsExported, ShellVariableCount,
  *          ShellVariableAt, ShellVariablesInitialise; of 8.4, ShellRunProgram
@@ -299,6 +299,18 @@ typedef const char *(*ShellLookup)(void *context, const char *name);
  */
 bool ShellExpandWord(const char *word, char *destination, size_t capacity,
                      ShellLookup lookup, void *context);
+
+/*
+ * Evaluates the text of a `$((expression))`, its parameters already expanded,
+ * as Section 2.6.4 has it: the ISO C integer operators upon signed long, with
+ * assignment through ShellVariableSet. False where it cannot be evaluated;
+ * ShellArithmeticFault then says why until ShellArithmeticClear, which every
+ * ShellExpandWord calls first, so that a fault is never one of an earlier word.
+ * arith.c.
+ */
+bool ShellArithmetic(const char *expression, long *value, ShellLookup lookup, void *context);
+const char *ShellArithmeticFault(void);
+void ShellArithmeticClear(void);
 
 /*
  * The built-in commands, of sub-task 8.3, in userland/sh/builtins.c — the one

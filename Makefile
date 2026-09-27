@@ -202,6 +202,7 @@ LIBC_ASM_SOURCES := libc/syscall/invoke.asm
 
 SHELL_SOURCES := userland/sh/lexer.c \
                  userland/sh/expand.c \
+                 userland/sh/arith.c \
                  userland/sh/variables.c \
                  userland/sh/parser.c
 

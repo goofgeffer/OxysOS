@@ -3,16 +3,21 @@
 /*
  * File: userland/sh/expand.c
  * Purpose: The word expansion of sub-task 8.3, as far as the built-ins need
- *          it: parameter expansion — `$NAME`, `${NAME}` and `$?` — performed
- *          upon a word with its quotes still upon it, and the quote removal of
- *          Section 2.6.7 applied last, in one pass, so that a `$` within single
- *          quotes is a character and one within double quotes is not.
- * Key functions: ShellExpandWord.
+ *          it: parameter expansion — `$NAME`, `${NAME}` and `$?` — and, since
+ *          2026-09-27, arithmetic expansion, `$((expression))`, evaluated by
+ *          arith.c; performed upon a word with its quotes still upon it, and
+ *          the quote removal of Section 2.6.7 applied last, in one pass, so
+ *          that a `$` within single quotes is a character and one within
+ *          double quotes is not.
+ * Key functions: ShellExpandWord, ShellExpandArithmetic.
  * References:
  *   - IEEE Std 1003.1-2017, Section 2.6 (Word Expansions): the order — tilde,
  *     parameter, command, arithmetic, field splitting, pathname expansion,
- *     quote removal — of which parameter expansion and quote removal are here
- *     and the rest are recorded as absent in docs/design/SHELL.md.
+ *     quote removal — of which parameter expansion, arithmetic expansion and
+ *     quote removal are here and the rest are recorded as absent in
+ *     docs/design/SHELL.md.
+ *   - IEEE Std 1003.1-2017, Section 2.6.4 (Arithmetic Expansion), and 2.6.3:
+ *     `$((` is arithmetic in preference to a command substitution.
  *   - IEEE Std 1003.1-2017, Section 2.6.2 (Parameter Expansion): `${name}` and
  *     `$name`, the name being the longest sequence of the characters of a
  *     name; and Section 2.5.2, the special parameter `?`.
@@ -76,6 +81,93 @@ static bool ShellExpandPutString(char *destination, size_t capacity, size_t *out
             return false;
         }
     }
+
+    return true;
+}
+
+/*
+ * The longest expression a `$((…))` may hold, and its expansion. It is a local
+ * of the function below and not a static, because an expression may hold
+ * another `$((…))`, which expands through the same function.
+ */
+#define SHELL_ARITH_TEXT 512U
+
+/*
+ * Expands a `$((expression))` at word[*index], of 2026-09-27, Section 2.6.4:
+ * the expression's parameters are expanded and its quotes removed, as if it
+ * stood within double quotes, and the result evaluated by arith.c; its value,
+ * in decimal, is appended. The tokeniser has made sure the `))` is there.
+ */
+static bool ShellExpandArithmetic(const char *word, size_t *index, char *destination,
+                                  size_t capacity, size_t *out, ShellLookup lookup,
+                                  void *context)
+{
+    char inner[SHELL_ARITH_TEXT + 1U];
+    char expanded[SHELL_ARITH_TEXT + 1U];
+    char digits[24];
+    size_t depth = 0U;
+    size_t end = *index + 1U;
+    size_t length;
+    size_t count = 0U;
+    unsigned long magnitude;
+    long value;
+
+    for (;;)
+    {
+        if (word[end] == '\0')
+        {
+            return false;
+        }
+
+        depth += (word[end] == '(') ? 1U : 0U;
+
+        if ((word[end] == ')') && (--depth == 0U))
+        {
+            break;
+        }
+
+        ++end;
+    }
+
+    /* The expression stands between `$((` and the closing `))`. */
+    length = (end >= (*index + 4U)) ? (end - 1U - (*index + 3U)) : 0U;
+
+    if ((word[end - 1U] != ')') || (length > SHELL_ARITH_TEXT))
+    {
+        return false;
+    }
+
+    memcpy(inner, &word[*index + 3U], length);
+    inner[length] = '\0';
+
+    if (!ShellExpandWord(inner, expanded, sizeof expanded, lookup, context) ||
+        !ShellArithmetic(expanded, &value, lookup, context))
+    {
+        return false;
+    }
+
+    magnitude = (value < 0) ? (0UL - (unsigned long)value) : (unsigned long)value;
+
+    do
+    {
+        digits[count++] = (char)('0' + (int)(magnitude % 10UL));
+        magnitude /= 10UL;
+    } while (magnitude != 0UL);
+
+    if ((value < 0) && !ShellExpandPut(destination, capacity, out, '-'))
+    {
+        return false;
+    }
+
+    while (count > 0U)
+    {
+        if (!ShellExpandPut(destination, capacity, out, digits[--count]))
+        {
+            return false;
+        }
+    }
+
+    *index = end + 1U;
 
     return true;
 }
@@ -148,11 +240,27 @@ static bool ShellExpandParameter(const char *word, size_t *index, char *destinat
                                 (lookup != NULL) ? lookup(context, name) : NULL);
 }
 
+/* A `$` at word[*index]: arithmetic where `$((` begins it, which Section 2.6.3
+ * gives precedence over a command substitution's `$(`, and a parameter
+ * otherwise. */
+static bool ShellExpandDollar(const char *word, size_t *index, char *destination,
+                              size_t capacity, size_t *out, ShellLookup lookup, void *context)
+{
+    if ((word[*index + 1U] == '(') && (word[*index + 2U] == '('))
+    {
+        return ShellExpandArithmetic(word, index, destination, capacity, out, lookup, context);
+    }
+
+    return ShellExpandParameter(word, index, destination, capacity, out, lookup, context);
+}
+
 bool ShellExpandWord(const char *word, char *destination, size_t capacity,
                      ShellLookup lookup, void *context)
 {
     size_t out = 0U;
     size_t index = 0U;
+
+    ShellArithmeticClear();
 
     if ((word == NULL) || (destination == NULL) || (capacity == 0U))
     {
@@ -234,7 +342,7 @@ bool ShellExpandWord(const char *word, char *destination, size_t capacity,
 
                 if (inner == '$')
                 {
-                    if (!ShellExpandParameter(word, &index, destination, capacity, &out,
+                    if (!ShellExpandDollar(word, &index, destination, capacity, &out,
                                               lookup, context))
                     {
                         return false;
@@ -261,7 +369,7 @@ bool ShellExpandWord(const char *word, char *destination, size_t capacity,
 
         if (character == '$')
         {
-            if (!ShellExpandParameter(word, &index, destination, capacity, &out, lookup,
+            if (!ShellExpandDollar(word, &index, destination, capacity, &out, lookup,
                                       context))
             {
                 return false;

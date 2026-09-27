@@ -20,11 +20,11 @@
  * What of Section 2.3 is not here.
  *
  *   Rule 5, the expansions: an unquoted `$` or backquote begins an expansion
- *   and the tokeniser is to recognise its extent. No expansion is performed at
- *   this sub-task, so a `$` is an ordinary character of a word and nothing
- *   here looks for the `}` or the `)` that would close one. When the
- *   expansions arrive the tokeniser will have to find those extents, and that
- *   is recorded as a limitation rather than pretended to.
+ *   and the tokeniser is to recognise its extent. Only arithmetic expansion's
+ *   is recognised, since 2026-09-27: `$((` runs to its matching `))`, because
+ *   its expression holds blanks and operator characters that would otherwise
+ *   end the word. `${…}` holds neither in the forms expand.c accepts, and
+ *   command substitution does not exist here.
  *
  *   The here-document of `<<`, whose body is the lines that follow: the
  *   operator is recognised, so that it is refused by name, and no body is read.
@@ -232,6 +232,37 @@ static size_t ShellWordExtent(const char *at, bool *unterminated)
                 ++index;
             }
 
+            continue;
+        }
+
+        if ((character == '$') && (at[index + 1U] == '(') && (at[index + 2U] == '('))
+        {
+            /* Rule 5, for arithmetic expansion alone: `$((` extends the word to
+             * its matching `))`, blanks and operator characters within it
+             * included — `$((2 < 3))` is one word and not a redirection. A
+             * line that ends inside one is incomplete, as an open quote is. */
+            size_t depth = 0U;
+            size_t scan = index + 1U;
+
+            for (;;)
+            {
+                if (at[scan] == '\0')
+                {
+                    *unterminated = true;
+                    return index;
+                }
+
+                depth += (at[scan] == '(') ? 1U : 0U;
+
+                if ((at[scan] == ')') && (--depth == 0U))
+                {
+                    break;
+                }
+
+                ++scan;
+            }
+
+            index = scan + 1U;
             continue;
         }
 

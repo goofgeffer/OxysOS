@@ -120,9 +120,9 @@ forms, each cited at its code.
 ## 4. Variables and expansion
 
 Variables are a fixed table of sixty-four names, each exported or not. The
-expansions are `$NAME`, `${NAME}` and `$?`; an assignment word `NAME=value`
-before a command's name is recorded as one (Section 2.10.2, rule 7) and after it
-is a word.
+expansions are `$NAME`, `${NAME}`, `$?` and `$((expression))`; an assignment
+word `NAME=value` before a command's name is recorded as one (Section 2.10.2,
+rule 7) and after it is a word.
 
 - **Expansion and quote removal are one pass**, because an expanded value's
   characters are never quoting characters: done as two passes, a value holding a
@@ -130,6 +130,21 @@ is a word.
   expand, and a backslash escapes as Section 2.2 says.
 - **Expansion takes a lookup function**, so the kernel's self-test asserts it
   against a table of its own and `$?` is the shell's to answer.
+- **Arithmetic expansion**, `$((expression))`, is Section 2.6.4's, in
+  [`../../userland/sh/arith.c`](../../userland/sh/arith.c): the ISO C integer
+  operators at C's precedence, upon signed long; decimal, octal and hexadecimal
+  constants; variables named with or without `$`, unset or empty as zero and
+  otherwise refused unless they hold a number; and the assignment operators,
+  `=` to `|=`, which set the shell's variable. The expression's parameters are
+  expanded first, as within double quotes. The tokeniser keeps `$((` to its
+  matching `))` as one word, since the expression holds blanks and `<`, `>`,
+  `&` and `|`, and a line ending inside one continues as an open quote does.
+- **Arithmetic never does what C leaves undefined**: sums, differences and
+  products wrap, a shift's count is taken modulo 64, and division or remainder
+  by zero, and the least value divided by minus one, are refused by name
+  (`sh: arithmetic: division by zero.`) and fail the command. **A branch not
+  taken is parsed and not evaluated**: `&&`, `||` and `?:` neither assign nor
+  divide in the side they skip, so `$((n != 0 && 10 / n))` guards a division.
 
 ## 5. The working directory
 
@@ -307,6 +322,7 @@ the programs `line-check`, `dir-check`, `env-check`, `file-check` and
 | Quote removal: single quotes literal, backslash within double quotes only before `$` `` ` `` `"` `\` and newline, adjacent parts joined. | `'\n'` becoming a newline. |
 | The parse of lists, pipelines and redirections; continuations; unexpected tokens at their position; compound commands refused by name; two commands of twenty words read back whole and apart. | An empty pipeline run silently; a program called `if`; one command's words running into the next's in the line's pool. |
 | Expansion: the longest name, `$?`, unset as empty, quoting respected, values with quotes passed through; assignments before and after the name. | `$HOMEx` expanding `$HOME`; a value closing a quote the person opened. |
+| Arithmetic: C's precedence and parentheses, division toward zero, shifts, comparisons, logicals, unaries and `?:`; variables with and without `$`, unset as zero; three bases of constant; within a word, within double quotes and nested; division by zero refused by name, a non-number and a malformed expression refused; `$((2 < 3))` one word, an unclosed one incomplete; an assignment sets the variable, and the branch `&&` skips neither assigns nor divides. | `2 + 3 * 4` as 20; `$((2 < 3))` read as a redirection; a guarded division refused; a crash on `/ 0`. |
 | `dir-check`: the root at start; `chdir` and `getcwd` agree and `open` follows; paths canonicalised; `ENOENT`, `ENOTDIR`, `ERANGE` and `ENAMETOOLONG`; a child inherits and does not affect the parent. | A working directory `open` ignores; a child that starts at the root. |
 | `env-check` receives its arguments and exported variables only; exit statuses of a program, a failure and a name not found; a parent's stack survives a child's `execve`. | Quotes reaching a program; an unexported variable leaking. |
 | `file-check`: writes advance, append and truncate, shared positions through `dup2`, a closed 2 reverting, inheritance; pipes carry twelve kibibytes through a page intact, end at the last writer, refuse the wrong direction, and are `EPIPE` with no reader. | A duplicate closed from under another; a pipe that loses or duplicates bytes, or never ends. |
@@ -321,8 +337,9 @@ the programs `line-check`, `dir-check`, `env-check`, `file-check` and
 3. The keyboard and the serial line are merged without an order between them;
    the serial path is exercised by use, not asserted.
 4. No compound commands, functions, subshells or here-documents; no positional
-   parameters, `${NAME:-word}`, tilde, command substitution, arithmetic, field
-   splitting or pathname expansion.
+   parameters, `${NAME:-word}`, tilde, command substitution, field splitting or
+   pathname expansion. Arithmetic has no `++`, `--` or comma operator, which
+   Section 2.6.4 does not require.
 5. A redirection on a built-in outside a pipeline is named and not performed.
 6. The environment and argument vectors are bounded at 128 strings, and a
    process at 1024 descriptors.
