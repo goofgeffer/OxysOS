@@ -126,6 +126,11 @@
 #define SESSION_ICON_UNITS  24
 #define SESSION_ICON_MARGIN 2
 
+/* The space between a launcher entry's icon and its name, in units, of
+ * 2026-09-27 at the project owner's request: at the icon's margin alone the
+ * name stood hard against the picture and read as part of it. */
+#define SESSION_MENU_TEXT_GAP 6
+
 /*
  * The least extent a window may have, which the panel's height must not fall
  * below. Fourteen units at a scale of one is fourteen pixels, and the manager
@@ -1478,7 +1483,7 @@ static void SessionDrawMenu(void)
     /* The text begins after the icon's slot whether or not an entry has a
      * picture, so that the names stand in one column and a launcher of three
      * entries does not read as three margins. */
-    const int32_t text_x = margin + slot + margin;
+    const int32_t text_x = margin + slot + (SESSION_MENU_TEXT_GAP * SessionScale);
 
     SessionFill(SessionMenu, 0, 0, column * (int32_t)((columns > 0U) ? columns : 1U),
                 row * (int32_t)rows, SESSION_PANEL);

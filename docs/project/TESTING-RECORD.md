@@ -15,6 +15,7 @@ that was cleared that day and renumbered from 1; the date identifies the image.
 
 | Date | Where | What | Result |
 | ---- | ----- | ---- | ------ |
+| 2026-09-27 | QEMU q35, VirtualBox and Bochs | The launcher's gap between icon and name | Passed; under QEMU twelve pixels between each icon and its name; every self-test under QEMU and Bochs; VirtualBox passed four of six boots, one hang in `init-check` and one failure whose log was lost |
 | 2026-09-27 | QEMU q35, VirtualBox and Bochs | File and folder pictures in Files | Passed; under QEMU every folder of `/` and `/share` and every file of `/share/icons` pictured, no edge left when a row emptied; every self-test on all three; one VirtualBox hang in `init-check`, three reruns passed |
 | 2026-09-27 | QEMU q35, VirtualBox and Bochs | Kernel tables grown | Passed; eighteen System Info windows open at once under QEMU; descriptors filled to 1024 by `file-check`; every self-test on all three; one VirtualBox hang in `init-check`, the rerun passed |
 | 2026-09-27 | QEMU q35, VirtualBox and Bochs | Userland lists grown in the heap | Passed; 25 added launcher entries all offered by Settings in two columns and by the launcher in two, a pin saved to a 4174-byte file; every self-test on all three |
