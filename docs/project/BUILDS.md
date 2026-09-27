@@ -352,20 +352,19 @@ regenerates it and fails if what is here differs.*
 
 | | |
 | --- | --- |
-| Builds recorded | 46 |
-| Verified | 39 passed, 7 not |
+| Builds recorded | 47 |
+| Verified | 40 passed, 7 not |
 | Compilers | gcc |
-| Environments | Bochs, QEMU, QEMU q35,  VirtualBox,  Bochs, VirtualBox |
+| Environments | Bochs, QEMU, QEMU q35, QEMU q35,  VirtualBox,  Bochs, VirtualBox |
 | First | 2026-09-17T01:34Z |
-| Latest | 2026-09-26T19:50Z |
+| Latest | 2026-09-27T00:39Z |
 
 ## The last 20 builds
 
-The remaining 26 are in [`builds.tsv`](builds.tsv), which is the record.
+The remaining 27 are in [`builds.tsv`](builds.tsv), which is the record.
 
 | # | Date (UTC) | Commit | Compiler | Kernel | ISO | Result | Environments | Note |
 | - | ---------- | ------ | -------- | ------ | --- | ------ | ------------ | ---- |
-| 27 | 2026-09-24T22:06Z | `51e019e` | gcc 13.2.0 | 3718160 | 10946560 | passed (78 assertions) |  | Launcher icons for Files and Windows |
 | 28 | 2026-09-24T22:37Z | `4bd8769` | gcc 13.2.0 | 3718160 | 13043712 | passed (78 assertions) |  | New Files icon; rose photograph background; ramdisk 4 MiB |
 | 29 | 2026-09-24T22:42Z | `1df1a73` | gcc 13.2.0 | 3718160 | 13043712 | passed (78 assertions) |  | Files icon corner fixed; rose and cliff backgrounds |
 | 30 | 2026-09-25T01:32Z | `1b977fd` | gcc 13.2.0 | 3718160 | 13043712 | passed (78 assertions) |  | Background fallback to the shipped one; config-check reads the shipped copies |
@@ -385,5 +384,6 @@ The remaining 26 are in [`builds.tsv`](builds.tsv), which is the record.
 | 44 | 2026-09-26T17:42Z | `38fbb4f` | gcc 13.2.0 | 3859840 | 13185024 | passed (80 assertions) | QEMU q35, VirtualBox, Bochs | The panel's icons without buttons |
 | 45 | 2026-09-26T19:39Z | `bf5c871` *(modified)* | gcc 13.2.0 | 3984272 | 13309952 | passed (80 assertions) |  |  |
 | 46 | 2026-09-26T19:50Z | `e478bff` *(modified)* | gcc 13.2.0 | 3990144 | 13316096 | passed (80 assertions) |  |  |
+| 47 | 2026-09-27T00:39Z | `260e09a` | gcc 13.2.0 | 3990144 | 13316096 | passed (80 assertions) | QEMU q35;VirtualBox;Bochs | Settings buttons sized to their labels |
 
 <!-- END GENERATED -->
