@@ -131,9 +131,9 @@ button, the **pinned programs**, the window list, and the `using defaults` or
 pinned icons are recognisable. The session has no fill across the protocol, so
 the bar is a tile blitted in bands.
 
-**The clock** stands apart, in a panel-layer box of its own at the top right: a
-fifth of the screen's width and the bar's height, `HH:MM` centred
-([`UTILITIES.md`](UTILITIES.md)). The window manager keeps the rows of a panel
+**The clock** stands apart, in a panel-layer box of its own at the top right,
+as wide as the widest `HH:MM` with ten units either side and the bar's height,
+the time centred ([`UTILITIES.md`](UTILITIES.md)). The window manager keeps the rows of a panel
 against the top or bottom edge free of windows made full, so neither the box nor
 the bar covers a full window's controls ([`WINDOWS.md`](WINDOWS.md)).
 

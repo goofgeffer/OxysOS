@@ -113,11 +113,13 @@
 
 /*
  * The clock stands apart from the panel, in a box of its own at the top right
- * of the screen, a fifth of the screen's width and the panel's height. The
+ * of the screen, as wide as the widest time it can show and a margin either
+ * side, and the panel's height. The
  * window manager keeps the rows beside it free of windows made full, so it
  * covers no window's controls.
  */
-#define SESSION_CLOCK_SHARE 5
+#define SESSION_CLOCK_SHARE  5  /* The share of the width, where nothing measures. */
+#define SESSION_CLOCK_MARGIN 10 /* Units either side of the time. */
 
 /* The icon slot within a row: its extent in units, and the margin before it.
  * An icon of any extent is fitted to the slot, SessionDrawIcon, the shipped
@@ -586,10 +588,36 @@ static int32_t SessionPanelTextTop(void)
     return (SessionPanelHeight() - (8 * SessionScale)) / 2;
 }
 
-/* The clock's box: a fifth of the screen's width, at its top right. */
+/*
+ * The clock's box, at the top right: measured once, as the session starts, to
+ * the widest `HH:MM` of the ten made of one digit repeated, and a margin either
+ * side. The widest is taken, whatever the face's digits do, because a box
+ * measured to a narrow time would cut a wider one at the minute it appeared.
+ * A fifth of the screen where the text cannot be measured, which is what the
+ * box always was.
+ */
+static int32_t SessionClockBox;
+
 static int32_t SessionClockWidth(void)
 {
-    return SessionScreen.width / SESSION_CLOCK_SHARE;
+    if (SessionClockBox == 0)
+    {
+        int32_t widest = 0;
+
+        for (char digit = '0'; digit <= '9'; ++digit)
+        {
+            const char time[6] = { digit, digit, ':', digit, digit, '\0' };
+            const int32_t width = SessionTextWidth(SessionRoot, time, SessionScale);
+
+            widest = (width > widest) ? width : widest;
+        }
+
+        SessionClockBox = (widest > 0)
+                              ? widest + (2 * SESSION_CLOCK_MARGIN * SessionScale)
+                              : SessionScreen.width / SESSION_CLOCK_SHARE;
+    }
+
+    return SessionClockBox;
 }
 
 /* How many launcher entries are pinned to the panel. */
