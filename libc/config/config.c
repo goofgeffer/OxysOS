@@ -38,8 +38,8 @@ static const char ConfigFaultLongValue[] = "a value beyond the bound";
 static const char ConfigFaultUnclosedSection[] = "a section that is not closed by a bracket";
 static const char ConfigFaultUnclosedQuote[] = "a quoted value that is not closed";
 static const char ConfigFaultDuplicateKey[] = "a key given twice within one section";
-static const char ConfigFaultFull[] = "more settings than the store holds";
-static const char ConfigFaultTruncated[] = "the file is longer than the parser reads";
+static const char ConfigFaultFull[] = "more settings than memory could be found for";
+static const char ConfigFaultTruncated[] = "the rest of the file could not be held in memory";
 
 static bool ConfigIsSpace(char c)
 {
@@ -83,6 +83,19 @@ static void ConfigRecordFault(OxysConfig *config, size_t line, const char *reaso
     {
         ++config->faults_dropped;
     }
+}
+
+/* The entry at `index`: within the store while it lasts, then in `more`. */
+static OxysConfigEntry *ConfigAt(OxysConfig *config, size_t index)
+{
+    return (index < CONFIG_ENTRIES_INLINE) ? &config->entries[index]
+                                           : &config->more[index - CONFIG_ENTRIES_INLINE];
+}
+
+static const OxysConfigEntry *ConfigAtConst(const OxysConfig *config, size_t index)
+{
+    return (index < CONFIG_ENTRIES_INLINE) ? &config->entries[index]
+                                           : &config->more[index - CONFIG_ENTRIES_INLINE];
 }
 
 /* Copies at most `capacity` characters and says whether the whole fitted. */
@@ -176,7 +189,7 @@ static bool ConfigHasKey(const OxysConfig *config, const char *section, size_t o
 {
     for (size_t index = 0U; index < config->count; ++index)
     {
-        const OxysConfigEntry *const entry = &config->entries[index];
+        const OxysConfigEntry *const entry = ConfigAtConst(config, index);
 
         if ((entry->occurrence == occurrence) && ConfigSame(entry->section, section) &&
             ConfigSame(entry->key, key))
@@ -262,10 +275,10 @@ static bool ConfigParseLine(OxysConfig *config, const char *line, size_t length,
 
         for (size_t index = 0U; index < config->count; ++index)
         {
-            if (ConfigSame(config->entries[index].section, section) &&
-                (config->entries[index].occurrence >= *occurrence))
+            if (ConfigSame(ConfigAtConst(config, index)->section, section) &&
+                (ConfigAtConst(config, index)->occurrence >= *occurrence))
             {
-                *occurrence = config->entries[index].occurrence + 1U;
+                *occurrence = ConfigAtConst(config, index)->occurrence + 1U;
             }
         }
 
@@ -323,7 +336,12 @@ static bool ConfigParseLine(OxysConfig *config, const char *line, size_t length,
         return false;
     }
 
-    if (config->count >= CONFIG_ENTRIES_MAXIMUM)
+    /* Past the store, room is asked of the grower; without one, or where it
+     * refuses, the line is a fault like any other a file cannot hold. */
+    if ((config->count >= (CONFIG_ENTRIES_INLINE + config->more_capacity)) &&
+        ((config->grow == NULL) ||
+         !config->grow(config, config->count + 1U - CONFIG_ENTRIES_INLINE) ||
+         (config->count >= (CONFIG_ENTRIES_INLINE + config->more_capacity))))
     {
         ConfigRecordFault(config, number, ConfigFaultFull);
 
@@ -331,7 +349,7 @@ static bool ConfigParseLine(OxysConfig *config, const char *line, size_t length,
     }
 
     {
-        OxysConfigEntry *const entry = &config->entries[config->count];
+        OxysConfigEntry *const entry = ConfigAt(config, config->count);
 
         if (!ConfigCopyBounded(entry->key, CONFIG_KEY_MAXIMUM, &line[key_start],
                                key_end - key_start))
@@ -437,13 +455,13 @@ size_t OxysConfigCount(const OxysConfig *config, const char *section)
 
     for (size_t index = 0U; index < config->count; ++index)
     {
-        if (ConfigSame(config->entries[index].section, section))
+        if (ConfigSame(ConfigAtConst(config, index)->section, section))
         {
             any = true;
 
-            if (config->entries[index].occurrence > highest)
+            if (ConfigAtConst(config, index)->occurrence > highest)
             {
-                highest = config->entries[index].occurrence;
+                highest = ConfigAtConst(config, index)->occurrence;
             }
         }
     }
@@ -461,7 +479,7 @@ const char *OxysConfigValue(const OxysConfig *config, const char *section, size_
 
     for (size_t index = 0U; index < config->count; ++index)
     {
-        const OxysConfigEntry *const entry = &config->entries[index];
+        const OxysConfigEntry *const entry = ConfigAtConst(config, index);
 
         if ((entry->occurrence == occurrence) && ConfigSame(entry->section, section) &&
             ConfigSame(entry->key, key))

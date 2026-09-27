@@ -137,8 +137,7 @@
  */
 #define SESSION_EXTENT_MINIMUM 16
 
-/* How many programs the launcher may offer. */
-#define SESSION_ENTRIES_MAXIMUM 8
+/* The launcher's entries are as many as the file has, grown in the heap. */
 
 /*
  * The list of windows upon the panel, of 2026-09-23: one button per ordinary
@@ -150,7 +149,6 @@
  */
 #define SESSION_TASK_UNITS   72
 #define SESSION_TASK_GAP     2
-#define SESSION_TASKS_MAXIMUM 16U
 
 /*
  * The background, of 2026-09-23: the file `/etc/session.conf` names, read once
@@ -200,7 +198,8 @@ typedef struct SessionEntry
     bool pinned;
 } SessionEntry;
 
-static SessionEntry SessionEntries[SESSION_ENTRIES_MAXIMUM];
+static SessionEntry *SessionEntries;
+static size_t SessionEntryCapacity;
 static size_t SessionEntryCount;
 
 static OxysConfig SessionConfig;
@@ -213,8 +212,44 @@ static int64_t SessionPanel = -1;
 static int64_t SessionMenu = -1;
 static int64_t SessionClock = -1;
 
-static SyscallWindowEntry SessionTasks[SESSION_TASKS_MAXIMUM];
+static SyscallWindowEntry *SessionTasks;
+static size_t SessionTaskCapacity;
 static size_t SessionTaskCount;
+
+/*
+ * The array `array`, of `*capacity` elements of `size` bytes, with room for
+ * `wanted`: itself where it has it, or grown by doubling. Null where the heap
+ * refuses, the array then left as it was.
+ */
+static void *SessionGrow(void *array, size_t *capacity, size_t wanted, size_t size)
+{
+    size_t larger = (*capacity > 0U) ? *capacity : 4U;
+    void *grown;
+
+    if ((wanted <= *capacity) && (array != NULL))
+    {
+        return array;
+    }
+
+    while (larger < wanted)
+    {
+        larger *= 2U;
+    }
+
+    if (larger > (SIZE_MAX / size))
+    {
+        return NULL;
+    }
+
+    grown = realloc(array, larger * size);
+
+    if (grown != NULL)
+    {
+        *capacity = larger;
+    }
+
+    return grown;
+}
 
 static uint8_t SessionBackgroundBytes[SESSION_BACKGROUND_BYTES];
 static OxysImage SessionBackground;
@@ -1346,11 +1381,26 @@ static void SessionDrawPanel(bool open)
 /* Asks the kernel for the windows again, and draws the panel with them. */
 static void SessionRefreshTasks(void)
 {
-    const int64_t count = OxysWindowList(SessionTasks, SESSION_TASKS_MAXIMUM);
+    int64_t count = OxysWindowList(SessionTasks, SessionTaskCapacity);
+
+    /* window_list says how many there are even past the room given, so a
+     * list too short is grown and asked for again. Windows may open between
+     * the two calls, and whatever the second finds is what is shown. */
+    if ((count > 0) && ((uint64_t)count > SessionTaskCapacity))
+    {
+        SyscallWindowEntry *const grown = SessionGrow(SessionTasks, &SessionTaskCapacity,
+                                                      (size_t)count, sizeof *grown);
+
+        if (grown != NULL)
+        {
+            SessionTasks = grown;
+            count = OxysWindowList(SessionTasks, SessionTaskCapacity);
+        }
+    }
 
     SessionTaskCount = (count < 0) ? 0U
-                       : ((uint64_t)count > SESSION_TASKS_MAXIMUM) ? SESSION_TASKS_MAXIMUM
-                                                                  : (size_t)count;
+                       : ((uint64_t)count > SessionTaskCapacity) ? SessionTaskCapacity
+                                                                : (size_t)count;
     SessionDrawPanel(SessionMenu >= 0);
 }
 
@@ -1398,31 +1448,53 @@ static void SessionDrawIcon(int64_t window, int32_t x, int32_t y, int32_t slot,
     (void)OxysWindowBlit(window, &area, SessionTile);
 }
 
-/* The launcher: one row per program, drawn into a panel-layer window. */
+/*
+ * The rows of one column of the launcher: every entry, or as many as stand
+ * between the panel and the top of the screen, the rest going into further
+ * columns to the right. A launcher of one column as tall as its entries would,
+ * past a dozen or so, begin above the screen, and a window that does is one
+ * the window manager may refuse — which would leave a launcher that does not
+ * open at all.
+ */
+static size_t SessionMenuRows(void)
+{
+    const int32_t row = SESSION_ENTRY_UNITS * SessionScale;
+    const size_t fits = (SessionPanelTop() > row) ? (size_t)(SessionPanelTop() / row) : 1U;
+
+    return (SessionEntryCount < fits) ? ((SessionEntryCount > 0U) ? SessionEntryCount : 1U)
+                                      : fits;
+}
+
+/* The launcher: one row per program, in columns of SessionMenuRows, drawn into
+ * a panel-layer window. */
 static void SessionDrawMenu(void)
 {
     const int32_t row = SESSION_ENTRY_UNITS * SessionScale;
     const int32_t slot = SESSION_ICON_UNITS * SessionScale;
     const int32_t margin = SESSION_ICON_MARGIN * SessionScale;
+    const int32_t column = SESSION_LAUNCH_WIDTH * 3 * SessionScale;
+    const size_t rows = SessionMenuRows();
+    const size_t columns = (SessionEntryCount + rows - 1U) / rows;
     /* The text begins after the icon's slot whether or not an entry has a
      * picture, so that the names stand in one column and a launcher of three
      * entries does not read as three margins. */
     const int32_t text_x = margin + slot + margin;
 
-    SessionFill(SessionMenu, 0, 0, SESSION_LAUNCH_WIDTH * 3 * SessionScale,
-                row * (int32_t)SessionEntryCount, SESSION_PANEL);
+    SessionFill(SessionMenu, 0, 0, column * (int32_t)((columns > 0U) ? columns : 1U),
+                row * (int32_t)rows, SESSION_PANEL);
 
     for (size_t index = 0U; index < SessionEntryCount; ++index)
     {
-        const int32_t top = (int32_t)index * row;
+        const int32_t left = (int32_t)(index / rows) * column;
+        const int32_t top = (int32_t)(index % rows) * row;
 
         if (SessionEntries[index].has_picture)
         {
-            SessionDrawIcon(SessionMenu, margin, top + ((row - slot) / 2), slot,
+            SessionDrawIcon(SessionMenu, left + margin, top + ((row - slot) / 2), slot,
                             &SessionEntries[index].picture, SESSION_PANEL);
         }
 
-        SessionText(SessionMenu, text_x, top + ((row - (8 * SessionScale)) / 2),
+        SessionText(SessionMenu, left + text_x, top + ((row - (8 * SessionScale)) / 2),
                     SessionEntries[index].name, SESSION_INK, SESSION_PANEL, SessionScale);
     }
 
@@ -1466,8 +1538,21 @@ static void SessionOpenMenu(void)
      * it touches neither edge of the screen, so the window manager keeps no
      * rows for it from a window made full. */
     geometry.x = 0;
-    geometry.width = SESSION_LAUNCH_WIDTH * 3 * SessionScale;
-    geometry.height = SESSION_ENTRY_UNITS * SessionScale * (int32_t)SessionEntryCount;
+    {
+        const size_t rows = SessionMenuRows();
+        const size_t columns = (SessionEntryCount + rows - 1U) / rows;
+
+        geometry.width = SESSION_LAUNCH_WIDTH * 3 * SessionScale *
+                         (int32_t)((columns > 0U) ? columns : 1U);
+        geometry.height = SESSION_ENTRY_UNITS * SessionScale * (int32_t)rows;
+
+        /* Columns past the screen's width are cut; at the scales the session
+         * draws, that is some three dozen entries. */
+        if (geometry.width > SessionScreen.width)
+        {
+            geometry.width = SessionScreen.width;
+        }
+    }
 
     if (geometry.height < SESSION_EXTENT_MINIMUM)
     {
@@ -1668,19 +1753,37 @@ static void SessionLoadEntries(void)
 
     SessionEntryCount = 0U;
 
-    for (size_t index = 0U; (index < blocks) && (SessionEntryCount < SESSION_ENTRIES_MAXIMUM);
-         ++index)
+    for (size_t index = 0U; index < blocks; ++index)
     {
         const char *const run = OxysConfigValue(&SessionConfig, "launch", index, "run");
         const char *const name = OxysConfigValue(&SessionConfig, "launch", index, "name");
         const char *const icon = OxysConfigValue(&SessionConfig, "launch", index, "icon");
-        SessionEntry *const entry = &SessionEntries[SessionEntryCount];
+        SessionEntry *entry;
 
         if (run == NULL)
         {
             (void)fprintf(stderr, "session: a launcher entry with no `run` is not offered.\n");
             continue;
         }
+
+        /* Each entry holds its icon's pixels, so the room is taken as the
+         * entries are found; where the heap refuses, those found are offered
+         * and the rest are said to be missing rather than silently absent. */
+        {
+            SessionEntry *const grown = SessionGrow(SessionEntries, &SessionEntryCapacity,
+                                                    SessionEntryCount + 1U, sizeof *grown);
+
+            if (grown == NULL)
+            {
+                (void)fprintf(stderr, "session: no memory for more launcher entries.\n");
+                SessionSay(SYSCALL_NOTIFY_WARNING, "Not every launcher entry could be offered.");
+                break;
+            }
+
+            SessionEntries = grown;
+        }
+
+        entry = &SessionEntries[SessionEntryCount];
 
         SessionCopy(entry->run, CONFIG_VALUE_MAXIMUM, run);
         SessionCopy(entry->name, CONFIG_VALUE_MAXIMUM, (name != NULL) ? name : run);
@@ -1779,11 +1882,27 @@ static bool SessionReadConfiguration(bool starting)
 
     if (SessionEntryCount == 0U)
     {
-        SessionEntry *const entry = &SessionEntries[0];
+        SessionEntry *const grown =
+            SessionGrow(SessionEntries, &SessionEntryCapacity, 1U, sizeof *grown);
+        SessionEntry *entry;
 
         (void)fprintf(stderr, "session: neither %s nor %s offers anything to launch; the "
                               "launcher offers the terminal, with which they may be mended.\n",
                       SESSION_CONFIGURATION, SESSION_DEFAULTS);
+
+        if (grown == NULL)
+        {
+            /* A heap that cannot give one entry has left the session nothing
+             * to offer; said, since the launcher will be empty. */
+            (void)fprintf(stderr, "session: no memory even for the terminal's entry.\n");
+            redraw = SessionLoadBackground();
+            SessionUsingDefaults = defaults;
+
+            return redraw;
+        }
+
+        SessionEntries = grown;
+        entry = &SessionEntries[0];
 
         SessionCopy(entry->name, CONFIG_VALUE_MAXIMUM, SESSION_FALLBACK_NAME);
         SessionCopy(entry->run, CONFIG_VALUE_MAXIMUM, SESSION_FALLBACK_RUN);
@@ -1873,7 +1992,13 @@ static void SessionHandlePress(const SyscallWindowEvent *event)
     if (event->window == (uint32_t)SessionMenu)
     {
         const int32_t row = SESSION_ENTRY_UNITS * SessionScale;
-        const size_t chosen = (event->y >= 0) ? ((size_t)(event->y / row)) : SessionEntryCount;
+        const int32_t column = SESSION_LAUNCH_WIDTH * 3 * SessionScale;
+        const size_t rows = SessionMenuRows();
+        const size_t chosen = ((event->y >= 0) && (event->x >= 0) &&
+                               ((size_t)(event->y / row) < rows))
+                                  ? (((size_t)(event->x / column) * rows) +
+                                     (size_t)(event->y / row))
+                                  : SessionEntryCount;
 
         if (chosen < SessionEntryCount)
         {

@@ -57,10 +57,16 @@
 #define SETTINGS_ADVANCE ((int32_t)SYSCALL_WINDOW_TEXT_ADVANCE)
 #define SETTINGS_PITCH   12
 #define SETTINGS_COLUMNS 46
-#define SETTINGS_ROWS    18
+#define SETTINGS_ROWS_LEAST 18 /* The rows before any wrap or any pin past five. */
 
 /* The space between a button's edge and its label, in units of the scale. */
 #define SETTINGS_MARGIN  4
+
+/* The rows of the screen a window of Settings leaves free: its title band and
+ * the session's panel, neither of whose heights a program is told. Four rows
+ * are more than both at either scale, 96 pixels against 60 at scale two and
+ * 48 against 42 at one, so that Save is never drawn beneath the panel. */
+#define SETTINGS_ROWS_KEPT 4
 
 #define SETTINGS_PAPER OXYS_RGB(OXYS_PAPER_RED, OXYS_PAPER_GREEN, OXYS_PAPER_BLUE)
 #define SETTINGS_INK   OXYS_RGB(OXYS_INK_RED, OXYS_INK_GREEN, OXYS_INK_BLUE)
@@ -70,40 +76,143 @@
 #define SETTINGS_EDGE \
     OXYS_RGB(OXYS_BUTTON_EDGE_RED, OXYS_BUTTON_EDGE_GREEN, OXYS_BUTTON_EDGE_BLUE)
 
-/* The most backgrounds offered, and the most launcher entries shown. */
-#define SETTINGS_BACKGROUNDS_MAXIMUM 4U
-#define SETTINGS_ENTRIES_MAXIMUM     6U
-
-
 /* The sizes: 0 is the session's own choice from the screen. */
 static const char *const SettingsScaleNames[] = { "Automatic", "Small", "Large" };
 static const char *const SettingsScaleValues[] = { "0", "1", "2" };
 #define SETTINGS_SCALES 3U
 
-/* What is chosen, and what the files held when they were read. */
+/* What is chosen, and what the files held when they were read. The pins are
+ * apart from the rest, one per launcher entry, however many the file has. */
 typedef struct SettingsChoice
 {
     char background[CONFIG_VALUE_MAXIMUM + 1U]; /* Empty for none. */
     size_t scale;
-    bool pinned[SETTINGS_ENTRIES_MAXIMUM];
 } SettingsChoice;
+
+typedef char SettingsName[CONFIG_VALUE_MAXIMUM + 1U];
 
 static SettingsChoice SettingsNow;
 static SettingsChoice SettingsRead;
 
-static char SettingsEntryNames[SETTINGS_ENTRIES_MAXIMUM][CONFIG_VALUE_MAXIMUM + 1U];
+/* The launcher's entries and their pins, and the backgrounds on offer: as many
+ * as there are, grown as they are found. A list with a bound would leave the
+ * entries past it with no button, and a person could not tell why. */
+static SettingsName *SettingsEntryNames;
+static bool *SettingsPinnedNow;
+static bool *SettingsPinnedRead;
 static size_t SettingsEntryCount;
+static size_t SettingsEntryCapacity;
 
-static char SettingsBackgrounds[SETTINGS_BACKGROUNDS_MAXIMUM][CONFIG_VALUE_MAXIMUM + 1U];
+static SettingsName *SettingsBackgrounds;
 static size_t SettingsBackgroundCount;
+static size_t SettingsBackgroundCapacity;
 
 static char SettingsStatus[SETTINGS_COLUMNS + 1];
 
 static OxysConfig SettingsConfig;
-static char SettingsText[CONFIG_TEXT_MAXIMUM];
+
+/* The text of the file being edited, in the heap: as long as the file, with
+ * room made before each edit for the line it may add. */
+static char *SettingsText;
+static size_t SettingsTextCapacity;
 
 static int64_t SettingsWindow = -1;
 static int32_t SettingsScale = 2;
+
+/* The screen, kept for laying out within it and for making the window again
+ * when it must change size. */
+static SyscallWindowRectangle SettingsScreen;
+
+/* The rows the window has: counted by laying it out, since the background
+ * buttons wrap and there is a pin for every launcher entry. */
+static int32_t SettingsRows = SETTINGS_ROWS_LEAST;
+
+/* The window's width in columns: SETTINGS_COLUMNS, or more where the pins
+ * stand in columns of their own; and the right-most edge the last layout drew
+ * a button to, in pixels, from which that is counted. */
+static int32_t SettingsColumns = SETTINGS_COLUMNS;
+static int32_t SettingsRightmost;
+
+/* Whether a button past the right margin begins the next row: so for the rows
+ * of choices, and not for the columns of pins, which widen the window. */
+static bool SettingsWrapping = true;
+
+/* ------------------------------------------------------------- memory */
+
+/*
+ * The array `array`, of `*capacity` elements of `size` bytes, with room for
+ * `wanted`: itself where it has it, or grown by doubling. Null where the heap
+ * refuses, the array then left as it was, and the caller shows what it has
+ * room for.
+ */
+static void *SettingsGrow(void *array, size_t *capacity, size_t wanted, size_t size)
+{
+    size_t larger = (*capacity > 0U) ? *capacity : 4U;
+    void *grown;
+
+    if ((wanted <= *capacity) && (array != NULL))
+    {
+        return array;
+    }
+
+    while (larger < wanted)
+    {
+        larger *= 2U;
+    }
+
+    if (larger > (SIZE_MAX / size))
+    {
+        return NULL;
+    }
+
+    grown = realloc(array, larger * size);
+
+    if (grown != NULL)
+    {
+        *capacity = larger;
+    }
+
+    return grown;
+}
+
+/* Room for `wanted` launcher entries: their names and both sets of pins, all
+ * of one capacity, so that the three are grown together or not at all. */
+static bool SettingsReserveEntries(size_t wanted)
+{
+    size_t names = SettingsEntryCapacity;
+    size_t now = SettingsEntryCapacity;
+    size_t read = SettingsEntryCapacity;
+    SettingsName *const grown_names =
+        SettingsGrow(SettingsEntryNames, &names, wanted, sizeof(SettingsName));
+    bool *grown_now;
+    bool *grown_read;
+
+    if (grown_names == NULL)
+    {
+        return false;
+    }
+
+    SettingsEntryNames = grown_names;
+    grown_now = SettingsGrow(SettingsPinnedNow, &now, wanted, sizeof(bool));
+
+    if (grown_now == NULL)
+    {
+        return false;
+    }
+
+    SettingsPinnedNow = grown_now;
+    grown_read = SettingsGrow(SettingsPinnedRead, &read, wanted, sizeof(bool));
+
+    if (grown_read == NULL)
+    {
+        return false;
+    }
+
+    SettingsPinnedRead = grown_read;
+    SettingsEntryCapacity = names;
+
+    return true;
+}
 
 /* ------------------------------------------------------------- reading */
 
@@ -152,13 +261,23 @@ static void SettingsFindBackgrounds(void)
         return;
     }
 
-    while ((OxysReadDirectory((int)descriptor, &entry) > 0) &&
-           (SettingsBackgroundCount < SETTINGS_BACKGROUNDS_MAXIMUM))
+    while (OxysReadDirectory((int)descriptor, &entry) > 0)
     {
         const size_t length = strlen(entry.name);
 
         if ((length > 5U) && (strcmp(&entry.name[length - 5U], ".oxim") == 0))
         {
+            SettingsName *const grown =
+                SettingsGrow(SettingsBackgrounds, &SettingsBackgroundCapacity,
+                             SettingsBackgroundCount + 1U, sizeof(SettingsName));
+
+            if (grown == NULL)
+            {
+                (void)fprintf(stderr, "settings: not every background could be offered.\n");
+                break;
+            }
+
+            SettingsBackgrounds = grown;
             (void)snprintf(SettingsBackgrounds[SettingsBackgroundCount], CONFIG_VALUE_MAXIMUM + 1U,
                            "%s/%s", SETTINGS_BACKGROUNDS, entry.name);
             ++SettingsBackgroundCount;
@@ -174,20 +293,29 @@ static void SettingsLoad(void)
     SettingsChoice choice;
 
     (void)memset(&choice, 0, sizeof choice);
+    SettingsEntryCount = 0U;
 
     if (SettingsReadConfig(SETTINGS_SESSION, "session.conf"))
     {
         const char *const background =
             OxysConfigValue(&SettingsConfig, "session", 0U, "background");
         const long scale = OxysConfigNumber(&SettingsConfig, "session", 0U, "scale", 0);
+        const size_t entries = OxysConfigCount(&SettingsConfig, "launch");
 
         SettingsCopy(choice.background, CONFIG_VALUE_MAXIMUM, background);
         choice.scale = ((scale >= 0) && (scale < (long)SETTINGS_SCALES)) ? (size_t)scale : 0U;
-        SettingsEntryCount = OxysConfigCount(&SettingsConfig, "launch");
 
-        if (SettingsEntryCount > SETTINGS_ENTRIES_MAXIMUM)
+        /* An entry with no room for its pin is not shown rather than shown
+         * wrongly, and the person is told, since Save leaves its line alone. */
+        SettingsEntryCount = SettingsReserveEntries(entries)
+                                 ? entries
+                                 : ((SettingsEntryCapacity < entries) ? SettingsEntryCapacity
+                                                                      : entries);
+
+        if (SettingsEntryCount < entries)
         {
-            SettingsEntryCount = SETTINGS_ENTRIES_MAXIMUM;
+            (void)OxysNotify(SYSCALL_NOTIFY_WARNING, 0U,
+                             "Settings could not show every launcher entry.");
         }
 
         for (size_t index = 0U; index < SettingsEntryCount; ++index)
@@ -200,8 +328,9 @@ static void SettingsLoad(void)
             }
 
             SettingsCopy(SettingsEntryNames[index], CONFIG_VALUE_MAXIMUM, name);
-            choice.pinned[index] = OxysConfigBoolean(&SettingsConfig, "launch", index, "pin",
-                                                     false);
+            SettingsPinnedNow[index] =
+                OxysConfigBoolean(&SettingsConfig, "launch", index, "pin", false);
+            SettingsPinnedRead[index] = SettingsPinnedNow[index];
         }
     }
 
@@ -211,11 +340,26 @@ static void SettingsLoad(void)
 
 /* ------------------------------------------------------------- writing */
 
-/* Reads a whole file into SettingsText; its length, or -1. */
+/* Makes room in SettingsText for `wanted` bytes; false where the heap refuses. */
+static bool SettingsTextRoom(size_t wanted)
+{
+    char *const grown = SettingsGrow(SettingsText, &SettingsTextCapacity, wanted, 1U);
+
+    if (grown == NULL)
+    {
+        return false;
+    }
+
+    SettingsText = grown;
+
+    return true;
+}
+
+/* Reads a whole file into SettingsText, however long; its length, or -1. */
 static int64_t SettingsSlurp(const char *path)
 {
     const int64_t descriptor = OxysOpen(path, SYSCALL_OPEN_READ, 0U);
-    int64_t total = 0;
+    size_t total = 0U;
 
     if (descriptor < 0)
     {
@@ -224,26 +368,26 @@ static int64_t SettingsSlurp(const char *path)
 
     for (;;)
     {
-        const int64_t got = OxysRead((int)descriptor, &SettingsText[total],
-                                     sizeof SettingsText - (size_t)total);
+        int64_t got;
+
+        if (!SettingsTextRoom(total + CONFIG_TEXT_INLINE))
+        {
+            /* A file only partly held would lose its end at the write. */
+            (void)OxysClose((int)descriptor);
+
+            return -1;
+        }
+
+        got = OxysRead((int)descriptor, &SettingsText[total], SettingsTextCapacity - total);
 
         if (got <= 0)
         {
             (void)OxysClose((int)descriptor);
 
-            return (got < 0) ? -1 : total;
+            return (got < 0) ? -1 : (int64_t)total;
         }
 
-        total += got;
-
-        if ((size_t)total == sizeof SettingsText)
-        {
-            /* Full: a file this long is more than the parser reads, and an
-             * edit of its start would drop its end. */
-            (void)OxysClose((int)descriptor);
-
-            return -1;
-        }
+        total += (size_t)got;
     }
 }
 
@@ -267,8 +411,25 @@ static bool SettingsWriteFile(const char *path, size_t length)
         return false;
     }
 
-    if ((OxysWrite((int)descriptor, SettingsText, length) != (int64_t)length) ||
-        (OxysClose((int)descriptor) < 0))
+    /* A write may take less than it was given — the kernel moves at most
+     * SYSCALL_TRANSFER_MAXIMUM at once — and a file longer than that is the
+     * rest of it written after. */
+    for (size_t at = 0U; at < length;)
+    {
+        const int64_t written = OxysWrite((int)descriptor, &SettingsText[at], length - at);
+
+        if (written <= 0)
+        {
+            (void)OxysClose((int)descriptor);
+            (void)OxysUnlink(beside);
+
+            return false;
+        }
+
+        at += (size_t)written;
+    }
+
+    if (OxysClose((int)descriptor) < 0)
     {
         (void)OxysUnlink(beside);
 
@@ -287,12 +448,22 @@ static bool SettingsWriteFile(const char *path, size_t length)
     return true;
 }
 
-/* Applies one edit to SettingsText; false where it could not be made. */
+/* Applies one edit to SettingsText; false where it could not be made. Room is
+ * made first for the most one edit adds — a block's heading and one setting —
+ * so that an edit fails for what it says and never for want of space. */
 static bool SettingsEdit(size_t *length, const char *section, size_t occurrence, const char *key,
                          const char *value)
 {
-    const size_t result = OxysConfigEdit(SettingsText, *length, sizeof SettingsText, section,
-                                         occurrence, key, value);
+    size_t result;
+
+    if (!SettingsTextRoom(*length + (2U * (CONFIG_SECTION_MAXIMUM + CONFIG_KEY_MAXIMUM +
+                                            CONFIG_VALUE_MAXIMUM + 8U))))
+    {
+        return false;
+    }
+
+    result = OxysConfigEdit(SettingsText, *length, SettingsTextCapacity, section, occurrence, key,
+                            value);
 
     if (result == CONFIG_EDIT_FAILED)
     {
@@ -329,7 +500,8 @@ static void SettingsSave(void)
 
     if ((strcmp(SettingsNow.background, SettingsRead.background) != 0) ||
         (SettingsNow.scale != SettingsRead.scale) ||
-        (memcmp(SettingsNow.pinned, SettingsRead.pinned, sizeof SettingsNow.pinned) != 0))
+        ((SettingsEntryCount > 0U) &&
+         (memcmp(SettingsPinnedNow, SettingsPinnedRead, SettingsEntryCount * sizeof(bool)) != 0)))
     {
         int64_t read = SettingsStart(SETTINGS_SESSION, "session.conf");
         size_t length = (read >= 0) ? (size_t)read : 0U;
@@ -344,7 +516,7 @@ static void SettingsSave(void)
         for (size_t index = 0U; saved && (index < SettingsEntryCount); ++index)
         {
             saved = SettingsEdit(&length, "launch", index, "pin",
-                                 SettingsNow.pinned[index] ? "yes" : NULL);
+                                 SettingsPinnedNow[index] ? "yes" : NULL);
         }
 
         saved = saved && SettingsWriteFile(SETTINGS_SESSION, length);
@@ -380,6 +552,11 @@ static void SettingsSave(void)
     }
 
     SettingsRead = SettingsNow;
+
+    if (SettingsEntryCount > 0U)
+    {
+        (void)memcpy(SettingsPinnedRead, SettingsPinnedNow, SettingsEntryCount * sizeof(bool));
+    }
 }
 
 /* ------------------------------------------------------------- drawing */
@@ -406,8 +583,11 @@ typedef struct SettingsButton
     size_t which;
 } SettingsButton;
 
-#define SETTINGS_BUTTONS_MAXIMUM 24U
-static SettingsButton SettingsButtons[SETTINGS_BUTTONS_MAXIMUM];
+/* The buttons as last laid out, as many as there are; and whether SettingsDraw
+ * paints, or only lays the window out to count the rows it needs. */
+static SettingsButton *SettingsButtons;
+static size_t SettingsButtonCapacity;
+static bool SettingsPainting = true;
 static size_t SettingsButtonCount;
 
 /* Draws, or with SYSCALL_WINDOW_TEXT_MEASURE only measures, a proportional run
@@ -417,6 +597,11 @@ static int32_t SettingsTextRun(int32_t row, int32_t x, const char *text, uint32_
 {
     SyscallWindowText placement;
     int64_t width;
+
+    if (!SettingsPainting && ((flags & SYSCALL_WINDOW_TEXT_MEASURE) == 0U))
+    {
+        return 0;
+    }
 
     placement.x = x;
     placement.y = (row * SETTINGS_PITCH * SettingsScale) +
@@ -442,7 +627,7 @@ static void SettingsFill(int32_t x, int32_t y, int32_t width, int32_t height, ui
     SyscallWindowRectangle area;
     const int32_t rows = (int32_t)(sizeof tile / sizeof tile[0]) / ((width > 0) ? width : 1);
 
-    if ((width <= 0) || (height <= 0) || (rows <= 0))
+    if (!SettingsPainting || (width <= 0) || (height <= 0) || (rows <= 0))
     {
         return;
     }
@@ -473,7 +658,7 @@ static void SettingsFill(int32_t x, int32_t y, int32_t width, int32_t height, ui
  * label's whether the button is chosen or not: a button that widened when
  * pressed would push the buttons beside it along, and the next press would
  * land on a different one than the pointer was over when the person aimed. */
-static int32_t SettingsButtonAt(int32_t row, int32_t x, const char *label, bool chosen,
+static int32_t SettingsButtonAt(int32_t *at_row, int32_t x, const char *label, bool chosen,
                                 SettingsAction action, size_t which)
 {
     char marked[CONFIG_VALUE_MAXIMUM + 4U];
@@ -481,6 +666,7 @@ static int32_t SettingsButtonAt(int32_t row, int32_t x, const char *label, bool 
     const int32_t cell = SETTINGS_ADVANCE * SettingsScale;
     const int32_t pitch = SETTINGS_PITCH * SettingsScale;
     const int32_t margin = SETTINGS_MARGIN * SettingsScale;
+    int32_t row = *at_row;
     int32_t text;
     int32_t width;
 
@@ -494,6 +680,16 @@ static int32_t SettingsButtonAt(int32_t row, int32_t x, const char *label, bool 
     }
 
     width = text + (2 * margin);
+
+    /* A button that would pass the window's right-hand margin begins the next
+     * row, unless it is the first of its row and could stand nowhere wider. */
+    if (SettingsWrapping && (x > (2 * cell)) && ((x + width) > ((SETTINGS_COLUMNS - 2) * cell)))
+    {
+        row = ++*at_row;
+        x = 2 * cell;
+    }
+
+    SettingsRightmost = ((x + width) > SettingsRightmost) ? (x + width) : SettingsRightmost;
     SettingsFill(x, (row * pitch) + SettingsScale, width, pitch - (2 * SettingsScale), ground);
 
     if (chosen)
@@ -522,10 +718,21 @@ static int32_t SettingsButtonAt(int32_t row, int32_t x, const char *label, bool 
         SettingsFill(left + across - SettingsScale, top, SettingsScale, down, SETTINGS_EDGE);
     }
 
-    if (SettingsButtonCount < SETTINGS_BUTTONS_MAXIMUM)
     {
-        SettingsButton *const button = &SettingsButtons[SettingsButtonCount++];
+        SettingsButton *const grown = SettingsGrow(SettingsButtons, &SettingsButtonCapacity,
+                                                   SettingsButtonCount + 1U, sizeof *grown);
+        SettingsButton *button;
 
+        if (grown == NULL)
+        {
+            /* Drawn but not pressable; said, since it looks like any other. */
+            (void)fprintf(stderr, "settings: no memory for the button \"%s\".\n", label);
+
+            return x + width + cell;
+        }
+
+        SettingsButtons = grown;
+        button = &SettingsButtons[SettingsButtonCount++];
         button->row = row;
         button->x = x;
         button->width = width;
@@ -557,7 +764,10 @@ static void SettingsBackgroundName(const char *path, char *name, size_t capacity
     }
 }
 
-static void SettingsDraw(void)
+/* Lays the window out and, while SettingsPainting, draws it; the rows it
+ * needed. The rows below the pins follow the last of them, so the window is as
+ * tall as the launcher entries make it and never less than it always was. */
+static int32_t SettingsDraw(void)
 {
     const int32_t cell = SETTINGS_ADVANCE * SettingsScale;
     const int32_t pitch = SETTINGS_PITCH * SettingsScale;
@@ -566,7 +776,8 @@ static void SettingsDraw(void)
     bool known = SettingsNow.background[0] == '\0';
 
     SettingsButtonCount = 0U;
-    SettingsFill(0, 0, SETTINGS_COLUMNS * cell, SETTINGS_ROWS * pitch, SETTINGS_PAPER);
+    SettingsRightmost = 0;
+    SettingsFill(0, 0, SettingsColumns * cell, SettingsRows * pitch, SETTINGS_PAPER);
 
     SettingsLabel(row++, 1, "Background", SETTINGS_INK, SETTINGS_PAPER);
 
@@ -577,10 +788,10 @@ static void SettingsDraw(void)
 
         known = known || chosen;
         SettingsBackgroundName(SettingsBackgrounds[index], name, sizeof name - 1U);
-        x = SettingsButtonAt(row, x, name, chosen, SETTINGS_BACKGROUND, index);
+        x = SettingsButtonAt(&row, x, name, chosen, SETTINGS_BACKGROUND, index);
     }
 
-    (void)SettingsButtonAt(row, x, "None", SettingsNow.background[0] == '\0',
+    (void)SettingsButtonAt(&row, x, "None", SettingsNow.background[0] == '\0',
                            SETTINGS_NO_BACKGROUND, 0U);
 
     /* A path of the person's own, which none of the buttons names, is kept
@@ -599,28 +810,62 @@ static void SettingsDraw(void)
 
     for (size_t index = 0U; index < SETTINGS_SCALES; ++index)
     {
-        x = SettingsButtonAt(row, x, SettingsScaleNames[index],
-                                  SettingsNow.scale == index, SETTINGS_SCALE, index);
+        x = SettingsButtonAt(&row, x, SettingsScaleNames[index], SettingsNow.scale == index,
+                             SETTINGS_SCALE, index);
     }
 
     row += 2;
     SettingsLabel(row++, 1, "Pinned beside the launcher", SETTINGS_INK, SETTINGS_PAPER);
 
-    for (size_t index = 0U; index < SettingsEntryCount; ++index)
+    /*
+     * The pins stand in a column, and in further columns to its right when the
+     * screen has not the rows for them all: a window taller than the screen
+     * would have Save and Revert cut from its foot, and the settings could be
+     * chosen but never saved. Each column begins a cell past the widest button
+     * of the one before, and the window is widened to hold them.
+     */
     {
-        char label[CONFIG_VALUE_MAXIMUM + 8U];
+        const int32_t first = row;
+        const int32_t before = SettingsRightmost;
+        const int32_t fits = (SettingsScreen.height / pitch) - SETTINGS_ROWS_KEPT;
+        const int32_t below = 4; /* A blank row, Save, the status and a margin. */
+        const size_t down = ((fits - first - below) > 1) ? (size_t)(fits - first - below) : 1U;
+        int32_t left = 2 * cell;
+        int32_t widest = left;
 
-        (void)snprintf(label, sizeof label, "[%c] %s", SettingsNow.pinned[index] ? 'x' : ' ',
-                       SettingsEntryNames[index]);
-        (void)SettingsButtonAt(row++, 2 * cell, label, false, SETTINGS_PIN, index);
+        SettingsWrapping = false;
+
+        for (size_t index = 0U; index < SettingsEntryCount; ++index)
+        {
+            char label[CONFIG_VALUE_MAXIMUM + 8U];
+            int32_t at = first + (int32_t)(index % down);
+
+            if ((index > 0U) && ((index % down) == 0U))
+            {
+                left = widest + cell;
+            }
+
+            (void)snprintf(label, sizeof label, "[%c] %s", SettingsPinnedNow[index] ? 'x' : ' ',
+                           SettingsEntryNames[index]);
+            SettingsRightmost = left;
+            (void)SettingsButtonAt(&at, left, label, false, SETTINGS_PIN, index);
+            widest = (SettingsRightmost > widest) ? SettingsRightmost : widest;
+        }
+
+        row = first + (int32_t)((SettingsEntryCount < down) ? SettingsEntryCount : down);
+        SettingsRightmost = (widest > before) ? widest : before;
+        SettingsWrapping = true;
     }
 
-
-    row = SETTINGS_ROWS - 3;
-    x = SettingsButtonAt(row, 2 * cell, "Save", false, SETTINGS_SAVE, 0U);
-    (void)SettingsButtonAt(row, x, "Revert", false, SETTINGS_REVERT, 0U);
+    row = ((row + 1) > (SETTINGS_ROWS_LEAST - 3)) ? (row + 1) : (SETTINGS_ROWS_LEAST - 3);
+    x = SettingsButtonAt(&row, 2 * cell, "Save", false, SETTINGS_SAVE, 0U);
+    (void)SettingsButtonAt(&row, x, "Revert", false, SETTINGS_REVERT, 0U);
     SettingsLabel(row + 1, 2, SettingsStatus, SETTINGS_DIM, SETTINGS_PAPER);
+
+    return row + 3;
 }
+
+static bool SettingsOpen(void);
 
 /* A press: the button beneath it, if any, acted upon. */
 static void SettingsPress(int32_t x, int32_t y)
@@ -651,7 +896,7 @@ static void SettingsPress(int32_t x, int32_t y)
             SettingsNow.scale = button->which;
             break;
         case SETTINGS_PIN:
-            SettingsNow.pinned[button->which] = !SettingsNow.pinned[button->which];
+            SettingsPinnedNow[button->which] = !SettingsPinnedNow[button->which];
             break;
         case SETTINGS_SAVE:
             SettingsSave();
@@ -663,19 +908,95 @@ static void SettingsPress(int32_t x, int32_t y)
             break;
         }
 
-        SettingsDraw();
+        /* Laid out again, and the window made again should Revert have found
+         * a different number of launcher entries. */
+        if (!SettingsOpen())
+        {
+            exit(EXIT_FAILURE);
+        }
 
         return;
     }
 }
 
+
+/* Makes a window of SettingsRows rows, or none; false then. */
+static bool SettingsCreate(void)
+{
+    SyscallWindowRectangle geometry;
+
+    geometry.width = SettingsColumns * SETTINGS_ADVANCE * SettingsScale;
+    geometry.height = SettingsRows * SETTINGS_PITCH * SettingsScale;
+    geometry.x = (SettingsScreen.width - geometry.width) / 2;
+    geometry.y = (SettingsScreen.height - geometry.height) / 3;
+
+    if (geometry.y < 0)
+    {
+        geometry.y = 0;
+    }
+
+    SettingsWindow = OxysWindowCreate(&geometry, "Settings", SYSCALL_WINDOW_LAYER_NORMAL);
+
+    return SettingsWindow >= 0;
+}
+
+/*
+ * Makes the window as large as its layout needs. A window cannot be resized by
+ * its program, and the labels are measured through a window, so the layout is
+ * counted within the window there is and the window made again where the count
+ * differs — before anything is drawn in it, so nothing is seen twice. The pins
+ * go into columns before the window outgrows the screen's height, so only a
+ * screen too narrow for those columns has anything cut, and that is said.
+ */
+static bool SettingsOpen(void)
+{
+    const int32_t cell = SETTINGS_ADVANCE * SettingsScale;
+    const int32_t fits =
+        (SettingsScreen.height / (SETTINGS_PITCH * SettingsScale)) - SETTINGS_ROWS_KEPT;
+    const int32_t across = SettingsScreen.width / cell;
+    int32_t rows;
+    int32_t columns;
+
+    if ((SettingsWindow < 0) && !SettingsCreate())
+    {
+        return false;
+    }
+
+    SettingsPainting = false;
+    rows = SettingsDraw();
+    SettingsPainting = true;
+    columns = (SettingsRightmost + (2 * cell) + cell - 1) / cell;
+    columns = (columns > SETTINGS_COLUMNS) ? columns : SETTINGS_COLUMNS;
+
+    if (((rows > fits) && (fits > 0)) || ((columns > across) && (across > 0)))
+    {
+        (void)fprintf(stderr, "settings: the screen is too small for every launcher entry.\n");
+        rows = ((rows > fits) && (fits > 0)) ? fits : rows;
+        columns = ((columns > across) && (across > 0)) ? across : columns;
+    }
+
+    if ((rows != SettingsRows) || (columns != SettingsColumns))
+    {
+        (void)OxysWindowDestroy(SettingsWindow);
+        SettingsRows = rows;
+        SettingsColumns = columns;
+
+        if (!SettingsCreate())
+        {
+            return false;
+        }
+    }
+
+    (void)SettingsDraw();
+
+    return true;
+}
+
 int main(void)
 {
-    SyscallWindowRectangle screen;
-    SyscallWindowRectangle geometry;
     bool running = true;
 
-    if (OxysWindowScreen(&screen) != 0)
+    if (OxysWindowScreen(&SettingsScreen) != 0)
     {
         (void)fprintf(stderr, "settings: the window manager does not have the screen.\n");
 
@@ -685,27 +1006,14 @@ int main(void)
     SettingsFindBackgrounds();
     SettingsLoad();
 
-    SettingsScale = (screen.width >= 1024) ? 2 : 1;
-    geometry.width = SETTINGS_COLUMNS * SETTINGS_ADVANCE * SettingsScale;
-    geometry.height = SETTINGS_ROWS * SETTINGS_PITCH * SettingsScale;
-    geometry.x = (screen.width - geometry.width) / 2;
-    geometry.y = (screen.height - geometry.height) / 3;
+    SettingsScale = (SettingsScreen.width >= 1024) ? 2 : 1;
 
-    if (geometry.y < 0)
-    {
-        geometry.y = 0;
-    }
-
-    SettingsWindow = OxysWindowCreate(&geometry, "Settings", SYSCALL_WINDOW_LAYER_NORMAL);
-
-    if (SettingsWindow < 0)
+    if (!SettingsOpen())
     {
         (void)fprintf(stderr, "settings: a window could not be made.\n");
 
         return EXIT_FAILURE;
     }
-
-    SettingsDraw();
 
     while (running)
     {
@@ -730,7 +1038,7 @@ int main(void)
             }
             else if (event.kind == SYSCALL_WINDOW_EVENT_RESIZE)
             {
-                SettingsDraw();
+                (void)SettingsDraw();
             }
             else if (event.kind == SYSCALL_WINDOW_EVENT_CLOSE)
             {

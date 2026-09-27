@@ -66,7 +66,13 @@
  */
 #define INIT_RESTART_LIMIT 5
 
-#define INIT_SERVICES_MAXIMUM 8
+/*
+ * The services held without an allocation. More are held in the heap, but a
+ * machine with the services a person writes starts them with nothing asked of
+ * it: `init` is the first program, and a start that could fail for want of
+ * memory is one more way for the machine to come up with nothing on it.
+ */
+#define INIT_SERVICES_INLINE 8U
 
 typedef struct InitService
 {
@@ -80,7 +86,9 @@ typedef struct InitService
     bool abandoned;
 } InitService;
 
-static InitService InitServices[INIT_SERVICES_MAXIMUM];
+static InitService InitServicesInline[INIT_SERVICES_INLINE];
+static InitService *InitServices = InitServicesInline;
+static size_t InitServiceCapacity = INIT_SERVICES_INLINE;
 static size_t InitServiceCount;
 
 static OxysConfig InitConfig;
@@ -118,12 +126,33 @@ static void InitAddService(const char *name, const char *run, bool restart, bool
 {
     InitService *service;
 
-    if (InitServiceCount >= INIT_SERVICES_MAXIMUM)
+    if (InitServiceCount >= InitServiceCapacity)
     {
-        (void)fprintf(stderr, "init: more services than %d; %s is not started.\n",
-                      INIT_SERVICES_MAXIMUM, name);
+        /* Moved to the heap whole and doubled; the inline store is never
+         * given to realloc, which may only resize what malloc gave. Nothing
+         * holds a service by pointer while the list is being read. */
+        InitService *const larger =
+            (InitServiceCapacity <= (SIZE_MAX / (2U * sizeof *larger)))
+                ? malloc(2U * InitServiceCapacity * sizeof *larger)
+                : NULL;
 
-        return;
+        if (larger == NULL)
+        {
+            (void)fprintf(stderr, "init: no memory for another service; %s is not started.\n",
+                          name);
+
+            return;
+        }
+
+        (void)memcpy(larger, InitServices, InitServiceCount * sizeof *larger);
+
+        if (InitServices != InitServicesInline)
+        {
+            free(InitServices);
+        }
+
+        InitServices = larger;
+        InitServiceCapacity *= 2U;
     }
 
     service = &InitServices[InitServiceCount];

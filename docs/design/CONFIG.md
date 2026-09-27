@@ -59,16 +59,24 @@ element.
 
 ## 2. The parser
 
-`config.c` touches only memory: it parses a buffer someone else read, allocates
-nothing, and calls only the string functions. `system.c` opens and reads the file.
-This split lets the kernel's boot-time self-test, which cannot make system calls,
-assert the parser, while a program asserts the file path ([`LIBC.md`](LIBC.md) uses
-the same seam throughout).
+`config.c` touches only memory: it parses a buffer someone else read, and calls
+only the string functions and, where the caller supplies one, a grower.
+`system.c` opens and reads the file. This split lets the kernel's boot-time
+self-test, which cannot make system calls, assert the parser, while a program
+asserts the file path ([`LIBC.md`](LIBC.md) uses the same seam throughout).
 
-**The store is fixed and supplied by the caller**, a static `OxysConfig` of a few
-kilobytes. A parser that called `malloc` could fail for a second reason at the
-moment the machine can least report it. The bounds are 64 settings, 8 recorded
-faults (more are counted) and 4 KiB of text.
+**The store starts fixed, and grows only where the reader lets it.** A static
+`OxysConfig` holds 64 settings within it, so a file of the size a person writes
+is parsed with no allocation, and `init` reading its services at boot cannot
+fail for want of memory. Settings past those go to the heap through the
+`grow` member, which `OxysConfigRead` supplies and a bare `OxysConfigParse`
+does not: the kernel's self-test calls the parser directly, and an allocation
+there would reach `brk`, which the kernel cannot execute. The text is read the
+same way, into a 4 KiB buffer and then into the heap. Where there is no grower,
+or the heap refuses, the line past the store is refused and recorded, never
+dropped. Faults are kept to 8 (more are counted), since they are a report and
+not the settings; a key, a section name and a value have the lengths in
+`config.h`, which a line past is refused.
 
 **Editing** is `edit.c`'s `OxysConfigEdit`, for the settings
 application: one key of one block set or removed within the text of a file, every
@@ -132,7 +140,7 @@ privilege level 3 for the file half.
 | Negative numbers read; partial numbers, absent keys and non-truths give the fallback; `YES` is true. | `2x` as 2; `mabye` as false. |
 | Each fault (not `key = value`, a setting before any section, unclosed bracket or quote, empty key, duplicate key) is recorded against its own line. | A person sent to the wrong line; a duplicate silently winning. |
 | **The parse continues past a fault**, reading what follows. | One bad line costing the file. |
-| An over-long value is refused, not cut; the store refuses beyond its capacity; faults beyond those kept are counted. | A different path; a store overrun; a file that looks nearly right. |
+| An over-long value is refused, not cut; without a grower the store refuses beyond its capacity, and with one the settings past it are taken and read back; faults beyond those kept are counted. | A different path; a store overrun; a setting past the store lost or read from the wrong place; a file that looks nearly right. |
 | A file the program wrote reads back as written; a missing file leaves the configuration empty. | Success reported on nothing; a previous file's settings left standing. |
 | **The shipped files carry the keys the programs read**, read from `/share/defaults/etc` so that a person's own `/etc` cannot fail the test: a service running `/bin/session` with `needs = display`; `session.conf`'s `scale`, at least one `[launch]` with `run`, and a readable background; the shipped copies at `/share/defaults/etc`, readable and offering a launcher. | A key renamed in a program and not its file: a bare screen with every other test passing. |
 
@@ -152,5 +160,6 @@ desktop and not the frames
 4. Values are strings, numbers and truths; no lists within a value (a reader
    splits one itself), durations, sizes or paths.
 5. A fault gives its line number, not its column or text.
-6. The parser's bounds (Section 2); beyond them, the excess is refused and
+6. Without a grower the parser holds 64 settings, and faults are kept to 8 and
+   token lengths bounded (Section 2); beyond them, the excess is refused and
    reported.

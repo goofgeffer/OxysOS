@@ -271,5 +271,5 @@ dragged down sliding **under** the bar; a pinned icon starting its program; a wi
 8. The background has no transparency or palette. A photograph compresses only
    once softened and reduced in colour, which bands a little; its edges are cut
    with no choice of where.
-9. The window list holds 16 entries, as many as the panel's width allows, with no
+9. The window list shows as many windows as the panel's width allows, with no
    icons (it does not know a window's program) and titles simply cut.

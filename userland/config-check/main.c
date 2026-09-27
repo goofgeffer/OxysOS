@@ -65,10 +65,23 @@ static bool ConfigWrite(const char *path, const char *text)
         ++length;
     }
 
-    written = OxysWrite((int)descriptor, text, length);
+    /* A write may take less than it was given — the kernel moves at most
+     * SYSCALL_TRANSFER_MAXIMUM at once — so the rest is written after it. */
+    for (size_t at = 0U; at < length; at += (size_t)written)
+    {
+        written = OxysWrite((int)descriptor, &text[at], length - at);
+
+        if (written <= 0)
+        {
+            (void)OxysClose((int)descriptor);
+
+            return false;
+        }
+    }
+
     (void)OxysClose((int)descriptor);
 
-    return (written == (int64_t)length);
+    return true;
 }
 
 int main(void)
@@ -126,6 +139,40 @@ int main(void)
     ConfigRequire((OxysConfigCount(&Config, "service") == 0U) &&
                       (OxysConfigValue(&Config, "system", 0U, "banner") == NULL),
                   "a failed read left the previous file's settings standing");
+
+    /*
+     * --- A file past both inline stores is read whole. ---
+     *
+     * Three hundred blocks: more settings than OxysConfig holds within it, in
+     * more text than its first buffer, so both are taken from the heap. The
+     * last block is checked because it is the one a store that stopped short,
+     * or text read only as far as its buffer, would lose.
+     */
+    {
+        static char text[300U * 32U];
+        size_t length = 0U;
+
+        for (unsigned index = 0U; index < 300U; ++index)
+        {
+            length += (size_t)snprintf(&text[length], sizeof text - length,
+                                       "[launch]\nrun = /bin/n%u\n", index);
+        }
+
+        ConfigRequire((length > CONFIG_TEXT_INLINE) && ConfigWrite(CONFIG_SCRATCH, text),
+                      "the long configuration could not be written");
+        ConfigRequire(OxysConfigRead(&Config, CONFIG_SCRATCH) &&
+                          (OxysConfigFaultCount(&Config) == 0U),
+                      "a file past the inline stores was not read without fault");
+        ConfigRequire(OxysConfigCount(&Config, "launch") == 300U,
+                      "a file of three hundred blocks was not counted as three hundred");
+
+        {
+            const char *const last = OxysConfigValue(&Config, "launch", 299U, "run");
+
+            ConfigRequire((last != NULL) && (strcmp(last, "/bin/n299") == 0),
+                          "the last block, past the inline store, did not read back");
+        }
+    }
 
     (void)OxysUnlink(CONFIG_SCRATCH);
 

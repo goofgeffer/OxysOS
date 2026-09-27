@@ -50,11 +50,15 @@
 #include <errno.h>
 #include <signal.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <syscall.h>
 #include <line.h>
 
-#define SHELL_JOB_MAXIMUM 16U
+/* The jobs, as many as are running or stopped, grown in the heap when every
+ * slot is taken. A job's number is its slot and one, so slots are never
+ * compacted, and the table moves only in ShellJobBegin: nothing holds a job by
+ * pointer across a new one being begun, and no signal handler reads it. */
 
 typedef enum ShellJobState
 {
@@ -78,14 +82,15 @@ typedef struct ShellJob
     char text[LINE_CAPACITY];
 } ShellJob;
 
-static ShellJob ShellJobs[SHELL_JOB_MAXIMUM];
+static ShellJob *ShellJobs;
+static size_t ShellJobCapacity;
 static int64_t ShellOwnGroup;
 
 /* ------------------------------------------------------------------ helpers */
 
 static ShellJob *ShellJobFind(int64_t group)
 {
-    for (size_t index = 0U; index < SHELL_JOB_MAXIMUM; ++index)
+    for (size_t index = 0U; index < ShellJobCapacity; ++index)
     {
         if (ShellJobs[index].used && (ShellJobs[index].group == group))
         {
@@ -98,7 +103,7 @@ static ShellJob *ShellJobFind(int64_t group)
 
 static ShellJob *ShellJobByPid(int64_t pid, size_t *member)
 {
-    for (size_t index = 0U; index < SHELL_JOB_MAXIMUM; ++index)
+    for (size_t index = 0U; index < ShellJobCapacity; ++index)
     {
         ShellJob *const job = &ShellJobs[index];
 
@@ -294,7 +299,7 @@ void ShellJobsInitialise(void)
 
 ShellJob *ShellJobBegin(const char *text, bool background)
 {
-    for (size_t index = 0U; index < SHELL_JOB_MAXIMUM; ++index)
+    for (size_t index = 0U; index < ShellJobCapacity; ++index)
     {
         ShellJob *const job = &ShellJobs[index];
 
@@ -315,10 +320,28 @@ ShellJob *ShellJobBegin(const char *text, bool background)
         return job;
     }
 
-    (void)fprintf(stderr, "sh: no room for another job; %u are held.\n",
-                  (unsigned)SHELL_JOB_MAXIMUM);
+    /* Every slot is taken: the table is doubled, the new slots unused, and the
+     * first of them begun. */
+    {
+        const size_t larger = (ShellJobCapacity > 0U) ? (2U * ShellJobCapacity) : 16U;
+        ShellJob *const grown = (larger <= (SIZE_MAX / sizeof *grown))
+                                    ? realloc(ShellJobs, larger * sizeof *grown)
+                                    : NULL;
 
-    return NULL;
+        if (grown == NULL)
+        {
+            (void)fprintf(stderr, "sh: no memory for another job; %u are held.\n",
+                          (unsigned)ShellJobCapacity);
+
+            return NULL;
+        }
+
+        (void)memset(&grown[ShellJobCapacity], 0, (larger - ShellJobCapacity) * sizeof *grown);
+        ShellJobs = grown;
+        ShellJobCapacity = larger;
+    }
+
+    return ShellJobBegin(text, background);
 }
 
 void ShellJobPrepareChild(const ShellJob *job, bool background)
@@ -480,7 +503,7 @@ void ShellJobsNotify(void)
         }
     }
 
-    for (size_t index = 0U; index < SHELL_JOB_MAXIMUM; ++index)
+    for (size_t index = 0U; index < ShellJobCapacity; ++index)
     {
         ShellJob *const job = &ShellJobs[index];
 
@@ -505,7 +528,7 @@ void ShellJobsList(void)
 {
     ShellJobsNotify();
 
-    for (size_t index = 0U; index < SHELL_JOB_MAXIMUM; ++index)
+    for (size_t index = 0U; index < ShellJobCapacity; ++index)
     {
         if (ShellJobs[index].used)
         {
@@ -521,7 +544,7 @@ static ShellJob *ShellJobNamed(const char *operand)
 
     if (operand == NULL)
     {
-        for (size_t index = SHELL_JOB_MAXIMUM; index > 0U; --index)
+        for (size_t index = ShellJobCapacity; index > 0U; --index)
         {
             if (ShellJobs[index - 1U].used)
             {
@@ -550,7 +573,7 @@ static ShellJob *ShellJobNamed(const char *operand)
         number = (number * 10U) + (unsigned)(*operand - '0');
     }
 
-    if ((number == 0U) || (number > SHELL_JOB_MAXIMUM) || !ShellJobs[number - 1U].used)
+    if ((number == 0U) || (number > ShellJobCapacity) || !ShellJobs[number - 1U].used)
     {
         (void)fprintf(stderr, "sh: no such job.\n");
 

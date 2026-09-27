@@ -47,10 +47,9 @@
 #include <syscall.h>
 #include <line.h>
 
-/* How many lines a file may hold here, and the buffer a read is made into. A
- * line longer than the editor's capacity is cut when it is edited, and is said
- * to be. */
-#define MICRO_LINE_MAXIMUM 1024U
+/* The buffer a read is made into; the lines themselves are as many as the file
+ * has, their table grown in the heap. A line longer than the editor's capacity
+ * is cut when it is edited, and is said to be. */
 #define MICRO_READ_BYTES   4096U
 
 #define MICRO_PROMPT "micro> "
@@ -60,7 +59,8 @@
  * takes the name: MicroWrite. */
 #define MICRO_SAVE_SUFFIX ".micro-save"
 
-static char *MicroLines[MICRO_LINE_MAXIMUM];
+static char **MicroLines;
+static size_t MicroLineCapacity;
 static size_t MicroLineCount;
 static bool MicroModified;
 static const char *MicroPath;
@@ -89,12 +89,28 @@ static bool MicroInsertLine(size_t position, const char *text)
 {
     char *copy;
 
-    if ((MicroLineCount >= MICRO_LINE_MAXIMUM) || (position > MicroLineCount))
+    if (position > MicroLineCount)
     {
-        (void)fprintf(stderr, "micro: the file cannot hold more than %u lines.\n",
-                      (unsigned)MICRO_LINE_MAXIMUM);
-
         return false;
+    }
+
+    if (MicroLineCount == MicroLineCapacity)
+    {
+        const size_t larger = (MicroLineCapacity > 0U) ? (2U * MicroLineCapacity) : 256U;
+        char **const grown = (larger <= (SIZE_MAX / sizeof *grown))
+                                 ? realloc(MicroLines, larger * sizeof *grown)
+                                 : NULL;
+
+        if (grown == NULL)
+        {
+            (void)fprintf(stderr, "micro: no memory for another line; %u are held.\n",
+                          (unsigned)MicroLineCount);
+
+            return false;
+        }
+
+        MicroLines = grown;
+        MicroLineCapacity = larger;
     }
 
     copy = MicroDuplicate(text, strlen(text));
@@ -349,7 +365,7 @@ static bool MicroParseNumber(const char *text, bool allow_end, size_t *number)
 
     for (; *text != '\0'; ++text)
     {
-        if ((*text < '0') || (*text > '9') || (value > MICRO_LINE_MAXIMUM))
+        if ((*text < '0') || (*text > '9') || (value > MicroLineCount))
         {
             (void)fprintf(stderr, "micro: not a line number.\n");
 

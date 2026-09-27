@@ -34,7 +34,7 @@ entries below, a status row at the foot. The launcher's `Files` entry starts it.
 | A directory opens in this window; a file opens in `/bin/view`, a child collected when it ends. | Two files can be read side by side. |
 | A device or a pipe is reported unopenable on the status row. | A viewer handed one would read it forever. |
 | It moves, copies and deletes nothing. | `mv`, `cp` and `rm` do, and are asserted doing it; a second implementation would have none of their tests. |
-| A directory is listed to 256 entries, and the status says so beyond that. | The list is a fixed array. |
+| A directory is listed whole, its entries grown in the heap; one the heap cannot hold is listed as far as it can, and the status says so. | A directory whose later entries are missing with nothing to say so. |
 | A path longer than `SYSCALL_PATH_MAXIMUM` is refused, not cut. | A path silently shortened names another file. |
 
 ## 2. The text viewer, `/bin/view`
@@ -54,8 +54,8 @@ manager or at the shell. It views; `micro` edits.
   The row table holds the file's length plus two entries: a file of line feeds
   is a row per byte and one after the last.
 - **Keys.** Arrows, Page Up/Down, Home, End, and the space bar, which pages down.
-- **Size.** A file is read to 256 KiB; beyond that the start is shown and the
-  status says so, which is more use than a refusal.
+- **Size.** A file is read whole into the heap; where the heap refuses, the
+  start is shown and the status says so, which is more use than a refusal.
 - **Long rows.** A row wider than 120 characters is drawn in pieces, because
   `window_text` carries at most 127 characters and refuses a longer string.
 

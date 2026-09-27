@@ -59,6 +59,18 @@ row is as wide as its marked label whether chosen or not: a button that widened
 when chosen would push its neighbours along, and the next press would land on
 a button the person had not aimed at.
 
+**Every background and launcher entry has a button**, however many there are:
+the lists, the buttons and the text Save edits are grown in the heap. Background
+buttons wrap to a new row at the window's right margin, and the window is as
+tall as its rows, never shorter than before. Where the screen has not the rows
+for every pin, the pins go on in further columns and the window widens, so
+Save and Revert are never cut from its foot. A window cannot be resized by its
+program and labels are measured through a window, so the layout is counted in a
+first window and the window made again at the counted height before anything is
+drawn; Revert does the same when the file has gained or lost entries. A list
+with a bound would leave the entries past it with no button and Save leaving
+their lines alone, with nothing to say why.
+
 A background path of the person's own, which no button names, is kept until
 another is chosen and shown as `Now:` beneath the buttons. An accent the four
 buttons do not name is likewise left alone.
@@ -161,6 +173,7 @@ beside them.
 1. **The size needs a new start** of the desktop, as Section 1 says.
 2. **Launcher entries are not added or removed**, and `system.conf` is not
    edited, here.
-3. **The settings window is drawn at a fixed size.** It is not laid out again
-   when made full.
+3. **The settings window is sized once for its layout.** It is not laid out again
+   when made full, and a screen too narrow for the columns of pins has the
+   last of them cut, which it says on its standard error.
 4. **Notices are not kept.** One missed is gone; there is no list of past ones.

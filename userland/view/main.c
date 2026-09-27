@@ -39,12 +39,12 @@
 #include <syscall.h>
 
 /*
- * The most of a file shown. A quarter of a megabyte is every text file this
- * system carries many times over; a larger file is shown to that much and says
- * so upon its last row, rather than being refused — the start of a large file
- * being more use than nothing.
+ * The first room taken for a file's text. The text is read whole into the
+ * heap, doubling as it comes; where the heap refuses, the file is shown as far
+ * as it was read and says so upon its last row, rather than being refused —
+ * the start of a large file being more use than nothing.
  */
-#define VIEW_BYTES_MAXIMUM (256U * 1024U)
+#define VIEW_BYTES_FIRST (64U * 1024U)
 
 /* A character is SYSCALL_WINDOW_TEXT_ADVANCE units wide and eight high, with
  * two of leading between rows, and every extent is multiplied by the scale. */
@@ -61,14 +61,15 @@
 #define VIEW_PAPER OXYS_RGB(OXYS_PAPER_RED, OXYS_PAPER_GREEN, OXYS_PAPER_BLUE)
 #define VIEW_INK   OXYS_RGB(OXYS_INK_RED, OXYS_INK_GREEN, OXYS_INK_BLUE)
 
-static char ViewText[VIEW_BYTES_MAXIMUM];
+static char *ViewText;
+static size_t ViewCapacity;
 static size_t ViewLength;
 static bool ViewTruncated;
 
 /* Where each display row begins in the text, and one past the last. A file of
  * nothing but line feeds is a row per byte and one after the last, and the
  * table ends with the text's length: two more than the text. */
-static uint32_t ViewRowStart[VIEW_BYTES_MAXIMUM + 2U];
+static uint32_t *ViewRowStart;
 static size_t ViewRowCount;
 
 static const char *ViewPath;
@@ -102,8 +103,29 @@ static bool ViewLoad(const char *path)
 
     for (;;)
     {
-        const int64_t taken = OxysRead((int)descriptor, &ViewText[ViewLength],
-                                       VIEW_BYTES_MAXIMUM - ViewLength);
+        int64_t taken;
+
+        if (ViewLength == ViewCapacity)
+        {
+            const size_t larger = (ViewCapacity > 0U) ? (2U * ViewCapacity) : VIEW_BYTES_FIRST;
+            /* Row starts are 32 bits, and the table is two longer than the
+             * text, so the text stops short of what they can name. */
+            char *const grown = (larger < (UINT32_MAX - 2U)) ? realloc(ViewText, larger) : NULL;
+
+            if (grown == NULL)
+            {
+                /* No more room: a byte more would say whether it was cut. */
+                char probe;
+
+                ViewTruncated = OxysRead((int)descriptor, &probe, 1U) > 0;
+                break;
+            }
+
+            ViewText = grown;
+            ViewCapacity = larger;
+        }
+
+        taken = OxysRead((int)descriptor, &ViewText[ViewLength], ViewCapacity - ViewLength);
 
         if (taken < 0)
         {
@@ -119,18 +141,19 @@ static bool ViewLoad(const char *path)
         }
 
         ViewLength += (size_t)taken;
-
-        /* Full: a byte more would say whether it was cut. */
-        if (ViewLength == VIEW_BYTES_MAXIMUM)
-        {
-            char probe;
-
-            ViewTruncated = OxysRead((int)descriptor, &probe, 1U) > 0;
-            break;
-        }
     }
 
     (void)OxysClose((int)descriptor);
+
+    /* A row per byte at most, and one past the last: two more than the text. */
+    ViewRowStart = malloc((ViewLength + 2U) * sizeof *ViewRowStart);
+
+    if (ViewRowStart == NULL)
+    {
+        (void)fprintf(stderr, "view: %s: no memory to lay the text out in rows.\n", path);
+
+        return false;
+    }
 
     return true;
 }

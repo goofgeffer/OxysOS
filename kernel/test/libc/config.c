@@ -53,6 +53,24 @@ static void VerifyConfigRequire(bool condition, const char *statement)
  * thing to keep in step for no assertion's sake. */
 static OxysConfig VerifyConfigStore;
 
+/* A grower for the store that takes nothing from a heap: the kernel cannot
+ * reach `brk`, so the room it gives is a static array, and it refuses more. */
+#define VERIFY_CONFIG_MORE 4U
+static OxysConfigEntry VerifyConfigMore[VERIFY_CONFIG_MORE];
+
+static bool VerifyConfigGrow(OxysConfig *config, size_t wanted)
+{
+    if (wanted > VERIFY_CONFIG_MORE)
+    {
+        return false;
+    }
+
+    config->more = VerifyConfigMore;
+    config->more_capacity = VERIFY_CONFIG_MORE;
+
+    return true;
+}
+
 static bool VerifyConfigParse(const char *text)
 {
     size_t length = 0U;
@@ -311,18 +329,20 @@ static void VerifyConfigFaults(void)
                             "a value beyond the bound was kept, cut to the bound");
     }
 
-    /* The store is bounded, and the entries beyond it are refused and counted
-     * rather than written past the end. Each setting is named by two letters,
-     * so that no two of the sixty-six share a name and the refusal is the
-     * bound's doing and not the duplicate rule's. */
+    /* Without a grower the store is bounded, and the entries beyond it are
+     * refused and counted rather than written past the end. Each setting is
+     * named by two letters, so that no two of the sixty-six share a name and
+     * the refusal is the bound's doing and not the duplicate rule's. With a
+     * grower, the same text is read whole and the entries past the store are
+     * found where they were grown to. */
     {
-        static char text[(CONFIG_ENTRIES_MAXIMUM + 4U) * 8U];
+        static char text[(CONFIG_ENTRIES_INLINE + 4U) * 8U];
         size_t at = 0U;
 
         (void)strcpy(text, "[system]\n");
         at = strlen(text);
 
-        for (size_t index = 0U; index < (CONFIG_ENTRIES_MAXIMUM + 2U); ++index)
+        for (size_t index = 0U; index < (CONFIG_ENTRIES_INLINE + 2U); ++index)
         {
             text[at] = (char)('a' + (int)(index / 26U));
             text[at + 1U] = (char)('a' + (int)(index % 26U));
@@ -336,8 +356,20 @@ static void VerifyConfigFaults(void)
 
         VerifyConfigRequire(!VerifyConfigParse(text),
                             "a store filled beyond its bound reported no fault");
-        VerifyConfigRequire(VerifyConfigStore.count == CONFIG_ENTRIES_MAXIMUM,
+        VerifyConfigRequire(VerifyConfigStore.count == CONFIG_ENTRIES_INLINE,
                             "the store took more entries than it holds");
+
+        VerifyConfigStore.grow = VerifyConfigGrow;
+        VerifyConfigRequire(VerifyConfigParse(text) &&
+                                (VerifyConfigStore.count == (CONFIG_ENTRIES_INLINE + 2U)),
+                            "a store with a grower did not take the entries past it");
+        VerifyConfigRequire(VerifyConfigStore.more_capacity == VERIFY_CONFIG_MORE,
+                            "the grower was not asked for the room the parse needed");
+        VerifyConfigRequire(VerifyConfigHolds("system", 0U, "cn", "1"),
+                            "the last entry, grown past the store, reads back wrong");
+        VerifyConfigStore.grow = NULL;
+        VerifyConfigStore.more = NULL;
+        VerifyConfigStore.more_capacity = 0U;
     }
 
     /* A file wrong in more places than the faults it keeps counts the rest. */

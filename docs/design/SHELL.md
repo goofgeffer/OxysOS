@@ -256,7 +256,9 @@ neither knows which runs first after the fork.
 - **The shell waits for a foreground job** with `waitpid` on its group and
   `WUNTRACED`, until every member has ended or every live one has stopped, then
   takes the terminal back. A stopped job's status is 128 plus SIGTSTP and it
-  stays in the table.
+  stays in the table. The table is doubled in the heap when every slot is taken;
+  `n` is a job's slot and one, so slots are never compacted, or `%2` would come
+  to name another job.
 - **A background job (`&`) is announced** as `[n] pid`, and what became of it is
   reported before the next prompt.
 - **`fg` and `bg` continue a job** in the foreground or background; **`kill`**

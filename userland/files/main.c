@@ -47,9 +47,9 @@
 #define FILES_CHUNK 120
 #define FILES_COLUMNS_MAXIMUM 512
 
-/* How many entries one directory may show. A directory with more is listed to
- * that many, and the status says so. */
-#define FILES_ENTRIES_MAXIMUM 256U
+/* The entries of the directory shown, as many as it has, grown in the heap. A
+ * directory the heap cannot hold is listed as far as it can, and the status
+ * says so. */
 
 #define FILES_VIEWER "/bin/view"
 
@@ -64,7 +64,8 @@ typedef struct FilesEntry
     uint32_t type;
 } FilesEntry;
 
-static FilesEntry FilesEntries[FILES_ENTRIES_MAXIMUM];
+static FilesEntry *FilesEntries;
+static size_t FilesCapacity;
 static size_t FilesCount;
 static bool FilesCut;
 
@@ -150,10 +151,21 @@ static bool FilesLoad(void)
             continue;
         }
 
-        if (FilesCount == FILES_ENTRIES_MAXIMUM)
+        if (FilesCount == FilesCapacity)
         {
-            FilesCut = true;
-            break;
+            const size_t larger = (FilesCapacity > 0U) ? (2U * FilesCapacity) : 64U;
+            FilesEntry *const grown = (larger <= (SIZE_MAX / sizeof *grown))
+                                          ? realloc(FilesEntries, larger * sizeof *grown)
+                                          : NULL;
+
+            if (grown == NULL)
+            {
+                FilesCut = true;
+                break;
+            }
+
+            FilesEntries = grown;
+            FilesCapacity = larger;
         }
 
         memcpy(FilesEntries[FilesCount].name, entry.name, sizeof FilesEntries[FilesCount].name);

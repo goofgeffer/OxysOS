@@ -7,7 +7,7 @@
  *          from and the desktop takes its appearance from — and the seam
  *          between the parsing, which runs anywhere, and the file it is read
  *          from, which only a program may open.
- * Key definitions: OxysConfig, OxysConfigEntry, CONFIG_ENTRIES_MAXIMUM,
+ * Key definitions: OxysConfig, OxysConfigEntry, CONFIG_ENTRIES_INLINE,
  *          CONFIG_SECTION_MAXIMUM, CONFIG_KEY_MAXIMUM, CONFIG_VALUE_MAXIMUM,
  *          CONFIG_FAULTS_MAXIMUM, OxysConfigParse, OxysConfigRead,
  *          OxysConfigCount, OxysConfigValue, OxysConfigNumber,
@@ -51,15 +51,19 @@
  *   a later settings application — sub-task 9.8 — must be able to add to
  *   without rewriting the file around it.
  *
- * Why the store is fixed and the caller supplies it.
+ * Why the store starts fixed, and grows only when a reader lets it.
  *
  *   OxysConfig is some kilobytes and is meant to be a static or a file-scope
- *   object, not a stack one. It allocates nothing: a parser that called malloc
- *   would be a parser that can fail for a second reason at the moment the
- *   machine is least able to report it, and the bounds below are large enough
- *   for a configuration a person wrote and small enough to be honest about.
- *   Everything beyond them is refused and recorded as a fault, never truncated
- *   silently.
+ *   object, not a stack one. Its first CONFIG_ENTRIES_INLINE entries are held
+ *   within it, so a configuration of the size a person writes is parsed without
+ *   an allocation — at boot, `init` reading its services cannot fail for a
+ *   second reason at the moment the machine is least able to report it.
+ *   Entries beyond those are taken from the heap through `grow`, which
+ *   OxysConfigRead supplies and OxysConfigParse alone does not: the kernel's
+ *   self-test calls the parser directly, and an allocation there would reach
+ *   `brk`, which the kernel cannot execute. Without a grower, or where the
+ *   heap refuses, an entry beyond the store is refused and recorded as a
+ *   fault, never dropped silently.
  */
 
 #ifndef OXYS_LIBC_CONFIG_H
@@ -72,14 +76,15 @@
  * The bounds. A configuration that exceeds one of these is not truncated: the
  * offending line is refused and recorded, and everything else is still read.
  */
-#define CONFIG_ENTRIES_MAXIMUM 64U
+#define CONFIG_ENTRIES_INLINE  64U /* Held within OxysConfig; more grow. */
 #define CONFIG_SECTION_MAXIMUM 31U
 #define CONFIG_KEY_MAXIMUM     31U
 #define CONFIG_VALUE_MAXIMUM   127U
 #define CONFIG_FAULTS_MAXIMUM  8U
 
-/* The longest file this will read, in bytes. */
-#define CONFIG_TEXT_MAXIMUM 4096U
+/* The file read without an allocation, in bytes; a longer one is read into
+ * the heap. */
+#define CONFIG_TEXT_INLINE 4096U
 
 /*
  * One setting: the section it stood in, which of the sections of that name it
@@ -107,8 +112,15 @@ typedef struct OxysConfigFault
 
 typedef struct OxysConfig
 {
-    OxysConfigEntry entries[CONFIG_ENTRIES_MAXIMUM];
+    OxysConfigEntry entries[CONFIG_ENTRIES_INLINE];
     size_t count;
+
+    /* The entries beyond the inline ones, and room for how many, kept across
+     * parses so that a file read again reuses what it grew. `grow` makes room
+     * for at least `wanted` of them, or says it could not; null refuses. */
+    OxysConfigEntry *more;
+    size_t more_capacity;
+    bool (*grow)(struct OxysConfig *config, size_t wanted);
 
     OxysConfigFault faults[CONFIG_FAULTS_MAXIMUM];
     size_t fault_count;
@@ -124,9 +136,9 @@ typedef struct OxysConfig
  * the text was read without a fault; a false return is not a refusal — what
  * could be read is there, and the faults say what could not.
  *
- * This half touches nothing but memory, which is what lets the kernel's
- * boot-time self-test assert the whole of the format before there is a
- * userland to read a file in.
+ * This half touches nothing but memory unless `config->grow` is set, which is
+ * what lets the kernel's boot-time self-test assert the whole of the format
+ * before there is a userland to read a file in.
  */
 bool OxysConfigParse(OxysConfig *config, const char *text, size_t length);
 
@@ -136,8 +148,10 @@ bool OxysConfigParse(OxysConfig *config, const char *text, size_t length);
  * decide whether it has a default to fall back upon; a file that was read but
  * has faults returns the same thing OxysConfigParse would.
  *
- * A file longer than CONFIG_TEXT_MAXIMUM is read as far as that and the
- * remainder recorded as a fault, rather than being cut off in silence.
+ * A file longer than CONFIG_TEXT_INLINE is read into the heap, and `config`
+ * given a grower for entries beyond the inline ones. Where the heap refuses,
+ * what was read is parsed and the remainder recorded as a fault, rather than
+ * being cut off in silence.
  */
 bool OxysConfigRead(OxysConfig *config, const char *path);
 
