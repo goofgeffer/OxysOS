@@ -76,3 +76,5 @@ number	date	commit	dirty	compiler	cc_version	kernel	iso	result	assertions	enviro
 56	2026-09-27T04:07Z	40cd2c6	no	gcc	13.2.0	4064768	13389824	passed	80	QEMU q35;VirtualBox;Bochs	-	Clock box fitted to its time
 57	2026-09-27T04:26Z	3649aa4	no	gcc	13.2.0	4064768	13389824	passed	80	QEMU q35;VirtualBox;Bochs	-	Clock box 128 pixels
 58	2026-09-27T16:56Z	1a50409	no	gcc	13.2.0	4070840	13395968	passed	80	QEMU q35;VirtualBox;Bochs	-	Commands past sixteen words; execve 128 strings
+59	2026-09-27T17:09Z	813adff	no	gcc	13.2.0	4119360	13445120	passed	80	QEMU q35;VirtualBox;Bochs	-	Arithmetic expansion
+60	2026-09-27T17:09Z	813adff	yes	gcc	13.2.0	4118968	13445120	failed	-	QEMU q35	-	Negative: 813adff with the tokeniser's $(( recognition disabled; self-test fails

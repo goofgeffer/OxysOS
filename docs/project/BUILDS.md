@@ -352,21 +352,19 @@ regenerates it and fails if what is here differs.*
 
 | | |
 | --- | --- |
-| Builds recorded | 58 |
-| Verified | 50 passed, 8 not |
+| Builds recorded | 60 |
+| Verified | 51 passed, 9 not |
 | Compilers | gcc |
 | Environments | Bochs, QEMU, QEMU q35, QEMU q35,  VirtualBox,  Bochs, VirtualBox |
 | First | 2026-09-17T01:34Z |
-| Latest | 2026-09-27T16:56Z |
+| Latest | 2026-09-27T17:09Z |
 
 ## The last 20 builds
 
-The remaining 38 are in [`builds.tsv`](builds.tsv), which is the record.
+The remaining 40 are in [`builds.tsv`](builds.tsv), which is the record.
 
 | # | Date (UTC) | Commit | Compiler | Kernel | ISO | Result | Environments | Note |
 | - | ---------- | ------ | -------- | ------ | --- | ------ | ------------ | ---- |
-| 39 | 2026-09-25T23:31Z | `076c3b7` | gcc 13.2.0 | 3815664 | 13142016 | passed (79 assertions) | QEMU q35, VirtualBox, Bochs | Icons at 96 pixels and notification symbols |
-| 40 | 2026-09-25T23:36Z | `9588cd0` | gcc 13.2.0 | 3815664 | 13142016 | passed (79 assertions) | QEMU q35, VirtualBox, Bochs | The settings icon's hole transparent |
 | 41 | 2026-09-26T01:50Z | `128c721` | gcc 13.2.0 | 3848232 | 13174784 | passed (80 assertions) | QEMU q35, VirtualBox, Bochs | Sub-task 10.1, the entropy pool |
 | 42 | 2026-09-26T16:33Z | `cb2bb59` | gcc 13.2.0 | 3854096 | 13178880 | passed (80 assertions) | QEMU q35, VirtualBox, Bochs | Notepad and System Info; the window demonstration removed |
 | 43 | 2026-09-26T17:32Z | `2e61dcc` | gcc 13.2.0 | 3859840 | 13185024 | passed (80 assertions) | QEMU q35, VirtualBox, Bochs | The owner's bars, buttons, pointer and icons |
@@ -385,5 +383,7 @@ The remaining 38 are in [`builds.tsv`](builds.tsv), which is the record.
 | 56 | 2026-09-27T04:07Z | `40cd2c6` | gcc 13.2.0 | 4064768 | 13389824 | passed (80 assertions) | QEMU q35;VirtualBox;Bochs | Clock box fitted to its time |
 | 57 | 2026-09-27T04:26Z | `3649aa4` | gcc 13.2.0 | 4064768 | 13389824 | passed (80 assertions) | QEMU q35;VirtualBox;Bochs | Clock box 128 pixels |
 | 58 | 2026-09-27T16:56Z | `1a50409` | gcc 13.2.0 | 4070840 | 13395968 | passed (80 assertions) | QEMU q35;VirtualBox;Bochs | Commands past sixteen words; execve 128 strings |
+| 59 | 2026-09-27T17:09Z | `813adff` | gcc 13.2.0 | 4119360 | 13445120 | passed (80 assertions) | QEMU q35;VirtualBox;Bochs | Arithmetic expansion |
+| 60 | 2026-09-27T17:09Z | `813adff` *(modified)* | gcc 13.2.0 | 4118968 | 13445120 | failed | QEMU q35 | Negative: 813adff with the tokeniser's $(( recognition disabled; self-test fails |
 
 <!-- END GENERATED -->
