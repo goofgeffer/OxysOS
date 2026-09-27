@@ -27,7 +27,7 @@ entries below, a status row at the foot. The launcher's `Files` entry starts it.
 | Rule | Reason |
 | ---- | ------ |
 | Directories first, then by name as bytes. | The order `ls` gives, so that knowing one is knowing the other. |
-| A directory is marked with a slash, as `ls -F` marks it; nothing else is marked. | The system has no picture per file type. |
+| Every file has the owner's file picture and every folder the folder picture, read from `/share/icons` as the window opens; where one cannot be read its rows stand without it, and a folder keeps the slash `ls -F` gives it. | A folder told from a file by nothing at all. One picture for every file, until there is a picture per kind. |
 | `.` is omitted; `..` is shown except at the root. | `.` is this directory; `..` at the root is the root again. |
 | A press selects; a press on the selected row opens. | A double press without a clock to time one. A press on an unselected row only selects, so the two are never confused. |
 | Arrows, Page Up/Down, Home and End move the selection; Enter opens; Backspace goes up. | Every action is reachable without the pointer. |

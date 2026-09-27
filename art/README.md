@@ -149,6 +149,7 @@ the rows of `PointerBody` and `PointerHalo`. The tip lands at (1, 1),
 | [`icons/files.png`](icons/files.png), [`icons/files.oxi`](icons/files.oxi) | The file manager's icon, a folder, as the project owner drew it, and the same converted by the command below. |
 | [`icons/sysinfo.png`](icons/sysinfo.png), [`icons/sysinfo.oxi`](icons/sysinfo.oxi) | System Info's icon, a window of text, as the project owner drew it on 2026-09-26, and the same converted by the command below. It had been the window demonstration's window around the mark. |
 | [`icons/notepad.png`](icons/notepad.png), [`icons/notepad.oxi`](icons/notepad.oxi) | Notepad's icon, a pencil, as the project owner drew it, and the same converted by the command below. |
+| [`icons/file.png`](icons/file.png), [`icons/file.oxi`](icons/file.oxi), [`icons/folder.png`](icons/folder.png), [`icons/folder.oxi`](icons/folder.oxi) | The file manager's pictures for every file, a white page with its corner turned, and every folder, as the project owner drew them on 2026-09-27; converted by the second command below. |
 | [`icons/start.png`](icons/start.png), [`icons/start.oxi`](icons/start.oxi) | The launcher's button, three dots and lines, as the project owner drew it, and the same converted by the command below. |
 | [`icons/settings.png`](icons/settings.png), [`icons/settings.oxi`](icons/settings.oxi) | The settings application's icon, a gear, as the project owner drew it, and the same converted by the command below. |
 | [`icons/notify-information.png`](icons/notify-information.png), [`icons/notify-success.png`](icons/notify-success.png), [`icons/notify-error.png`](icons/notify-error.png), and the three `.oxi` files | The notifications' symbols as the project owner drew them: an `i` in blue, which warnings use as well; a tick in green; an `!` in red. Converted by the command below. |
@@ -182,6 +183,17 @@ convert cut.png -background none -gravity center -extent ${S}x${S} \
 xxd -p -c 4 raw | awk '{ printf "%s%s%s%02x", substr($0,5,2), substr($0,3,2),
         substr($0,1,2), 255 - strtonum("0x" substr($0,7,2)) }' | xxd -r -p > pixels
 cat head pixels > art/icons/$N.oxi
+```
+
+**The file and folder pictures came with their transparency drawn**, and the
+file is a white page. The command above lays a picture upon white and floods
+away the white from a corner, which would take the whole page with it; for
+these two the picture is cut by its own transparency instead, and the rest of
+the command is the same:
+
+```sh
+N=file   # or folder
+convert art/icons/$N.png -trim +repage cut.png
 ```
 
 **The settings icon has a hole**, and the flood from a corner cannot reach it:

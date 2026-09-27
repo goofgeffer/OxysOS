@@ -5,7 +5,7 @@
  * Purpose: The file manager of sub-task 9.7: a window listing one directory,
  *          directories first, in which a person moves into a directory, back
  *          out of it, and opens a file in the text viewer.
- * Key functions: main, FilesLoad, FilesOpen, FilesDraw, FilesPaint,
+ * Key functions: main, FilesLoad, FilesOpen, FilesDraw, FilesDrawIcon, FilesPaint,
  *          FilesHandleKey, FilesHandlePress, FilesReap.
  * References:
  *   - kernel/abi/oxys/syscall_abi.h: `open` with SYSCALL_OPEN_DIRECTORY,
@@ -33,6 +33,7 @@
  *   a ramdisk whose contents are lost at every reboot in any case.
  */
 
+#include <icon.h>
 #include <palette.h>
 #include <errno.h>
 #include <signal.h>
@@ -84,6 +85,29 @@ static int32_t FilesColumns;
 /* The rows of entries: the window's rows less the path at the top and the
  * status at the foot. */
 static int32_t FilesRows;
+
+/*
+ * The pictures at the head of each row, of 2026-09-27: one for every file and
+ * one for every folder, the project owner's, until there is a picture per kind
+ * of file. Read once as the window opens. Where one cannot be read its rows
+ * stand without it and a folder keeps the slash `ls -F` would give it, so that
+ * a folder is never told from a file by nothing at all.
+ */
+#define FILES_FILE_ICON   "/share/icons/file.oxi"
+#define FILES_FOLDER_ICON "/share/icons/folder.oxi"
+
+/* The icon's square within a row, in units of the scale: within the eight a
+ * row's text covers, whose paper is all that is drawn again when a row
+ * changes, so that no edge of an icon outlives the row it was drawn in. Its
+ * tile is the square at the largest scale the window is drawn at. */
+#define FILES_ICON_UNITS  7
+#define FILES_ICON_INDENT "   " /* The name begins past the icon's columns. */
+
+static OxysIcon FilesFileIcon;
+static OxysIcon FilesFolderIcon;
+static bool FilesHasFileIcon;
+static bool FilesHasFolderIcon;
+static uint32_t FilesIconTile[(FILES_ICON_UNITS * 2) * (FILES_ICON_UNITS * 2)];
 
 static volatile sig_atomic_t FilesChildEnded;
 
@@ -355,6 +379,35 @@ static void FilesDrawLine(int32_t row, const char *text, uint32_t ink, uint32_t 
     FilesDrawText(row, line, FilesColumns, ink, paper);
 }
 
+/* Draws an icon at the head of a row, composed upon the row's paper so that a
+ * selected row's band shows through its transparent pixels. Drawn after the
+ * row's text, whose paper covers the whole row first. */
+static void FilesDrawIcon(int32_t row, const OxysIcon *icon, uint32_t paper)
+{
+    const int32_t extent = FILES_ICON_UNITS * FilesScale;
+    SyscallWindowRectangle area;
+
+    if ((FilesScale < 1) || (FilesScale > 2))
+    {
+        return;
+    }
+
+    for (int32_t y = 0; y < extent; ++y)
+    {
+        for (int32_t x = 0; x < extent; ++x)
+        {
+            FilesIconTile[(y * extent) + x] =
+                OxysIconCompose(icon, (uint32_t)x, (uint32_t)y, (uint32_t)extent, paper);
+        }
+    }
+
+    area.x = FilesScale;
+    area.y = (row * FILES_PITCH * FilesScale) + (FilesScale / 2);
+    area.width = extent;
+    area.height = extent;
+    (void)OxysWindowBlit(FilesWindow, &area, FilesIconTile);
+}
+
 static void FilesDraw(void)
 {
     char text[SYSCALL_NAME_MAXIMUM + 8U];
@@ -371,13 +424,22 @@ static void FilesDraw(void)
             continue;
         }
 
-        /* A directory is marked by the slash `ls -F` would give it, and nothing
-         * else is marked: a picture per type would be a picture the list does
-         * not have yet. */
-        (void)snprintf(text, sizeof text, " %s%s", FilesEntries[index].name,
-                       (FilesEntries[index].type == SYSCALL_TYPE_DIRECTORY) ? "/" : "");
-        FilesDrawLine(row + 1, text, FILES_INK,
-                      (index == FilesSelected) ? FILES_MARK : FILES_PAPER);
+        {
+            const bool folder = FilesEntries[index].type == SYSCALL_TYPE_DIRECTORY;
+            const bool pictured = folder ? FilesHasFolderIcon : FilesHasFileIcon;
+            const uint32_t paper = (index == FilesSelected) ? FILES_MARK : FILES_PAPER;
+
+            /* A folder is marked by its picture, or by the slash `ls -F`
+             * would give it where the picture could not be read. */
+            (void)snprintf(text, sizeof text, "%s%s%s", FILES_ICON_INDENT,
+                           FilesEntries[index].name, (folder && !pictured) ? "/" : "");
+            FilesDrawLine(row + 1, text, FILES_INK, paper);
+
+            if (pictured)
+            {
+                FilesDrawIcon(row + 1, folder ? &FilesFolderIcon : &FilesFileIcon, paper);
+            }
+        }
     }
 
     FilesDrawLine(FilesRows + 1, FilesStatus, FILES_DIM, FILES_PAPER);
@@ -538,6 +600,15 @@ int main(void)
         (void)fprintf(stderr, "files: a window could not be made.\n");
 
         return EXIT_FAILURE;
+    }
+
+    FilesHasFileIcon = OxysIconRead(&FilesFileIcon, FILES_FILE_ICON);
+    FilesHasFolderIcon = OxysIconRead(&FilesFolderIcon, FILES_FOLDER_ICON);
+
+    if (!FilesHasFileIcon || !FilesHasFolderIcon)
+    {
+        (void)fprintf(stderr, "files: %s could not be read; its rows stand without it.\n",
+                      !FilesHasFileIcon ? FILES_FILE_ICON : FILES_FOLDER_ICON);
     }
 
     FilesLayout(geometry.width, geometry.height);

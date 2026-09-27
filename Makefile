@@ -760,7 +760,8 @@ INITRD_CONFIGURATION := etc/system.conf etc/session.conf
 INITRD_ICONS := art/icons/terminal.oxi art/icons/files.oxi art/icons/sysinfo.oxi \
                 art/icons/start.oxi art/icons/settings.oxi \
                 art/icons/notify-information.oxi art/icons/notify-success.oxi \
-                art/icons/notify-error.oxi art/icons/notepad.oxi
+                art/icons/notify-error.oxi art/icons/notepad.oxi \
+                art/icons/file.oxi art/icons/folder.oxi
 
 # The `/share/backgrounds` hierarchy: the pictures the session may cover the
 # desktop with, named by `background` in `/etc/session.conf`. Files for the
