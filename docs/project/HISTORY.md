@@ -11,7 +11,7 @@ row.
 
 | Date | Phase | Change | Commit |
 | ---- | ----- | ------ | ------ |
-| 2026-09-27 | Phase 8 | A command takes as many words as its line holds; `execve` takes 128 strings and 8 KiB, copied into the heap | `pending` |
+| 2026-09-27 | Phase 8 | A command takes as many words as its line holds; `execve` takes 128 strings and 8 KiB, copied into the heap | `1a50409` |
 | 2026-09-27 | Phase 9 | The clock's box sixty-four units wide, 128 pixels at the scale of two | `3649aa4` |
 | 2026-09-27 | Phase 9 | The clock's box as wide as its time and a margin, from a fifth of the screen | `40cd2c6` |
 | 2026-09-27 | Phase 9 | The launcher's icons twenty units square, from twenty-four | `ee657a4` |
