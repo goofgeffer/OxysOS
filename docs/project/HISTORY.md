@@ -11,7 +11,7 @@ row.
 
 | Date | Phase | Change | Commit |
 | ---- | ----- | ------ | ------ |
-| 2026-09-27 | Phase 9 | The desktop's names with no label, by `window_text`'s TRANSPARENT flag | `pending` |
+| 2026-09-27 | Phase 9 | The desktop's names with no label, by `window_text`'s TRANSPARENT flag | `ef618f0` |
 | 2026-09-27 | Phase 9 | The pointer eighteen pixels high, from twenty-two | `2033d9d` |
 | 2026-09-27 | Phase 9 | Icons on the desktop: launcher entries marked `desktop = yes`, chosen in Settings; Files alone as shipped | `e827a72` |
 | 2026-09-27 | Phase 8 | Arithmetic expansion, `$((expression))`, in the shell | `813adff` |
