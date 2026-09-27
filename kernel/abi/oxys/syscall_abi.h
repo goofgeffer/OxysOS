@@ -553,9 +553,12 @@ typedef struct SyscallWindowText
 /* window_text's flags. PROPORTIONAL spaces the text by the font's own advances,
  * for labels and titles; without it the text stands on the grid, for anything
  * aligned in columns. MEASURE draws nothing and returns the width alone, so a
- * program can centre or fit a label before drawing it. */
+ * program can centre or fit a label before drawing it. TRANSPARENT, with
+ * PROPORTIONAL only, lays no paper and blends the ink over what the window
+ * holds, for a name standing upon a picture; on the grid it is EINVAL. */
 #define SYSCALL_WINDOW_TEXT_PROPORTIONAL 1U
 #define SYSCALL_WINDOW_TEXT_MEASURE      2U
+#define SYSCALL_WINDOW_TEXT_TRANSPARENT  4U
 
 #define SYSCALL_POWER_HALT   1U
 #define SYSCALL_POWER_REBOOT 2U

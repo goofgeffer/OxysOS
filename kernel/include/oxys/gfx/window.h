@@ -322,11 +322,16 @@ uint64_t WindowSession(void);
  * exist, the text is null, the scale is outside 1 to 8 or a flag is unknown.
  * WINDOW_TEXT_PROPORTIONAL spaces it by the font's advances; without it the
  * text stands on the grid of FACE_WIDTH. WINDOW_TEXT_MEASURE draws nothing.
+ * WINDOW_TEXT_TRANSPARENT, with PROPORTIONAL only, lays no paper and blends
+ * the ink over what the window holds, for a name standing on a picture; on
+ * the grid it is refused, a column of cells being text that must cover what
+ * it replaces.
  * Characters the face does not cover are drawn as a box rather than refused,
  * a label with one odd character in it being a label a person can still read.
  */
 #define WINDOW_TEXT_PROPORTIONAL 1U
 #define WINDOW_TEXT_MEASURE      2U
+#define WINDOW_TEXT_TRANSPARENT  4U
 
 int32_t WindowDrawText(size_t window, int32_t x, int32_t y, const char *text, uint32_t ink,
                        uint32_t paper, int32_t scale, uint32_t flags);

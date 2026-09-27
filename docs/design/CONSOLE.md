@@ -179,7 +179,7 @@ needs text above it (that text is written and erased again).
 | Into a full row, BS stops on its last character; erasing it returns to column 0 and then to that character. | A wrapped row treated as ended; a stray character left at the edge of the next prompt. |
 | Inter's space covers nothing at every scale; its `H` is fully covered somewhere at every scale from two, the sampled scales included; nothing is covered outside the cell, beyond scale eight or outside the codes (`KernelVerifyWindows`). | A table index off by a row or a glyph; a sampler reading past its table. |
 | A glyph drawn in a window leaves ink in the content (`KernelVerifyWindows`, `window-check`). | Text that draws nothing. |
-| Grid text is five units a character; proportional `il` is narrower than the grid; drawing proportional text returns the width measuring it gave; an unknown flag is refused (`KernelVerifyWindows`, `window-check`). | A measure that disagrees with the drawing, which centres every label wrongly. |
+| Grid text is five units a character; proportional `il` is narrower than the grid; drawing proportional text returns the width measuring it gave; transparent text keeps what lay beneath where it has no ink and inks where it has, and is refused on the grid; an unknown flag is refused (`KernelVerifyWindows`, `window-check`). | A measure that disagrees with the drawing, which centres every label wrongly; a name on the desktop standing on a stripe of paper. |
 
 `FAULTSCREEN.md` asserts the fast paths against the slow ones. That the log is
 legible, numbers included, is judged by eye

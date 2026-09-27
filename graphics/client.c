@@ -58,7 +58,8 @@
 #include <oxys/kernel.h>
 
 _Static_assert((WINDOW_TEXT_PROPORTIONAL == SYSCALL_WINDOW_TEXT_PROPORTIONAL) &&
-                   (WINDOW_TEXT_MEASURE == SYSCALL_WINDOW_TEXT_MEASURE),
+                   (WINDOW_TEXT_MEASURE == SYSCALL_WINDOW_TEXT_MEASURE) &&
+                   (WINDOW_TEXT_TRANSPARENT == SYSCALL_WINDOW_TEXT_TRANSPARENT),
                "window_text's flags are the window manager's");
 
 static uint64_t WindowClientCalls;

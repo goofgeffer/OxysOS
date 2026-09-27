@@ -70,7 +70,11 @@ advances, for labels, the panel, the clock, notifications, Settings and System
 Info; without it the text stands on the grid of `SYSCALL_WINDOW_TEXT_ADVANCE`,
 for the terminal, the editor, Files and the viewer, whose columns must align.
 **`SYSCALL_WINDOW_TEXT_MEASURE`** draws nothing and returns the width, which is
-how the session centres the clock and the wordmark. An unknown flag is `EINVAL`.
+how the session centres the clock and the wordmark.
+**`SYSCALL_WINDOW_TEXT_TRANSPARENT`**, with proportional text only, lays no paper
+and blends the ink over what the window holds, which is how the desktop's names
+stand upon the background; on the grid it is `EINVAL`, a column of cells being
+text that must cover what it replaces. An unknown flag is `EINVAL`.
 Colours are `0x00RRGGBB`, encoded as blitted pixels are; glyphs are clipped by the
 content, so long labels are cut at the edge.
 
@@ -148,17 +152,17 @@ last and the window list.
 **The desktop's icons**, of 2026-09-27, are the launcher entries marked
 `desktop = yes`, drawn upon the root from the top left, down a column and then
 across: each the entry's icon at the launcher's size, twenty units, centred in
-a cell sixty units wide and forty-four high, with its name beneath on a label of
-the bar's colour, cut with `..` to the cell. One press upon the icon or the name
+a cell sixty units wide and forty-four high, with its name beneath, cut with
+`..` to the cell. One press upon the icon or the name
 starts it, as a pinned program does. The shipped file puts Files there alone.
 
 - **The icons are mixed into the background**, band by band as it is drawn, each
   pixel composed upon the photograph's pixel beneath it; a picture composed upon
   one colour would stand in a square of it. Upon the plain ground they are
   composed upon the ground.
-- **The names stand on labels** because `window_text` lays its paper under the
-  run: a paper of the bar's colour reads as a label upon any background, where
-  one matched to a photograph would be a stripe cut out of it.
+- **The names are drawn with no paper**, `SYSCALL_WINDOW_TEXT_TRANSPARENT`: a
+  paper of one colour under the run would stand on the photograph as a label
+  or a stripe cut out of it.
 - **The root is drawn again when what it shows changes**: after a save by
   Settings, as for the background, and at an opening of the launcher where a
   digest of the entries marked `desktop` differs from what was last drawn, so

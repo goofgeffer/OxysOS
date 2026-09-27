@@ -1515,7 +1515,9 @@ int32_t WindowDrawText(size_t identifier, int32_t x, int32_t y, const char *text
     int32_t width;
 
     if ((window == NULL) || (text == NULL) || (scale < 1) || (scale > 8) ||
-        ((flags & ~(WINDOW_TEXT_PROPORTIONAL | WINDOW_TEXT_MEASURE)) != 0U))
+        ((flags & ~(WINDOW_TEXT_PROPORTIONAL | WINDOW_TEXT_MEASURE | WINDOW_TEXT_TRANSPARENT)) !=
+         0U) ||
+        (((flags & WINDOW_TEXT_TRANSPARENT) != 0U) && !proportional))
     {
         return -1;
     }
@@ -1531,8 +1533,10 @@ int32_t WindowDrawText(size_t identifier, int32_t x, int32_t y, const char *text
      * into the row beneath — which is what a caller drawing a label into a
      * window too narrow for it means, and is what it would see upon a screen.
      */
-    width = FaceDrawText(&window->surface, x, y, text, ink_pixel, paper_pixel, scale,
-                         proportional);
+    width = ((flags & WINDOW_TEXT_TRANSPARENT) != 0U)
+                ? FaceInkText(&window->surface, x, y, text, ink_pixel, scale)
+                : FaceDrawText(&window->surface, x, y, text, ink_pixel, paper_pixel, scale,
+                               proportional);
 
     if (width != 0)
     {

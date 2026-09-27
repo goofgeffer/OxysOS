@@ -226,6 +226,20 @@ int32_t FaceDrawText(GraphicsSurface *surface, int32_t x, int32_t y, const char 
         GraphicsFillRectangle(surface, run, paper);
     }
 
+    return FaceInkText(surface, x, y, text, ink, scale);
+}
+
+int32_t FaceInkText(GraphicsSurface *surface, int32_t x, int32_t y, const char *text,
+                    uint32_t ink, int32_t scale)
+{
+    const int32_t width = FaceTextWidth(text, scale, true);
+    int32_t pen = 0;
+
+    if ((surface == NULL) || (width == 0))
+    {
+        return width;
+    }
+
     for (const char *at = text; *at != '\0'; ++at)
     {
         const uint8_t code = (uint8_t)*at;

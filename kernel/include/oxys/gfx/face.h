@@ -4,7 +4,7 @@
  * File: kernel/include/oxys/gfx/face.h
  * Purpose: The desktop's face: Inter, drawn smoothly on a grid of five by
  *          eight units of the scale, or proportionally by its own advances.
- * Key functions: FaceCoverage, FaceDrawGlyph, FaceTextWidth, FaceDrawText.
+ * Key functions: FaceCoverage, FaceDrawGlyph, FaceTextWidth, FaceDrawText, FaceInkText.
  * References:
  *   - docs/design/CONSOLE.md: the two faces, and why the boot log and the
  *     fault screen keep the 8-by-8 one.
@@ -56,5 +56,13 @@ int32_t FaceTextWidth(const char *text, int32_t scale, bool proportional);
  */
 int32_t FaceDrawText(GraphicsSurface *surface, int32_t x, int32_t y, const char *text,
                      uint32_t ink, uint32_t paper, int32_t scale, bool proportional);
+
+/*
+ * The ink of a proportional run alone, blended over whatever the surface holds,
+ * with no paper: text standing on a picture, as the desktop's names do. Returns
+ * the run's width.
+ */
+int32_t FaceInkText(GraphicsSurface *surface, int32_t x, int32_t y, const char *text,
+                    uint32_t ink, int32_t scale);
 
 #endif /* OXYS_GFX_FACE_H */

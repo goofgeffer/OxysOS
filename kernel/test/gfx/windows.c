@@ -723,7 +723,7 @@ void KernelVerifyWindows(void)
                             "a scale of zero was accepted");
         KernelWindowRequire(WindowDrawText(window, 0, 0, NULL, 0U, 0U, 1, 0U) < 0,
                             "text at no address was accepted");
-        KernelWindowRequire(WindowDrawText(window, 0, 0, "A", 0U, 0U, 1, 4U) < 0,
+        KernelWindowRequire(WindowDrawText(window, 0, 0, "A", 0U, 0U, 1, 8U) < 0,
                             "an unknown flag of window_text was accepted");
         {
             const int32_t narrow = WindowDrawText(window, 0, 16, "il", 0U, 0U, 1,
@@ -752,6 +752,41 @@ void KernelVerifyWindows(void)
         }
 
         KernelWindowRequire(any_ink, "the glyph drawn left no ink in the window's content");
+
+        /*
+         * Transparent text lays no paper: a run painted red, then an `i` drawn
+         * over it transparently with a green paper given, keeps red where the
+         * `i` has no ink and changes where it has. A paper laid would leave no
+         * red; no ink drawn would leave all of it. On the grid it is refused.
+         */
+        if (surface != NULL)
+        {
+            const int32_t top = 24;
+            const int32_t width = WindowDrawText(window, 0, top, "iiii", 0x00FF0000U, 0x00FF0000U,
+                                                 1, WINDOW_TEXT_PROPORTIONAL);
+            const uint32_t red = GraphicsPixelAt(surface, 0, top);
+            int32_t still_red = 0;
+            int32_t area = 0;
+
+            KernelWindowRequire(WindowDrawText(window, 0, top, "i", 0x00FFFFFFU, 0x0000FF00U, 1,
+                                               WINDOW_TEXT_TRANSPARENT) < 0,
+                                "transparent text on the grid was accepted");
+            (void)WindowDrawText(window, 0, top, "iiii", 0x00FFFFFFU, 0x0000FF00U, 1,
+                                 WINDOW_TEXT_PROPORTIONAL | WINDOW_TEXT_TRANSPARENT);
+
+            for (int32_t row = top; row < (top + 8); ++row)
+            {
+                for (int32_t column = 0; column < width; ++column)
+                {
+                    still_red += (GraphicsPixelAt(surface, column, row) == red) ? 1 : 0;
+                    ++area;
+                }
+            }
+
+            KernelWindowRequire((width > 0) && (still_red > 0) && (still_red < area),
+                                "transparent text laid a paper, or drew no ink");
+        }
+
         WindowDestroy(window);
     }
 

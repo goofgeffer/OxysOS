@@ -415,6 +415,23 @@ static void SessionText(int64_t window, int32_t x, int32_t y, const char *text, 
     (void)OxysWindowText(window, &placement, text);
 }
 
+/* The session's text with no paper, its ink over what the window holds: the
+ * desktop's names upon the background. */
+static void SessionTextOver(int64_t window, int32_t x, int32_t y, const char *text, uint32_t ink,
+                            int32_t scale)
+{
+    SyscallWindowText placement;
+
+    placement.x = x;
+    placement.y = y;
+    placement.ink = ink;
+    placement.paper = 0U;
+    placement.scale = scale;
+    placement.flags = SYSCALL_WINDOW_TEXT_PROPORTIONAL | SYSCALL_WINDOW_TEXT_TRANSPARENT;
+
+    (void)OxysWindowText(window, &placement, text);
+}
+
 /* The width the session's text would take, in pixels: zero if it cannot be
  * measured, which leaves a centred label at the left rather than nowhere. */
 static int32_t SessionTextWidth(int64_t window, const char *text, int32_t scale)
@@ -1581,10 +1598,9 @@ static void SessionDesktopOverlay(int32_t first, int32_t rows, int32_t width)
 }
 
 /*
- * The name beneath an icon, cut to its cell with `..` where it is longer, in
- * a label of the panel's colour: the text is drawn upon a paper of one colour,
- * and a paper that is the panel's reads as a label upon any background rather
- * than as a stripe cut out of the photograph.
+ * The name beneath an icon, cut to its cell with `..` where it is longer, its
+ * ink laid straight upon the desktop with no paper (window_text's TRANSPARENT),
+ * so it stands on the photograph itself rather than on a label.
  */
 static void SessionDesktopLabel(int32_t cell_x, int32_t cell_y, const char *name)
 {
@@ -1619,10 +1635,8 @@ static void SessionDesktopLabel(int32_t cell_x, int32_t cell_y, const char *name
         const int32_t label_y =
             cell_y + ((SESSION_ICON_UNITS + SESSION_DESK_LABEL_GAP) * SessionScale);
 
-        SessionFill(SessionRoot, label_x, label_y, label_width, (8 * SessionScale) + (2 * pad),
-                    SESSION_PANEL);
-        SessionText(SessionRoot, label_x + pad, label_y + pad, text, SESSION_INK, SESSION_PANEL,
-                    SessionScale);
+        SessionTextOver(SessionRoot, label_x + pad, label_y + pad, text, SESSION_INK,
+                        SessionScale);
     }
 }
 
