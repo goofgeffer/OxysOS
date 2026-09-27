@@ -352,20 +352,19 @@ regenerates it and fails if what is here differs.*
 
 | | |
 | --- | --- |
-| Builds recorded | 49 |
-| Verified | 42 passed, 7 not |
+| Builds recorded | 50 |
+| Verified | 43 passed, 7 not |
 | Compilers | gcc |
 | Environments | Bochs, QEMU, QEMU q35, QEMU q35,  VirtualBox,  Bochs, VirtualBox |
 | First | 2026-09-17T01:34Z |
-| Latest | 2026-09-27T01:47Z |
+| Latest | 2026-09-27T02:21Z |
 
 ## The last 20 builds
 
-The remaining 29 are in [`builds.tsv`](builds.tsv), which is the record.
+The remaining 30 are in [`builds.tsv`](builds.tsv), which is the record.
 
 | # | Date (UTC) | Commit | Compiler | Kernel | ISO | Result | Environments | Note |
 | - | ---------- | ------ | -------- | ------ | --- | ------ | ------------ | ---- |
-| 30 | 2026-09-25T01:32Z | `1b977fd` | gcc 13.2.0 | 3718160 | 13043712 | passed (78 assertions) |  | Background fallback to the shipped one; config-check reads the shipped copies |
 | 31 | 2026-09-25T01:45Z | `e53fd5f` | gcc 13.2.0 | 3719144 | 13043712 | passed (78 assertions) |  | Panel at the foot, pinned programs, clock box at top right |
 | 32 | 2026-09-25T01:53Z | `141ac8b` | gcc 13.2.0 | 3719144 | 13043712 | passed (78 assertions) |  | Pinned icons evenly spaced |
 | 33 | 2026-09-25T02:14Z | `f224263` | gcc 13.2.0 | 3719144 | 13043712 | passed (78 assertions) | QEMU;VirtualBox;Bochs | Oxys 1 Beta: the release image, cut after sub-task 9.7; booted to the desktop under QEMU, VirtualBox and Bochs |
@@ -385,5 +384,6 @@ The remaining 29 are in [`builds.tsv`](builds.tsv), which is the record.
 | 47 | 2026-09-27T00:39Z | `260e09a` | gcc 13.2.0 | 3990144 | 13316096 | passed (80 assertions) | QEMU q35;VirtualBox;Bochs | Settings buttons sized to their labels |
 | 48 | 2026-09-27T01:24Z | `1137633` | gcc 13.2.0 | 3998232 | 13324288 | passed (80 assertions) | QEMU q35;VirtualBox;Bochs | Userland lists grown in the heap |
 | 49 | 2026-09-27T01:47Z | `2a812b8` | gcc 13.2.0 | 4064768 | 13389824 | passed (80 assertions) | QEMU q35;VirtualBox;Bochs | Kernel tables grown; descriptors to 1024 |
+| 50 | 2026-09-27T02:21Z | `049e06a` | gcc 13.2.0 | 4064768 | 13389824 | passed (80 assertions) | QEMU q35;VirtualBox;Bochs | File and folder pictures in Files |
 
 <!-- END GENERATED -->
